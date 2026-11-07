@@ -7,7 +7,7 @@
 // the caller's to have checked. The finders are the keys a person knows a
 // customer by — the registration number, which is unique, and the e-mail,
 // which is not: a housing administrator's address serves many organisations.
-import type { Customer, CustomerCreate, CustomerKind, CustomerPatch, CustomerStatus } from "@waste/contracts/customers"
+import type { Customer, CustomerCreate, CustomerPatch } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { and, asc, count, eq } from "drizzle-orm"
@@ -39,14 +39,14 @@ export type CustomerRow = Pick<typeof customer.$inferSelect, keyof typeof custom
 export function customerOf(row: CustomerRow): Customer {
   return {
     id: row.id,
-    kind: row.kind as CustomerKind,
+    kind: row.kind,
     name: row.name,
     registrationNumber: row.registrationNumber,
     email: row.email,
     phone: row.phone,
     billingAddress: row.billingAddress,
     serviceMessagesAllowed: row.serviceMessagesAllowed,
-    status: row.status as CustomerStatus,
+    status: row.status,
     paymentTermsDays: row.paymentTermsDays,
     ...stampsOf(row),
   }

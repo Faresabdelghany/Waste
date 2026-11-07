@@ -358,7 +358,7 @@ describe("TicketEvent", () => {
     assert.deepEqual(refusal(TicketEvent.safeParse(event("comment", { ...exemplar("comment"), objectKey: "letter.pdf" }))).map((issue) => issue.path), ["objectKey"])
     assert.deepEqual(refusal(TicketEvent.safeParse({ ...event("comment"), kind: "message" })).map((issue) => issue.path), ["kind"])
     assert.deepEqual(refusal(TicketEvent.safeParse({ ...event("comment"), status: "created" })).map((issue) => issue.path), ["status"])
-    assert.deepEqual(refusal(TicketEvent.safeParse(event("status-changed", { ...exemplar("status-changed"), status: "completed", resolution: "rescheduled" }))).map((issue) => issue.path), ["resolution"])
+    assert.deepEqual(refusal(TicketEvent.safeParse({ ...event("status-changed", { ...exemplar("status-changed"), status: "completed" }), resolution: "rescheduled" })).map((issue) => issue.path), ["resolution"])
   })
 })
 

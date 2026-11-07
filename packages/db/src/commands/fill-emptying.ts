@@ -17,13 +17,13 @@
 import { routeLabel } from "@waste/domain/numbering"
 import { fillEmptyingRoute, type EmptyingRoute, type FillEmptyingOutcome } from "@waste/domain/execution/fill-emptying"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
+import { NOT_STARTED_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gte, inArray, lt } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { placementInForce } from "../query/placement-in-force"
 import { pickup, route } from "../schema/execution"
-import { addOfficeStop, ORDER_OPEN_STATUSES } from "./office-stops"
+import { addOfficeStop } from "./office-stops"
 import { lockRow } from "./shared"
 
 const routeColumns = {
@@ -65,7 +65,7 @@ export async function bookFillEmptying(tx: Tx, scope: { companyId: string; proje
         eq(pickup.origin, "generation"),
         eq(pickup.service, "empty"),
         eq(pickup.status, "planned"),
-        inArray(route.status, ORDER_OPEN_STATUSES),
+        inArray(route.status, [...NOT_STARTED_ROUTE_STATUSES]),
         gte(route.operatingDate, today),
       ),
     )
@@ -84,7 +84,7 @@ export async function bookFillEmptying(tx: Tx, scope: { companyId: string; proje
               eq(route.projectId, projectId),
               eq(route.routeSchemeId, nextRoute.routeSchemeId),
               eq(route.collectionGroupId, nextRoute.collectionGroupId),
-              inArray(route.status, ORDER_OPEN_STATUSES),
+              inArray(route.status, [...NOT_STARTED_ROUTE_STATUSES]),
               gte(route.operatingDate, today),
               lt(route.operatingDate, nextRoute.operatingDate),
             ),
@@ -99,7 +99,7 @@ export async function bookFillEmptying(tx: Tx, scope: { companyId: string; proje
     .from(route)
     .where(and(eq(route.companyId, companyId), eq(route.id, chosen.id)))
     .limit(1)
-  if (locked === undefined || !orderIsOpen(locked.status as RouteStatus)) return { kind: "refused", route: chosen, reason: "the route has started" }
+  if (locked === undefined || !orderIsOpen(locked.status)) return { kind: "refused", route: chosen, reason: "the route has started" }
   const place = await placementInForce(tx, scope, containerId, locked.serviceDate)
   if (place === undefined) return { kind: "refused", route: chosen, reason: "the container has no placement in force on the route's service date" }
   const added = await addOfficeStop(tx, companyId, { id: chosen.id, projectId, plannedVehicleId: locked.plannedVehicleId }, { service: "empty", containerId, ...place, note })

@@ -47,7 +47,6 @@
 // 201 with no address of its own: a station's adjustments are listed under it.
 import type { Action } from "@waste/domain/access/modules"
 import { OUTBOUND_LOAD_COMMANDS, notATransferStation, outboundLoadTransition, receiptReading, SAY_WHY, type OutboundLoadCommand } from "@waste/domain/execution/haul-out"
-import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { unloadStanding } from "@waste/domain/insight/readings"
 import {
   MaterialAdjustment,
@@ -220,7 +219,7 @@ async function stockOf(tx: Tx, principal: Principal, stationId: string, projectI
     return row
   }
   for (const group of tipped) {
-    const standing = unloadStanding(group.status as WeightReviewStatus)
+    const standing = unloadStanding(group.status)
     if (standing === "approved" || standing === "captured") rowOf(group).inKg += group.netKg
     else if (standing === "rejected") rowOf(group).rejectedKg += group.netKg
   }
@@ -272,7 +271,7 @@ export function outboundLoadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     if ((await findLoad(tx, principal, id)) === undefined) throw noSuchLoad(id)
     await lockRow(tx, outboundLoad, { companyId: principal.companyId, id })
     const found = (await findLoad(tx, principal, id))!
-    const transition = outboundLoadTransition(found.status as OutboundLoadStatus, name)
+    const transition = outboundLoadTransition(found.status, name)
     if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
     if (transition.kind === "stay") return c.json((await loadsOf(tx, principal.companyId, [found]))[0]!)
     const [row] = await tx

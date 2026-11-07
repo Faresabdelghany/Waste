@@ -4,9 +4,9 @@
 // company starts with eight (@waste/domain/resources/decommission-reasons);
 // the office adds, renames and retires its own. A reason is retired by its
 // status, never deleted: a decommission names the reason it was given, and a
-// status gates a new decommission, never an existing one (routes/statuses.ts).
+// status gates a new decommission, never an existing one (@waste/domain/status-gates).
 import { Page } from "@waste/contracts/pagination"
-import { DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch, type DecommissionReasonStatus } from "@waste/contracts/stock"
+import { DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
 import { decommissionReason } from "@waste/db/schema/stock"
 import type { Action } from "@waste/domain/access/modules"
@@ -38,7 +38,7 @@ const columns = {
 
 type Row = Pick<typeof decommissionReason.$inferSelect, keyof typeof columns>
 
-const reasonOf = (row: Row): DecommissionReason => ({ id: row.id, code: row.code, name: row.name, status: row.status as DecommissionReasonStatus, ...stampsOf(row) })
+const reasonOf = (row: Row): DecommissionReason => ({ id: row.id, code: row.code, name: row.name, status: row.status, ...stampsOf(row) })
 
 /** `unique (company_id, code)` and `unique (company_id, name)`: each is one reason's inside a company. */
 const CODE_TAKEN = "decommission_reason_code_key"

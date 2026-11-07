@@ -179,13 +179,13 @@ export const route = wms.table(
     serviceDate: date().notNull(),
     /** The day the route runs: the service date, or the day a holiday policy or a reschedule moved it to. */
     operatingDate: date().notNull(),
-    status: text().notNull().default("planned"),
+    status: text({ enum: ROUTE_STATUSES }).notNull().default("planned"),
     /** Whether a regeneration cancelled it, as against a dispatcher. */
     cancelledByGeneration: boolean().notNull().default(false),
     /** The deviation note: the holiday note, the regeneration sentence, or the dispatcher's cancel reason. */
     note: text(),
     /** Why the route was cancelled (O5 of #290): one of the office's codes, or `regeneration` on a route a run cancelled; the note beside it stays free. A cancelled route's alone (`route_cancel_reason_shape`), and null on one cancelled before the codes. */
-    cancelReasonCode: text(),
+    cancelReasonCode: text({ enum: ROUTE_CANCEL_REASON_CODES }),
     /** The generation run that last wrote the route (#97 part B, migration 0012); null on a route no run has written. */
     generationRunId: uuid(),
     /** The active Plan (#39 S1, migration 0013): the execution sequence when set; null means the generated baseline stands unmeasured, drawn dashed (#124). */
@@ -237,7 +237,7 @@ export const route = wms.table(
     unique(tableObjectName(t.companyId.table, "generation_key", "route")).on(t.companyId, t.routeSchemeId, t.collectionGroupId, t.serviceDate),
     tenantUnique(t, t.number),
     projectKey(t),
-    oneOf(t.status, ROUTE_STATUSES),
+    oneOf(t.status),
     // A route that started has the driver and the vehicle that started it, and a trailer only then; one that did not has none. Read off `started_at`, which the stamps check ties to the status.
     check(
       tableObjectName(t.id.table, "actual_shape", "route"),
@@ -255,7 +255,7 @@ export const route = wms.table(
       tableObjectName(t.id.table, "scheme_shape", "route"),
       sql`(${t.routeSchemeId} is null) = (${t.collectionGroupId} is null) and (${t.routeSchemeId} is not null or (${t.generationRunId} is null and not ${t.cancelledByGeneration}))`,
     ),
-    oneOf(t.cancelReasonCode, ROUTE_CANCEL_REASON_CODES),
+    oneOf(t.cancelReasonCode),
     // A reason code is a cancelled route's (O5 of #290), and `regeneration` is exactly a run's cancel: the office's codes are the office's, and a route brought back by a run, or never cancelled, carries none.
     check(
       tableObjectName(t.id.table, "cancel_reason_shape", "route"),
@@ -307,11 +307,11 @@ export const pickup = wms.table(
     containerId: uuid(),
     /** Stop order, 1..n; not unique, since a refresh reorders in place and a dispatcher's reorder rewrites the run. */
     position: integer().notNull(),
-    status: text().notNull().default("planned"),
+    status: text({ enum: PICKUP_STATUSES }).notNull().default("planned"),
     /** Who put the stop on the route (#111): generation, or the office, whose stop a refresh never skips or moves. Every pickup before 0016 was generation's. */
-    origin: text().notNull().default("generation"),
+    origin: text({ enum: PICKUP_ORIGINS }).notNull().default("generation"),
     /** What the stop is for (O3 of #290): `empty`, every stop before the column and every one generation writes, or one of the office's work orders. */
-    service: text().notNull().default("empty"),
+    service: text({ enum: PICKUP_SERVICES }).notNull().default("empty"),
     note: text(),
     /** The place on the service date, from the subscription the placement valid that day named: exactly one of the two. */
     propertyId: uuid(),
@@ -323,7 +323,7 @@ export const pickup = wms.table(
     /** When the status left planned: the outcome's instant, or the route's end or cancellation. */
     outcomeAt: instant(),
     /** Why a skipped or failed pickup was not collected; none otherwise. */
-    reason: text(),
+    reason: text({ enum: PICKUP_REASONS }),
     /** A delivery's subscription (O3b of #290): what the container serves under once its completion issues it, at the stop's place. */
     subscriptionId: uuid(),
     /** A removal's or a swap's warehouse: where the container taken is returned to. */
@@ -362,7 +362,7 @@ export const pickup = wms.table(
     movedFromRouteId: uuid(),
     movedFromPickupId: uuid(),
     /** How full its container was, the driver's latest `record-fill` (M23 of #293): a later estimate replaces it, and the receipt keeps each. */
-    fillLevel: text(),
+    fillLevel: text({ enum: FILL_LEVELS }),
   },
   (t) => [
     companyReference(t, company),
@@ -381,10 +381,10 @@ export const pickup = wms.table(
       .where(sql`${t.origin} = 'generation'`),
     // Carries the route: a proof or a receipt names a pickup of the route it names, and no other.
     projectKey(t, t.routeId),
-    oneOf(t.status, PICKUP_STATUSES),
-    oneOf(t.origin, PICKUP_ORIGINS),
-    oneOf(t.service, PICKUP_SERVICES),
-    oneOf(t.fillLevel, FILL_LEVELS),
+    oneOf(t.status),
+    oneOf(t.origin),
+    oneOf(t.service),
+    oneOf(t.fillLevel),
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties, or collects a bulky booking.
@@ -401,7 +401,7 @@ export const pickup = wms.table(
     // A stock container is held back by one planned delivery or swap at a time, and one in service taken away by one planned removal or swap.
     uniqueIndex(tableObjectName(t.id.table, "reserved_container_id_key", "pickup")).on(t.companyId, t.reservedContainerId).where(sql`${t.reservedContainerId} is not null`),
     uniqueIndex(tableObjectName(t.id.table, "taken_container_id_key", "pickup")).on(t.companyId, t.takenContainerId).where(sql`${t.takenContainerId} is not null`),
-    oneOf(t.reason, PICKUP_REASONS),
+    oneOf(t.reason),
     positive(t.position),
     // Every pickup names its place, an address-only one included: the address the stop is at.
     exactlyOne(t, "place", [t.propertyId, t.sharedCollectionPointId]),
@@ -505,8 +505,8 @@ export const proofOfService = wms.table(
     pickupId: uuid(),
     /** The session, on every driver-recorded row and on no office row. */
     sessionId: uuid(),
-    kind: text().notNull(),
-    source: text().notNull(),
+    kind: text({ enum: PROOF_KINDS }).notNull(),
+    source: text({ enum: EXECUTION_SOURCES }).notNull(),
     /** The device's clock, or the office's word. */
     occurredAt: instant().notNull(),
     /** The driver's login or the dispatcher's. */
@@ -515,7 +515,7 @@ export const proofOfService = wms.table(
     /** Where the device stood. */
     location: geometry.point(),
     locationAccuracyM: integer(),
-    reason: text(),
+    reason: text({ enum: PICKUP_REASONS }),
     note: text(),
     /** A lifter's or a hand scale's reading, whole kilograms. */
     weightKg: integer(),
@@ -524,7 +524,7 @@ export const proofOfService = wms.table(
     /** The Storage object of a photo or a signature, under the row's own ids. */
     objectKey: text(),
     /** On a correction: the status the pickup was moved to. */
-    outcome: text(),
+    outcome: text({ enum: PICKUP_OUTCOMES }),
     /** The contaminant code the outcome was tagged with (M5 of #293), on a proof that records an outcome. */
     contaminantCodeId: uuid(),
   },
@@ -536,10 +536,10 @@ export const proofOfService = wms.table(
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.routeId, t.sessionId], session, [session.routeId, session.id]),
     tenantReference(t, [t.recordedBy], userAccount),
-    oneOf(t.kind, PROOF_KINDS),
-    oneOf(t.source, EXECUTION_SOURCES),
-    oneOf(t.reason, PICKUP_REASONS),
-    oneOf(t.outcome, PICKUP_OUTCOMES),
+    oneOf(t.kind),
+    oneOf(t.source),
+    oneOf(t.reason),
+    oneOf(t.outcome),
     validGeometry(t.location),
     positive(t.locationAccuracyM),
     positive(t.weightKg),
@@ -579,7 +579,7 @@ export const unload = wms.table(
     unloadingStationId: uuid().notNull(),
     /** What was tipped; a multi-compartment vehicle records one row per fraction. */
     wasteFractionId: uuid().notNull(),
-    source: text().notNull(),
+    source: text({ enum: EXECUTION_SOURCES }).notNull(),
     occurredAt: instant().notNull(),
     recordedBy: uuid().notNull(),
     deviceId: text(),
@@ -595,7 +595,7 @@ export const unload = wms.table(
     objectKey: text(),
     note: text(),
     /** Why the station refused the load (O9 of #290); null for a load it took. Set with the row, a ledger's, never after. */
-    refusalReason: text(),
+    refusalReason: text({ enum: UNLOAD_REFUSAL_REASONS }),
     /** The refusal in words: required with `other`, and only with a reason. */
     refusalNote: text(),
   },
@@ -609,7 +609,7 @@ export const unload = wms.table(
     tenantReference(t, [t.recordedBy], userAccount),
     // What the weight review points at (Issue #112, migration 0010): the day something pointed at it, the way the placement got its key in 0007.
     projectKey(t),
-    oneOf(t.source, EXECUTION_SOURCES),
+    oneOf(t.source),
     validGeometry(t.location),
     positive(t.grossKg),
     positive(t.tareKg),
@@ -617,7 +617,7 @@ export const unload = wms.table(
     check(tableObjectName(t.id.table, "session_shape", "unload"), sql`(${t.source} = 'driver-app') = (${t.sessionId} is not null)`),
     // The prototype's own sentence: gross and tare come together, and net is gross less tare.
     check(tableObjectName(t.id.table, "weights_shape", "unload"), sql`(${t.grossKg} is null) = (${t.tareKg} is null) and (${t.grossKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg})`),
-    oneOf(t.refusalReason, UNLOAD_REFUSAL_REASONS),
+    oneOf(t.refusalReason),
     // A refusal's note goes with its reason, and `other` says it in words: `refusalIssue` (@waste/domain/execution/unloads), at the table.
     check(tableObjectName(t.id.table, "refusal_shape", "unload"), sql`(${t.refusalNote} is null or ${t.refusalReason} is not null) and (${t.refusalReason} is distinct from 'other' or ${t.refusalNote} is not null)`),
     tenantIndex(t, t.routeId),
@@ -644,12 +644,12 @@ export const driverCommand = wms.table(
     pickupId: uuid(),
     driverId: uuid().notNull(),
     deviceId: text().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: DRIVER_COMMAND_KINDS }).notNull(),
     /** The device's clock, as sent, even when refused. */
     occurredAt: instant().notNull(),
     /** The command as received, verbatim; a rejected command has no other row to live in. Never joined or filtered on. */
     body: jsonb().notNull(),
-    outcome: text().notNull(),
+    outcome: text({ enum: COMMAND_OUTCOMES }).notNull(),
     /** The problem the applier answered, exactly when rejected. */
     problem: jsonb(),
   },
@@ -660,8 +660,8 @@ export const driverCommand = wms.table(
     projectReference(t, [t.routeId, t.sessionId], session, [session.routeId, session.id]),
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.driverId], driver),
-    oneOf(t.kind, DRIVER_COMMAND_KINDS),
-    oneOf(t.outcome, COMMAND_OUTCOMES),
+    oneOf(t.kind),
+    oneOf(t.outcome),
     check(tableObjectName(t.id.table, "problem_shape", "driverCommand"), sql`(${t.outcome} = 'rejected') = (${t.problem} is not null)`),
     // A receipt without a route is a rejection that named nothing the driver reaches: no session, no pickup, and never an applied command.
     check(tableObjectName(t.id.table, "route_shape", "driverCommand"), sql`${t.routeId} is not null or (${t.outcome} = 'rejected' and ${t.sessionId} is null and ${t.pickupId} is null)`),
@@ -725,8 +725,8 @@ export const outboxEvent = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    kind: text().notNull(),
-    aggregateKind: text().notNull(),
+    kind: text({ enum: OUTBOX_KINDS }).notNull(),
+    aggregateKind: text({ enum: OUTBOX_AGGREGATES }).notNull(),
     /** A soft id on purpose: an outbox row outlives nothing and joins nothing. */
     aggregateId: uuid().notNull(),
     /** The command's instant, not the request's. */
@@ -739,8 +739,8 @@ export const outboxEvent = wms.table(
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
-    oneOf(t.kind, OUTBOX_KINDS),
-    oneOf(t.aggregateKind, OUTBOX_AGGREGATES),
+    oneOf(t.kind),
+    oneOf(t.aggregateKind),
     // The relay's read, across companies: the unpublished rows in id order. A partial index over `id` alone, since `published_at` is null on every row in it and a constant-null leading column would say nothing.
     indexOn(t.id).where(sql`${t.publishedAt} is null`),
     tenantIndex(t, t.projectId),

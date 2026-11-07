@@ -47,7 +47,7 @@ export const dropOffPoint = wms.table(
     /** The stable reference a person quotes: `GS-AMAGER`. Set once; unique per project. */
     code: text().notNull(),
     name: text().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: DROP_OFF_POINT_KINDS }).notNull(),
     /** The address as one text, as a depot's. */
     address: text().notNull(),
     /** The public map draws it, so a point is always located. */
@@ -58,7 +58,7 @@ export const dropOffPoint = wms.table(
     closedOnHolidays: boolean().notNull().default(false),
     /** What a resident is told beside the hours: `Bring ID`, `Vans need a permit`. */
     publicNote: text(),
-    status: text().notNull(),
+    status: text({ enum: DROP_OFF_POINT_STATUSES }).notNull(),
     /** The office's own notes, never shown on the public map. */
     notes: text(),
   },
@@ -68,8 +68,8 @@ export const dropOffPoint = wms.table(
     tenantUnique(t, t.projectId, t.code),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.kind, DROP_OFF_POINT_KINDS),
-    oneOf(t.status, DROP_OFF_POINT_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.status),
     validGeometry(t.location),
   ],
 )
@@ -137,7 +137,7 @@ export const dropOffPointHours = wms.table(
     ...projectScoped,
     ...timestamps,
     dropOffPointId: uuid().notNull(),
-    weekday: text().notNull(),
+    weekday: text({ enum: SERVICE_DAYS }).notNull(),
     /** On the project's clock; a window opens before it closes on the day. */
     opensAt: time().notNull(),
     closesAt: time().notNull(),
@@ -145,7 +145,7 @@ export const dropOffPointHours = wms.table(
   (t) => [
     companyReference(t, company),
     projectReference(t, [t.dropOffPointId], dropOffPoint),
-    oneOf(t.weekday, SERVICE_DAYS),
+    oneOf(t.weekday),
     check(tableObjectName(t.id.table, "window_shape", "dropOffPointHours"), sql`${t.opensAt} < ${t.closesAt}`),
     tenantIndex(t, t.dropOffPointId),
   ],

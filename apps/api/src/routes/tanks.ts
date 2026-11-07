@@ -30,9 +30,6 @@ import {
   TankInstallationCreate,
   TankInstallationListQuery,
   TankInstallationPatch,
-  type TankInspectionOutcome,
-  type TankKind,
-  type TankOutlet,
 } from "@waste/contracts/tanks"
 import type { Tx } from "@waste/db/client"
 import { lastEmptyings, type TankEmptying } from "@waste/db/query/tank-emptyings"
@@ -101,9 +98,9 @@ const tankOf = (row: Row, emptying: TankEmptying | undefined): TankInstallation 
   validTo: row.validTo,
   propertyId: row.propertyId,
   containerId: row.containerId,
-  kind: row.kind as TankKind,
+  kind: row.kind,
   volumeLitres: row.volumeLitres,
-  outlet: row.outlet as TankOutlet,
+  outlet: row.outlet,
   emptyingIntervalMonths: row.emptyingIntervalMonths,
   lastEmptiedOn: row.lastEmptiedOn,
   notes: row.notes,
@@ -152,7 +149,7 @@ const inspectionOf = (row: Pick<typeof tankInspection.$inferSelect, keyof typeof
   projectId: row.projectId,
   tankInstallationId: row.tankInstallationId,
   inspectedOn: row.inspectedOn,
-  outcome: row.outcome as TankInspectionOutcome,
+  outcome: row.outcome,
   findings: row.findings,
   nextInspectionOn: row.nextInspectionOn,
   recordedBy: row.recordedBy,

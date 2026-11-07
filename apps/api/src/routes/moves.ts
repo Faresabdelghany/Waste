@@ -45,6 +45,7 @@ import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agr
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { property, propertyParty } from "@waste/db/schema/customers"
 import { billableEvent } from "@waste/db/schema/finance"
+import { refuseInactiveCustomer } from "@waste/domain/registry/agreements"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -71,7 +72,6 @@ import { findProperty, noSuchProperty, propertyWithParties } from "./property-wr
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, stamp } from "./shared"
-import { refuseInactiveCustomer } from "./statuses"
 
 /** What a move with subscriptions to carry and no number for the incoming agreement is told. */
 export const NUMBER_OWED = "The outgoing customer subscribes at this property, so the incoming customer's agreement needs a number"
@@ -110,7 +110,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
     .orderBy(asc(subscription.id))
   if (subscribed.length > 0 && body.agreementNumber === undefined) throw invalidRequest("body", [{ path: "agreementNumber", message: NUMBER_OWED }])
 
-  // Every 400 above, every 409 below (routes/statuses.ts).
+  // Every 400 above, every 409 below (@waste/domain/status-gates).
   const leaving = await tx
     .select({ id: propertyParty.id, role: propertyParty.role, validFrom: propertyParty.validFrom, validTo: propertyParty.validTo })
     .from(propertyParty)

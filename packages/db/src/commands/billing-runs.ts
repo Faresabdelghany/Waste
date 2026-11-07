@@ -115,7 +115,7 @@ import type { BillingRunPreview } from "@waste/contracts/billing"
 import { PERIOD_ENDS_BY_TODAY } from "@waste/domain/finance/billing-runs"
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
 import { catchUpFrom } from "@waste/domain/finance/periods"
-import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
+import type { BillableEventKind, ExclusionReason } from "@waste/domain/finance/vocabulary"
 import { Refused } from "@waste/domain/refusal"
 import { addDays } from "@waste/domain/days"
 import { lastDayIn } from "@waste/domain/periods"
@@ -442,7 +442,7 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
     catchUp: selection.catchUpIds.flatMap((id) => {
       const event = caughtUp.get(id)
       if (event === undefined || tooMany.has(event.payerCustomerId) || event.currency === null || event.netMinor === null || event.vatMinor === null) return []
-      return [{ billableEventId: id, kind: event.kind as BillableEventKind, customerId: event.payerCustomerId, description: descriptionOf(event), serviceDate: event.serviceDate, currency: event.currency, netMinor: event.netMinor, vatMinor: event.vatMinor }]
+      return [{ billableEventId: id, kind: event.kind, customerId: event.payerCustomerId, description: descriptionOf(event), serviceDate: event.serviceDate, currency: event.currency, netMinor: event.netMinor, vatMinor: event.vatMinor }]
     }),
     catchUpDeferredCount: selection.catchUpDeferredCount,
   }
@@ -653,7 +653,7 @@ async function runBatch(tx: Tx, input: RunBillingInput, scope: Scope, runId: str
   const plan = nextBatch(await remainingPayers(tx, scope, input, runId), max)
   if (plan.payers.length === 0 && plan.tooMany.length === 0) return false
   if (plan.tooMany.length > 0) {
-    await tx.insert(billingRunExclusion).values(plan.tooMany.map((payer) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, billingRunId: runId, customerId: payer.customerId, reason: "too-many-events", eventCount: payer.eventCount })))
+    await tx.insert(billingRunExclusion).values(plan.tooMany.map((payer) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, billingRunId: runId, customerId: payer.customerId, reason: "too-many-events" as const, eventCount: payer.eventCount })))
   }
   let issued = 0
   if (plan.payers.length > 0) {
@@ -690,7 +690,7 @@ async function issueGroups(tx: Tx, input: RunBillingInput, scope: Scope, runId: 
         creditReason: null,
         creditNote: null,
         issuedBy: input.requestedBy,
-        paymentReferenceScheme: settings.scheme as PaymentReferenceScheme,
+        paymentReferenceScheme: settings.scheme,
       },
       lines: group.events.map(lineOfEvent),
       newId: input.newId,

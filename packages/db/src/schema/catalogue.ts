@@ -68,7 +68,7 @@ export const wasteFraction = wms.table(
     /** The European List of Waste entry it is reported under, `200301`; null where nobody has set one. */
     wasteCode: text(),
     /** How it is treated once collected (M13 of #293); null where nobody has set one. */
-    treatment: text(),
+    treatment: text({ enum: WASTE_TREATMENTS }),
     /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
     densityKgPerCubicMetre: integer(),
     /** Whether it is hazardous waste (O18 of #290), what its transfer note says: true under a starred code always, and set by the office under any other. */
@@ -82,7 +82,7 @@ export const wasteFraction = wms.table(
     lowercase(t.key),
     // The code's shape, the domain's one spelling; a null passes: no code is not a wrong one.
     check(tableObjectName(t.id.table, "waste_code_shape", "wasteFraction"), sql`${t.wasteCode} ~ ${sql.raw(`'${WASTE_CODE_PATTERN}'`)}`),
-    oneOf(t.treatment, WASTE_TREATMENTS),
+    oneOf(t.treatment),
     // A starred code is a hazardous entry of the list: such a fraction is never held not hazardous (`hazardousAgrees`, @waste/domain/registry/waste-code).
     check(tableObjectName(t.id.table, "hazardous_shape", "wasteFraction"), sql`${t.hazardous} or ${t.wasteCode} is null or ${t.wasteCode} not like '%*'`),
     // Within the domain's bounds; a null passes: no density is not a wrong one.
@@ -171,10 +171,10 @@ export const product = wms.table(
     ...projectScoped,
     ...timestamps,
     name: text().notNull(),
-    kind: text().notNull(),
-    status: text().notNull(),
+    kind: text({ enum: PRODUCT_KINDS }).notNull(),
+    status: text({ enum: PRODUCT_STATUSES }).notNull(),
     /** What one of it is: prices are Finance & Contracting's, the unit they are quoted per is here. */
-    unit: text().notNull(),
+    unit: text({ enum: PRODUCT_UNITS }).notNull(),
     containerTypeId: uuid(),
     wasteFractionId: uuid(),
     /** The default cadence; a placement may override it, and the effective one is read, never written. */
@@ -196,9 +196,9 @@ export const product = wms.table(
     projectReference(t, [t.serviceFrequencyId], serviceFrequency),
     tenantUnique(t, t.projectId, t.name),
     projectKey(t),
-    oneOf(t.kind, PRODUCT_KINDS),
-    oneOf(t.status, PRODUCT_STATUSES),
-    oneOf(t.unit, PRODUCT_UNITS),
+    oneOf(t.kind),
+    oneOf(t.status),
+    oneOf(t.unit),
     // A rate is a percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). No helper spells it, since no other table has it.
     check(tableObjectName(t.id.table, "vat_percent_range", "product"), sql`${t.vatPercent} between ${sql.raw(String(VAT_PERCENT.min))} and ${sql.raw(String(VAT_PERCENT.max))}`),
     // A hire's free days, from none to a year (`FREE_DAYS_MAX`), on a product sold by the day and no other.

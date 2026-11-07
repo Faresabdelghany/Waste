@@ -14,7 +14,7 @@
 // lock: a price put outside is a 400 naming the bound, an assignment
 // shortened under its prices a 409 counting them (routes/service-areas.ts).
 // A price is a new reference to its product, so the product is `active`
-// (routes/statuses.ts, #79), as a price row's is.
+// (@waste/domain/status-gates, #79), as a price row's is.
 //
 // Indexation is a new row and never an update (§7.18): the fee on a day is
 // a `validOn` read, so a settlement recalculated for March after a June
@@ -30,7 +30,7 @@
 // deadlock), so two indexations of one row take turns and the chain never
 // forks. The row is judged by the plan the Apply index over many prices runs
 // (routes/indexation.ts): one fee, one pair of range refusals, and a product
-// no longer active refused (409, routes/statuses.ts) since the successor is a
+// no longer active refused (409, @waste/domain/status-gates) since the successor is a
 // new reference to it. The bid is
 // set on the first row and copied onto every indexed one; the patch never
 // takes it, and the fee moves through `index` alone. A day at or before the
@@ -62,7 +62,7 @@
 // Provider's manager reads the prices under its own assignments and no
 // other, and writes nothing here, since the company sets what it pays. The
 // grant is `commercial.service-provider-prices` throughout.
-import { IndexResult, type IndexBase } from "@waste/contracts/finance"
+import { IndexResult } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
 import {
   ServiceProviderPrice,
@@ -77,6 +77,7 @@ import { validOn } from "@waste/db/query/valid-on"
 import { serviceAreaAssignment, serviceProviderPrice } from "@waste/db/schema/finance"
 import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { priceEnded, priceEndedBy } from "@waste/domain/finance/transitions"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, exists, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -95,7 +96,6 @@ import { answerOf, batchesOf, INDEX_BELOW_ZERO, INDEX_TOO_LARGE, lockInBatches, 
 import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.service-provider-prices"
 const PricePage = Page(ServiceProviderPrice)
@@ -134,7 +134,7 @@ function priceOf(row: Row): ServiceProviderPrice {
     indexedFromId: row.indexedFromId,
     indexLabel: row.indexLabel,
     indexBasisPoints: row.indexBasisPoints,
-    indexBase: row.indexBase as IndexBase | null,
+    indexBase: row.indexBase,
     notes: row.notes,
     validFrom: row.validFrom,
     validTo: row.validTo,
@@ -266,7 +266,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const productStatus = await requireProduct(tx, within, values.productId)
         requireWithin(assignment, periodOf(values), OUTSIDE_ASSIGNMENT)
 
-        // Every 400 above, every 409 below (routes/statuses.ts).
+        // Every 400 above, every 409 below (@waste/domain/status-gates).
         refuseUnofferedProduct(productStatus)
         const currency = await projectCurrency(tx, principal.companyId, assignment.projectId)
         const [row] = await refuseOverlap({ [PRICE_RUNNING]: PRICE_RUNNING_SENTENCE }, () =>
@@ -518,7 +518,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (plan.outOfRange !== undefined) throw invalidRequest("body", [{ path: "basisPoints", message: plan.outOfRange.problem === "below-zero" ? INDEX_BELOW_ZERO : INDEX_TOO_LARGE }])
         // The row in force is the one to index; the refusal names the end by its last day in, as the office reads a period (#281).
         if (current.validTo !== null && priceEndedBy(current.validTo, index.appliedFrom)) throw problem(409, { detail: priceEnded(current.validTo) })
-        // The successor is a new reference to its product, which is active (routes/statuses.ts), as the bulk index skips it.
+        // The successor is a new reference to its product, which is active (@waste/domain/status-gates), as the bulk index skips it.
         const [verdict] = plan.verdicts
         if (verdict.outcome !== "indexed") {
           refuseUnofferedProduct(statuses.get(current.productId))

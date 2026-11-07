@@ -113,9 +113,9 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     await withCompany(pool.db, a.companyId, (tx: Tx) =>
       tx.insert(propertyParty).values(
         [
-          { customerId: owner_.id, role: "owner" },
-          { customerId: tenant.id, role: "tenant" },
-          { customerId: tenant.id, role: "payer" },
+          { customerId: owner_.id, role: "owner" as const },
+          { customerId: tenant.id, role: "tenant" as const },
+          { customerId: tenant.id, role: "payer" as const },
         ].map((party) => ({ id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: property.id, validFrom: "2026-01-01", ...party })),
       ),
     )

@@ -82,7 +82,7 @@ describe("a staff member's notices", { skip: database.skip }, () => {
     // Each a millisecond apart: an id's order is its time's, and two minted in one millisecond have none.
     const minted = Date.now()
     let made = 0
-    const staff = (userAccountId: string, subject: string) => ({
+    const staff = (userAccountId: string, subject: string): typeof message.$inferInsert => ({
       id: testId(minted + made++),
       companyId: a.companyId,
       projectId: a.projects.copenhagen.id,

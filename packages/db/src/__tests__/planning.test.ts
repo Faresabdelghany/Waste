@@ -16,6 +16,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import type { Polygon } from "@waste/contracts/geojson"
+import type { ServiceDay } from "@waste/domain/days"
 import { eq, getTableName } from "drizzle-orm"
 import { sql } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
@@ -33,7 +34,7 @@ import { collectionGroup, collectionGroupContainer, collectionGroupContainerType
 import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -239,11 +240,11 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
       // A project that never rests is an empty set, which the subset check allows: nothing says a weekend has a day in it.
       await tx.update(project).set({ weekend: [] }).where(eq(project.id, a.spare))
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.update(project).set({ weekend: ["saturday", "funday"] }).where(eq(project.id, a.spare))),
+        tx.transaction((savepoint) => savepoint.update(project).set({ weekend: ["saturday", outside("funday")] }).where(eq(project.id, a.spare))),
         refusedWith("23514", /project_weekend_subset_of/),
       )
       // But a project that always rests has no working day for a shifted collection to land on: six is the most (23514 project_weekend_not_every_day).
-      const week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+      const week: ServiceDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
       await tx.update(project).set({ weekend: week.slice(0, 6) }).where(eq(project.id, a.spare))
       await assert.rejects(
         tx.transaction((savepoint) => savepoint.update(project).set({ weekend: week }).where(eq(project.id, a.spare))),
@@ -396,9 +397,9 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
 
   test("a scheme's service days are one or more of the seven (23514 route_scheme_service_days_subset_of, route_scheme_service_days_non_empty); a group's days are of the seven and may be none", () =>
     seeded(async (tx) => {
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ serviceDays: ["monday", "funday"] }))), refusedWith("23514", /route_scheme_service_days_subset_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ serviceDays: ["monday", outside("funday")] }))), refusedWith("23514", /route_scheme_service_days_subset_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ serviceDays: [] }))), refusedWith("23514", /route_scheme_service_days_non_empty/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ days: ["Monday"] }))), refusedWith("23514", /collection_group_days_subset_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(collectionGroup).values(group({ days: [outside("Monday")] }))), refusedWith("23514", /collection_group_days_subset_of/))
       // A group that no longer runs keeps its row with no days; a daily scheme serves all seven.
       await tx.insert(collectionGroup).values(group({ days: [] }))
       await tx.insert(routeScheme).values(scheme({ frequency: "daily", serviceDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] }))
@@ -408,7 +409,7 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ frequency: "weekly", weekRotation: "odd" }))), refusedWith("23514", /route_scheme_week_rotation_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ frequency: "every-2-weeks" }))), refusedWith("23514", /route_scheme_week_rotation_shape/))
-      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ frequency: "every-2-weeks", weekRotation: "third" }))), refusedWith("23514", /route_scheme_week_rotation_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(routeScheme).values(scheme({ frequency: "every-2-weeks", weekRotation: outside("third") }))), refusedWith("23514", /route_scheme_week_rotation_one_of/))
       await tx.insert(routeScheme).values(scheme({ frequency: "every-2-weeks", weekRotation: "even" }))
 
       // The vehicle type is a row since 0007 (Issue #101), so a type nobody made is the key's refusal and not a check's.

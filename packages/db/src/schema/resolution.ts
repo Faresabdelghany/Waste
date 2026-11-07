@@ -154,9 +154,9 @@ export const team = wms.table(
     ...tenant,
     ...timestamps,
     name: text().notNull(),
-    status: text().notNull().default("active"),
+    status: text({ enum: TEAM_STATUSES }).notNull().default("active"),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, TEAM_STATUSES)],
+  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status)],
 )
 
 export const teamPolicies = policies(team, { audited: {} })
@@ -202,9 +202,9 @@ export const ticketType = wms.table(
     ...timestamps,
     name: text().notNull(),
     /** The kind it is a type of; never changed once made. */
-    kind: text().notNull(),
+    kind: text({ enum: TICKET_KINDS }).notNull(),
     description: text(),
-    status: text().notNull().default("active"),
+    status: text({ enum: TICKET_TYPE_STATUSES }).notNull().default("active"),
     /** Whether it is its kind's default: the type of a ticket opened by kind alone. */
     isDefault: boolean().notNull().default(false),
   },
@@ -214,8 +214,8 @@ export const ticketType = wms.table(
     tenantKey(t),
     // What a ticket's type points at: its id and its kind, so the ticket's kind is the type's.
     unique(tableObjectName(t.id.table, "kind_key", "ticketType")).on(t.companyId, t.id, t.kind),
-    oneOf(t.kind, TICKET_KINDS),
-    oneOf(t.status, TICKET_TYPE_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.status),
     // One default type per kind.
     uniqueIndex(tableObjectName(t.id.table, "default_kind_key", "ticketType")).on(t.companyId, t.kind).where(sql`${t.isDefault}`),
     // Every opener of a kind reaches its default type, so a default is offered.
@@ -246,9 +246,9 @@ export const ticketTypeField = wms.table(
     label: text().notNull(),
     /** Shown under the input. */
     helpText: text(),
-    input: text().notNull(),
+    input: text({ enum: TICKET_FIELD_INPUTS }).notNull(),
     choices: text().array().notNull().default(sql`'{}'::text[]`),
-    requirement: text().notNull().default("optional"),
+    requirement: text({ enum: TICKET_FIELD_REQUIREMENTS }).notNull().default("optional"),
   },
   (t) => [
     companyReference(t, company),
@@ -257,8 +257,8 @@ export const ticketTypeField = wms.table(
     tenantUnique(t, t.ticketTypeId, t.position),
     positive(t.position),
     lowercase(t.key),
-    oneOf(t.input, TICKET_FIELD_INPUTS),
-    oneOf(t.requirement, TICKET_FIELD_REQUIREMENTS),
+    oneOf(t.input),
+    oneOf(t.requirement),
     // A choice field offers choices, and no other does.
     check(tableObjectName(t.id.table, "choices_shape", "ticketTypeField"), sql`(${t.input} = 'choice') = (cardinality(${t.choices}) > 0)`),
   ],
@@ -277,7 +277,7 @@ export const ticketTypePermission = wms.table(
     ...tenant,
     ...timestamps,
     ticketTypeId: uuid().notNull(),
-    command: text().notNull(),
+    command: text({ enum: TICKET_COMMANDS }).notNull(),
     roleId: uuid().notNull(),
   },
   (t) => [
@@ -286,7 +286,7 @@ export const ticketTypePermission = wms.table(
     tenantReference(t, [t.roleId], role),
     // One row per role a command names, led by the type whose set it is.
     unique(tableObjectName(t.id.table, "grant_key", "ticketTypePermission")).on(t.companyId, t.ticketTypeId, t.command, t.roleId),
-    oneOf(t.command, TICKET_COMMANDS),
+    oneOf(t.command),
     tenantIndex(t, t.roleId),
   ],
 )
@@ -322,17 +322,17 @@ export const ticketTypeAction = wms.table(
     ...tenant,
     ...timestamps,
     ticketTypeId: uuid().notNull(),
-    trigger: text().notNull(),
+    trigger: text({ enum: TICKET_ACTION_TRIGGERS }).notNull(),
     /** Its place among its trigger's actions, 1..n. */
     position: integer().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: TICKET_ACTION_KINDS }).notNull(),
     teamId: uuid(),
     userAccountId: uuid(),
-    priority: text(),
-    command: text(),
-    resolution: text(),
+    priority: text({ enum: TICKET_PRIORITIES }),
+    command: text({ enum: TICKET_ACTION_COMMANDS }),
+    resolution: text({ enum: TICKET_RESOLUTIONS }),
     messageTemplateName: text(),
-    recipient: text(),
+    recipient: text({ enum: TICKET_MESSAGE_RECIPIENTS }),
     followUpTypeId: uuid(),
     /** The vehicle's project, for the key: a vehicle is a project's and a type the company's. */
     vehicleProjectId: uuid(),
@@ -348,12 +348,12 @@ export const ticketTypeAction = wms.table(
     tenantReference(t, [t.vehicleProjectId, t.vehicleId], vehicle, [vehicle.projectId, vehicle.id]),
     tenantUnique(t, t.ticketTypeId, t.trigger, t.position),
     positive(t.position),
-    oneOf(t.trigger, TICKET_ACTION_TRIGGERS),
-    oneOf(t.kind, TICKET_ACTION_KINDS),
-    oneOf(t.priority, TICKET_PRIORITIES),
-    oneOf(t.command, TICKET_ACTION_COMMANDS),
-    oneOf(t.resolution, TICKET_RESOLUTIONS),
-    oneOf(t.recipient, TICKET_MESSAGE_RECIPIENTS),
+    oneOf(t.trigger),
+    oneOf(t.kind),
+    oneOf(t.priority),
+    oneOf(t.command),
+    oneOf(t.resolution),
+    oneOf(t.recipient),
     // What each kind carries and forbids: one CASE built from ACTION_PARAMETERS, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "ticketTypeAction"), sql`case ${t.kind} ${sql.join(TICKET_ACTION_KINDS.map((kind) => actionKindClause(kind, t)), sql` `)} else false end`),
     // A vehicle with its project, or neither; and the days the domain allows.
@@ -385,8 +385,8 @@ export const countingRule = wms.table(
     ...tenant,
     ...timestamps,
     name: text().notNull(),
-    status: text().notNull().default("inactive"),
-    period: text().notNull(),
+    status: text({ enum: COUNTING_RULE_STATUSES }).notNull().default("inactive"),
+    period: text({ enum: COUNTING_PERIODS }).notNull(),
     /** How many emptyings in a period open the ticket. */
     limit: integer().notNull(),
     /** The one fraction counted; null counts every fraction. */
@@ -407,8 +407,8 @@ export const countingRule = wms.table(
     tenantReference(t, [t.teamId], team),
     tenantUnique(t, t.name),
     tenantKey(t),
-    oneOf(t.status, COUNTING_RULE_STATUSES),
-    oneOf(t.period, COUNTING_PERIODS),
+    oneOf(t.status),
+    oneOf(t.period),
     check(tableObjectName(t.id.table, "limit_range", "countingRule"), sql`${t.limit} between 1 and ${sql.raw(String(COUNTING_LIMIT_MAX))}`),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.containerTypeId),
@@ -427,15 +427,15 @@ export const ticket = wms.table(
     ...timestamps,
     /** The display number, `T-8831` on the wire; from the company's counter, never renumbered. */
     number: integer().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: TICKET_KINDS }).notNull(),
     /** Its Ticket Type (#545 of #544), a type of its kind: the opener's, or the kind's default. */
     ticketTypeId: uuid().notNull(),
     /** The type's custom fields' values, by key (#545 of #544): an object, empty where none is filled in. */
     fieldValues: jsonb().notNull().default(sql`'{}'::jsonb`),
-    status: text().notNull().default("open"),
-    priority: text().notNull().default("none"),
+    status: text({ enum: TICKET_STATUSES }).notNull().default("open"),
+    priority: text({ enum: TICKET_PRIORITIES }).notNull().default("none"),
     /** Provenance; never patched. */
-    source: text().notNull(),
+    source: text({ enum: TICKET_SOURCES }).notNull(),
     /** The case's headline and its description: the office's or the citizen's own words. */
     subject: text().notNull(),
     description: text().notNull(),
@@ -464,7 +464,7 @@ export const ticket = wms.table(
     /** A sub-case's parent; never itself. */
     parentTicketId: uuid(),
     /** What a completed ticket ended in; null otherwise. */
-    resolution: text(),
+    resolution: text({ enum: TICKET_RESOLUTIONS }),
     /** The route the re-collection rides on, with `recollected`. */
     recollectionRouteId: uuid(),
     /** The stop of that route the re-collection is, where the office added one (#111, migration 0016); never without the route. */
@@ -513,11 +513,11 @@ export const ticket = wms.table(
     tenantReference(t, [t.countingRuleId], countingRule),
     tenantUnique(t, t.number),
     projectKey(t),
-    oneOf(t.kind, TICKET_KINDS),
-    oneOf(t.status, TICKET_STATUSES),
-    oneOf(t.priority, TICKET_PRIORITIES),
-    oneOf(t.source, TICKET_SOURCES),
-    oneOf(t.resolution, TICKET_RESOLUTIONS),
+    oneOf(t.kind),
+    oneOf(t.status),
+    oneOf(t.priority),
+    oneOf(t.source),
+    oneOf(t.resolution),
     // A ticket is a person's or an event's.
     check(tableObjectName(t.id.table, "origin_shape", "ticket"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
@@ -596,17 +596,17 @@ export const ticketEvent = wms.table(
     ...projectScoped,
     ...recorded,
     ticketId: uuid().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: TICKET_EVENT_KINDS }).notNull(),
     /** The ticket's status after the event: a snapshot, so the history reads without the row. */
-    status: text().notNull(),
+    status: text({ enum: TICKET_STATUSES }).notNull(),
     /** The assignee after the event, likewise. */
     assigneeUserAccountId: uuid(),
     /** On a status change to completed: what the ticket ended in. */
-    resolution: text(),
+    resolution: text({ enum: TICKET_RESOLUTIONS }),
     /** The comment, the note a command carried, the reason a rejection gave. */
     body: text(),
     /** Who may read it: `customer` on a comment the customer may read. */
-    visibility: text().notNull().default("internal"),
+    visibility: text({ enum: TICKET_VISIBILITIES }).notNull().default("internal"),
     /** The Storage object of an attachment on a comment, under the row's own ids. */
     objectKey: text(),
     /** The outbox event a consumer's comment came from: the second idempotency key. */
@@ -620,10 +620,10 @@ export const ticketEvent = wms.table(
     projectReference(t, [t.ticketId], ticket),
     tenantReference(t, [t.assigneeUserAccountId], userAccount),
     tenantReference(t, [t.recordedBy], userAccount),
-    oneOf(t.kind, TICKET_EVENT_KINDS),
-    oneOf(t.status, TICKET_STATUSES),
-    oneOf(t.resolution, TICKET_RESOLUTIONS),
-    oneOf(t.visibility, TICKET_VISIBILITIES),
+    oneOf(t.kind),
+    oneOf(t.status),
+    oneOf(t.resolution),
+    oneOf(t.visibility),
     // What each kind carries and forbids: one CASE built from TICKET_EVENT_SHAPES, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "ticketEvent"), sql`case ${t.kind} ${sql.join(TICKET_EVENT_KINDS.map((kind) => kindClause(kind, t)), sql` `)} else false end`),
     // One comment per outbox event: the consumer's second idempotency key.
@@ -672,11 +672,11 @@ export const alert = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    kind: text().notNull(),
-    severity: text().notNull(),
+    kind: text({ enum: ALERT_KINDS }).notNull(),
+    severity: text({ enum: ALERT_SEVERITIES }).notNull(),
     /** Who raised it: `manual` for every row the office writes. */
-    source: text().notNull(),
-    status: text().notNull().default("new"),
+    source: text({ enum: ALERT_SOURCES }).notNull(),
+    status: text({ enum: ALERT_STATUSES }).notNull().default("new"),
     title: text().notNull(),
     details: text().notNull(),
     /** When the condition was seen: the caller's, defaulting to the clock. */
@@ -700,7 +700,7 @@ export const alert = wms.table(
     resolvedBy: uuid(),
     resolutionNote: text(),
     /** The worker's rule that raised it; null for an alert a person raised. */
-    rule: text(),
+    rule: text({ enum: ALERT_RULES }),
     /** The occurrence the rule raised it for, unique per company: `route-not-started:<route>`. */
     ruleKey: text(),
   },
@@ -716,11 +716,11 @@ export const alert = wms.table(
     tenantReference(t, [t.raisedBy], userAccount),
     tenantReference(t, [t.acknowledgedBy], userAccount),
     tenantReference(t, [t.resolvedBy], userAccount),
-    oneOf(t.kind, ALERT_KINDS),
-    oneOf(t.severity, ALERT_SEVERITIES),
-    oneOf(t.source, ALERT_SOURCES),
-    oneOf(t.status, ALERT_STATUSES),
-    oneOf(t.rule, ALERT_RULES),
+    oneOf(t.kind),
+    oneOf(t.severity),
+    oneOf(t.source),
+    oneOf(t.status),
+    oneOf(t.rule),
     // An alert about nothing is nothing: the prototype's own validation, and a ticket since the worker's rules.
     check(
       tableObjectName(t.id.table, "subject_shape", "alert"),
@@ -776,10 +776,10 @@ export const ticketSla = wms.table(
     ...projectScoped,
     ...timestamps,
     /** The kind the target is for; null for every kind without one of its own, or where a type is named. */
-    kind: text(),
+    kind: text({ enum: TICKET_KINDS }),
     /** The Ticket Type the target is for (#548 of #544), whose own wins over its kind's; null for a kind's or every kind's. */
     ticketTypeId: uuid(),
-    priority: text().notNull(),
+    priority: text({ enum: TICKET_PRIORITIES }).notNull(),
     /** From when the ticket's issue happened to its due date, on the wall clock: 1 to a year. */
     hours: integer().notNull(),
   },
@@ -788,8 +788,8 @@ export const ticketSla = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.ticketTypeId], ticketType),
     tenantUnique(t, t.projectId, t.kind, t.ticketTypeId, t.priority).nullsNotDistinct(),
-    oneOf(t.kind, TICKET_KINDS),
-    oneOf(t.priority, TICKET_PRIORITIES),
+    oneOf(t.kind),
+    oneOf(t.priority),
     // A type is of one kind already: a target names its kind, its type, or neither.
     check(tableObjectName(t.id.table, "scope_shape", "ticketSla"), sql`${t.kind} is null or ${t.ticketTypeId} is null`),
     tenantIndex(t, t.ticketTypeId),
@@ -812,7 +812,7 @@ export const ticketTeamDefault = wms.table(
     ...projectScoped,
     ...timestamps,
     /** The kind the default is for; null where a type is named. */
-    kind: text(),
+    kind: text({ enum: TICKET_KINDS }),
     /** The Ticket Type the default is for (#548 of #544); null where a kind is named. */
     ticketTypeId: uuid(),
     teamId: uuid().notNull(),
@@ -823,7 +823,7 @@ export const ticketTeamDefault = wms.table(
     tenantReference(t, [t.teamId], team),
     tenantReference(t, [t.ticketTypeId], ticketType),
     tenantUnique(t, t.projectId, t.kind, t.ticketTypeId).nullsNotDistinct(),
-    oneOf(t.kind, TICKET_KINDS),
+    oneOf(t.kind),
     exactlyOne(t, "kind_or_type", [t.kind, t.ticketTypeId]),
     tenantIndex(t, t.teamId),
     tenantIndex(t, t.ticketTypeId),

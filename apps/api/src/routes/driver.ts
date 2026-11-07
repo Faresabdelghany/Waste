@@ -172,15 +172,15 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { tankInstallation } from "@waste/db/schema/tanks"
 import { validOn } from "@waste/db/query/valid-on"
-import type { TankKind, TankOutlet } from "@waste/contracts/tanks"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
-import { alreadyOnRoute, assignedTo, decide, OCCURRED_AT_SKEW_MS, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
+import { alreadyOnRoute, assignedTo, decide, OCCURRED_AT_SKEW_MS, PROOF_COMMAND_KINDS, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
-import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import { DISPATCHED_ROUTE_STATUSES, type DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import { isOneOf } from "@waste/domain/lists"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
-import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
+import { ACTIVE_VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -263,7 +263,7 @@ const heldAtWrite = (applier: Applier, envelope: DriverCommandEnvelope, constrai
  */
 const todays = (now: Date): SQL =>
   or(
-    inArray(route.status, ["ready", "active"]),
+    inArray(route.status, [...DISPATCHED_ROUTE_STATUSES]),
     and(eq(route.status, "completed"), sql`(${route.completedAt} at time zone ${project.timezone})::date = (${now.toISOString()}::timestamptz at time zone ${project.timezone})::date`),
   ) as SQL
 
@@ -312,7 +312,7 @@ async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Pro
     tx
       .select(vehicleColumns)
       .from(vehicle)
-      .where(and(eq(vehicle.companyId, companyId), eq(vehicle.projectId, profile.projectId), eq(vehicle.status, "active")))
+      .where(and(eq(vehicle.companyId, companyId), eq(vehicle.projectId, profile.projectId), inArray(vehicle.status, [...ACTIVE_VEHICLE_STATUSES])))
       .orderBy(asc(vehicle.id)),
     tx
       .select({ id: unloadingStation.id, name: unloadingStation.name, location: unloadingStation.location, weighbridge: unloadingStation.weighbridge, wasteFractionIds: idsColumn(tx, stationFractions, companyId, unloadingStation.id) })
@@ -322,7 +322,7 @@ async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Pro
     tx.select({ id: wasteFraction.id, key: wasteFraction.key, name: wasteFraction.name }).from(wasteFraction).where(eq(wasteFraction.companyId, companyId)).orderBy(asc(wasteFraction.id)),
   ])
   return {
-    vehicles: vehicles.map((row) => ({ id: row.id, label: vehicleLabel(row), kind: row.kind as VehicleKind, requiredLicenceClass: row.requiredLicenceClass as LicenceClass })),
+    vehicles: vehicles.map((row) => ({ id: row.id, label: vehicleLabel(row), kind: row.kind, requiredLicenceClass: row.requiredLicenceClass })),
     // A station's column is `geometry(Point, 4326)`, flat: what it holds is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
     unloadingStations: stations.map((row) => ({ ...row, location: row.location as FlatPoint })),
     wasteFractions,
@@ -410,7 +410,7 @@ async function tanksOfRoute(tx: Tx, companyId: string, routeId: string): Promise
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .innerJoin(tankInstallation, and(eq(tankInstallation.companyId, pickup.companyId), eq(tankInstallation.containerId, pickup.containerId), validOn(tankInstallation, route.serviceDate)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
-  return new Map(rows.map((row) => [row.containerId, { kind: row.kind as TankKind, volumeLitres: row.volumeLitres, outlet: row.outlet as TankOutlet }]))
+  return new Map(rows.map((row) => [row.containerId, { kind: row.kind, volumeLitres: row.volumeLitres, outlet: row.outlet }]))
 }
 
 /**
@@ -530,7 +530,7 @@ async function findVehicleState(tx: Tx, companyId: string, projectId: string, id
     .where(and(eq(vehicle.companyId, companyId), eq(vehicle.projectId, projectId), eq(vehicle.id, id)))
     .limit(1)
   if (row === undefined) return undefined
-  return { id: row.id, label: vehicleLabel(row), kind: row.kind as VehicleKind, status: row.status as VehicleStatus, requiredLicenceClass: row.requiredLicenceClass as LicenceClass }
+  return { id: row.id, label: vehicleLabel(row), kind: row.kind, status: row.status, requiredLicenceClass: row.requiredLicenceClass }
 }
 
 /** Whether a row of this company exists in a company-wide table: the station and the fraction a `record-unload` names. */
@@ -550,9 +550,9 @@ async function driverOpenOn(tx: Tx, companyId: string, profile: DriverProfile): 
   return driving === undefined ? undefined : routeLabel(driving.number)
 }
 
-const routeState = (row: RouteRow): RouteState => ({ id: row.id, label: labelOf(row), status: row.status as RouteState["status"], plannedDriverId: row.plannedDriverId, actualDriverId: row.actualDriverId, operatingDate: row.operatingDate })
+const routeState = (row: RouteRow): RouteState => ({ id: row.id, label: labelOf(row), status: row.status, plannedDriverId: row.plannedDriverId, actualDriverId: row.actualDriverId, operatingDate: row.operatingDate })
 const sessionState = (row: SessionRow): SessionState => ({ id: row.id, driverId: row.driverId, startedAt: row.startedAt.toISOString(), endedAt: row.endedAt === null ? null : row.endedAt.toISOString(), pausedAt: row.pausedAt === null ? null : row.pausedAt.toISOString() })
-const pickupState = (row: PickupRow): PickupState => ({ id: row.id, position: row.position, status: row.status as PickupState["status"], arrivedAt: row.arrivedAt === null ? null : row.arrivedAt.toISOString(), containerId: row.containerId })
+const pickupState = (row: PickupRow): PickupState => ({ id: row.id, position: row.position, status: row.status, arrivedAt: row.arrivedAt === null ? null : row.arrivedAt.toISOString(), containerId: row.containerId })
 
 /**
  * Everything `decide` asks for, each lookup bounded the way the door bounds
@@ -625,9 +625,6 @@ async function readLookups(tx: Tx, applier: Applier, envelope: DriverCommandEnve
 /** The problem a rejection is recorded with and answered in: the contracts' shape, built the way every problem of this API is. */
 const rejectionProblem = (status: 400 | 404 | 409, detail: string, errors?: { path: string; message: string }[]): Problem => problemBody(status, errors === undefined ? { detail } : { detail, errors })
 
-/** The commands whose result is the proof they appended with their id; `start-route` and `end-route` append one too, but answer the session and the route. */
-const PROOF_COMMANDS: readonly DriverCommandKind[] = ["arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-volume"]
-
 /**
  * The row a command made, read back and tagged with what it is: a session
  * for `start-route`, a proof for the evidence and outcome commands, an unload
@@ -643,7 +640,7 @@ async function resultOf(tx: Tx, companyId: string, kind: DriverCommandKind, id: 
     const [row] = await tx.select(sessionColumns).from(session).where(and(eq(session.companyId, companyId), eq(session.id, id))).limit(1)
     return row === undefined ? undefined : { resource: "session", value: sessionOf(row) }
   }
-  if (PROOF_COMMANDS.includes(kind)) {
+  if (isOneOf(kind, PROOF_COMMAND_KINDS)) {
     const [row] = await tx.select(proofColumns).from(proofOfService).where(and(eq(proofOfService.companyId, companyId), eq(proofOfService.id, id))).limit(1)
     return row === undefined ? undefined : { resource: "proof", value: proofOf(row) }
   }
@@ -722,7 +719,7 @@ async function replayOf(tx: Tx, applier: Applier, receipt: ReceiptRow, envelope:
     applier.log({ commandId: envelope.id, kind: envelope.kind, detail: "replayed with a command that differs from the first upload; the first answer stands" })
   }
   if (receipt.outcome === "rejected") return { commandId: receipt.id, outcome: "replayed", problem: receipt.problem as Problem }
-  const result = await resultOf(tx, applier.principal.companyId, receipt.kind as DriverCommandKind, receipt.id, receipt.routeId)
+  const result = await resultOf(tx, applier.principal.companyId, receipt.kind, receipt.id, receipt.routeId)
   return result === undefined ? { commandId: receipt.id, outcome: "replayed" } : { commandId: receipt.id, outcome: "replayed", result }
 }
 

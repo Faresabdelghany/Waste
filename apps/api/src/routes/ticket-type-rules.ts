@@ -7,7 +7,7 @@
 // and a kind alone opens the kind's default type, made where the company has
 // none (`defaultTicketTypeOf`). A patch moves the ticket to another type, its
 // kind following, or to another kind's default type when it names the kind
-// alone. A type named afresh is offered (409, `refuseRetiredTicketType`,
+// alone. A type named afresh is offered (409, `ACTIVE_TICKET_TYPE_STATUSES`,
 // after every 400); the type a ticket already is of is kept whatever its
 // status, the rule every status gate keeps.
 //
@@ -31,14 +31,14 @@ import { ticketTypeRules, defaultTicketTypeOf, type TicketTypeRules } from "@was
 import type { Tx } from "@waste/db/client"
 import { role } from "@waste/db/schema/access"
 import { ticketType } from "@waste/db/schema/resolution"
-import { fieldRequiredToOpen, fieldValuesIssues, mayGive, missingFields, needsBeforeCompleting, onlyRolesMay, typeOfAnotherKind, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
-import { type TicketCommand, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { fieldRequiredToOpen, fieldValuesIssues, mayGive, missingFields, needsBeforeCompleting, onlyRolesMay, retiredTicketType, typeOfAnotherKind, type TicketFieldValues } from "@waste/domain/resolution/ticket-types"
+import { ACTIVE_TICKET_TYPE_STATUSES, type TicketCommand, type TicketKind } from "@waste/domain/resolution/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
 import { invalidRequest, problem } from "../problem"
-import { refuseRetiredTicketType } from "./statuses"
 
 /** What a body naming a type of another company, or none, is told. */
 export const NOT_A_TICKET_TYPE = "Not a ticket type of this company"
@@ -87,7 +87,7 @@ export async function typeAfterPatch(tx: Tx, companyId: string, current: { kind:
 
 /** The type named afresh is offered: the 409, after every 400. */
 export function refuseRetiredType(type: { rules: TicketTypeRules; named: boolean }): void {
-  if (type.named) refuseRetiredTicketType(type.rules.status, type.rules.name)
+  if (type.named) refuseUnless(type.rules.status, ACTIVE_TICKET_TYPE_STATUSES, retiredTicketType(type.rules.name))
 }
 
 /** A body's values against the type, at `fieldValues.<key>`: each key a field it holds and each value one the field takes, one issue per key in one pass; a null clears a value, whatever its key. The contracts bound how many a body names. */
@@ -148,7 +148,7 @@ export async function requireSetTypes(tx: Tx, companyId: string, entries: readon
   return () => {
     for (const id of named) {
       const type = found.get(id)
-      if (type !== undefined && !kept.has(id)) refuseRetiredTicketType(type.status as TicketTypeStatus, type.name)
+      if (type !== undefined && !kept.has(id)) refuseUnless(type.status, ACTIVE_TICKET_TYPE_STATUSES, retiredTicketType(type.name))
     }
   }
 }

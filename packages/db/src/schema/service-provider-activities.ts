@@ -43,8 +43,8 @@ export const serviceProviderActivity = wms.table(
     ...timestamps,
     /** The company's running count, `ACT-<n>` in a sentence. */
     number: integer().notNull(),
-    kind: text().notNull(),
-    status: text().notNull(),
+    kind: text({ enum: SERVICE_PROVIDER_ACTIVITY_KINDS }).notNull(),
+    status: text({ enum: SERVICE_PROVIDER_ACTIVITY_STATUSES }).notNull(),
     serviceProviderId: uuid().notNull(),
     /** The award it is about, where it is about one. */
     serviceAreaId: uuid(),
@@ -56,7 +56,7 @@ export const serviceProviderActivity = wms.table(
     routeSchemeId: uuid(),
     collectionGroupId: uuid(),
     /** A route-day change's days for the group. */
-    serviceDays: text().array(),
+    serviceDays: text({ enum: SERVICE_DAYS }).array(),
     /** The first day a proposal applies from. */
     effectiveFrom: date(),
     /** A vehicle change's vehicle for the group, and its driver where the proposal names one (#474, part 2). */
@@ -82,9 +82,9 @@ export const serviceProviderActivity = wms.table(
     tenantReference(t, [t.openedBy], userAccount),
     tenantReference(t, [t.closedBy], userAccount),
     tenantUnique(t, t.number),
-    oneOf(t.kind, SERVICE_PROVIDER_ACTIVITY_KINDS),
-    oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
-    subsetOf(t.serviceDays, SERVICE_DAYS),
+    oneOf(t.kind),
+    oneOf(t.status),
+    subsetOf(t.serviceDays),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),
     // Each kind carries its own columns and none of another's: a proposal its scheme, group and first day, a route-day change its days, a vehicle change its vehicle and maybe a driver, a follow-up its due day. A stop-set change's containers and a waste-fraction change's fractions are their sets' rows (`service_provider_activity_container`, `service_provider_activity_fraction`), which the API holds to one at least.
     check(

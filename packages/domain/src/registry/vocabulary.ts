@@ -118,6 +118,26 @@ export type TankOutlet = (typeof TANK_OUTLETS)[number]
 export type TankInspectionOutcome = (typeof TANK_INSPECTION_OUTCOMES)[number]
 export type WasteTreatment = (typeof WASTE_TREATMENTS)[number]
 
+// The statuses that take a new reference (`@waste/domain/status-gates`): a
+// customer holds and is billed for an agreement while active, a contact is
+// written to while active, a product is subscribed to while offered, and a
+// place is served — a subscription made, a container placed, a stop added, a
+// booking made at it — while a property is active or a point open or
+// restricted (`@waste/domain/registry/served-places`).
+
+/** A Customer an agreement names as its holder or its payer. */
+export const ACTIVE_CUSTOMER_STATUSES = ["active"] as const satisfies readonly CustomerStatus[]
+/** A Contact a message is sent to. */
+export const ACTIVE_CONTACT_STATUSES = ["active"] as const satisfies readonly ContactStatus[]
+/** A Product a subscription, a price or a charge names. */
+export const OFFERED_PRODUCT_STATUSES = ["active"] as const satisfies readonly ProductStatus[]
+/** A Property served. */
+export const SERVED_PROPERTY_STATUSES = ["active"] as const satisfies readonly PropertyStatus[]
+/** A Shared Collection Point served: from anybody when open, from its members when restricted. */
+export const SERVING_POINT_STATUSES = ["open", "restricted"] as const satisfies readonly SharedCollectionPointStatus[]
+/** An Application not yet decided or withdrawn: the office corrects, decides or withdraws one. */
+export const UNDECIDED_APPLICATION_STATUSES = ["received", "in-review"] as const satisfies readonly ApplicationStatus[]
+
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const REGISTRY_VOCABULARIES = {
   WASTE_TREATMENTS,

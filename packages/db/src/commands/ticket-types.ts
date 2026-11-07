@@ -12,7 +12,7 @@
 // deviation. Two transactions making the same default meet the partial unique
 // index (`ticket_type_default_kind_key`) and the second reads the first's.
 import { DEFAULT_TICKET_TYPE_NAMES, type CommandPermission, type TicketFieldDefinition } from "@waste/domain/resolution/ticket-types"
-import { TICKET_KINDS, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import { TICKET_KINDS, type TicketCommand, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -72,13 +72,13 @@ export async function ticketTypeRules(tx: Tx, companyId: string, id: string): Pr
     .from(ticketTypePermission)
     .where(and(eq(ticketTypePermission.companyId, companyId), eq(ticketTypePermission.ticketTypeId, id)))
   const byCommand = new Map<TicketCommand, string[]>()
-  for (const grant of grants) byCommand.set(grant.command as TicketCommand, [...(byCommand.get(grant.command as TicketCommand) ?? []), grant.roleId])
+  for (const grant of grants) byCommand.set(grant.command, [...(byCommand.get(grant.command) ?? []), grant.roleId])
   return {
     id: row.id,
     name: row.name,
-    kind: row.kind as TicketKind,
-    status: row.status as TicketTypeStatus,
-    fields: fields.map((field) => ({ ...field, input: field.input as TicketFieldInput, requirement: field.requirement as TicketFieldRequirement })),
+    kind: row.kind,
+    status: row.status,
+    fields: fields.map((field) => ({ ...field, input: field.input, requirement: field.requirement })),
     permissions: [...byCommand.entries()].map(([command, roleIds]) => ({ command, roleIds })),
   }
 }

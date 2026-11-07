@@ -3,7 +3,6 @@
 // and `command-rejected`'s payload all go through.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { Problem } from "@waste/contracts/problem"
-import type { CommandOutcome, DriverCommandKind } from "@waste/domain/execution/vocabulary"
 
 import { driverCommand } from "../schema/execution"
 
@@ -46,10 +45,10 @@ export function receiptOf(row: ReceiptRow): DriverCommandReceipt {
     pickupId: row.pickupId,
     driverId: row.driverId,
     deviceId: row.deviceId,
-    kind: row.kind as DriverCommandKind,
+    kind: row.kind,
     occurredAt: row.occurredAt.toISOString(),
     body: row.body as DriverCommandReceipt["body"],
-    outcome: row.outcome as CommandOutcome,
+    outcome: row.outcome,
     problem: row.problem as Problem | null,
   }
 }

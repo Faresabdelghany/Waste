@@ -49,7 +49,6 @@ import { listHolidayRows } from "@waste/db/query/holidays"
 import { route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { holidayReleases, WALK_CAP_DAYS } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/days"
 import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
@@ -141,9 +140,9 @@ export async function releaseHolds(tx: Tx, principal: Principal, projectId: stri
  */
 export async function projectCalendarOf(tx: Tx, companyId: string, projectId: string): Promise<SchemeCalendar> {
   const [row] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
-  if (row === undefined || row.holidayList === null) return { weekend: (row?.weekend ?? []) as ServiceDay[], holidays: new Map() }
+  if (row === undefined || row.holidayList === null) return { weekend: (row?.weekend ?? []), holidays: new Map() }
   const days = await listHolidayRows(tx, companyId, row.holidayList)
-  return { weekend: row.weekend as ServiceDay[], holidays: new Map(days.map(({ day }) => [day, ""])) }
+  return { weekend: row.weekend, holidays: new Map(days.map(({ day }) => [day, ""])) }
 }
 
 /** A change of holiday inputs: the project's calendar before and after it, and the scheme's policy where the change is the scheme's. */
@@ -170,7 +169,7 @@ export async function releaseHolidayHolds(tx: Tx, companyId: string, projectId: 
     )
   const released = held
     .filter((row) => {
-      const policy = row.holidayPolicy as HolidayPolicy
+      const policy = row.holidayPolicy
       return holidayReleases(
         row,
         { holidayPolicy: change.policy?.before ?? policy, calendar: change.before },

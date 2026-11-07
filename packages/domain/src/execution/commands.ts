@@ -53,7 +53,8 @@
 // never reaches `decide`, since the route records that rejection itself with
 // the schema's issues.
 import { licenceRefusal, licenceSentence, type Licence } from "../resources/licence"
-import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
+import { ACTIVE_VEHICLE_STATUSES, type LicenceClass, type VehicleKind, type VehicleStatus } from "../resources/vocabulary"
+import { takesReference } from "../status-gates"
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
 import { subjectOf, type OutboxKind, type OutboxSubject } from "../outbox/vocabulary"
@@ -292,6 +293,9 @@ const invalid = (path: string, message: string): Decision => reject(400, message
 
 /** The kinds that decide a pickup's outcome, by command. */
 const OUTCOME_COMMANDS: Readonly<Partial<Record<DriverCommandKind, PickupCommand>>> = { "complete-pickup": "complete", "skip-pickup": "skip", "fail-pickup": "fail" }
+
+/** The commands whose result is the proof `decide` appends under the command's id: an arrival, a stop's outcome, a problem and each kind of evidence. `start-route` and `end-route` append one too, but answer the session and the route. */
+export const PROOF_COMMAND_KINDS = ["arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-volume"] as const satisfies readonly DriverCommandKind[]
 /** The proof each outcome command appends. */
 const OUTCOME_PROOFS: Readonly<Record<PickupCommand, ProofKind>> = { complete: "completion", skip: "skip", fail: "failure" }
 /** The event each outcome is worth. */
@@ -470,8 +474,8 @@ function decideStart(command: Command<"start-route">, driver: CommandDriver, rou
   const refusal = licenceRefusal(driver, vehicle.requiredLicenceClass, route.operatingDate)
   if (refusal !== undefined) return invalid("body.vehicleId", licenceSentence(refusal, { driver: driver.name, vehicle: vehicle.label }, THE_OPERATING_DATE))
   // Only an active vehicle goes out: one in the workshop or otherwise unavailable is planned with for next month, not driven today.
-  if (vehicle.status !== "active") return reject(409, notInService(vehicle.label, vehicle.status, "vehicle"))
-  if (trailer !== undefined && body.trailerId !== undefined && trailer.status !== "active") return reject(409, notInService(trailer.label, trailer.status, "trailer"))
+  if (!takesReference(vehicle.status, ACTIVE_VEHICLE_STATUSES)) return reject(409, notInService(vehicle.label, vehicle.status, "vehicle"))
+  if (trailer !== undefined && body.trailerId !== undefined && !takesReference(trailer.status, ACTIVE_VEHICLE_STATUSES)) return reject(409, notInService(trailer.label, trailer.status, "trailer"))
   return {
     apply: [
       { kind: "start-route", sessionId: command.id, vehicleId: vehicle.id, trailerId: body.trailerId ?? null, appVersion: body.appVersion ?? null, at: command.occurredAt },

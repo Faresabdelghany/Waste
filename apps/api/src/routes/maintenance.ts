@@ -27,8 +27,6 @@ import {
   MaintenancePlanCreate,
   MaintenancePlanListQuery,
   MaintenancePlanPatch,
-  type MaintenanceOrderStatus,
-  type MaintenancePlanStatus,
 } from "@waste/contracts/maintenance"
 import type { Tx } from "@waste/db/client"
 import { dayInTimezone } from "@waste/domain/clock"
@@ -36,6 +34,8 @@ import { vehicle } from "@waste/db/schema/fleet"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { project } from "@waste/db/schema/organisation"
 import { maintenanceDue, planIssue, type VehicleReadings } from "@waste/domain/resources/maintenance"
+import { ACTIVE_MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -128,7 +128,7 @@ async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now:
     lastDoneOn: row.lastDoneOn,
     lastDoneKm: row.lastDoneKm,
     lastDoneHours: row.lastDoneHours,
-    status: row.status as MaintenancePlanStatus,
+    status: row.status,
     due: maintenanceDue(row, todays.get(row.projectId)!, NO_READINGS),
   }))
 }
@@ -177,7 +177,7 @@ const orderOf = (row: OrderRow): MaintenanceOrder => ({
   vehicleId: row.vehicleId,
   planId: row.planId,
   title: row.title,
-  status: row.status as MaintenanceOrderStatus,
+  status: row.status,
   dueOn: row.dueOn,
   note: row.note,
   completedOn: row.completedOn,
@@ -406,7 +406,7 @@ export function maintenanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         let title = body.title
         if (body.planId !== undefined) {
           const plan = await findPlan(tx, principal, body.planId)
-          if (plan === undefined || plan.vehicleId !== what.id || plan.status !== "active") throw invalidRequest("json", [{ path: "planId", message: NOT_A_PLAN_OF_THE_VEHICLE }])
+          if (plan === undefined || plan.vehicleId !== what.id || !takesReference(plan.status, ACTIVE_MAINTENANCE_PLAN_STATUSES)) throw invalidRequest("json", [{ path: "planId", message: NOT_A_PLAN_OF_THE_VEHICLE }])
           title ??= plan.name
         }
         const [row] = await tx

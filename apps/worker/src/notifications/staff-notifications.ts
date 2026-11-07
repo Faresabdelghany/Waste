@@ -33,7 +33,6 @@ import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { alertNotice, severityReaches, ticketAssignedNotice, type Notice } from "@waste/domain/notifications/notices"
 import { NOTIFICATION_EVENTS, type NotificationEvent } from "@waste/domain/notifications/vocabulary"
-import type { AlertSeverity } from "@waste/domain/resolution/vocabulary"
 import { and, eq, exists, isNull, or, sql } from "drizzle-orm"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
@@ -76,7 +75,7 @@ async function alertRecipients(tx: Tx, companyId: string, raised: Alert): Promis
       ),
     )
     .orderBy(userAccount.id)
-  const reached = asking.filter((row) => row.minSeverity !== null && severityReaches(raised.severity, row.minSeverity as AlertSeverity))
+  const reached = asking.filter((row) => row.minSeverity !== null && severityReaches(raised.severity, row.minSeverity))
   if (reached.length === 0) return []
   const notice = alertNotice(raised, await namesOf(tx, companyId, raised.projectId))
   return reached.map(({ userAccountId }) => ({ userAccountId, notice }))

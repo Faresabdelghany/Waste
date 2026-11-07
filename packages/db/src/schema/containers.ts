@@ -58,7 +58,7 @@ export const container = wms.table(
     barcode: text(),
     rfid: text(),
     serialNumber: text(),
-    ownership: text().notNull(),
+    ownership: text({ enum: CONTAINER_OWNERSHIPS }).notNull(),
     notes: text(),
   },
   (t) => [
@@ -67,7 +67,7 @@ export const container = wms.table(
     tenantReference(t, [t.containerTypeId], containerType),
     tenantUnique(t, t.label),
     projectKey(t),
-    oneOf(t.ownership, CONTAINER_OWNERSHIPS),
+    oneOf(t.ownership),
     tenantIndex(t, t.containerTypeId),
   ],
 )

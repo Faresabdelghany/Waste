@@ -11,7 +11,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { LICENCE_CLASSES as DISPLAY_LICENCE_CLASSES } from "../../route-schemes/fleet-profiles"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 26, ["STOCK_PLACES", "ADJUSTMENT_TARGETS"])
+defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 26, ["STOCK_PLACES", "ADJUSTMENT_TARGETS", "PLANNABLE_VEHICLE_STATUSES", "ACTIVE_VEHICLE_STATUSES", "ACTIVE_DRIVER_STATUSES", "STOCKING_WAREHOUSE_STATUSES", "LIVE_ALLOCATION_STATUSES", "ACTIVE_DECOMMISSION_REASON_STATUSES", "ACTIVE_SENSOR_STATUSES", "ACTIVE_MAINTENANCE_PLAN_STATUSES"])
 
 describe("the Resources vocabulary's own rules", () => {
   test("the stock places and the adjustment targets are places of the place list, and never a service placement", () => {

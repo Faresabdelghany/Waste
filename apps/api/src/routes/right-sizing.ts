@@ -17,9 +17,8 @@
 // container between collection groups itself, which is a scheme's edit
 // (#411, decision c). Dismiss says why. A decided proposal is decided.
 import { Page } from "@waste/contracts/pagination"
-import { RightSizingApprove, RightSizingDismiss, RightSizingListQuery, RightSizingProposal, RightSizingRun, type RightSizingDirection, type RightSizingStatus } from "@waste/contracts/right-sizing"
+import { RightSizingApprove, RightSizingDismiss, RightSizingListQuery, RightSizingProposal, RightSizingRun, type RightSizingStatus } from "@waste/contracts/right-sizing"
 import type { Action } from "@waste/domain/access/modules"
-import type { FillLevel } from "@waste/domain/execution/vocabulary"
 import type { Tx } from "@waste/db/client"
 import { proposeRightSizing } from "@waste/db/commands/right-sizing"
 import { subscription } from "@waste/db/schema/agreements"
@@ -84,11 +83,11 @@ function proposalOf(row: Row): RightSizingProposal {
     projectId: row.projectId,
     subscriptionId: row.subscriptionId,
     productId: row.productId,
-    direction: row.direction as RightSizingDirection,
+    direction: row.direction,
     suggestedProductId: row.suggestedProductId,
-    evidence: row.evidence as FillLevel[],
+    evidence: row.evidence,
     evidenceThrough: row.evidenceThrough.toISOString(),
-    status: row.status as RightSizingStatus,
+    status: row.status,
     decidedAt: instantOf(row.decidedAt),
     decidedBy: row.decidedBy,
     dismissNote: row.dismissNote,
@@ -114,7 +113,7 @@ async function openProposal(tx: Tx, principal: Principal, id: string): Promise<R
   await lockRow(tx, rightSizingProposal, { companyId: principal.companyId, id })
   const current = await findProposal(tx, principal, id)
   if (current === undefined) throw noSuchProposal(id)
-  if (current.status !== "open") throw problem(409, { detail: alreadyDecided(current.status as RightSizingStatus) })
+  if (current.status !== "open") throw problem(409, { detail: alreadyDecided(current.status) })
   return current
 }
 
@@ -237,7 +236,7 @@ export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { 
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await openProposal(tx, principal, id)
-        const sized = changesTheProduct(current.direction as RightSizingDirection)
+        const sized = changesTheProduct(current.direction)
         if (!sized && (body.on !== undefined || body.productId !== undefined)) throw invalidRequest("json", [{ path: body.on !== undefined ? "on" : "productId", message: A_FREQUENCY_CHANGES_NO_PRODUCT }])
         if (sized && body.on === undefined) throw invalidRequest("json", [{ path: "on", message: A_DAY_FOR_THE_CHANGE }])
         // The evidence was read against the subscription as it stood: any write to it since — a change, a patch, an end — makes it stale.

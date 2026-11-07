@@ -33,7 +33,6 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Warehouse, WarehouseCreate, WarehouseListQuery, WarehousePatch } from "@waste/contracts/places"
-import type { WarehouseStatus } from "@waste/contracts/resources"
 import type { Tx } from "@waste/db/client"
 import { warehouse } from "@waste/db/schema/places"
 import { and, asc, eq, gt } from "drizzle-orm"
@@ -81,7 +80,7 @@ function warehouseOf(row: Row): Warehouse {
     address: row.address,
     location: row.location as FlatPoint | null,
     depotId: row.depotId,
-    status: row.status as WarehouseStatus,
+    status: row.status,
     notes: row.notes,
     ...stampsOf(row),
   }

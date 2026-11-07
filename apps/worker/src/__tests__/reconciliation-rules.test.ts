@@ -17,6 +17,7 @@ import { unloadingStation } from "@waste/db/schema/places"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
+import type { UnloadingStationOwnership } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 
 import { runAlertRules } from "../resolution/alert-rules"
@@ -67,11 +68,11 @@ describe("the disposal-site reconciliation", { skip: roles.skip }, () => {
     unplanned = await seedRoute(api, tenant, { status: "completed", pickups: [{ container: "bin2", status: "completed" }] })
     const { companyId, projectId } = tenant
     await withCompany(api.db, companyId, async (tx) => {
-      const place = (id: string, code: string, ownership: string, transfer: boolean) => ({ id, companyId, code, name: code, address: "Havnevej 2", location: { type: "Point" as const, coordinates: [12.6, 55.7] as [number, number] }, ownership, transfer, status: "active" })
+      const place = (id: string, code: string, ownership: UnloadingStationOwnership, transfer: boolean) => ({ id, companyId, code, name: code, address: "Havnevej 2", location: { type: "Point" as const, coordinates: [12.6, 55.7] as [number, number] }, ownership, transfer, status: "active" as const })
       await tx.insert(unloadingStation).values([place(stations.transfer, "Kystbyen omlastestation", "company", true), place(stations.plant, "ARC Amager Bakke", "external", false)])
       await tx.update(route).set({ unloadingStationId: stations.plant }).where(and(eq(route.companyId, companyId), eq(route.id, untipped.id)))
       await tx.update(vehicle).set({ capacityKg: 26_000 }).where(and(eq(vehicle.companyId, companyId), eq(vehicle.id, tenant.vehicleId)))
-      const load = (id: string, departedAt: Date, netKg: number, values: Partial<typeof outboundLoad.$inferInsert> = {}) => ({
+      const load = (id: string, departedAt: Date, netKg: number, values: Partial<typeof outboundLoad.$inferInsert> = {}): typeof outboundLoad.$inferInsert => ({
         id,
         companyId,
         projectId,

@@ -7,6 +7,8 @@
 // a plan to the domain's rule in its words.
 import type { MaintenancePlan } from "@waste/contracts/maintenance"
 import { MAINTENANCE_INTERVAL_MAX } from "@waste/domain/resources/maintenance"
+import { ACTIVE_MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
+import { takesReference } from "@waste/domain/status-gates"
 
 import type { BusinessFormSchema } from "./business-form-types"
 
@@ -62,7 +64,7 @@ export function orderFormOf(plans: readonly Pick<MaintenancePlan, "id" | "name" 
             label: "Plan",
             type: "select",
             description: "Leave blank for a one-off.",
-            options: plans.filter((plan) => plan.status === "active").map((plan) => ({ value: plan.id, label: plan.name })),
+            options: plans.filter((plan) => takesReference(plan.status, ACTIVE_MAINTENANCE_PLAN_STATUSES)).map((plan) => ({ value: plan.id, label: plan.name })),
           },
           { id: "title", label: "What it is for", type: "text", description: "The plan's name where blank.", requiredWhen: { fieldId: "planId", hasValue: false } },
           { id: "dueOn", label: "Planned for", type: "date" },

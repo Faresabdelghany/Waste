@@ -34,6 +34,8 @@ import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { project } from "@waste/db/schema/organisation"
 import { allocatedWithOthers, overlappingRoute, sameDayClash, sameDayUnconfirmed, spanOf, type DaySpan } from "@waste/domain/execution/crew-day"
 import { formatShortDay } from "@waste/domain/days"
+import { OPEN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { LIVE_ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm"
@@ -43,7 +45,6 @@ import { projectTimezone } from "@waste/db/commands/project-clock"
 import { problem } from "../problem"
 import { driverName, vehicleName } from "./availability-rules"
 import type { Scope } from "./references"
-import { LIVE_ALLOCATION_STATUSES } from "./statuses"
 import { shiftsByRoute, workloadsByRoute } from "./workload"
 
 /** The crew a route plans, by id, each null where it names none. */
@@ -150,7 +151,7 @@ export async function refuseDoubleBooked(tx: Tx, scope: Scope, after: RouteRow, 
         eq(route.companyId, scope.companyId),
         eq(route.projectId, scope.projectId),
         eq(route.operatingDate, after.operatingDate),
-        inArray(route.status, ["planned", "ready", "active"]),
+        inArray(route.status, [...OPEN_ROUTE_STATUSES]),
         ne(route.id, after.id),
         or(...members.map((member) => eq(member.column, member.id))),
       ),

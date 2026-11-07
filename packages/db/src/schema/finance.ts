@@ -163,7 +163,7 @@ export const priceListRow = wms.table(
     /** The prototype's Zone: a price that holds inside one operational area, matched against the route's scheme's planning area. */
     planningAreaId: uuid(),
     /** The prototype's Customer type, as the Registry spells it; matched against the agreement's customer. */
-    customerKind: text(),
+    customerKind: text({ enum: CUSTOMER_KINDS }),
     containerTypeId: uuid(),
     wasteFractionId: uuid(),
     /** The negotiated row: it matches its customer alone and always wins for them. */
@@ -195,7 +195,7 @@ export const priceListRow = wms.table(
     projectReference(t, [t.indexedFromId], t as ProjectTable),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.customerKind, CUSTOMER_KINDS),
+    oneOf(t.customerKind),
     check(tableObjectName(t.id.table, "unit_price_not_negative", "priceListRow"), sql`${t.unitPriceMinor} >= 0`),
     positive(t.fromQuantity),
     // The three index columns are null together or none of them, and a row is not indexed from itself; a null passes the last, as the provider price's shape.
@@ -336,7 +336,7 @@ export const serviceProviderPrice = wms.table(
     /** 500 for +5 %; a negative figure is a deflator. */
     indexBasisPoints: integer(),
     /** What was multiplied: the bid, or the fee it replaced. */
-    indexBase: text(),
+    indexBase: text({ enum: INDEX_BASES }),
     notes: text(),
   },
   (t) => [
@@ -348,7 +348,7 @@ export const serviceProviderPrice = wms.table(
     projectReference(t, [t.indexedFromId], t as ProjectTable),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.indexBase, INDEX_BASES),
+    oneOf(t.indexBase),
     check(tableObjectName(t.id.table, "bid_not_negative", "serviceProviderPrice"), sql`${t.bidMinor} >= 0`),
     check(tableObjectName(t.id.table, "unit_price_not_negative", "serviceProviderPrice"), sql`${t.unitPriceMinor} >= 0`),
     // The four index columns are null together or none of them, and a row is not indexed from itself; a null passes the last, like a ticket's parent.
@@ -371,7 +371,7 @@ export const billableEvent = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    kind: text().notNull(),
+    kind: text({ enum: BILLABLE_EVENT_KINDS }).notNull(),
     /** The day the occurrence is priced and billed on: the pickup's route's service date, the ticket's closing day on the project's clock, the person's word on a manual event. */
     serviceDate: date().notNull(),
     /** What the occurrence was under; null where the block reason says why. The customer and the payer are reached through the agreement, never copied. */
@@ -389,7 +389,7 @@ export const billableEvent = wms.table(
     /** The row that won, so the selected price stays traceable; none on a manual event with a person's price, and none on a reversal. */
     priceListRowId: uuid(),
     /** Why the event is not ready; cleared by `reprice`. */
-    blockReason: text(),
+    blockReason: text({ enum: BLOCK_REASONS }),
     /** The pickup of the route, for a `pickup` event. */
     routeId: uuid(),
     pickupId: uuid(),
@@ -424,7 +424,7 @@ export const billableEvent = wms.table(
     /** The cancellation: the instant, the person (none for the consumer's), the reason. */
     cancelledAt: instant(),
     cancelledBy: uuid(),
-    cancelReason: text(),
+    cancelReason: text({ enum: CANCEL_REASONS }),
     /** A hold for the office's review (M14 of #293): the instant, the person (none for the project's own auto-hold), the reason. A held event is not ready, and a run passes over it until it is released. */
     heldAt: instant(),
     heldBy: uuid(),
@@ -452,9 +452,9 @@ export const billableEvent = wms.table(
     tenantReference(t, [t.cancelledBy], userAccount),
     tenantReference(t, [t.heldBy], userAccount),
     projectKey(t),
-    oneOf(t.kind, BILLABLE_EVENT_KINDS),
-    oneOf(t.blockReason, BLOCK_REASONS),
-    oneOf(t.cancelReason, CANCEL_REASONS),
+    oneOf(t.kind),
+    oneOf(t.blockReason),
+    oneOf(t.cancelReason),
     positive(t.quantity),
     positive(t.weightKg),
     // A priced event names what it was under; a blocked one may leave them null where the reason says why.
@@ -546,7 +546,7 @@ export const billingRun = wms.table(
     periodFrom: date().notNull(),
     periodTo: date().notNull(),
     /** Part A writes the row `completed` in the transaction that made its invoices; `requested` and `failed` are the worker's. */
-    status: text().notNull().default("requested"),
+    status: text({ enum: BILLING_RUN_STATUSES }).notNull().default("requested"),
     /** The caller; null for the worker's scheduled run. */
     requestedBy: uuid(),
     completedAt: instant(),
@@ -564,7 +564,7 @@ export const billingRun = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.requestedBy], userAccount),
     projectKey(t),
-    oneOf(t.status, BILLING_RUN_STATUSES),
+    oneOf(t.status),
     check(tableObjectName(t.id.table, "period_shape", "billingRun"), sql`${t.periodTo} >= ${t.periodFrom}`),
     check(tableObjectName(t.id.table, "stamps_shape", "billingRun"), sql`(${t.status} = 'completed') = (${t.completedAt} is not null)`),
     tenantIndex(t, t.projectId, t.periodFrom),
@@ -583,7 +583,7 @@ export const billingRunExclusion = wms.table(
     billingRunId: uuid().notNull(),
     /** The payer the run found events for and invoiced nothing. */
     customerId: uuid().notNull(),
-    reason: text().notNull(),
+    reason: text({ enum: EXCLUSION_REASONS }).notNull(),
     /** How many of its events the run found. */
     eventCount: integer().notNull(),
   },
@@ -593,7 +593,7 @@ export const billingRunExclusion = wms.table(
     projectReference(t, [t.billingRunId], billingRun),
     tenantReference(t, [t.customerId], customer),
     tenantUnique(t, t.billingRunId, t.customerId),
-    oneOf(t.reason, EXCLUSION_REASONS),
+    oneOf(t.reason),
     positive(t.eventCount),
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.projectId),
@@ -608,7 +608,7 @@ export const invoice = wms.table(
     ...recorded,
     /** The document number from the company's counter, `INV-26007188` on the wire; the company's series, unbroken. */
     number: integer().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: INVOICE_KINDS }).notNull(),
     /** The payer: `agreement.payer_customer_id` of every line's event. */
     customerId: uuid().notNull(),
     /** One per document; a payer with agreements in two currencies gets two invoices. */
@@ -623,7 +623,7 @@ export const invoice = wms.table(
     billingRunId: uuid(),
     /** What a credit note corrects and why; null on an invoice. */
     creditsInvoiceId: uuid(),
-    creditReason: text(),
+    creditReason: text({ enum: CREDIT_REASONS }),
     creditNote: text(),
     /** The totals as issued; a credit note's zero or negative, an invoice's of either sign, since the reversals of a period may outweigh its lines. */
     netMinor: total().notNull(),
@@ -646,8 +646,8 @@ export const invoice = wms.table(
     tenantReference(t, [t.issuedBy], userAccount),
     tenantUnique(t, t.number),
     projectKey(t),
-    oneOf(t.kind, INVOICE_KINDS),
-    oneOf(t.creditReason, CREDIT_REASONS),
+    oneOf(t.kind),
+    oneOf(t.creditReason),
     check(tableObjectName(t.id.table, "due_shape", "invoice"), sql`${t.dueOn} >= ${t.issuedOn}`),
     // An invoice bills a period and a credit note none; the two bounds come together.
     check(tableObjectName(t.id.table, "period_shape", "invoice"), sql`(${t.periodFrom} is null) = (${t.periodTo} is null) and (${t.kind} = 'invoice') = (${t.periodFrom} is not null)`),
@@ -729,7 +729,7 @@ export const settlement = wms.table(
     ...validity,
     /** Whose period it settles; the provider and the area through it. */
     serviceAreaAssignmentId: uuid().notNull(),
-    status: text().notNull().default("open"),
+    status: text({ enum: SETTLEMENT_STATUSES }).notNull().default("open"),
     /** ISO 4217, the project's. */
     currency: text().notNull(),
     /** The stamps the status carries: calculated once, closed with the person who closed it. */
@@ -747,7 +747,7 @@ export const settlement = wms.table(
     tenantReference(t, [t.closedBy], userAccount),
     projectKey(t),
     validPeriod(t),
-    oneOf(t.status, SETTLEMENT_STATUSES),
+    oneOf(t.status),
     // Which stamps each status carries: open none, calculated the first, closed both and the person.
     check(
       tableObjectName(t.id.table, "stamps_shape", "settlement"),
@@ -805,9 +805,9 @@ export const settlementEvent = wms.table(
     ...projectScoped,
     ...recorded,
     settlementId: uuid().notNull(),
-    kind: text().notNull(),
+    kind: text({ enum: SETTLEMENT_EVENT_KINDS }).notNull(),
     /** The settlement's status after the event: a snapshot, so the history reads without the row. */
-    status: text().notNull(),
+    status: text({ enum: SETTLEMENT_STATUSES }).notNull(),
     lineCount: integer().notNull(),
     netMinor: total().notNull(),
     /** On a reopening: why. */
@@ -819,8 +819,8 @@ export const settlementEvent = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.settlementId], settlement),
     tenantReference(t, [t.recordedBy], userAccount),
-    oneOf(t.kind, SETTLEMENT_EVENT_KINDS),
-    oneOf(t.status, SETTLEMENT_STATUSES),
+    oneOf(t.kind),
+    oneOf(t.status),
     // Reopening requires a reason, and nothing else carries one.
     check(tableObjectName(t.id.table, "reason_shape", "settlementEvent"), sql`(${t.kind} = 'reopened') = (${t.reason} is not null)`),
     // A settlement's history in recording order: leads with the settlement, so it is the reference's index too.
@@ -837,7 +837,7 @@ export const weightReview = wms.table(
     ...projectScoped,
     ...recorded,
     unloadId: uuid().notNull(),
-    decision: text().notNull(),
+    decision: text({ enum: WEIGHT_REVIEW_DECISIONS }).notNull(),
     /** A rejection says why. */
     note: text(),
     /** On a correction: the new Unload row it wrote, never the reviewed one. */
@@ -850,7 +850,7 @@ export const weightReview = wms.table(
     projectReference(t, [t.unloadId], unload),
     projectReference(t, [t.correctionUnloadId], unload),
     tenantReference(t, [t.reviewedBy], userAccount),
-    oneOf(t.decision, WEIGHT_REVIEW_DECISIONS),
+    oneOf(t.decision),
     check(tableObjectName(t.id.table, "note_shape", "weightReview"), sql`${t.decision} <> 'rejected' or ${t.note} is not null`),
     check(tableObjectName(t.id.table, "correction_shape", "weightReview"), sql`(${t.decision} = 'corrected') = (${t.correctionUnloadId} is not null) and (${t.correctionUnloadId} is null or ${t.correctionUnloadId} <> ${t.unloadId})`),
     // The fold's one backward probe per unload, leading with the unload so it is the reference's index too.
@@ -872,7 +872,7 @@ export const ticketKindProduct = wms.table(
     ...projectScoped,
     ...timestamps,
     /** The kind charged; null where a type is named. */
-    ticketKind: text(),
+    ticketKind: text({ enum: TICKET_KINDS }),
     /** The Ticket Type charged (#548 of #544), its own winning over its kind's; null where a kind is named. */
     ticketTypeId: uuid(),
     productId: uuid().notNull(),
@@ -882,7 +882,7 @@ export const ticketKindProduct = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.productId], product),
     tenantReference(t, [t.ticketTypeId], ticketType),
-    oneOf(t.ticketKind, TICKET_KINDS),
+    oneOf(t.ticketKind),
     // A kind or a type is charged at one product in a project.
     tenantUnique(t, t.projectId, t.ticketKind, t.ticketTypeId).nullsNotDistinct(),
     exactlyOne(t, "kind_or_type", [t.ticketKind, t.ticketTypeId]),
@@ -916,7 +916,7 @@ export const payment = wms.table(
     reference: text(),
     /** The bank's text about the payer. */
     payerText: text(),
-    source: text().notNull(),
+    source: text({ enum: PAYMENT_SOURCES }).notNull(),
     /** A bank line's key (@waste/domain/finance/payments, `bankLineKey`): what it said and how many identical lines came before it. */
     bankLineKey: text(),
     note: text(),
@@ -929,7 +929,7 @@ export const payment = wms.table(
     tenantReference(t, [t.customerId], customer),
     tenantReference(t, [t.recordedBy], userAccount),
     projectKey(t),
-    oneOf(t.source, PAYMENT_SOURCES),
+    oneOf(t.source),
     check(tableObjectName(t.id.table, "amount_positive", "payment"), sql`${t.amountMinor} > 0`),
     // A bank line carries its key, and only a bank line does.
     check(tableObjectName(t.id.table, "bank_line_shape", "payment"), sql`(${t.source} = 'bank-file') = (${t.bankLineKey} is not null)`),

@@ -42,7 +42,6 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Depot, DepotCreate, DepotListQuery, DepotPatch } from "@waste/contracts/places"
-import type { DepotOwnership, DepotStatus } from "@waste/contracts/resources"
 import type { Tx } from "@waste/db/client"
 import { depot } from "@waste/db/schema/places"
 import { and, asc, eq, gt } from "drizzle-orm"
@@ -93,12 +92,12 @@ function depotOf(row: Row): Depot {
     name: row.name,
     address: row.address,
     location: row.location as FlatPoint,
-    ownership: row.ownership as DepotOwnership,
+    ownership: row.ownership,
     serviceProviderId: row.serviceProviderId,
     opensAt: hourOf(row.opensAt),
     closesAt: hourOf(row.closesAt),
     vehicleCapacity: row.vehicleCapacity,
-    status: row.status as DepotStatus,
+    status: row.status,
     notes: row.notes,
     ...stampsOf(row),
   }

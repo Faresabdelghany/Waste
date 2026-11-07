@@ -12,7 +12,6 @@
 // are bounded by their agreement alone. Every time is seconds from the
 // operating date's midnight on the project's clock.
 import { departureOf, secondsOfDay, stopWindow, windowSeconds, type DriverShift, type TimeWindow } from "@waste/domain/execution/shift"
-import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { serviceSecondsOf } from "@waste/domain/execution/workload"
 import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm"
 
@@ -117,7 +116,7 @@ export async function routeTiming(
     const window = stopWindow([windowOf(row.propertyStart, row.propertyEnd), windowOf(row.agreementStart, row.agreementEnd)])
     stops.set(row.id, {
       window: window === null || window === "disjoint" ? window : windowSeconds(window),
-      serviceSeconds: serviceSecondsOf({ service: row.service as PickupService, containerServiceSeconds: row.containerServiceSeconds }),
+      serviceSeconds: serviceSecondsOf({ service: row.service, containerServiceSeconds: row.containerServiceSeconds }),
     })
   }
   const departure = departureOf(routeRow.plannedStartTime, shift)

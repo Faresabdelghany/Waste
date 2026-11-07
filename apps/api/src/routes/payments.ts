@@ -52,7 +52,6 @@ import {
   PaymentListQuery,
   type BankLineResult,
   type PaymentAllocation,
-  type PaymentSource,
 } from "@waste/contracts/payments"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
@@ -185,7 +184,7 @@ function paymentOf(row: PaymentRow): Payment {
     paidOn: row.paidOn,
     reference: row.reference,
     payerText: row.payerText,
-    source: row.source as PaymentSource,
+    source: row.source,
     note: row.note,
     recordedBy: row.recordedBy,
     allocatedMinor,
@@ -289,7 +288,7 @@ async function statementOf(tx: Tx, principal: Principal, customerId: string, que
       .groupBy(payment.id, payment.paidOn, payment.reference),
   ])
   const entries: Omit<Entry, "balanceMinor">[] = [
-    ...documents.map((row) => ({ on: row.issuedOn, kind: row.kind as "invoice" | "credit-note", documentId: row.id, label: labelOf(row), amountMinor: row.grossMinor })),
+    ...documents.map((row) => ({ on: row.issuedOn, kind: row.kind, documentId: row.id, label: labelOf(row), amountMinor: row.grossMinor })),
     ...[...own, ...applied.filter((row) => row.amountMinor !== 0)].map((row) => ({ on: row.paidOn, kind: "payment" as const, documentId: row.id, label: row.reference, amountMinor: -row.amountMinor })),
   ]
   const openingBalanceMinor = entries.filter((entry) => entry.on < query.from).reduce((total, entry) => total + entry.amountMinor, 0)

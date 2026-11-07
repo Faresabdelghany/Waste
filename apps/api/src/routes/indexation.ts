@@ -67,7 +67,7 @@ export function refusePlan(plan: IndexPlan, appliedFrom: string, dryRun: boolean
   if (!dryRun && !plan.verdicts.some((verdict) => verdict.outcome === "indexed")) throw problem(409, { detail: nothingToIndex(appliedFrom) })
 }
 
-/** The status of each product the rows name, in one statement per batch and inside the caller's projects: a successor is a new reference to its product, so an inactive one is a row the plan skips (routes/statuses.ts). */
+/** The status of each product the rows name, in one statement per batch and inside the caller's projects: a successor is a new reference to its product, so an inactive one is a row the plan skips (@waste/domain/status-gates). */
 export async function productStatuses(tx: Tx, principal: Principal, ids: readonly string[]): Promise<Map<string, ProductStatus>> {
   const statuses = new Map<string, ProductStatus>()
   for (const batch of batchesOf([...new Set(ids)])) {
@@ -76,7 +76,7 @@ export async function productStatuses(tx: Tx, principal: Principal, ids: readonl
       .from(product)
       .where(and(eq(product.companyId, principal.companyId), inProjects(product.projectId, principal), inArray(product.id, batch)))
     // The column's CHECK holds it to the Registry's tuple.
-    for (const row of rows) statuses.set(row.id, row.status as ProductStatus)
+    for (const row of rows) statuses.set(row.id, row.status)
   }
   return statuses
 }

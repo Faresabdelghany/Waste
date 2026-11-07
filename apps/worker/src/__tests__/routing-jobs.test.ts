@@ -282,7 +282,7 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
         const seeded = await seedRoute(api, tenant, { status: "planned", pickups: [{ container: "bin1", status: "planned" }, ...Array.from({ length: 25 }, () => ({ container: null, status: "planned" as const }))] })
         const bins = Array.from({ length: 25 }, () => testId())
         await withCompany(api.db, tenant.companyId, async (tx: Tx) => {
-          await tx.insert(container).values(bins.map((id, index) => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, label: `BIN-O15-${seeded.number}-${index}`, containerTypeId: tenant.containerTypeId, ownership: "company" })))
+          await tx.insert(container).values(bins.map((id, index): typeof container.$inferInsert => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, label: `BIN-O15-${seeded.number}-${index}`, containerTypeId: tenant.containerTypeId, ownership: "company" })))
           for (const [index, id] of bins.entries()) await tx.update(pickup).set({ containerId: id }).where(eq(pickup.id, seeded.pickupIds[index + 1]))
           await tx.update(route).set({ depotId, unloadingStationId: stationId }).where(eq(route.id, seeded.id))
         })

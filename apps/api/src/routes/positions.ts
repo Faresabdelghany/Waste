@@ -31,8 +31,6 @@ import { project } from "@waste/db/schema/organisation"
 import { plan, planLeg } from "@waste/db/schema/routing"
 import { routeEta, type EtaStop } from "@waste/domain/routing/eta"
 import { POSITION_RETENTION_DAYS, TRACK_POINTS_MAX } from "@waste/domain/execution/positions"
-import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
-import type { PlanTrip } from "@waste/domain/routing/vocabulary"
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -139,8 +137,8 @@ export async function routeEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, 
     return {
       kind: "pickup",
       pickupId: stop.id,
-      status: stop.status as PickupStatus,
-      reason: stop.reason as PickupReason | null,
+      status: stop.status,
+      reason: stop.reason,
       outcomeAt: stop.outcomeAt?.getTime() ?? null,
       arrivedAt: stop.arrivedAt?.getTime() ?? null,
       serviceSeconds: clock?.serviceSeconds ?? 0,
@@ -148,10 +146,10 @@ export async function routeEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, 
     }
   })
   const reading = routeEta({
-    routeStatus: routeRow.status as RouteStatus,
+    routeStatus: routeRow.status,
     startedAt: routeRow.startedAt?.getTime() ?? null,
     plannedDeparture: timing.departure === null ? null : onDay(timing.departure),
-    trip: planRow.trip as PlanTrip,
+    trip: planRow.trip,
     stops: etaStops,
     // A Plan's legs are written with its `ready` and never before; a stop dropped from the trip leaves legs that are no longer its, which the domain refuses to read.
     legs: planRow.status === "ready" && visited.length === planStops.length ? legRows.map((row) => row.seconds) : null,

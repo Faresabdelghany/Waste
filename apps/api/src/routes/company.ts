@@ -13,7 +13,7 @@
 //
 // The grant is `configure.organization`, which is Settings → Company &
 // Projects: `view` to read, `edit` to change.
-import { Company, CompanyPatch, type CompanyStatus } from "@waste/contracts/organisation"
+import { Company, CompanyPatch } from "@waste/contracts/organisation"
 import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, ne } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -55,7 +55,7 @@ function companyOf(row: Row): Company {
     legalName: row.legalName,
     registrationNumber: row.registrationNumber,
     country: row.country,
-    status: row.status as CompanyStatus,
+    status: row.status,
     vatNumber: row.vatNumber,
     bankIban: row.bankIban,
     bankBic: row.bankBic,

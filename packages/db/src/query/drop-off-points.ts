@@ -14,7 +14,6 @@
 import type { DropOffOpening, OpeningException, WeeklyWindow } from "@waste/domain/resources/drop-off-points"
 import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
 import { holidayListOf } from "@waste/domain/planning/generation"
-import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import type { DropOffPointKind } from "@waste/domain/resources/vocabulary"
 import { type HolidayList, NO_HOLIDAYS } from "@waste/domain/days"
 import { and, asc, eq, exists, gte, inArray, lte, sql } from "drizzle-orm"
@@ -122,7 +121,7 @@ export async function readDropOffMap(tx: Tx, scope: ScopedProject, { fractionKey
   ]
 
   const fractions = byPoint(fractionRows, (row) => row.name)
-  const hours = byPoint(hourRows, (row): WeeklyWindow => ({ weekday: row.weekday as ServiceDay, opensAt: clock(row.opensAt), closesAt: clock(row.closesAt) }))
+  const hours = byPoint(hourRows, (row): WeeklyWindow => ({ weekday: row.weekday, opensAt: clock(row.opensAt), closesAt: clock(row.closesAt) }))
   const exceptions = byPoint(
     exceptionRows,
     (row): OpeningException => ({ date: row.day, opensAt: row.opensAt === null ? null : clock(row.opensAt), closesAt: row.closesAt === null ? null : clock(row.closesAt), note: row.note }),
@@ -149,7 +148,7 @@ export async function readDropOffMap(tx: Tx, scope: ScopedProject, { fractionKey
     points: shown.map((row) => ({
       id: row.id,
       name: row.name,
-      kind: row.kind as DropOffPointKind,
+      kind: row.kind,
       address: row.address,
       location: row.location as DropOffMapPoint["location"],
       publicNote: row.publicNote,

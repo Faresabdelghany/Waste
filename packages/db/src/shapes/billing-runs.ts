@@ -2,7 +2,6 @@
 // row and its exclusions, and the office reads a run with the payers it
 // excluded and the invoices it issued (`runDetailOf`).
 import type { BillingRun, BillingRunDetail, BillingRunExclusion } from "@waste/contracts/billing"
-import type { BillingRunStatus, ExclusionReason } from "@waste/domain/finance/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -36,7 +35,7 @@ export function runOf(row: RunRow): BillingRun {
     projectId: row.projectId,
     periodFrom: row.periodFrom,
     periodTo: row.periodTo,
-    status: row.status as BillingRunStatus,
+    status: row.status,
     requestedBy: row.requestedBy,
     completedAt: instantOf(row.completedAt),
     eventCount: row.eventCount,
@@ -67,7 +66,7 @@ export function exclusionOf(row: ExclusionRow): BillingRunExclusion {
     recordedAt: row.recordedAt.toISOString(),
     billingRunId: row.billingRunId,
     customerId: row.customerId,
-    reason: row.reason as ExclusionReason,
+    reason: row.reason,
     eventCount: row.eventCount,
   }
 }

@@ -41,7 +41,7 @@ export async function raiseAlerts(tx: Tx, companyId: string, drafts: readonly Al
   if (drafts.length === 0) return []
   const written = await tx
     .insert(alert)
-    .values(drafts.map((draft) => ({ ...draft, companyId, status: "new" })))
+    .values(drafts.map((draft) => ({ ...draft, companyId, status: "new" as const })))
     .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
     .returning(alertColumns)
   for (const row of written) await emit(tx, { companyId }, { aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: row.detectedAt })

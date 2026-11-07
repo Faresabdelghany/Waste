@@ -7,7 +7,7 @@
 // the grant is the caller's to have checked. `containerByLabel` is the key a
 // person knows a container by in a file, the label read off the bin.
 import type { AssetState } from "@waste/contracts/stock"
-import type { Container, ContainerCreate, ContainerOwnership, ContainerPatch } from "@waste/contracts/containers"
+import type { Container, ContainerCreate, ContainerPatch } from "@waste/contracts/containers"
 import type { Tx } from "@waste/db/client"
 import { assetStateOf, assetStatus } from "@waste/db/query/asset-state"
 import { container } from "@waste/db/schema/containers"
@@ -89,7 +89,7 @@ export function containerOf(row: ContainerRow): Container {
     barcode: row.barcode,
     rfid: row.rfid,
     serialNumber: row.serialNumber,
-    ownership: row.ownership as ContainerOwnership,
+    ownership: row.ownership,
     notes: row.notes,
     assetState: assetStateOfRow(row),
     ...stampsOf(row),

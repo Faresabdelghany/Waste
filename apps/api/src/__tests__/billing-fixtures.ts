@@ -35,6 +35,7 @@ import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { reversalOf, type BillableEventDraft } from "@waste/domain/finance/from-event"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
+import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 
 import { newId } from "@waste/db/ids"
 import { priceDraft, recordBillableEvent } from "@waste/db/commands/billable-writes"
@@ -196,7 +197,7 @@ export async function seedBilling(pool: Database, tenant: Tenant, ex: ExecutionF
   const { priceLists } = fixtures
 
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    const signed = (fixture: { id: string; number: string }, customerId: string, options: { projectId?: string; status?: string; currency?: string; priceListId?: string | null } = {}) => ({
+    const signed = (fixture: { id: string; number: string }, customerId: string, options: { projectId?: string; status?: AgreementStatus; currency?: string; priceListId?: string | null } = {}): typeof agreement.$inferInsert => ({
       id: fixture.id,
       companyId,
       projectId: options.projectId ?? copenhagen,

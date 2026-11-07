@@ -9,7 +9,7 @@
 // them in. A step and the business per-visit product are products of the
 // project sold per visit, and the annual-access product one sold by the month
 // (400 at the field); each is active where the reference is new (409, the
-// status gate of routes/statuses.ts). A free fraction is the company's (400).
+// status gate of @waste/domain/status-gates). A free fraction is the company's (400).
 // An amended rule never moves a charge already made: each visit is judged
 // once, at its event.
 import { Page } from "@waste/contracts/pagination"
@@ -22,8 +22,10 @@ import { project } from "@waste/db/schema/organisation"
 import { visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
 import type { Action } from "@waste/domain/access/modules"
 import { NOT_A_FRACTION } from "@waste/domain/execution/commands"
-import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
+import { OFFERED_PRODUCT_STATUSES, type ProductUnit } from "@waste/domain/registry/vocabulary"
 import { TRADE_TOGETHER } from "@waste/domain/visits/charges"
+import { unofferedProduct, unofferedStep } from "@waste/domain/registry/catalogue"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -39,7 +41,6 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
-import { unofferedProduct, unofferedStep } from "./statuses"
 
 const MODULE = "commercial.products"
 
@@ -132,8 +133,7 @@ async function requireProducts(tx: Tx, scope: Scope, named: readonly Named[]): P
   })
   if (wrong.length > 0) throw invalidRequest("body", wrong)
   for (const entry of named) {
-    const status = byId.get(entry.id)?.status as ProductStatus | undefined
-    if (status !== undefined && status !== "active" && entry.kept !== entry.id) throw problem(409, { detail: entry.step === null ? unofferedProduct(status) : unofferedStep(entry.step, status) })
+    if (entry.kept !== entry.id) refuseUnless(byId.get(entry.id)?.status, OFFERED_PRODUCT_STATUSES, (status) => (entry.step === null ? unofferedProduct(status) : unofferedStep(entry.step, status)))
   }
 }
 

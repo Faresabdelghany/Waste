@@ -112,7 +112,6 @@ import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
-import { type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
   compatibilityKey,
   holidayListOf,
@@ -135,7 +134,6 @@ import {
   type RouteDecision,
   type StopGroup,
 } from "@waste/domain/planning/generation"
-import type { HolidayPolicy, RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/days"
@@ -235,7 +233,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const stopGroups: StopGroup[] = groups.map((group) => ({
     id: group.id,
     position: group.position,
-    stopSource: group.stopSource as StopSource,
+    stopSource: group.stopSource,
     rule:
       group.stopSource === "rule"
         ? {
@@ -250,7 +248,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   }))
   const stopGroupOf = new Map(stopGroups.map((group) => [group.id, group]))
   const groupOf = new Map(groups.map((group) => [group.id, group]))
-  const planningGroups: GenerationGroup[] = groups.map((group) => ({ id: group.id, position: group.position, days: group.days as ServiceDay[], stopSource: group.stopSource as StopSource }))
+  const planningGroups: GenerationGroup[] = groups.map((group) => ({ id: group.id, position: group.position, days: group.days, stopSource: group.stopSource }))
 
   // The project's working week and its holidays near the walk: a recurrence date lies inside it and a shift walks at most SHIFT_SEARCH_DAYS from one.
   const [calendar] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, scheme.projectId)))
@@ -263,12 +261,12 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     .where(and(eq(routeSchemeSeason.companyId, companyId), eq(routeSchemeSeason.routeSchemeId, scheme.id)))
     .orderBy(asc(routeSchemeSeason.startsOn))
   const recurrence = schemeRecurrenceOf({
-    frequency: scheme.frequency as RecurrenceFrequency,
-    serviceDays: scheme.serviceDays as ServiceDay[],
-    weekRotation: scheme.weekRotation as WeekRotation | null,
+    frequency: scheme.frequency,
+    serviceDays: scheme.serviceDays,
+    weekRotation: scheme.weekRotation,
     validFrom: scheme.validFrom,
     validTo: scheme.validTo,
-    seasons: seasons.map((season) => ({ ...season, frequency: season.frequency as SeasonFrequency, weekRotation: season.weekRotation as WeekRotation | null })),
+    seasons: seasons.map((season) => ({ ...season, frequency: season.frequency, weekRotation: season.weekRotation })),
   })
   const holidayRows = await listHolidayRows(tx, companyId, calendar.holidayList, {
     from: addDays(window.from, -SHIFT_SEARCH_DAYS),
@@ -287,15 +285,15 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   )
   const plan = planRoutes({
     recurrence,
-    holidayPolicy: scheme.holidayPolicy as HolidayPolicy,
-    calendar: { holidays, weekend: calendar.weekend as ServiceDay[] },
+    holidayPolicy: scheme.holidayPolicy,
+    calendar: { holidays, weekend: calendar.weekend },
     window,
     groups: planningGroups,
     existingRoutes: existingRoutes.map((row) => ({
       id: row.id,
       collectionGroupId: groupOfRoute(row),
       serviceDate: row.serviceDate,
-      status: row.status as RouteStatus,
+      status: row.status,
       cancelledByGeneration: row.cancelledByGeneration,
       held: row.heldAt !== null,
       officeStops: officeStops.has(row.id),
@@ -368,10 +366,10 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
         id: row.id,
         containerId: row.containerId,
         position: row.position,
-        origin: row.origin as PickupOrigin,
-        service: row.service as PickupService,
-        status: row.status as PickupStatus,
-        reason: row.reason as PickupReason | null,
+        origin: row.origin,
+        service: row.service,
+        status: row.status,
+        reason: row.reason,
         propertyId: row.propertyId,
         sharedCollectionPointId: row.sharedCollectionPointId,
         wasteFractionId: row.wasteFractionId,

@@ -48,8 +48,8 @@ export const sensor = wms.table(
     ...timestamps,
     /** The device's identifier on its network, a LoRaWAN DevEUI or a Sigfox ID: the key its readings are posted under. */
     identifier: text().notNull(),
-    network: text().notNull(),
-    status: text().notNull(),
+    network: text({ enum: SENSOR_NETWORKS }).notNull(),
+    status: text({ enum: SENSOR_STATUSES }).notNull(),
     notes: text(),
   },
   (t) => [
@@ -57,8 +57,8 @@ export const sensor = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantUnique(t, t.identifier),
     projectKey(t),
-    oneOf(t.network, SENSOR_NETWORKS),
-    oneOf(t.status, SENSOR_STATUSES),
+    oneOf(t.network),
+    oneOf(t.status),
   ],
 )
 

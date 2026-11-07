@@ -32,6 +32,7 @@ import { billableEvent, priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import { PERIOD_ENDS_BY_TODAY } from "@waste/domain/finance/billing-runs"
 import { FREE_DAYS_ARE_A_HIRES } from "@waste/domain/finance/hire"
+import type { AgreementStatus, BillingCadence } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { HELD_FOR_REVIEW } from "@waste/db/commands/billable-writes"
@@ -98,7 +99,7 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
       await tx.insert(priceListRow).values({ id: testId(), companyId, projectId: copenhagen, priceListId: fx.priceLists.default.id, productId: products.wash, unitPriceMinor: 30_000, validFrom: "2026-01-01" })
       const row = (unitPriceMinor: number, containerTypeId: string | null = null) => ({ id: testId(), companyId, projectId: copenhagen, priceListId: fx.priceLists.default.id, productId: products.hire, unitPriceMinor, containerTypeId, validFrom: "2026-01-01" })
       await tx.insert(priceListRow).values([row(4_500), row(5_500, skipType)])
-      const anna = (id: string, number: string, billingCadence: string, status = "active") => ({ id, companyId, projectId: copenhagen, number, customerId: fx.customers.anna.id, payerCustomerId: fx.customers.anna.id, status, billingCadence, currency: "DKK", validFrom: "2026-01-01" })
+      const anna = (id: string, number: string, billingCadence: BillingCadence, status: AgreementStatus = "active"): typeof agreement.$inferInsert => ({ id, companyId, projectId: copenhagen, number, customerId: fx.customers.anna.id, payerCustomerId: fx.customers.anna.id, status, billingCadence, currency: "DKK", validFrom: "2026-01-01" })
       await tx.insert(agreement).values([anna(agreements.manual, "AGR-120", "manual"), anna(agreements.cancelled, "AGR-121", "monthly", "cancelled")])
       const subscriptions = { housing: testId(), unpriced: testId(), draft: testId(), manual: testId(), cancelled: testId() }
       const sold = (id: string, agreementId: string, productId = products.hire) => ({ id, companyId, projectId: copenhagen, agreementId, productId, propertyId: ex.properties.havnegade.id, quantity: 1, validFrom: "2026-01-01" })
@@ -112,7 +113,7 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
       // Paused from the 10th to the 20th of October: a hire's days run on, since the skip still stands there.
       await tx.insert(subscriptionPause).values({ id: testId(), companyId, projectId: copenhagen, subscriptionId: subscriptions.housing, validFrom: "2026-10-10", validTo: "2026-10-21" })
       const skips = Object.fromEntries(CASES.map((name) => [name, testId()])) as Record<Case, string>
-      await tx.insert(container).values(CASES.map((name, index) => ({ id: skips[name], companyId, projectId: copenhagen, label: `SKIP-${index + 1}`, containerTypeId: name === "whole" ? skipType : ex.containerTypes.bin.id, ownership: "company" })))
+      await tx.insert(container).values(CASES.map((name, index): typeof container.$inferInsert => ({ id: skips[name], companyId, projectId: copenhagen, label: `SKIP-${index + 1}`, containerTypeId: name === "whole" ? skipType : ex.containerTypes.bin.id, ownership: "company" })))
       const placed = (name: Case, subscriptionId: string, validFrom: string, validTo: string | null = null) => ({ id: placements[name], companyId, projectId: copenhagen, containerId: skips[name], subscriptionId, wasteFractionId: ex.fractions.residual.id, validFrom, validTo })
       await tx.insert(containerServicePlacement).values([
         placed("whole", subscriptions.housing, "2026-09-25"),

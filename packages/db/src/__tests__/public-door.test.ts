@@ -20,6 +20,7 @@ import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { wasteFraction } from "../schema/catalogue"
 import { company, project } from "../schema/organisation"
 import { dropOffPoint, dropOffPointHours } from "../schema/drop-off-points"
+import type { DropOffPointStatus } from "@waste/domain/resources/vocabulary"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { PUBLIC_DOOR_POLICY, publicGrantStatements, publicPolicyStatements } from "../sql/public-door"
 import { PUBLIC_DOOR_TABLES } from "../table-policies"
@@ -56,8 +57,8 @@ describe("the public door's role", { skip: database.skip }, () => {
     fresh = await freshDatabase(database.adminUrl, "waste_public_door_test")
     await migrateDatabase(fresh.url)
     owner = createDb(fresh.url, { max: 2 })
-    const row = (n: "a" | "b") => ({ id: companyId(n), companyId: companyId(n), name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `3000000${n === "a" ? 1 : 2}`, country: "DK", status: "active" })
-    const projectRow = (n: "a" | "b", m: 1 | 2, publicSlug: string | null) => ({
+    const row = (n: "a" | "b"): typeof company.$inferInsert => ({ id: companyId(n), companyId: companyId(n), name: `Company ${n}`, legalName: `Company ${n} A/S`, registrationNumber: `3000000${n === "a" ? 1 : 2}`, country: "DK", status: "active" })
+    const projectRow = (n: "a" | "b", m: 1 | 2, publicSlug: string | null): typeof project.$inferInsert => ({
       id: projectId(n, m),
       companyId: companyId(n),
       name: `Project ${n}${m}`,
@@ -74,7 +75,7 @@ describe("the public door's role", { skip: database.skip }, () => {
       { id: fractionId("a"), companyId: companyId("a"), key: "glass", name: "Glas" },
       { id: fractionId("b"), companyId: companyId("b"), key: "glass", name: "Glass" },
     ])
-    const point = (n: "a" | "b", m: number, p: 1 | 2, status: string) => ({
+    const point = (n: "a" | "b", m: number, p: 1 | 2, status: DropOffPointStatus): typeof dropOffPoint.$inferInsert => ({
       id: pointId(n, m),
       companyId: companyId(n),
       projectId: projectId(n, p),
@@ -88,7 +89,7 @@ describe("the public door's role", { skip: database.skip }, () => {
     })
     await owner.db.insert(dropOffPoint).values([point("a", 1, 1, "active"), point("a", 2, 1, "draft"), point("a", 3, 1, "closed"), point("a", 4, 2, "active"), point("b", 1, 1, "active")])
     await owner.db.insert(dropOffPointHours).values(
-      [pointId("a", 1), pointId("a", 2), pointId("a", 4)].map((id) => ({ companyId: companyId("a"), projectId: id === pointId("a", 4) ? projectId("a", 2) : projectId("a", 1), dropOffPointId: id, weekday: "monday", opensAt: "10:00", closesAt: "18:00" })),
+      [pointId("a", 1), pointId("a", 2), pointId("a", 4)].map((id): typeof dropOffPointHours.$inferInsert => ({ companyId: companyId("a"), projectId: id === pointId("a", 4) ? projectId("a", 2) : projectId("a", 1), dropOffPointId: id, weekday: "monday", opensAt: "10:00", closesAt: "18:00" })),
     )
   })
 

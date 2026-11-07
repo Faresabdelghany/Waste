@@ -21,7 +21,7 @@
 // vocabulary's type here and nowhere else.
 import type { BillableEvent, BillableEventLinks } from "@waste/contracts/billable-events"
 import { billableEventStatus } from "@waste/domain/finance/readings"
-import type { BillableEventKind, BillableEventStatus, BlockReason, CancelReason } from "@waste/domain/finance/vocabulary"
+import type { BillableEventStatus } from "@waste/domain/finance/vocabulary"
 import { and, eq, isNotNull, isNull, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 
@@ -96,7 +96,7 @@ export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" 
 
 /** The status the domain reads off a row and the two rows that may name it. */
 export const statusOf = (row: EventReading): BillableEventStatus =>
-  billableEventStatus({ blockReason: row.blockReason as BlockReason | null, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null, heldAt: row.heldAt })
+  billableEventStatus({ blockReason: row.blockReason, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null, heldAt: row.heldAt })
 
 /** The billable event on the wire, its status the fold over the reading. */
 export function eventOf(row: EventReading): BillableEvent {
@@ -104,7 +104,7 @@ export function eventOf(row: EventReading): BillableEvent {
   return {
     id: row.id,
     projectId: row.projectId,
-    kind: row.kind as BillableEventKind,
+    kind: row.kind,
     status,
     serviceDate: row.serviceDate,
     agreementId: row.agreementId,
@@ -118,7 +118,7 @@ export function eventOf(row: EventReading): BillableEvent {
     vatMinor: row.vatMinor,
     currency: row.currency,
     priceListRowId: row.priceListRowId,
-    blockReason: row.blockReason as BlockReason | null,
+    blockReason: row.blockReason,
     links: linksOf(row),
     // The four are set together on a recurring charge and on nothing else (billable_event_charge_shape).
     charge:
@@ -131,7 +131,7 @@ export function eventOf(row: EventReading): BillableEvent {
     note: row.note,
     cancelledAt: instantOf(row.cancelledAt),
     cancelledBy: row.cancelledBy,
-    cancelReason: row.cancelReason as CancelReason | null,
+    cancelReason: row.cancelReason,
     // The hold while it stands: a cancellation, which leaves the columns as they were, ends it as a release does.
     hold: status !== "held" || row.heldAt === null || row.holdReason === null ? null : { at: row.heldAt.toISOString(), by: row.heldBy, reason: row.holdReason },
     invoiceLineId: row.invoiceLineId,

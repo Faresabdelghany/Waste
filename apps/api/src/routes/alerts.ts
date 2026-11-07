@@ -106,7 +106,7 @@ async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<Al
 
 /** What the machine says of a command on this alert: the next status, undefined when the command is already done, or the 409 thrown. */
 function judged(current: AlertRow, command: AlertCommand): AlertStatus | undefined {
-  const transition = alertTransition(current.status as AlertStatus, command)
+  const transition = alertTransition(current.status, command)
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   return transition.kind === "stay" ? undefined : transition.to
 }

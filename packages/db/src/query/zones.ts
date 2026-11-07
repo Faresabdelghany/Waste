@@ -24,7 +24,7 @@ export type PlanningAreaAt = {
   projectId: string
   code: string
   name: string
-  purpose: string
+  purpose: PlanningAreaPurpose
   createdAt: Date
   updatedAt: Date
 }

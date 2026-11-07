@@ -36,7 +36,6 @@
 // aggregate statement, so no list of visits crosses the wire.
 import type { SiteVisit, VisitIdentifier } from "@waste/contracts/site-visits"
 import type { PricingOutcome } from "@waste/domain/finance/pricing"
-import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
 import { businessAgreementOf, feePayingAgreement, householdPropertyOf, identifyVisit, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type Identified, type LikelyTrade, type VisitCharge, type VisitFacts, type VisitHolder, type VisitRuleFacts } from "@waste/domain/visits/charges"
 import type { SiteVisitSource } from "@waste/domain/visits/vocabulary"
 import { addDays } from "@waste/domain/days"
@@ -111,7 +110,7 @@ export async function feePayingAgreementOf(tx: Tx, scope: Scope, propertyId: str
         validOn(agreement, day),
       ),
     )
-  return feePayingAgreement(rows.map((row) => ({ agreementId: row.agreementId, status: row.status as AgreementStatus })))
+  return feePayingAgreement(rows.map((row) => ({ agreementId: row.agreementId, status: row.status })))
 }
 
 /** Whether a business's Agreement pays for its visits on the day: signed, and in force. */

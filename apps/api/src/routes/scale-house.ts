@@ -49,7 +49,6 @@ import {
   VehicleTarePatch,
   ScaleTicketAmountDue,
   type AmountDueLine,
-  type VehicleTareStatus,
 } from "@waste/contracts/scale-house"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
@@ -68,8 +67,9 @@ import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scal
 import type { WeighbridgeUnmatchedReason } from "@waste/domain/execution/vocabulary"
 import { matchTicket, plateKey } from "@waste/domain/execution/weighbridge"
 import { CUBIC_METRE_UNIT, soldAtTheWindow } from "@waste/domain/finance/window"
-import type { ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
+import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { linesIssue, netOf, registeredTare, tareKeyOf } from "@waste/domain/scale-house/rules"
+import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -84,7 +84,6 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
-import { refuseUnofferedProduct } from "./statuses"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 import { routesOf } from "./weighbridge"
@@ -124,7 +123,7 @@ const tareOf = (row: TareRow): VehicleTare => ({
   weighedOn: row.weighedOn,
   customerId: row.customerId,
   label: row.label,
-  status: row.status as VehicleTareStatus,
+  status: row.status,
 })
 
 const tareScope = (principal: Principal) => and(eq(vehicleTare.companyId, principal.companyId), inProjects(vehicleTare.projectId, principal))
@@ -629,7 +628,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
               .select({ unit: product.unit })
               .from(product)
               .where(and(eq(product.companyId, principal.companyId), eq(product.id, line.productId)))
-            const unit = sold!.unit as ProductUnit
+            const unit = sold!.unit
             if (!soldAtTheWindow(unit)) throw invalidRequest("body", [{ path: at("productId"), message: NOT_SOLD_AT_THE_WINDOW }])
             if (unit === CUBIC_METRE_UNIT && line.volumeLitres == null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_REQUIRED }])
             if (unit !== CUBIC_METRE_UNIT && line.volumeLitres != null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_ONLY_BY_THE_CUBIC_METRE }])
@@ -658,7 +657,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
             if (issue.kind === "sum") throw invalidRequest("body", [{ path: "lines", message: linesOffNet(issue.sum, issue.netKg) }])
             throw new Error(`the contract let through lines the rule refuses: ${issue.kind}`)
           }
-          // Every 400 above, every 409 below (routes/statuses.ts): a product no longer offered is a new reference refused.
+          // Every 400 above, every 409 below (@waste/domain/status-gates): a product no longer offered is a new reference refused.
           for (const status of offered) refuseUnofferedProduct(status)
 
           // One of our own vehicles' load: matched to its route and written as its Unload, or kept with why not.

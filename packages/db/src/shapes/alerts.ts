@@ -3,7 +3,6 @@
 // through these, and `raiseAlerts`, which the office's raise and the worker's
 // rules both run, emits `alert-raised` with the same `Alert`.
 import type { Alert } from "@waste/contracts/alerts"
-import type { AlertKind, AlertRule, AlertSeverity, AlertSource, AlertStatus } from "@waste/domain/resolution/vocabulary"
 
 import { alert } from "../schema/resolution"
 import { instantOf, stampsOf } from "./times"
@@ -42,10 +41,10 @@ export function alertOf(row: AlertRow): Alert {
   return {
     id: row.id,
     projectId: row.projectId,
-    kind: row.kind as AlertKind,
-    severity: row.severity as AlertSeverity,
-    source: row.source as AlertSource,
-    status: row.status as AlertStatus,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    status: row.status,
     title: row.title,
     details: row.details,
     detectedAt: row.detectedAt.toISOString(),
@@ -61,7 +60,7 @@ export function alertOf(row: AlertRow): Alert {
     resolvedAt: instantOf(row.resolvedAt),
     resolvedBy: row.resolvedBy,
     resolutionNote: row.resolutionNote,
-    rule: row.rule as AlertRule | null,
+    rule: row.rule,
     ...stampsOf(row),
   }
 }

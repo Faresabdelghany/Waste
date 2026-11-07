@@ -11,7 +11,6 @@ import type { SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import type { StoredSeason } from "@waste/domain/planning/generation"
-import type { SeasonFrequency, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import { newId } from "@waste/db/ids"
@@ -34,7 +33,7 @@ export async function seasonsOf(tx: Tx, companyId: string, schemeIds: readonly s
     .where(and(eq(routeSchemeSeason.companyId, companyId), inArray(routeSchemeSeason.routeSchemeId, [...schemeIds])))
     .orderBy(asc(routeSchemeSeason.routeSchemeId), asc(routeSchemeSeason.startsOn))
   for (const { routeSchemeId, ...row } of rows) {
-    const season: SchemeSeason = { ...row, frequency: row.frequency as SeasonFrequency, weekRotation: row.weekRotation as WeekRotation | null }
+    const season: SchemeSeason = { ...row, frequency: row.frequency, weekRotation: row.weekRotation }
     byScheme.set(routeSchemeId, [...(byScheme.get(routeSchemeId) ?? []), season])
   }
   return byScheme

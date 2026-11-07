@@ -248,7 +248,7 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
     blocked: { id: testId(), serviceDate: "2026-09-28", route: routes.cancelled },
     manual: { id: testId(), serviceDate: "2026-09-28", route: null },
   }
-  const pickupEvent = (seed: PickupEventSeed) => ({
+  const pickupEvent = (seed: PickupEventSeed): typeof billableEvent.$inferInsert => ({
     id: seed.id,
     companyId,
     projectId: seed.projectId,

@@ -24,7 +24,6 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { plan, planStop } from "@waste/db/schema/routing"
 import { routeShift } from "@waste/domain/execution/shift"
 import { routeWorkload, type WorkloadStop } from "@waste/domain/execution/workload"
-import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, count, eq, inArray } from "drizzle-orm"
 
 /** Each route's workload, by its id: every route named answers one, a route without stops a workload of nothing. */
@@ -68,8 +67,8 @@ export async function workloadsByRoute(tx: Tx, companyId: string, routes: readon
   for (const group of groups) {
     const stops = stopsByRoute.get(group.routeId) ?? []
     stops.push({
-      service: group.service as PickupService,
-      status: group.status as PickupStatus,
+      service: group.service,
+      status: group.status,
       volumeLitres: group.volumeLitres,
       densityKgPerCubicMetre: group.densityKgPerCubicMetre,
       containerServiceSeconds: group.containerServiceSeconds,

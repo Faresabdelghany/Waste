@@ -46,16 +46,16 @@ export const notificationPreference = wms.table(
     ...tenant,
     ...timestamps,
     userAccountId: uuid().notNull(),
-    event: text().notNull(),
+    event: text({ enum: NOTIFICATION_EVENTS }).notNull(),
     /** For `alert-raised`: the lowest severity the person is told of. */
-    minSeverity: text(),
+    minSeverity: text({ enum: ALERT_SEVERITIES }),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.userAccountId], userAccount),
     tenantUnique(t, t.userAccountId, t.event),
-    oneOf(t.event, NOTIFICATION_EVENTS),
-    oneOf(t.minSeverity, ALERT_SEVERITIES),
+    oneOf(t.event),
+    oneOf(t.minSeverity),
     check(tableObjectName(t.id.table, "min_severity_shape", "notificationPreference"), sql`(${t.event} = 'alert-raised') = (${t.minSeverity} is not null)`),
   ],
 )
@@ -68,7 +68,7 @@ export const notificationRule = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    event: text().notNull(),
+    event: text({ enum: CUSTOMER_NOTICE_EVENTS }).notNull(),
     /** The project's template the notice is sent from. */
     templateId: uuid().notNull(),
   },
@@ -79,7 +79,7 @@ export const notificationRule = wms.table(
     projectKey(t),
     tenantUnique(t, t.projectId, t.event),
     tenantIndex(t, t.templateId),
-    oneOf(t.event, CUSTOMER_NOTICE_EVENTS),
+    oneOf(t.event),
   ],
 )
 

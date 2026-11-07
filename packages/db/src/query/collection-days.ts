@@ -21,9 +21,7 @@
 // them.
 import { holidayListOf, schemeRecurrenceOf, type ExistingRoute, type GenerationWindow } from "@waste/domain/planning/generation"
 import { lookbackOf, type ServedContainer, type ServingGroup, type ServingScheme } from "@waste/domain/planning/collection-days"
-import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
+import { SHIFT_SEARCH_DAYS, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/days"
 import { and, arrayOverlaps, asc, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -102,7 +100,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
     from: addDays(lookbackOf(window), -SHIFT_SEARCH_DAYS),
     to: addDays(window.to, SHIFT_SEARCH_DAYS),
   })
-  const calendar: SchemeCalendar = { holidays: holidayListOf(holidayRows, calendarRow?.holidayList ?? null), weekend: (calendarRow?.weekend ?? []) as ServiceDay[] }
+  const calendar: SchemeCalendar = { holidays: holidayListOf(holidayRows, calendarRow?.holidayList ?? null), weekend: (calendarRow?.weekend ?? []) }
 
   // Every placement of the property's containers in force on some service date the plan walks: from the lookback a shift can reach from, to the window's end.
   const walkFrom = lookbackOf(window)
@@ -183,12 +181,12 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
     .where(and(fenced(collectionGroup), inArray(collectionGroup.id, [...collected.keys()])))
   const serving = new Map<string, ServingGroup[]>()
   for (const group of groups) {
-    const source = group.stopSource as StopSource
+    const source = group.stopSource
     const containers = collected.get(group.id)?.[source === "manual" ? "manual" : "rule"] ?? new Set<string>()
     if (containers.size === 0) continue
     const served = [...containers].flatMap((containerId) => placementsOf.get(containerId) ?? [])
     const list = serving.get(group.routeSchemeId) ?? []
-    list.push({ id: group.id, position: group.position, days: group.days as ServiceDay[], stopSource: source, containers: served })
+    list.push({ id: group.id, position: group.position, days: group.days, stopSource: source, containers: served })
     serving.set(group.routeSchemeId, list)
   }
   if (serving.size === 0) return { calendar, schemes: [] }
@@ -222,7 +220,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
           .where(and(fenced(routeSchemeSeason), inArray(routeSchemeSeason.routeSchemeId, schemes.map((scheme) => scheme.id))))
           .orderBy(asc(routeSchemeSeason.startsOn))
   const seasonsOf = (schemeId: string) =>
-    seasons.filter((season) => season.routeSchemeId === schemeId).map(({ routeSchemeId: _scheme, ...season }) => ({ ...season, frequency: season.frequency as SeasonFrequency, weekRotation: season.weekRotation as WeekRotation | null }))
+    seasons.filter((season) => season.routeSchemeId === schemeId).map(({ routeSchemeId: _scheme, ...season }) => ({ ...season, frequency: season.frequency, weekRotation: season.weekRotation }))
   const groupIds = schemes.flatMap((scheme) => (serving.get(scheme.id) ?? []).map((group) => group.id))
   const standing =
     groupIds.length === 0
@@ -244,7 +242,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
     if (row.collectionGroupId === null) continue
     const list = routesOf.get(row.collectionGroupId) ?? []
     // Whether a route carries an office stop decides only cancel against trim, and neither is a collection: false is enough here.
-    list.push({ id: row.id, collectionGroupId: row.collectionGroupId, serviceDate: row.serviceDate, operatingDate: row.operatingDate, status: row.status as RouteStatus, cancelledByGeneration: row.cancelledByGeneration, held: row.heldAt !== null, officeStops: false })
+    list.push({ id: row.id, collectionGroupId: row.collectionGroupId, serviceDate: row.serviceDate, operatingDate: row.operatingDate, status: row.status, cancelledByGeneration: row.cancelledByGeneration, held: row.heldAt !== null, officeStops: false })
     routesOf.set(row.collectionGroupId, list)
   }
 
@@ -254,14 +252,14 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
       const schemeGroups = serving.get(scheme.id) ?? []
       return {
         recurrence: schemeRecurrenceOf({
-          frequency: scheme.frequency as RecurrenceFrequency,
-          serviceDays: scheme.serviceDays as ServiceDay[],
-          weekRotation: scheme.weekRotation as WeekRotation | null,
+          frequency: scheme.frequency,
+          serviceDays: scheme.serviceDays,
+          weekRotation: scheme.weekRotation,
           validFrom: scheme.validFrom,
           validTo: scheme.validTo,
           seasons: seasonsOf(scheme.id),
         }),
-        holidayPolicy: scheme.holidayPolicy as HolidayPolicy,
+        holidayPolicy: scheme.holidayPolicy,
         groups: schemeGroups,
         existingRoutes: schemeGroups.flatMap((group) => routesOf.get(group.id) ?? []),
       }

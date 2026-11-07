@@ -2,7 +2,6 @@
 // type and `stockMovementOf`, which the ledger's commands answer with
 // (`commands/stock-ledger.ts`) and the API's two reads of the ledger page.
 import type { StockMovement } from "@waste/contracts/stock"
-import type { StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
 
 import { stockMovement } from "../schema/stock"
 
@@ -34,10 +33,10 @@ export function stockMovementOf(row: StockMovementRow): StockMovement {
     recordedAt: row.recordedAt.toISOString(),
     projectId: row.projectId,
     containerId: row.containerId,
-    kind: row.kind as StockMovementKind,
-    fromKind: row.fromKind as StockPlaceKind,
+    kind: row.kind,
+    fromKind: row.fromKind,
     fromWarehouseId: row.fromWarehouseId,
-    toKind: row.toKind as StockPlaceKind,
+    toKind: row.toKind,
     toWarehouseId: row.toWarehouseId,
     placementId: row.placementId,
     occurredAt: row.occurredAt.toISOString(),

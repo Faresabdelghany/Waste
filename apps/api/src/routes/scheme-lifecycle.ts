@@ -72,6 +72,7 @@ import { firstEndingDay, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/dom
 import { routeLabel } from "@waste/domain/numbering"
 import type { JobSender } from "@waste/db/jobs"
 import { addDays } from "@waste/domain/days"
+import { DISPATCHED_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -196,7 +197,7 @@ export async function writeSuccessor(
   const going = await tx
     .select({ number: route.number })
     .from(route)
-    .where(and(eq(route.companyId, principal.companyId), eq(route.routeSchemeId, id), gte(route.serviceDate, validFrom), inArray(route.status, ["ready", "active"])))
+    .where(and(eq(route.companyId, principal.companyId), eq(route.routeSchemeId, id), gte(route.serviceDate, validFrom), inArray(route.status, [...DISPATCHED_ROUTE_STATUSES])))
     .orderBy(asc(route.number))
   if (going.length > 0) throw problem(409, { detail: dispatchedFrom(going.map((row) => routeLabel(row.number)), validFrom) })
 

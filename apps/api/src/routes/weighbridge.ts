@@ -49,7 +49,6 @@ import { vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
-import type { WeighbridgeTicketStatus, WeighbridgeUnmatchedReason } from "@waste/domain/execution/vocabulary"
 import { fractionNamed, matchTicket, plateKey, WEIGHBRIDGE_BATCHES_PER_MINUTE, WEIGHBRIDGE_BODY_MAX_BYTES, type FractionCandidate } from "@waste/domain/execution/weighbridge"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -60,6 +59,7 @@ import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { aheadOfClock } from "@waste/domain/execution/commands"
+import { RAN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 
 import { Allowance } from "../auth/public-door"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -125,8 +125,8 @@ function ticketOf(row: TicketRow): WeighbridgeTicket {
     netKg: row.netKg,
     fractionKey: row.fractionKey,
     wasteCode: row.wasteCode,
-    status: row.status as WeighbridgeTicketStatus,
-    unmatchedReason: row.unmatchedReason as WeighbridgeUnmatchedReason | null,
+    status: row.status,
+    unmatchedReason: row.unmatchedReason,
     routeId: row.routeId,
     unloadId: row.unloadId,
     dismissedNote: row.dismissedNote,
@@ -211,7 +211,7 @@ export async function routesOf(tx: Tx, companyId: string, truck: { id: string; p
           eq(route.companyId, companyId),
           eq(route.projectId, truck.projectId),
           eq(route.operatingDate, dayInTimezone(at, truck.timezone)),
-          inArray(route.status, ["active", "completed"]),
+          inArray(route.status, [...RAN_ROUTE_STATUSES]),
           sql`coalesce(${route.actualVehicleId}, ${route.plannedVehicleId}) = ${truck.id}`,
         ),
       ),

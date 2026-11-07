@@ -19,7 +19,7 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
-import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
+import { outside, refusedWith, rolledBack, rolledBackIn } from "./specimen"
 
 const database = databaseUnderTest()
 
@@ -119,11 +119,11 @@ describe("the Organisation & Access tables against a fresh database", { skip: da
   test("a status is one of the listed values (23514 <table>_status_one_of)", () =>
     seeded(async (tx) => {
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(company).values({ id: a.spare, companyId: a.spare, name: "x", legalName: "x", registrationNumber: "3", country: "DK", status: "closed" })),
+        tx.transaction((savepoint) => savepoint.insert(company).values({ id: a.spare, companyId: a.spare, name: "x", legalName: "x", registrationNumber: "3", country: "DK", status: outside("closed") })),
         refusedWith("23514", /company_status_one_of/),
       )
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(project).values({ id: a.spare, companyId: a.company, name: "Harbor", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "Active" })),
+        tx.transaction((savepoint) => savepoint.insert(project).values({ id: a.spare, companyId: a.company, name: "Harbor", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: outside("Active") })),
         refusedWith("23514", /project_status_one_of/),
       )
       await tx.insert(project).values({ id: a.spare, companyId: a.company, name: "Harbor", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "onboarding" })

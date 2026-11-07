@@ -60,7 +60,7 @@ export const auditEvent = wms.table(
     /** The table and the row a row of a set belongs to; null for a row of no set. */
     parentTable: text(),
     parentId: uuid(),
-    action: text().notNull(),
+    action: text({ enum: AUDIT_ACTIONS }).notNull(),
     /** `{ column: [before, after] }`, over the columns that moved. */
     changed: jsonb().notNull(),
     /** The principal's account; null for the worker, the seed and the hook. */
@@ -71,7 +71,7 @@ export const auditEvent = wms.table(
   },
   (t) => [
     companyReference(t, company).onDelete("cascade"),
-    oneOf(t.action, AUDIT_ACTIONS),
+    oneOf(t.action),
     // The history of one row, newest first.
     index(tableObjectName(t.companyId.table, "row_idx", "auditEvent")).on(t.companyId, t.tableName, t.rowId, t.id),
     // The history of a set, under its parent: most rows have none, so the index is partial.

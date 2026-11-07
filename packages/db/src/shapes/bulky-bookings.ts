@@ -4,7 +4,7 @@
 // `bulky-booking-cancelled` carry.
 import type { BulkyBooking, BulkyStop } from "@waste/contracts/bulky"
 import { bulkyBookingStatus, LIVE_STOP_STATUSES } from "@waste/domain/execution/bulky"
-import type { BulkyBookingStatus, PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -39,9 +39,9 @@ export const bookingColumns = {
   stopStatus: pickup.status,
 }
 
-export const stopOf = (row: BookingRow): BulkyStop | null => (row.stopId === null || row.stopRouteId === null || row.stopStatus === null ? null : { pickupId: row.stopId, routeId: row.stopRouteId, status: row.stopStatus as PickupStatus })
+export const stopOf = (row: BookingRow): BulkyStop | null => (row.stopId === null || row.stopRouteId === null || row.stopStatus === null ? null : { pickupId: row.stopId, routeId: row.stopRouteId, status: row.stopStatus })
 
-export const statusOf = (row: BookingRow): BulkyBookingStatus => bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus as PickupStatus | null })
+export const statusOf = (row: BookingRow): BulkyBookingStatus => bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus })
 
 export function bookingOf(row: BookingRow, items: readonly { description: string; quantity: number }[]): BulkyBooking {
   return {

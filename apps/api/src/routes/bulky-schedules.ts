@@ -12,14 +12,15 @@
 // recurrences it is spelled like.
 import { Page } from "@waste/contracts/pagination"
 import { BulkySchedule, BulkyScheduleCreate, BulkyScheduleListQuery, BulkySchedulePatch } from "@waste/contracts/bulky"
-import type { ProductStatus, ProductUnit } from "@waste/contracts/catalogue"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { product } from "@waste/db/schema/catalogue"
 import type { Action } from "@waste/domain/access/modules"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, isBulkyProductUnit } from "@waste/domain/execution/bulky"
-import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { UnofferedStatus } from "@waste/domain/registry/catalogue"
+import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, gte, isNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -63,10 +64,10 @@ function scheduleOf(row: Row): BulkySchedule {
     id: row.id,
     projectId: row.projectId,
     planningAreaId: row.planningAreaId,
-    frequency: row.frequency as RecurrenceFrequency,
-    serviceDays: row.serviceDays as ServiceDay[],
-    weekRotation: row.weekRotation as WeekRotation | null,
-    holidayPolicy: row.holidayPolicy as HolidayPolicy,
+    frequency: row.frequency,
+    serviceDays: row.serviceDays,
+    weekRotation: row.weekRotation,
+    holidayPolicy: row.holidayPolicy,
     slotsPerDay: row.slotsPerDay,
     productId: row.productId,
     validFrom: row.validFrom,
@@ -79,7 +80,7 @@ const SCHEDULE_RUNNING = "bulky_schedule_no_overlap"
 const SCHEDULE_RUNNING_SENTENCE = "The planning area has a bulky schedule in force over part of that period already; end it first or start this one after it"
 
 /** What a product a schedule names that is not offered is told. */
-export const unofferedBulkyProduct = (status: Exclude<ProductStatus, "active">): string => `The product is ${status}; a bulky schedule charges an active one`
+export const unofferedBulkyProduct = (status: UnofferedStatus): string => `The product is ${status}; a bulky schedule charges an active one`
 
 /** What an end that leaves bookings outside it is told. */
 export const bookingsOutside = (rows: number): string =>
@@ -107,9 +108,8 @@ async function requireBulkyProduct(tx: Tx, scope: Scope, id: string, kept?: stri
     .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
-  if (!isBulkyProductUnit(found.unit as ProductUnit)) throw invalidRequest("body", [{ path: "productId", message: A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM }])
-  const status = found.status as ProductStatus
-  if (status !== "active" && id !== kept) throw problem(409, { detail: unofferedBulkyProduct(status) })
+  if (!isBulkyProductUnit(found.unit)) throw invalidRequest("body", [{ path: "productId", message: A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM }])
+  if (id !== kept) refuseUnless(found.status, OFFERED_PRODUCT_STATUSES, unofferedBulkyProduct)
 }
 
 const commonProblems = (action: Action) => ({

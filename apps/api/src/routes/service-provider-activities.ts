@@ -42,7 +42,6 @@ import {
   ServiceProviderActivityListQuery,
   ServiceProviderActivityPatch,
   type ActivityKind,
-  type ActivityStatus,
 } from "@waste/contracts/service-provider-activities"
 import type { Tx } from "@waste/db/client"
 import { serviceArea, serviceAreaAssignment } from "@waste/db/schema/finance"
@@ -56,7 +55,7 @@ import type { JobSender } from "@waste/db/jobs"
 import type { Action } from "@waste/domain/access/modules"
 import { NOT_A_FRACTION, NOT_A_POWERED_VEHICLE } from "@waste/domain/execution/commands"
 import { firstEndingDay } from "@waste/domain/planning/lifecycle"
-import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
+import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { Refused, type Refusal } from "@waste/domain/refusal"
 import {
   activityLabel,
@@ -129,7 +128,7 @@ const activityOf = (row: Row, containerIds: string[] | null = null, wasteFractio
   projectId: row.projectId,
   number: row.number,
   kind: row.kind as ActivityKind,
-  status: row.status as ActivityStatus,
+  status: row.status,
   serviceProviderId: row.serviceProviderId,
   serviceAreaId: row.serviceAreaId,
   subject: row.subject,
@@ -357,7 +356,7 @@ async function judgeProposal(
     .limit(1)
   if (group === undefined) return { reason: "invalid", input: "collectionGroupId", sentence: NOT_A_GROUP_OF_THE_SCHEME }
   if (proposal.kind === "route-day-change") {
-    const same = routeDayChangeRefusal(group.days as ServiceDay[], proposal.serviceDays)
+    const same = routeDayChangeRefusal(group.days, proposal.serviceDays)
     if (same !== null) return { reason: "invalid", input: "serviceDays", sentence: same }
   } else if (proposal.kind === "vehicle-change") {
     const crew = await crewRefusal(tx, scope, proposal)
@@ -437,7 +436,7 @@ const routeDayAmendment =
   (body: RouteSchemeCreate, predecessor: RouteScheme): RouteSchemeCreate => {
     const at = predecessor.collectionGroups.findIndex((group) => group.id === collectionGroupId)
     const groups = (body.collectionGroups ?? []).map((group, index) => (index === at ? { ...group, days: [...days] } : group))
-    return { ...body, collectionGroups: groups, serviceDays: [...serviceDaysAfter(body.frequency as RecurrenceFrequency, body.serviceDays as ServiceDay[], groups as { days: ServiceDay[] }[])] }
+    return { ...body, collectionGroups: groups, serviceDays: [...serviceDaysAfter(body.frequency, body.serviceDays, groups as { days: ServiceDay[] }[])] }
   }
 
 /**
@@ -512,7 +511,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     await lockRow(tx, serviceProviderActivity, { companyId: principal.companyId, id })
     const current = await findActivity(tx, principal, id)
     if (current === undefined) throw noSuchActivity(id)
-    const move = closesWith({ number: current.number, kind: current.kind as ActivityKind, status: current.status as ActivityStatus }, command, sideOf(principal))
+    const move = closesWith({ number: current.number, kind: current.kind, status: current.status }, command, sideOf(principal))
     if (!move.ok) throw problem(move.status, { detail: move.detail })
     const successorSchemeId = apply === undefined ? null : await apply(current)
     const [row] = await tx
@@ -737,8 +736,8 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         await lockRow(tx, serviceProviderActivity, { companyId: principal.companyId, id })
         const current = await findActivity(tx, principal, id)
         if (current === undefined) throw noSuchActivity(id)
-        const kind = current.kind as ActivityKind
-        if (!OPEN_STATUSES.includes(current.status as ActivityStatus)) throw problem(409, { detail: `${activityLabel(current.number)} is ${current.status.replace("-", " ")}: only an open activity is corrected` })
+        const kind = current.kind
+        if (!OPEN_STATUSES.includes(current.status)) throw problem(409, { detail: `${activityLabel(current.number)} is ${current.status.replace("-", " ")}: only an open activity is corrected` })
         if (!correctedBy(kind, sideOf(principal))) throw problem(403, { detail: createRefusal(kind, sideOf(principal)) ?? undefined })
         const carried: Readonly<Record<ActivityKind, readonly string[]>> = {
           "route-day-change": ["serviceDays", "effectiveFrom"],

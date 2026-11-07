@@ -19,6 +19,7 @@ import { THE_BOOKING_ALONE } from "@waste/domain/execution/office-stops"
 import { and, asc, eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { unofferedProduct } from "@waste/domain/registry/catalogue"
 
 import { createApp } from "../app"
 import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/billable-events"
@@ -26,7 +27,6 @@ import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedule
 import { INACTIVE_CUSTOMER } from "../routes/bulky-bookings"
 import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
 import { bulkyKeepsTheDay } from "../routes/routes"
-import { unofferedProduct } from "../routes/statuses"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -110,11 +110,11 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
         { id: ids.draft, ...scoped, name: "Bulky collection (draft)", kind: "additional-service", unit: "job", status: "draft" },
         { id: ids.byItem, ...scoped, name: "Bulky collection per item", kind: "additional-service", unit: "item", status: "active" },
       ])
-      const organisation = (id: string, name: string) => ({ id, companyId: a.companyId, kind: "organisation", name, registrationNumber: String(randomInt(10_000_000, 100_000_000)), status: "active" })
+      const organisation = (id: string, name: string): typeof customer.$inferInsert => ({ id, companyId: a.companyId, kind: "organisation", name, registrationNumber: String(randomInt(10_000_000, 100_000_000)), status: "active" })
       await tx.insert(customer).values([organisation(ids.customer, "Parkvej Boligforening"), organisation(ids.stranger, "Another Housing")])
-      const home = (id: string, name: string, location: typeof TOWN_HALL | null) => ({ id, ...scoped, name, address: `${name}, København`, kind: "residential", location, status: "active" })
+      const home = (id: string, name: string, location: typeof TOWN_HALL | null): typeof property.$inferInsert => ({ id, ...scoped, name, address: `${name}, København`, kind: "residential", location, status: "active" })
       await tx.insert(property).values([home(ids.home, "Parkvej 18", TOWN_HALL), home(ids.outside, "Roskildevej 1", { type: "Point", coordinates: [12.1, 55.6] }), home(ids.nowhere, "Ukendt 1", null)])
-      const contract = (id: string, number: string, customerId: string) => ({ id, ...scoped, validFrom: "2026-01-01", number, customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK" })
+      const contract = (id: string, number: string, customerId: string): typeof agreement.$inferInsert => ({ id, ...scoped, validFrom: "2026-01-01", number, customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK" })
       await tx.insert(agreement).values([contract(ids.agreement, "AGR-501", ids.customer), contract(ids.strangers, "AGR-502", ids.stranger)])
       await tx.insert(subscription).values([
         { id: testId(), ...scoped, validFrom: "2026-01-01", agreementId: ids.agreement, productId: ids.collection, propertyId: ids.home },

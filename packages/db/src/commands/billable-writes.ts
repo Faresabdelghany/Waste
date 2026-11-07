@@ -91,7 +91,7 @@ export async function agreementFacts(tx: Tx, scope: Scope, agreementId: string):
     .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.projectId, scope.projectId), eq(agreement.id, agreementId)))
     .limit(1)
   if (row === undefined) return undefined
-  return { ...row, status: row.status as AgreementStatus, customerKind: row.customerKind as CustomerKind }
+  return { ...row, status: row.status, customerKind: row.customerKind }
 }
 
 /** The product's VAT rate, or undefined when the product is not the project's: the last read of a pricing, and what the override reads its rate from. */
@@ -139,7 +139,7 @@ export async function rowsOn(tx: Tx, companyId: string, listId: string, productI
     .from(priceListRow)
     .where(and(eq(priceListRow.companyId, companyId), eq(priceListRow.priceListId, listId), eq(priceListRow.productId, productId), validOn(priceListRow, day)))
     .orderBy(asc(priceListRow.id))
-  return rows.map((row) => ({ ...row, customerKind: row.customerKind as CustomerKind | null }))
+  return rows.map((row) => ({ ...row, customerKind: row.customerKind }))
 }
 
 /** What one occurrence is priced with: the agreement and the product it was under, how many, the day, and the conditions a pickup carries — null or absent on a manual or a ticket event. */
@@ -211,7 +211,7 @@ export type ComposedEvent = {
   vatMinor: number | null
   currency: string | null
   priceListRowId: string | null
-  blockReason: string | null
+  blockReason: BlockReason | null
   routeId: string | null
   pickupId: string | null
   ticketId: string | null
@@ -328,11 +328,11 @@ export async function holdsForReview(tx: Tx, scope: Scope): Promise<boolean> {
 export const heldWhenCharged = (holds: boolean, kind: BillableEventKind, blockReason: string | null): boolean => holds && (kind === "job" || kind === "hire") && blockReason === null
 
 /** The hold such an event is written with: the database's clock, no person, the project's reason; none for any other. */
-export const autoHold = (holds: boolean, kind: BillableEventKind, blockReason: string | null): { heldAt: SQL; holdReason: string } | Record<string, never> =>
+export const autoHold = (holds: boolean, kind: BillableEventKind, blockReason: BlockReason | null): { heldAt: SQL; holdReason: string } | Record<string, never> =>
   heldWhenCharged(holds, kind, blockReason) ? { heldAt: sql`now()`, holdReason: HELD_FOR_REVIEW } : {}
 
 /** `autoHold` with the project's choice read here, and read only where the kind and the price could be held. */
-export async function autoHoldOf(tx: Tx, scope: Scope, kind: BillableEventKind, blockReason: string | null): Promise<{ heldAt: SQL; holdReason: string } | Record<string, never>> {
+export async function autoHoldOf(tx: Tx, scope: Scope, kind: BillableEventKind, blockReason: BlockReason | null): Promise<{ heldAt: SQL; holdReason: string } | Record<string, never>> {
   return heldWhenCharged(true, kind, blockReason) ? autoHold(await holdsForReview(tx, scope), kind, blockReason) : {}
 }
 

@@ -28,9 +28,6 @@ import {
   InspectionPhotoLinks,
   InspectionPhotoUpload,
   InspectionPhotoUploadRequest,
-  type FieldInspectionOutcome,
-  type FieldInspectionStatus,
-  type InspectionFinding,
 } from "@waste/contracts/field-inspections"
 import type { Database, Tx } from "@waste/db/client"
 import { container } from "@waste/db/schema/containers"
@@ -102,10 +99,10 @@ function inspectionOf(row: Row, photos: readonly PhotoRow[]): FieldInspection {
     propertyId: row.propertyId,
     inspectorId: row.inspectorId,
     inspectedAt: row.inspectedAt.toISOString(),
-    outcome: row.outcome as FieldInspectionOutcome,
-    findings: row.findings as InspectionFinding[],
+    outcome: row.outcome,
+    findings: row.findings,
     note: row.note,
-    status: row.status as FieldInspectionStatus,
+    status: row.status,
     closedAt: instantOf(row.closedAt),
     photos: photos.map((photo) => ({ id: photo.id, objectKey: photo.objectKey, recordedAt: photo.recordedAt.toISOString() })),
     ...stampsOf(row),
@@ -344,7 +341,7 @@ export function fieldInspectionRoutes(guard: MiddlewareHandler<AuthEnv>, identif
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await openInspection(tx, principal, id)
-        const issue = findingsIssue(fields.outcome ?? (current.outcome as FieldInspectionOutcome), fields.findings ?? (current.findings as InspectionFinding[]))
+        const issue = findingsIssue(fields.outcome ?? current.outcome, fields.findings ?? current.findings)
         if (issue !== undefined) throw invalidRequest("json", [{ path: "findings", message: issue }])
         const [row] = await tx
           .update(fieldInspection)

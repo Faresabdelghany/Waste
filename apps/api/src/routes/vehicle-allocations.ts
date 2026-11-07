@@ -36,7 +36,7 @@
 // so a window ending at midnight is judged on the day before, the day the
 // driver is still meant to be driving — refused on `driverId` with the
 // domain's sentence; the depot the project's and the fraction the company's.
-// Then, after every one of those 400s, the statuses (routes/statuses.ts): a
+// Then, after every one of those 400s, the statuses (@waste/domain/status-gates): a
 // vehicle or a trailer named afresh is in service and a driver named afresh
 // is active, and a retired, an inactive or a suspended one is a 409 naming
 // the row and its status, like every status gate — the id is right and the
@@ -68,8 +68,9 @@ import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allo
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { WINDOW_ENDS_AFTER_IT_STARTS, windowOrdered } from "@waste/domain/resources/allocations"
 import { allocationOverPayload, carriesFraction, fractionsCarried, noCompartmentFor, payloadFor } from "@waste/domain/resources/fleet-fit"
+import { refuseRetiredVehicle, refuseUnavailableDriver } from "@waste/domain/resources/fleet"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
-import type { AllocationAction, AllocationStatus } from "@waste/domain/resources/vocabulary"
+import { LIVE_ALLOCATION_STATUSES, type AllocationAction, type AllocationStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -89,7 +90,6 @@ import { daysThrough, refuseCrewAway } from "./availability-rules"
 import { findDriver, findVehicle, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import { LIVE_ALLOCATION_STATUSES, refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 
 /** The grant every route here runs under: the planner's, not the fleet's. */
 const MODULE = "fleet.vehicle-planning"
@@ -102,6 +102,18 @@ const VEHICLE_RESERVED = "vehicle_allocation_vehicle_no_overlap"
 const DRIVER_RESERVED = "vehicle_allocation_driver_no_overlap"
 const TRAILER_RESERVED = "vehicle_allocation_trailer_no_overlap"
 const alreadyAllocated = (who: string): string => `${who} is already allocated over part of that window`
+
+/**
+ * The live allocations still naming a row — `naming` says how: as the vehicle
+ * or as the trailer, or as the driver — not yet over on the database's clock,
+ * what taking a vehicle or a driver out of service counts (routes/vehicles.ts,
+ * routes/drivers.ts). `company_id` and the row's id and never `inProjects`:
+ * the row was read under the caller's scope and an allocation's project is the
+ * row's by the composite key, and a count that refuses a write must not be the
+ * one statement that could miss a row.
+ */
+export const liveAllocationsNaming = (companyId: string, naming: SQL | undefined): SQL | undefined =>
+  and(eq(vehicleAllocation.companyId, companyId), naming, inArray(vehicleAllocation.status, [...LIVE_ALLOCATION_STATUSES]), gt(vehicleAllocation.plannedTo, sql`now()`))
 
 /** What a command on a released allocation is told: the window is freed, and what is wanted is a new one. */
 const RELEASED_DOES_NOT_CHANGE = "Released allocations do not change; allocate anew"
@@ -162,7 +174,7 @@ function allocationOf(row: Row): VehicleAllocation {
     requiredCapacityKg: row.requiredCapacityKg,
     plannedFrom: row.plannedFrom.toISOString(),
     plannedTo: row.plannedTo.toISOString(),
-    status: row.status as AllocationStatus,
+    status: row.status,
     note: row.note,
     ...stampsOf(row),
   }
@@ -175,8 +187,8 @@ function eventOf(row: EventRow): VehicleAllocationEvent {
     recordedAt: row.recordedAt.toISOString(),
     projectId: row.projectId,
     vehicleAllocationId: row.vehicleAllocationId,
-    action: row.action as AllocationAction,
-    status: row.status as AllocationStatus,
+    action: row.action,
+    status: row.status,
     vehicleId: row.vehicleId,
     driverId: row.driverId,
     trailerId: row.trailerId,
@@ -253,7 +265,7 @@ const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
  * driver, the vehicle or the window moved; the depot the project's; the
  * fraction the company's. Each of those refusals is a 400 at the field that
  * carried it. Then the statuses, after every 400 and each a 409 naming the
- * row and its status (routes/statuses.ts): a vehicle or a trailer named
+ * row and its status (@waste/domain/status-gates): a vehicle or a trailer named
  * afresh is not retired, a driver named afresh is active. A stored row is
  * read only where a rule or an overlap sentence needs it, and its status is
  * never asked; the rows read are handed back for the sentences.

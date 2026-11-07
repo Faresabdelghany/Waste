@@ -37,6 +37,8 @@ import type { Action } from "@waste/domain/access/modules"
 import { onlyABookedBooking } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
+import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
+import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, gte, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -240,7 +242,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         const place = { propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null }
         // The agreement's customer is the body's own field, a 400 asked before any 409.
         await requireCustomersAgreement(tx, scope, { customerId: body.customerId, agreementId: body.agreementId, day: body.day })
-        if (customerStatus !== undefined && customerStatus !== "active") throw problem(409, { detail: INACTIVE_CUSTOMER })
+        refuseUnless(customerStatus, ACTIVE_CUSTOMER_STATUSES, INACTIVE_CUSTOMER)
         refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "booking")
         const today = await projectToday(tx, scope, now)()
         const id = await bookBulky(tx, scope, newId(), { ...body, place, note: body.note ?? null, bookedBy: principal.user.id }, today)

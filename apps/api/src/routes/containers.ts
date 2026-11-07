@@ -79,7 +79,7 @@
 // constraint over `container_id` alone (23P01), turned into a sentence by
 // `refuseOverlap`.
 //
-// A status gates a new reference and never an existing one (routes/statuses.ts,
+// A status gates a new reference and never an existing one (@waste/domain/status-gates,
 // Issue #79): a container is not put into service at a place that no longer
 // serves — a property not active, a point not open or restricted — which the
 // statement proving the subscription is there reads through it and the route

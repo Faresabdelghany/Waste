@@ -65,7 +65,7 @@ describe("an invoice's lines, written in batches (#447)", { skip: database.skip 
     // A run's invoice may carry up to the ceiling's lines, past the 65 534 parameters one statement binds at fifteen a line; the batches cross the thousand here.
     const day = "2027-01-20"
     const lines = 1_001
-    const rows = Array.from({ length: lines }, () => ({ id: testId(), companyId: a.companyId, projectId: copenhagen, kind: "manual", serviceDate: day, agreementId: fx.agreements.anna.id, productId: fx.products.residual.id, quantity: 1, unitPriceMinor: 12_000, netMinor: 12_000, vatPercent: 25, vatMinor: 3_000, currency: "DKK", priceListRowId: fx.rows.residual.id, createdBy: a.users.olivia.id }))
+    const rows = Array.from({ length: lines }, (): typeof billableEvent.$inferInsert => ({ id: testId(), companyId: a.companyId, projectId: copenhagen, kind: "manual", serviceDate: day, agreementId: fx.agreements.anna.id, productId: fx.products.residual.id, quantity: 1, unitPriceMinor: 12_000, netMinor: 12_000, vatPercent: 25, vatMinor: 3_000, currency: "DKK", priceListRowId: fx.rows.residual.id, createdBy: a.users.olivia.id }))
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       for (let start = 0; start < rows.length; start += 500) await tx.insert(billableEvent).values(rows.slice(start, start + 500))
     })

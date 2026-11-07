@@ -14,7 +14,6 @@
 import { ticketLabel } from "@waste/domain/numbering"
 import type { TicketFieldValues } from "@waste/contracts/ticket-types"
 import type { Ticket, TicketEvent, TicketLinks } from "@waste/contracts/tickets"
-import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
 
 import { ticket, ticketEvent } from "../schema/resolution"
 import { instantOf, stampsOf } from "./times"
@@ -89,12 +88,12 @@ export function ticketOf(row: TicketRow): Ticket {
     projectId: row.projectId,
     number: row.number,
     label: labelOf(row),
-    kind: row.kind as TicketKind,
+    kind: row.kind,
     ticketTypeId: row.ticketTypeId,
     fieldValues: row.fieldValues as TicketFieldValues,
-    status: row.status as TicketStatus,
-    priority: row.priority as TicketPriority,
-    source: row.source as TicketSource,
+    status: row.status,
+    priority: row.priority,
+    source: row.source,
     subject: row.subject,
     description: row.description,
     occurredAt: row.occurredAt.toISOString(),
@@ -104,7 +103,7 @@ export function ticketOf(row: TicketRow): Ticket {
     createdBy: row.createdBy,
     sourceEventId: row.sourceEventId,
     links: linksOf(row),
-    resolution: row.resolution as TicketResolution | null,
+    resolution: row.resolution,
     recollectionRouteId: row.recollectionRouteId,
     recollectionPickupId: row.recollectionPickupId,
     chargeProductId: row.chargeProductId,
@@ -141,12 +140,12 @@ export function eventOf(row: TicketEventRow): TicketEvent {
     recordedAt: row.recordedAt.toISOString(),
     projectId: row.projectId,
     ticketId: row.ticketId,
-    kind: row.kind as TicketEventKind,
-    status: row.status as TicketStatus,
+    kind: row.kind,
+    status: row.status,
     assigneeUserAccountId: row.assigneeUserAccountId,
-    resolution: row.resolution as TicketResolution | null,
+    resolution: row.resolution,
     body: row.body,
-    visibility: row.visibility as TicketVisibility,
+    visibility: row.visibility,
     objectKey: row.objectKey,
     sourceEventId: row.sourceEventId,
     recordedBy: row.recordedBy,

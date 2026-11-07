@@ -10,6 +10,7 @@ import { withCompany } from "@waste/db/tenant"
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import { MODULE_KEYS } from "@waste/domain/access/modules"
 import { BLANK_PROBLEM_TYPE } from "@waste/domain/requests"
+import type { DriverStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 
@@ -157,7 +158,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
 
   describe("GET /me names the active driver profile bound to the account", () => {
     const driverOf = async (account: Account) => Me.parse(await (await get("/me", await tokenFor(account, a.companyId))).json()).driver
-    const setStatus = (id: string, status: string) =>
+    const setStatus = (id: string, status: DriverStatus) =>
       withCompany(pool.db, a.companyId, (tx) => tx.update(driver).set({ status }).where(and(eq(driver.companyId, a.companyId), eq(driver.id, id))))
 
     test("by its id, for an account an active profile is bound to", async () => {

@@ -47,7 +47,7 @@ async function preferencesOf(tx: Tx, principal: Principal): Promise<Notification
     .where(and(eq(notificationPreference.companyId, principal.companyId), eq(notificationPreference.userAccountId, principal.user.id)))
   const answered: NotificationPreferences = { ...NO_NOTIFICATIONS }
   for (const row of rows) {
-    if (row.event === "alert-raised") answered.alertRaisedMinSeverity = row.minSeverity as AlertSeverity
+    if (row.event === "alert-raised") answered.alertRaisedMinSeverity = row.minSeverity
     else if (row.event === "ticket-assigned") answered.ticketAssigned = true
   }
   return answered

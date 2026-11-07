@@ -247,7 +247,7 @@ export async function slaHoursOf(tx: Tx, companyId: string, draft: Typed & Pick<
     .from(ticketSla)
     .where(and(eq(ticketSla.companyId, companyId), eq(ticketSla.projectId, draft.projectId), eq(ticketSla.priority, draft.priority), or(and(isNull(ticketSla.kind), isNull(ticketSla.ticketTypeId)), ownOrKinds(ticketSla, draft))))
   const target = slaTargetFor(
-    targets.map((row) => ({ kind: row.kind as TicketKind | null, ticketTypeId: row.ticketTypeId, priority: row.priority as TicketPriority, hours: row.hours })),
+    targets.map((row) => ({ kind: row.kind, ticketTypeId: row.ticketTypeId, priority: row.priority, hours: row.hours })),
     draft,
     draft.priority,
   )
@@ -261,5 +261,5 @@ async function defaultTeamOf(tx: Tx, companyId: string, draft: Typed): Promise<s
     .from(ticketTeamDefault)
     .innerJoin(team, and(eq(team.companyId, ticketTeamDefault.companyId), eq(team.id, ticketTeamDefault.teamId)))
     .where(and(eq(ticketTeamDefault.companyId, companyId), eq(ticketTeamDefault.projectId, draft.projectId), ownOrKinds(ticketTeamDefault, draft), eq(team.status, "active")))
-  return settingFor(rows.map((row) => ({ ...row, kind: row.kind as TicketKind | null })), draft)?.teamId ?? null
+  return settingFor(rows.map((row) => ({ ...row, kind: row.kind })), draft)?.teamId ?? null
 }

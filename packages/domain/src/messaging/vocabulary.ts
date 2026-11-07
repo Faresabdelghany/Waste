@@ -36,6 +36,9 @@ export type MessageTemplatePurpose = (typeof MESSAGE_TEMPLATE_PURPOSES)[number]
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number]
 export type MessageTemplateStatus = (typeof MESSAGE_TEMPLATE_STATUSES)[number]
 
+/** The statuses a template renders a new message in, or is named by a rule in (`@waste/domain/status-gates`). */
+export const ACTIVE_TEMPLATE_STATUSES = ["active"] as const satisfies readonly MessageTemplateStatus[]
+
 /** Every list of this module by its name. */
 export const MESSAGING_VOCABULARIES = {
   MESSAGE_CHANNELS,
