@@ -24,12 +24,11 @@
 //
 // A public placement (M12 of #293) is a candidate too: a litter or dog bin
 // standing for the project at one of its Shared Collection Points, with no
-// subscription and so no agreement to be valid. The subscription and the
-// agreement are left joins on the day, and a row stands when its placement is
-// public or its agreement was found — which, for a subscribed placement, is
-// exactly the rows the inner joins kept: a subscription out of force on the
-// day finds no agreement either. A public placement's point is its own, and
-// it is never paused.
+// subscription and so no agreement to be valid. The placement in force is
+// the one reading every reader asks (`inForceOn`, @waste/db/query/
+// placement-in-force): the subscription and the agreement left joins on the
+// day, a row standing when its placement is public or its agreement was
+// found. A public placement's point is its own, and it is never paused.
 //
 // One statement for every day of the walk, `unnest` over the dates, so a
 // year's run is one round trip and not three hundred; the domain's
@@ -50,6 +49,7 @@
 // fence bounds it to the company as it bounds every request; the project is a
 // `where` beside it.
 import type { Tx } from "@waste/db/client"
+import { inForceOn } from "@waste/db/query/placement-in-force"
 import { lastEmptyings } from "@waste/db/query/tank-emptyings"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
@@ -89,6 +89,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
   const byDay = new Map<string, StopCandidate[]>(days.map((day) => [day, []]))
   if (days.length === 0) return byDay
   const place = sql`coalesce(${property.location}, ${sharedCollectionPoint.location})`
+  const inForce = inForceOn(sql`d.day`)
   const rows = await tx.execute<Row>(sql`
     select d.day::text as service_date,
       ${container.id} as container_id,
@@ -115,13 +116,9 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
     join ${container} on ${container.companyId} = ${scope.companyId} and ${container.projectId} = ${scope.projectId}
     join ${containerServicePlacement}
       on ${containerServicePlacement.companyId} = ${container.companyId} and ${containerServicePlacement.projectId} = ${container.projectId} and ${containerServicePlacement.containerId} = ${container.id}
-      and ${validOn(containerServicePlacement, sql`d.day`)}
-    left join ${subscription}
-      on ${subscription.companyId} = ${containerServicePlacement.companyId} and ${subscription.projectId} = ${containerServicePlacement.projectId} and ${subscription.id} = ${containerServicePlacement.subscriptionId}
-      and ${validOn(subscription, sql`d.day`)}
-    left join ${agreement}
-      on ${agreement.companyId} = ${subscription.companyId} and ${agreement.projectId} = ${subscription.projectId} and ${agreement.id} = ${subscription.agreementId}
-      and ${validOn(agreement, sql`d.day`)}
+      and ${inForce.placement}
+    left join ${subscription} on ${inForce.subscription}
+    left join ${agreement} on ${inForce.agreement}
     left join ${property} on ${property.companyId} = ${subscription.companyId} and ${property.id} = ${subscription.propertyId}
     left join ${sharedCollectionPoint}
       on ${sharedCollectionPoint.companyId} = ${containerServicePlacement.companyId}
@@ -130,7 +127,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       select ${tankInstallation.emptyingIntervalMonths} as emptying_interval_months, ${tankInstallation.lastEmptiedOn} as last_emptied_on from ${tankInstallation}
       where ${tankInstallation.companyId} = ${container.companyId} and ${tankInstallation.containerId} = ${container.id} and ${validOn(tankInstallation, sql`d.day`)}
     ) as tank on true
-    where ${containerServicePlacement.subscriptionId} is null or ${agreement.id} is not null
+    where ${inForce.stands}
     order by d.day, ${container.label}, ${container.id}
   `)
   const emptyings = await lastEmptyings(tx, scope.companyId, [...new Set(rows.filter((row) => row.tank_interval_months !== null).map((row) => row.container_id))])

@@ -1,15 +1,9 @@
 // A Company made outside the seed (C33 of #291, row 18.8): the rows a tenant
 // needs before its first administrator signs in, written in one transaction
 // under the new company's fence. The company starts `onboarding`, with:
-//   the twelve system roles and their grants, from the domain's charters
-//   (@waste/domain/access/system-roles), which the API never writes and only
-//   refuses a change to;
-//   the eight Decommission Reasons every company starts with
-//   (@waste/domain/resources/decommission-reasons), which the office then
-//   renames and retires;
-//   a default Ticket Type per kind (#545 of #544,
-//   @waste/domain/resolution/ticket-types), which the office then renames and
-//   adds its own types beside;
+//   the rows every company starts with (`companyDefaultRows`,
+//   commands/company-defaults.ts): the system roles and their grants, the
+//   Decommission Reasons and a default Ticket Type per kind;
 //   its first Project; and
 //   its primary Company Administrator, an Invitation in every project — an
 //   account no Login is bound to yet, which the access token hook binds on
@@ -19,10 +13,9 @@
 // decisions recorded on #390. Who may run this is the caller's question: the
 // owner-only script (scripts/provision-company.ts), never a tenant's request.
 //
-// The seed spells the demo tenant's roles, grants and reasons through the same
-// row builders below, on its fixed ids, so "the rows a company starts with" is
-// spelled once while the seed stays an upsert that writes nothing a second
-// time.
+// The seed spells the demo tenant's starting rows through the same builders,
+// on its fixed ids, so "the rows a company starts with" is spelled once while
+// the seed stays an upsert that writes nothing a second time.
 //
 // Two refusals, judged before anything is written: a company the register
 // knows already — `unique (country, registration_number)` — and an address
@@ -30,10 +23,8 @@
 // one open Invitation carrying its address and two would bind neither
 // (migration 0005). The second reads across companies, so the caller runs as
 // a role that sees them all: the owner.
-import { normaliseGrants } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 import { Refused } from "@waste/domain/refusal"
-import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 import { and, eq, isNull } from "drizzle-orm"
 
 import type { Db } from "../client"
@@ -42,43 +33,7 @@ import { company, project } from "../schema/organisation"
 import { ticketType } from "../schema/resolution"
 import { decommissionReason } from "../schema/stock"
 import { withCompany } from "../tenant"
-import { defaultTicketTypeRows } from "./ticket-types"
-
-/** The twelve system roles of a company, each under the id `idOf` gives its key. */
-export function systemRoleRows(companyId: string, idOf: (key: SystemRoleKey) => string): (typeof role.$inferInsert)[] {
-  return SYSTEM_ROLES.map((systemRole) => ({
-    id: idOf(systemRole.key),
-    companyId,
-    key: systemRole.key,
-    name: systemRole.name,
-    scope: systemRole.scope,
-    description: systemRole.description,
-    system: systemRole.system,
-  }))
-}
-
-// One row per action a charter allows. `normaliseGrants` is the rule the API
-// applies to a grant set it stores (@waste/domain/access/grants); the charters
-// already satisfy it, so it changes nothing today and keeps the rows right if
-// a charter is ever spelled loosely.
-/** The system roles' grants, one row per action, each role under the id `idOf` gives its key. */
-export function systemGrantRows(companyId: string, idOf: (key: SystemRoleKey) => string): (typeof roleGrant.$inferInsert)[] {
-  return SYSTEM_ROLES.flatMap((systemRole) =>
-    normaliseGrants(systemRole.grants).flatMap((grant) =>
-      grant.actions.map((action) => ({
-        companyId,
-        roleId: idOf(systemRole.key),
-        moduleKey: grant.moduleKey,
-        action,
-      })),
-    ),
-  )
-}
-
-/** The Decommission Reasons a company starts with, active, each under the next id `nextId` gives. */
-export function defaultDecommissionReasonRows(companyId: string, nextId: () => string): (typeof decommissionReason.$inferInsert)[] {
-  return DEFAULT_DECOMMISSION_REASONS.map(({ code, name }) => ({ id: nextId(), companyId, code, name, status: "active" }))
-}
+import { companyDefaultRows } from "./company-defaults"
 
 /** What a new company is made from. */
 export type CompanyProvision = {
@@ -122,12 +77,13 @@ export async function provisionCompany(db: Db, provision: CompanyProvision, newI
   const administratorId = newId()
   const roleIds = Object.fromEntries(SYSTEM_ROLES.map((systemRole) => [systemRole.key, newId()])) as Record<SystemRoleKey, string>
   const idOf = (key: SystemRoleKey) => roleIds[key]
+  const starts = companyDefaultRows(companyId, { role: idOf, next: newId })
   await withCompany(db, companyId, async (tx) => {
     await tx.insert(company).values({ id: companyId, companyId, ...provision.company, status: "onboarding" })
-    await tx.insert(role).values(systemRoleRows(companyId, idOf))
-    await tx.insert(roleGrant).values(systemGrantRows(companyId, idOf))
-    await tx.insert(decommissionReason).values(defaultDecommissionReasonRows(companyId, newId))
-    await tx.insert(ticketType).values(defaultTicketTypeRows(companyId, newId))
+    await tx.insert(role).values(starts.roles)
+    await tx.insert(roleGrant).values(starts.grants)
+    await tx.insert(decommissionReason).values(starts.decommissionReasons)
+    await tx.insert(ticketType).values(starts.ticketTypes)
     await tx.insert(project).values({ id: projectId, companyId, ...provision.project, status: "onboarding" })
     await tx.insert(userAccount).values({ id: administratorId, companyId, email, fullName: provision.administrator.fullName, roleId: idOf("company-administrator"), allProjects: true, primaryAdministrator: true })
   })

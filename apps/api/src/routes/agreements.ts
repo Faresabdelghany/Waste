@@ -37,8 +37,10 @@
 // (routes/periods.ts) — a child that moves outside is a 400 naming the bound,
 // since the caller chose it; a parent that shortens under its children is a
 // 409 counting them, since the rows in the way are not in the body and have
-// to be ended first. An agreement's children are its subscriptions and a
-// subscription's are its placements, so a subscription's patch answers both.
+// to be ended first. An agreement's children are its subscriptions and the
+// business credentials charged to it, a subscription's its placements and
+// its pauses, each declared once (@waste/db/commands/agreement-periods), so
+// a subscription's patch answers both sides and a termination ends them all.
 //
 // A status gates a new reference and never an existing one (@waste/domain/status-gates,
 // Issue #79): the customer an agreement names, as holder or as payer, is
@@ -82,18 +84,18 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
-import { containerServicePlacement } from "@waste/db/schema/containers"
 import type { JobSender } from "@waste/db/jobs"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
-import { count } from "@waste/domain/text"
 import { refuseInactiveCustomer, type Party } from "@waste/domain/registry/agreements"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
-import { and, asc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm"
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import { and, asc, eq, gt, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
+import { AGREEMENT_CHILDREN, carryPlacements, endAgreementHoldingsOn, endSubscriptionsOn, servingOn, SUBSCRIPTION_CHILDREN } from "@waste/db/commands/agreement-periods"
+import { refuseStrandedChildren, runsPast } from "@waste/db/commands/periods"
+import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { pauseSubscription } from "@waste/db/commands/subscription-pauses"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -101,7 +103,7 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
+import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requirePriceList, requireProduct, requireProperty, requireSharedCollectionPoint, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 import type { ClockOptions } from "./scheme-groups"
@@ -197,14 +199,6 @@ const PLACE_SUBSCRIBED_SENTENCE = "The agreement already subscribes to that prod
 /** What a bound outside the parent's period is told, on the create and on the patch alike. */
 const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 
-/** "it" or "them": the sentence has just counted the rows, so the pronoun follows the count. */
-const them = (rows: number) => (rows === 1 ? "it" : "them")
-
-/** What a period a child does not fit inside is refused with; the rows in the way are not in the body, so the caller ends them first — a placement through the ledger's commands, since a form does not end one (Issue #101). */
-const strandedSubscriptions = (rows: number) => `${count(rows, "subscription")} would fall outside the agreement's period; end ${them(rows)} first`
-const strandedPlacements = (rows: number) =>
-  `${count(rows, "placement")} would fall outside the subscription's period; end ${them(rows)} first through the container's return or decommission`
-
 const noSuchAgreement = (id: string) => problem(404, { detail: `No agreement ${id} in the projects this account works in` })
 const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
 
@@ -255,18 +249,13 @@ async function findSubscription(
   return { ...held, agreement: { validFrom: agreementValidFrom, validTo: agreementValidTo } }
 }
 
-/** A child table of an effective-dated record: the tenant, the period, and the column naming the parent. */
-type ChildTable = PgTable & { companyId: PgColumn; validFrom: PgColumn; validTo: PgColumn }
-
-/**
- * The `where` of the children a parent's move would strand, for
- * `refuseStranded` (routes/periods.ts): this company's rows of the parent
- * whose period leaves the new one. Both parents here ask it — an agreement of
- * its subscriptions, a subscription of its placements — so it is spelled
- * once; the count and the 409 are the shared helper's.
- */
-const strandedChildren = (table: ChildTable, parentColumn: PgColumn, parent: { companyId: string; id: string }, period: Period) =>
-  and(eq(table.companyId, parent.companyId), eq(parentColumn, parent.id), notWithin(table, period))
+/** One subscription of the caller's projects as the wire carries it; undefined for one they do not reach. */
+export async function readSubscription(tx: Tx, principal: Principal, id: string): Promise<Subscription | undefined> {
+  const row = await findSubscription(tx, principal, id)
+  if (row === undefined) return undefined
+  const { agreement: _period, ...held } = row
+  return subscriptionOf(held)
+}
 
 /** The status of the customer each field names, as `partyStatuses` answers it. */
 type Parties = Readonly<Record<Party, CustomerStatus | undefined>>
@@ -360,9 +349,7 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, b
 
   // Every 400 above, every 409 below (@waste/domain/status-gates).
   refuseInactiveParties(parties)
-  if (period !== undefined) {
-    await refuseStranded(tx, subscription, strandedChildren(subscription, subscription.agreementId, { companyId: principal.companyId, id }, period), strandedSubscriptions)
-  }
+  if (period !== undefined) await refuseStrandedChildren(tx, AGREEMENT_CHILDREN, { companyId: principal.companyId, id }, period)
 
   const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
     tx
@@ -426,13 +413,7 @@ export async function patchSubscription(tx: Tx, principal: Principal, id: string
 
     const period = periodAfter(current, patch)
     requireWithin(current.agreement, period, OUTSIDE_AGREEMENT)
-    await refuseStranded(
-      tx,
-      containerServicePlacement,
-      strandedChildren(containerServicePlacement, containerServicePlacement.subscriptionId, { companyId: principal.companyId, id }, period),
-      strandedPlacements,
-    )
-    await refuseStranded(tx, subscriptionPause, strandedChildren(subscriptionPause, subscriptionPause.subscriptionId, { companyId: principal.companyId, id }, period), strandedPauses)
+    await refuseStrandedChildren(tx, SUBSCRIPTION_CHILDREN, { companyId: principal.companyId, id }, period)
   }
 
   const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
@@ -487,37 +468,11 @@ export const INSIDE_AGREEMENT = "After the agreement's first day and before its 
 /** What a change that leaves the product and the quantity as they are is told. */
 export const CHANGES_NOTHING = "The subscription already has that product and that quantity"
 
-/** What a change or a termination is refused with where a row begins on or after its day, which ending on that day would strand. */
-export const placementsBeginLater = (rows: number) => `${count(rows, "placement")} ${rows === 1 ? "begins" : "begin"} on or after that day; end ${them(rows)} first`
-/** What a change or a termination is refused with where a pause begins on or after its day: a pause that has not begun is cancelled, not ended (#291). */
-export const pausesBeginLater = (rows: number) => `${count(rows, "pause")} ${rows === 1 ? "begins" : "begin"} on or after that day; cancel ${them(rows)} first`
-/** What a subscription's new period that would leave a pause outside it is refused with. */
-export const strandedPauses = (rows: number) => `${count(rows, "pause")} would fall outside the subscription's period; end or cancel ${them(rows)} first`
-export const subscriptionsBeginLater = (rows: number) => `${count(rows, "subscription")} ${rows === 1 ? "begins" : "begin"} on or after that day; end ${them(rows)} first`
-
 /** The day of a change or a termination: after the period's first day and before its end, so both halves it leaves are periods (400 at `on`). */
 function requireStrictlyInside(period: Period, on: string, message: string): void {
   if (period.validFrom < on && (period.validTo === null || on < period.validTo)) return
   throw invalidRequest("body", [{ path: "on", message }])
 }
-
-/** A pause of these subscriptions in force past `on`: begun before it, ending after it or open. */
-export const pausesPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
-  and(
-    eq(subscriptionPause.companyId, companyId),
-    inArray(subscriptionPause.subscriptionId, [...subscriptionIds]),
-    lt(subscriptionPause.validFrom, on),
-    or(isNull(subscriptionPause.validTo), gt(subscriptionPause.validTo, on)),
-  )
-
-/** A placement of these subscriptions in force past `on`: begun before it, ending after it or open. */
-export const placementsPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
-  and(
-    eq(containerServicePlacement.companyId, companyId),
-    inArray(containerServicePlacement.subscriptionId, [...subscriptionIds]),
-    lt(containerServicePlacement.validFrom, on),
-    or(isNull(containerServicePlacement.validTo), gt(containerServicePlacement.validTo, on)),
-  )
 
 /**
  * A change of service from a day (#291): the subscription ends on `on` and
@@ -545,39 +500,19 @@ export async function changeSubscription(tx: Tx, principal: Principal, id: strin
 
   // Every 400 above, every 409 below (@waste/domain/status-gates).
   refuseUnofferedProduct(productStatus)
-  await refuseStranded(
-    tx,
-    containerServicePlacement,
-    and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.subscriptionId, id), gte(containerServicePlacement.validFrom, on)),
-    placementsBeginLater,
-  )
-  await refuseStranded(tx, subscriptionPause, and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), gte(subscriptionPause.validFrom, on)), pausesBeginLater)
 
-  // The containers serving it on the day, read before their placements end, since each one's replacement keeps its end.
-  const serving = await tx
-    .select({
-      id: containerServicePlacement.id,
-      containerId: containerServicePlacement.containerId,
-      wasteFractionId: containerServicePlacement.wasteFractionId,
-      serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
-      validTo: containerServicePlacement.validTo,
-    })
-    .from(containerServicePlacement)
-    .where(placementsPast(companyId, [id], on))
-    .orderBy(asc(containerServicePlacement.id))
+  // The containers serving it on the day and the pause in force past it, read before they end, since each one's replacement keeps its end.
+  const serving = await servingOn(tx, companyId, [id], on)
+  const [pausing] = await tx
+    .select({ validTo: subscriptionPause.validTo })
+    .from(subscriptionPause)
+    .where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), runsPast(subscriptionPause, on)))
 
-  // Each half ends before the other begins, so no exclusion constraint sees two at once. The placements end first, so the
-  // subscription's own patch strands none; the replacement is written as any subscription is (`createSubscription`, the CSV
-  // import's writer too): an active product and a served place, a period inside the agreement's, no second of it at the place.
-  if (serving.length > 0) {
-    await tx
-      .update(containerServicePlacement)
-      .set({ validTo: on })
-      .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, serving.map((placement) => placement.id))))
-  }
-  const [pausing] = await tx.select({ id: subscriptionPause.id, validTo: subscriptionPause.validTo }).from(subscriptionPause).where(pausesPast(companyId, [id], on))
-  if (pausing !== undefined) await tx.update(subscriptionPause).set({ validTo: on }).where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.id, pausing.id)))
-  await patchSubscription(tx, principal, id, { validTo: on })
+  // Each half ends before the other begins, so no exclusion constraint sees two at once: the subscription ends with what it holds
+  // (`endSubscriptionsOn`, refused where a placement or a pause begins on or after the day), and the replacement is written as any
+  // subscription is (`createSubscription`, the CSV import's writer too): an active product and a served place, a period inside the
+  // agreement's, no second of it at the place.
+  await endSubscriptionsOn(tx, companyId, [id], on)
   const replacement = await createSubscription(tx, principal, current.agreementId, {
     productId: takes.productId,
     propertyId: current.propertyId,
@@ -586,23 +521,9 @@ export async function changeSubscription(tx: Tx, principal: Principal, id: strin
     validFrom: on,
     validTo: current.validTo,
   })
-  if (serving.length > 0) {
-    await tx.insert(containerServicePlacement).values(
-      serving.map((placement) => ({
-        id: newId(),
-        companyId,
-        projectId: current.projectId,
-        containerId: placement.containerId,
-        subscriptionId: replacement.id,
-        wasteFractionId: placement.wasteFractionId,
-        serviceFrequencyId: placement.serviceFrequencyId,
-        validFrom: on,
-        validTo: placement.validTo,
-      })),
-    )
-  }
+  await carryPlacements(tx, { companyId, projectId: current.projectId }, serving, replacement.id, on)
   // The pause in force on the day goes on under the replacement, as the containers do (#291).
-  if (pausing !== undefined) await tx.insert(subscriptionPause).values({ id: newId(), companyId, projectId: current.projectId, subscriptionId: replacement.id, validFrom: on, validTo: pausing.validTo })
+  if (pausing !== undefined) await pauseSubscription(tx, companyId, replacement, { id: newId(), validFrom: on, validTo: pausing.validTo })
   return replacement
 }
 
@@ -705,7 +626,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "patchAgreement",
         summary: "Amend an agreement",
         description:
-          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. A customer the patch newly names, as holder or as payer, must be active (409, saying which); re-stating the customer the agreement already carries names nothing new, so a patch sending the record whole is taken after its customer has gone inactive. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement — a shortening that would strand one is refused (409) and the subscriptions have to be ended first. A period that overlaps another agreement of the same number is refused too. `priceListId` moves the agreement onto a price list of the project in the agreement's currency, or back to the project's default list with null; a list or a currency the patch changes is held to the other (400 on `priceListId`).",
+          "Amends one agreement of a project the caller works in; every field is optional and at least one must be given. Amending changes the row and the audit log is the history. The project is not patchable, since a record does not move between projects. A customer the patch newly names, as holder or as payer, must be active (409, saying which); re-stating the customer the agreement already carries names nothing new, so a patch sending the record whole is taken after its customer has gone inactive. Moving the period is held to two rules: the end still comes after the start, which a body naming one bound cannot see by itself, and the new period still contains every subscription of the agreement and every business access credential charged to it — a shortening that would strand one is refused (409), counting them, and they have to be ended first. A period that overlaps another agreement of the same number is refused too. `priceListId` moves the agreement onto a price list of the project in the agreement's currency, or back to the project's default list with null; a list or a currency the patch changes is held to the other (400 on `priceListId`).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The agreement as it now stands.", Agreement),
@@ -715,7 +636,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No agreement with that id in the projects this account works in."),
-          409: describeProblem("Subscriptions of the agreement would fall outside the new period, another agreement of that number is already valid over part of it, or the customer the patch newly names, as holder or as payer, is inactive."),
+          409: describeProblem("Subscriptions of the agreement, or access credentials charged to it, would fall outside the new period, another agreement of that number is already valid over part of it, or the customer the patch newly names, as holder or as payer, is inactive."),
         },
       }),
       guard,
@@ -913,7 +834,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "terminateAgreement",
         summary: "Terminate an agreement on a day",
         description:
-          "A termination (#291): the agreement, every one of its subscriptions in force past `on`, and every placement serving them end together on `on`, the first day none of them is in force. A container stays in service — the bin stays where it is until it is returned, and its return then records the placement that ended without ending it again. `on` lies after the agreement's first day and before its end (400 on `on`). A subscription or a placement that begins on or after `on` would be stranded, and is refused (409, counting them) so it is ended first. Generation's planned routes from `on` stop at those containers no more once a run has read them again: a run of each scheme whose planned routes do is asked in the same transaction, from `on` (or the project's today, or the scheme's first day, if later) through the last such route — where the caller may ask one (`edit` on `route-studio.schemes`), of a validated scheme, absorbed by one already queued, and never a refusal: where no worker has made the queue yet, the next run drops them. Stops no run will take away — on a dispatched or running route, which generation never refreshes, or the office's own — are answered in `stopsToRemove`, for the office to remove by hand, and so is a planned delivery booked under a subscription that ends, from `on` (O3b of #290); a removal or a swap of one of the containers is kept, since it is how the container leaves service. Under the agreement's lock and then its subscriptions', in id order.",
+          "A termination (#291): the agreement, every one of its subscriptions in force past `on`, every placement serving them and every pause of them, and every business access credential charged to it, end together on `on`, the first day none of them is in force. A container stays in service — the bin stays where it is until it is returned, and its return then records the placement that ended without ending it again. `on` lies after the agreement's first day and before its end (400 on `on`). A subscription, a placement, a pause or a credential that begins on or after `on` would be stranded, and is refused (409, counting them) so it is ended first. Generation's planned routes from `on` stop at those containers no more once a run has read them again: a run of each scheme whose planned routes do is asked in the same transaction, from `on` (or the project's today, or the scheme's first day, if later) through the last such route — where the caller may ask one (`edit` on `route-studio.schemes`), of a validated scheme, absorbed by one already queued, and never a refusal: where no worker has made the queue yet, the next run drops them. Stops no run will take away — on a dispatched or running route, which generation never refreshes, or the office's own — are answered in `stopsToRemove`, for the office to remove by hand, and so is a planned delivery booked under a subscription that ends, from `on` (O3b of #290); a removal or a swap of one of the containers is kept, since it is how the container leaves service. Under the agreement's lock and then its subscriptions', in id order.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The agreement as it now stands, and the stops left to remove by hand.", AgreementTerminated),
@@ -921,7 +842,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No agreement with that id in the projects this account works in."),
-          409: describeProblem("A subscription of the agreement, or a placement serving one, begins on or after `on`."),
+          409: describeProblem("A subscription of the agreement, a placement serving one, a pause of one, or a credential charged to it, begins on or after `on`."),
         },
       }),
       guard,
@@ -940,30 +861,9 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         if (current === undefined) throw noSuchAgreement(id)
         requireStrictlyInside(current, on, INSIDE_AGREEMENT)
 
-        // Every 400 above, every 409 below: what begins on or after the day cannot end on it.
-        const ofAgreement = and(eq(subscription.companyId, companyId), eq(subscription.agreementId, id))
-        await refuseStranded(tx, subscription, and(ofAgreement, gte(subscription.validFrom, on)), subscriptionsBeginLater)
-        const subscriptionIds = (await tx.select({ id: subscription.id }).from(subscription).where(ofAgreement)).map((row) => row.id)
-        if (subscriptionIds.length > 0) {
-          await refuseStranded(
-            tx,
-            containerServicePlacement,
-            and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.subscriptionId, subscriptionIds), gte(containerServicePlacement.validFrom, on)),
-            placementsBeginLater,
-          )
-          await refuseStranded(tx, subscriptionPause, and(eq(subscriptionPause.companyId, companyId), inArray(subscriptionPause.subscriptionId, subscriptionIds), gte(subscriptionPause.validFrom, on)), pausesBeginLater)
-        }
-
-        const ending = (await tx.select({ id: subscription.id }).from(subscription).where(and(ofAgreement, or(isNull(subscription.validTo), gt(subscription.validTo, on))))).map((row) => row.id)
-        let containerIds: string[] = []
-        if (ending.length > 0) {
-          await lockRows(tx, subscription, companyId, ending)
-          const ended = await tx.update(containerServicePlacement).set({ validTo: on }).where(placementsPast(companyId, ending, on)).returning({ containerId: containerServicePlacement.containerId })
-          containerIds = [...new Set(ended.map((placement) => placement.containerId))]
-          await tx.update(subscriptionPause).set({ validTo: on }).where(pausesPast(companyId, ending, on))
-          // Through each one's own patch, its placements ended first so it strands none, and then the agreement's, which then strands none.
-          for (const subscriptionId of ending) await patchSubscription(tx, principal, subscriptionId, { validTo: on })
-        }
+        // Everything the agreement holds ends on the day, refused (409) where a subscription, a placement, a pause or a credential
+        // begins on or after it, and the agreement's own patch then strands nothing.
+        const { subscriptionIds: ending, containerIds } = await endAgreementHoldingsOn(tx, companyId, id, on)
         const terminated = await patchAgreement(tx, principal, id, { validTo: on })
 
         const within = { companyId, projectId: current.projectId }

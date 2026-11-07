@@ -4,7 +4,10 @@
 // route's service date, through its subscription and agreement, at the
 // subscription's place; a bulky stop serves its booking's customer at the
 // booking's place. A stop with neither (an address-only stop of the office's)
-// names no customer, and is told nothing.
+// names no customer, and is told nothing. The placement is the one in force
+// on the day as generation holds it (`inForceOn`, placement-in-force.ts): its
+// subscription and agreement valid that day too, so a bin whose placement an
+// issue left open past its subscription's end serves nobody once it ends.
 //
 // The stops are those still owed: `planned`, or `skipped` with the reason
 // `route-cancelled`, the office's cancel closing them. A notice about an area
@@ -23,6 +26,7 @@ import { customer, property, sharedCollectionPoint } from "../schema/customers"
 import { pickup, route } from "../schema/execution"
 import { message } from "../schema/messaging"
 import { planningAreaBoundary } from "../schema/planning-areas"
+import { inForceOn } from "./placement-in-force"
 import { validOn } from "./valid-on"
 
 /** A project of a company: every read here is fenced to one. */
@@ -43,15 +47,16 @@ function servedStops(scope: StopScope, where: SQL, areaIds: readonly string[]): 
             and ${validOn(planningAreaBoundary, route.operatingDate)}
             and extensions.st_contains(${planningAreaBoundary.boundary}, ${place})
         ))`
+  const inForce = inForceOn(route.serviceDate)
   return sql`
     select ${agreement.customerId} as customer_id
     from ${pickup}
     join ${route} on ${route.companyId} = ${pickup.companyId} and ${route.id} = ${pickup.routeId}
     join ${containerServicePlacement}
       on ${containerServicePlacement.companyId} = ${pickup.companyId} and ${containerServicePlacement.projectId} = ${route.projectId} and ${containerServicePlacement.containerId} = ${pickup.containerId}
-      and ${validOn(containerServicePlacement, route.serviceDate)}
-    join ${subscription} on ${subscription.companyId} = ${containerServicePlacement.companyId} and ${subscription.id} = ${containerServicePlacement.subscriptionId}
-    join ${agreement} on ${agreement.companyId} = ${subscription.companyId} and ${agreement.id} = ${subscription.agreementId}
+      and ${inForce.placement}
+    join ${subscription} on ${inForce.subscription}
+    join ${agreement} on ${inForce.agreement}
     left join ${property} on ${property.companyId} = ${subscription.companyId} and ${property.id} = ${subscription.propertyId}
     left join ${sharedCollectionPoint} on ${sharedCollectionPoint.companyId} = ${subscription.companyId} and ${sharedCollectionPoint.id} = ${subscription.sharedCollectionPointId}
     where ${pickup.companyId} = ${scope.companyId} and ${route.projectId} = ${scope.projectId} and ${pickup.bulkyBookingId} is null and ${owed} and ${where} and ${inAreas}

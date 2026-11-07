@@ -15,6 +15,7 @@ import type { Route } from "@waste/contracts/routes"
 import type { Database } from "@waste/db/client"
 import { createDb } from "@waste/db/client"
 import { SEND_MESSAGE_QUEUE } from "@waste/db/commands/messaging"
+import { customersOfRoute, remindersDue } from "@waste/db/query/stop-customers"
 import { defaultTicketTypeOf } from "@waste/db/commands/ticket-types"
 import { newId } from "@waste/db/ids"
 import type { Send } from "@waste/db/jobs"
@@ -326,6 +327,20 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual(await recipientsOf(late.messageIds), [tenant.customers.housing.id, tenant.customers.anna.id].sort())
     const silent = await noticeCustomerFor(event("alert-raised", await raise({ rule: "session-silent", routeId: planned.id, routeLabel: `R-${planned.number}`, driverId: tenant.fleet.driverId, driverName: "Driver", vehicleId: null, lastSeen: NOON.toISOString() })), context())
     assert.deepEqual([silent.notice, silent.messageIds], [null, []])
+  })
+
+  test("a bin whose placement an issue left open past its subscription's end serves nobody once the subscription has ended: neither a route's notice nor the day-ahead reminder reaches its customer", async () => {
+    const { companyId } = tenant
+    const scope = { companyId, projectId: tenant.projects.copenhagen.id }
+    const ended = await placeBin(pool, tenant, "E-1", { agreementId: tenant.agreements.draft.id, productId: tenant.products.residual.id, subscriptionValidTo: "2026-09-01" })
+    const onRoute = await seedCompletedRoute(pool, tenant, [{ containerId: ended.containerId, propertyId: ended.propertyId, status: "planned" }])
+    const [served, reminded] = await withCompany(pool.db, companyId, async (tx) => {
+      await tx.update(route).set({ status: "planned", dispatchedAt: null, startedAt: null, completedAt: null, actualVehicleId: null, actualDriverId: null }).where(eq(route.id, onRoute.id))
+      await tx.update(customer).set({ email: "bo@bo.example", serviceMessagesAllowed: true }).where(eq(customer.id, tenant.customers.bo.id))
+      return [await customersOfRoute(tx, scope, onRoute.id, []), await remindersDue(tx, scope, FIXTURE_DAY, { channel: "email", cap: 100, batch: 100 })]
+    })
+    assert.deepEqual(served, [], "the route's one stop serves no customer")
+    assert.equal(reminded.due.some((due) => due.customerId === tenant.customers.bo.id), false, "nor is its customer reminded of the day")
   })
 
   test("takes the eight kinds, one queue each", () => {

@@ -201,7 +201,7 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
   const window = { from: query.from, to: query.to }
   const routeWindow = and(routesOfWindow(window), routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId))
   // On time: started no later than the planned start on the project's clock on the operating date, plus the grace.
-  const deadline = sql`${instantOnClock(route.operatingDate, project.timezone, route.plannedStartTime)} +${sql.raw(`interval '${ON_TIME_GRACE_MINUTES} minutes'`)}`
+  const deadline = sql`${instantOnClock(route.operatingDate, project.timezone, route.plannedStartTime)} + ${sql.raw(`interval '${ON_TIME_GRACE_MINUTES} minutes'`)}`
   const judged = and(isNotNull(route.startedAt), isNotNull(route.plannedStartTime))
   const routeGroups = await tx
     .select({

@@ -8,9 +8,12 @@
 //
 // A credential is effective-dated (ADR-0005): a patch moves its label and its
 // end alone, under its row lock; the kind, the value and the holder are what
-// it is. `block` turns its visits away with a reason, `unblock` lets them in
-// again; nothing is deleted, since the ledger names the credential each visit
-// was read by.
+// it is. A business's credential sits inside its Agreement's period: a bound
+// outside it is a 400 here, under the agreement's lock, and the agreement's
+// shortening and termination count and end the credentials charged to it
+// (@waste/db/commands/agreement-periods). `block` turns its visits away with
+// a reason, `unblock` lets them in again; nothing is deleted, since the
+// ledger names the credential each visit was read by.
 import {
   AccessCredential,
   AccessCredentialBlock,
@@ -220,7 +223,9 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (body.propertyId != null) await requireProperty(tx, scope, body.propertyId)
         else if (body.customerId != null && body.agreementId != null) {
           // The body's 400s first — the customer, its agreement, the period inside it — then the two states a new reference is gated on.
+          // The agreement is read under its lock, which its shortening and its termination take too.
           const customerStatus = await requireCustomer(tx, principal.companyId, body.customerId)
+          await lockRow(tx, agreement, { companyId: principal.companyId, id: body.agreementId })
           const charged = await customersAgreement(tx, scope, body.customerId, body.agreementId)
           requireWithin(charged.period, periodOf(body), WITHIN_THE_AGREEMENT)
           refuseUnless(customerStatus, ACTIVE_CUSTOMER_STATUSES, INACTIVE_HOLDER)
@@ -296,6 +301,10 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const fields = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
+        const found = await findCredential(tx, principal, id)
+        if (found === undefined) throw noSuchCredential(id)
+        // The agreement a business's credential is charged to first, parent before child, as its shortening and its termination take it.
+        if (found.agreementId !== null) await lockRow(tx, agreement, { companyId: principal.companyId, id: found.agreementId })
         await lockRow(tx, accessCredential, { companyId: principal.companyId, id })
         const current = await findCredential(tx, principal, id)
         if (current === undefined) throw noSuchCredential(id)

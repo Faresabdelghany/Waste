@@ -11,7 +11,7 @@
 //
 // The number is the company's running count, what a decision letter quotes:
 // the highest plus one, taken under the company's row lock so two creates
-// never meet, with `application_number_key` behind it. Each `decide` appends
+// never meet (`nextNumberOf`), with `application_number_key` behind it. Each `decide` appends
 // a Decision — `decided_by` the caller — and the latest rides on the
 // Application; an appeal reopens it for review and the next decision follows
 // the last. A decision emits `application-decided` to the outbox with the
@@ -29,17 +29,16 @@ import type { Tx } from "@waste/db/client"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { propertyParty } from "@waste/db/schema/customers"
-import { company } from "@waste/db/schema/organisation"
 import type { Action } from "@waste/domain/access/modules"
 import { moveOf, moveRefusal, ONE_PLACE, type ApplicationCommand } from "@waste/domain/registry/applications"
 import { isOneOf } from "@waste/domain/lists"
 import { UNDECIDED_APPLICATION_STATUSES } from "@waste/domain/registry/vocabulary"
-import { and, asc, eq, gt, max, sql } from "drizzle-orm"
+import { and, asc, eq, gt, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { lockRow } from "@waste/db/commands/shared"
+import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { applicationColumns, applicationOf, decisionColumns, decisionOf, labelOf, latestDecisions, type ApplicationRow } from "@waste/db/shapes/applications"
 
@@ -239,9 +238,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const subject = { customerId: body.customerId, propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null, subscriptionId: body.subscriptionId ?? null }
         const refused = await subjectRefusal(tx, principal.companyId, subject, { party: true, subscription: true }, now())
         if (refused !== undefined) throw invalidRequest("body", [{ path: refused === "party" ? "propertyId" : "subscriptionId", message: SUBJECT_SENTENCES[refused] }])
-        // The company's row first, so two creates take the next number one after the other; a key share, so the company's children still insert beside it.
-        await tx.select({ id: company.id }).from(company).where(eq(company.id, principal.companyId)).limit(1).for("no key update")
-        const [{ highest }] = await tx.select({ highest: max(application.number) }).from(application).where(eq(application.companyId, principal.companyId))
+        const number = await nextNumberOf(tx, application, principal.companyId)
         const [row] = await tx
           .insert(application)
           .values({
@@ -251,7 +248,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             subscriptionId: body.subscriptionId ?? null,
             id: newId(),
             companyId: principal.companyId,
-            number: (highest ?? 0) + 1,
+            number,
           })
           .returning(applicationColumns)
         return created(c, "/applications", applicationOf(row, undefined))

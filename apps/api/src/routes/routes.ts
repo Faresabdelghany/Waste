@@ -54,7 +54,7 @@
 // the row, since the id is right and the row is there. A stored row the body
 // did not move is not asked its status (#79's rule).
 //
-// The hold (#209, routes/route-holds.ts): `assign` and `reschedule` that
+// The hold (#209, @waste/db/commands/route-holds): `assign` and `reschedule` that
 // change a `planned` route stamp `heldAt` with the command's instant, so the
 // next generation run keeps the day, the start and the Planned Assignment the
 // office gave it rather than copying the scheme's back; one that changes
@@ -109,6 +109,7 @@ import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickup
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { receiptColumns, receiptOf } from "@waste/db/shapes/driver-commands"
 import { routeFitStops, vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { handBackWindow } from "@waste/db/commands/route-holds"
 import { timeOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -124,7 +125,6 @@ import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./worklo
 import { requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGenerationBestEffort } from "./generation"
-import { handBackWindow } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
 import { refuseAllocatedElsewhere, refuseDoubleBooked } from "./crew-day"

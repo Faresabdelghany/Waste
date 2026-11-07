@@ -5,24 +5,20 @@
 //
 // A company is given a default type per kind by the migration that made the
 // types, by its provisioning and by the seed, under the domain's names
-// (`defaultTicketTypeRows`). A kind that has none — one a later migration
-// adds, or a tenant a test mints by hand — is given it as its first ticket
-// opens (`defaultTicketTypeOf`), so every opener reaches a type: the office's
-// create naming a kind, the worker's consumer, a work order, a weighbridge
-// deviation. Two transactions making the same default meet the partial unique
+// (`defaultTicketTypeRows`, commands/company-defaults.ts). A kind that has
+// none — one a later migration adds, or a tenant a test mints by hand — is
+// given it as its first ticket opens (`defaultTicketTypeOf`, the same row),
+// so every opener reaches a type: the office's create naming a kind, the
+// worker's consumer, a work order, a weighbridge deviation. Two transactions making the same default meet the partial unique
 // index (`ticket_type_default_kind_key`) and the second reads the first's.
 import { DEFAULT_TICKET_TYPE_NAMES, type CommandPermission, type TicketFieldDefinition } from "@waste/domain/resolution/ticket-types"
-import { TICKET_KINDS, type TicketCommand, type TicketKind, type TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
+import type { TicketCommand, TicketKind, TicketTypeStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
 import { ticketType, ticketTypeField, ticketTypePermission } from "../schema/resolution"
-
-/** The default types a company starts with, one per kind, in the kinds' order. */
-export function defaultTicketTypeRows(companyId: string, newId: IdMinter): (typeof ticketType.$inferInsert)[] {
-  return TICKET_KINDS.map((kind) => ({ id: newId(), companyId, kind, name: DEFAULT_TICKET_TYPE_NAMES[kind], isDefault: true }))
-}
+import { defaultTicketTypeRow } from "./company-defaults"
 
 async function findDefault(tx: Tx, companyId: string, kind: TicketKind): Promise<string | undefined> {
   const [row] = await tx
@@ -37,7 +33,7 @@ async function findDefault(tx: Tx, companyId: string, kind: TicketKind): Promise
 export async function defaultTicketTypeOf(tx: Tx, companyId: string, kind: TicketKind, newId: IdMinter): Promise<string> {
   const found = await findDefault(tx, companyId, kind)
   if (found !== undefined) return found
-  await tx.insert(ticketType).values({ id: newId(), companyId, kind, name: DEFAULT_TICKET_TYPE_NAMES[kind], isDefault: true }).onConflictDoNothing()
+  await tx.insert(ticketType).values(defaultTicketTypeRow(companyId, kind, newId())).onConflictDoNothing()
   const made = await findDefault(tx, companyId, kind)
   // A conflict on the name rather than the default: a type of another kind took the name first.
   if (made === undefined) throw new Error(`ticket type: company ${companyId} has no default type for ${kind}, and its name ${JSON.stringify(DEFAULT_TICKET_TYPE_NAMES[kind])} is taken`)

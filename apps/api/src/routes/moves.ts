@@ -5,8 +5,10 @@
 // command (the owner's decision on #374); another customer's parties are not
 // the move's. The outgoing customer's subscriptions at the property that run
 // past `on` end there with their placements and their pauses, as a
-// termination ends them (routes/agreements.ts), and the outgoing agreement
-// ends too where nothing of it runs past `on` elsewhere. One agreement for the
+// termination ends them (`endSubscriptionsOn`, @waste/db/commands/
+// agreement-periods), and the outgoing agreement ends too where nothing it
+// holds runs past `on` elsewhere — no other subscription, and no business
+// credential charged to it. One agreement for the
 // incoming customer begins on `on`, `active`, under the number the body typed
 // and the outgoing agreement's cadence, currency, list and service window,
 // invoicing the body's payer or the incoming customer; it carries the same
@@ -41,33 +43,23 @@
 import { MoveCreate, MoveOutcome } from "@waste/contracts/moves"
 import type { Subscription } from "@waste/contracts/agreements"
 import type { Tx } from "@waste/db/client"
-import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
-import { containerServicePlacement } from "@waste/db/schema/containers"
+import { agreement, subscription } from "@waste/db/schema/agreements"
 import { property, propertyParty } from "@waste/db/schema/customers"
 import { billableEvent } from "@waste/db/schema/finance"
 import { refuseInactiveCustomer } from "@waste/domain/registry/agreements"
-import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { AGREEMENT_CHILDREN, carryPlacements, endSubscriptionsOn, servingOn } from "@waste/db/commands/agreement-periods"
+import { holdsPast, runsPast } from "@waste/db/commands/periods"
 import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import {
-  createAgreement,
-  createSubscription,
-  patchAgreement,
-  patchSubscription,
-  pausesBeginLater,
-  pausesPast,
-  placementsBeginLater,
-  placementsPast,
-  readAgreement,
-} from "./agreements"
-import { refuseStranded } from "./periods"
+import { createAgreement, createSubscription, patchAgreement, readAgreement, readSubscription } from "./agreements"
 import { findProperty, noSuchProperty, propertyWithParties } from "./property-writes"
 import { requireCustomer } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -106,7 +98,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
     .select({ id: subscription.id, agreementId: subscription.agreementId, validFrom: subscription.validFrom, number: agreement.number })
     .from(subscription)
     .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.id, subscription.agreementId)))
-    .where(and(eq(subscription.companyId, companyId), eq(subscription.propertyId, id), eq(agreement.customerId, body.outgoingCustomerId), or(isNull(subscription.validTo), gt(subscription.validTo, on))))
+    .where(and(eq(subscription.companyId, companyId), eq(subscription.propertyId, id), eq(agreement.customerId, body.outgoingCustomerId), runsPast(subscription, on)))
     .orderBy(asc(subscription.id))
   if (subscribed.length > 0 && body.agreementNumber === undefined) throw invalidRequest("body", [{ path: "agreementNumber", message: NUMBER_OWED }])
 
@@ -134,8 +126,6 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
   if (outgoingId !== undefined) {
     await lockRow(tx, agreement, { companyId, id: outgoingId })
     await lockRows(tx, subscription, companyId, ending)
-    await refuseStranded(tx, containerServicePlacement, and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.subscriptionId, ending), gte(containerServicePlacement.validFrom, on)), placementsBeginLater)
-    await refuseStranded(tx, subscriptionPause, and(eq(subscriptionPause.companyId, companyId), inArray(subscriptionPause.subscriptionId, ending), gte(subscriptionPause.validFrom, on)), pausesBeginLater)
 
     // What the outgoing subscriptions are and what serves them on the day, read before anything ends.
     const sold = await tx
@@ -143,34 +133,17 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
       .from(subscription)
       .where(and(eq(subscription.companyId, companyId), inArray(subscription.id, ending)))
       .orderBy(asc(subscription.id))
-    const serving = await tx
-      .select({
-        id: containerServicePlacement.id,
-        subscriptionId: containerServicePlacement.subscriptionId,
-        containerId: containerServicePlacement.containerId,
-        wasteFractionId: containerServicePlacement.wasteFractionId,
-        serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
-        validTo: containerServicePlacement.validTo,
-      })
-      .from(containerServicePlacement)
-      .where(placementsPast(companyId, ending, on))
-      .orderBy(asc(containerServicePlacement.id))
+    const serving = await servingOn(tx, companyId, ending, on)
 
-    // The outgoing half ends: its placements first, so no subscription strands one, then its pauses and the subscriptions.
-    if (serving.length > 0) {
-      await tx
-        .update(containerServicePlacement)
-        .set({ validTo: on })
-        .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, serving.map((placement) => placement.id))))
+    // The outgoing half ends with its placements and its pauses (refused where one begins on or after the day), and the outgoing
+    // agreement with them where nothing else it holds — a subscription elsewhere, a credential charged to it — runs past the day.
+    await endSubscriptionsOn(tx, companyId, ending, on)
+    for (const subscriptionId of ending) {
+      const endedThere = await readSubscription(tx, principal, subscriptionId)
+      if (endedThere === undefined) throw noSuchProperty(id)
+      outgoing.subscriptions.push(endedThere)
     }
-    await tx.update(subscriptionPause).set({ validTo: on }).where(pausesPast(companyId, ending, on))
-    for (const subscriptionId of ending) outgoing.subscriptions.push(await patchSubscription(tx, principal, subscriptionId, { validTo: on }))
-    const runningElsewhere = await tx
-      .select({ id: subscription.id })
-      .from(subscription)
-      .where(and(eq(subscription.companyId, companyId), eq(subscription.agreementId, outgoingId), or(isNull(subscription.validTo), gt(subscription.validTo, on))))
-      .limit(1)
-    outgoing.agreement = runningElsewhere.length === 0 ? await patchAgreement(tx, principal, outgoingId, { validTo: on }) : ((await readAgreement(tx, principal, outgoingId)) ?? null)
+    outgoing.agreement = (await holdsPast(tx, AGREEMENT_CHILDREN, { companyId, id: outgoingId }, on)) ? ((await readAgreement(tx, principal, outgoingId)) ?? null) : await patchAgreement(tx, principal, outgoingId, { validTo: on })
     const ended = outgoing.agreement
     if (ended === null) throw noSuchProperty(id)
 
@@ -192,20 +165,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
       const replacement = await createSubscription(tx, principal, started.id, { productId: held.productId, propertyId: held.propertyId ?? undefined, quantity: held.quantity, validFrom: on, validTo: held.validTo })
       incoming.subscriptions.push(replacement)
       const carried = serving.filter((placement) => placement.subscriptionId === held.id)
-      if (carried.length === 0) continue
-      await tx.insert(containerServicePlacement).values(
-        carried.map((placement) => ({
-          id: newId(),
-          companyId,
-          projectId: ended.projectId,
-          containerId: placement.containerId,
-          subscriptionId: replacement.id,
-          wasteFractionId: placement.wasteFractionId,
-          serviceFrequencyId: placement.serviceFrequencyId,
-          validFrom: on,
-          validTo: placement.validTo,
-        })),
-      )
+      await carryPlacements(tx, { companyId, projectId: ended.projectId }, carried, replacement.id, on)
       containersCarried.push(...carried.map((placement) => placement.containerId))
     }
 

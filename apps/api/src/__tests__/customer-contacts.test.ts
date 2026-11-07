@@ -12,8 +12,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
 import { createApp } from "../app"
-import { CONTACTS_ARE_AN_ORGANISATIONS } from "../routes/customer-contacts"
-import { keepsActiveContacts } from "../routes/customer-writes"
+import { CONTACTS_ARE_AN_ORGANISATIONS, keepsActiveContacts } from "../routes/customer-writes"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
@@ -115,6 +114,18 @@ describe("a customer's contact persons", { skip: database.skip }, () => {
     assert.equal(CustomerContact.parse(await retired.json()).status, "inactive")
     assert.equal((await olivia(`/customers/${organisation.id}`, { method: "PATCH", body: { kind: "person" } })).status, 200)
     assert.deepEqual((await contactsOf(olivia, organisation.id)).map((contact) => contact.status), ["inactive"])
+  })
+
+  test("a contact left under an organisation that became a person is not made active again: a person is their own contact", async () => {
+    const organisation = await createCustomer(olivia, { kind: "organisation", name: "Retired trader ApS" })
+    const owner = await addContact(organisation.id, { name: "Karen", role: "primary", email: "karen@example.dk" })
+    assert.equal((await olivia(`/customer-contacts/${owner.id}`, { method: "PATCH", body: { status: "inactive" } })).status, 200)
+    assert.equal((await olivia(`/customers/${organisation.id}`, { method: "PATCH", body: { kind: "person" } })).status, 200)
+    const problem = await refused(await olivia(`/customer-contacts/${owner.id}`, { method: "PATCH", body: { status: "active" } }), 409)
+    assert.equal(problem.detail, CONTACTS_ARE_AN_ORGANISATIONS)
+    const renamed = await olivia(`/customer-contacts/${owner.id}`, { method: "PATCH", body: { name: "Karen Holm" } })
+    assert.equal(renamed.status, 200, "an inactive contact's history is still corrected")
+    assert.deepEqual((await contactsOf(olivia, organisation.id)).map((contact) => [contact.name, contact.status]), [["Karen Holm", "inactive"]])
   })
 
   test("a role with view alone writes none, and another company's customer and contact do not exist here", async () => {

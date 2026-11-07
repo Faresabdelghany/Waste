@@ -41,13 +41,14 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import type { JobSender } from "@waste/db/jobs"
 import { validOn } from "@waste/db/query/valid-on"
-import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
+import { subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { refuseOverlap } from "@waste/db/commands/shared"
+import { lockedSubscription, PAUSE_OVERLAP, pauseSubscription } from "@waste/db/commands/subscription-pauses"
 import { projectToday } from "@waste/db/query/project-clock"
 import { OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
@@ -64,10 +65,6 @@ import { describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.agreements"
 const PausePage = Page(SubscriptionPause)
-
-/** `EXCLUDE USING gist (company_id, subscription_id, daterange)`: one pause of a subscription in force at a time. */
-const PAUSED_ALREADY = "subscription_pause_no_overlap"
-export const PAUSED_ALREADY_SENTENCE = "The subscription is already paused over part of that period"
 
 export const BEGINS_TODAY_OR_LATER = "A pause begins today or later"
 export const ENDS_TODAY_OR_LATER = "A pause ends today or later: collections resume on that day"
@@ -113,11 +110,9 @@ async function findSubscription(tx: Tx, principal: Principal, id: string): Promi
   return row
 }
 
-/** The subscription's locks, its agreement's first, top down; then the subscription read again underneath them. */
-async function lockedSubscription(tx: Tx, principal: Principal, found: Parent): Promise<Parent> {
-  await lockRow(tx, agreement, { companyId: principal.companyId, id: found.agreementId })
-  await lockRow(tx, subscription, { companyId: principal.companyId, id: found.id })
-  const current = await findSubscription(tx, principal, found.id)
+/** The subscription's locks, its agreement's first, top down (`lockedSubscription`, the pause's own statement); then the subscription read again underneath them. */
+async function lockedParent(tx: Tx, principal: Principal, found: Parent): Promise<Parent> {
+  const current = await lockedSubscription(tx, principal.companyId, found.id)
   if (current === undefined) throw noSuchSubscription(found.id)
   return current
 }
@@ -241,7 +236,7 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
         const principal = c.get("principal")
         const found = await findSubscription(tx, principal, id)
         if (found === undefined) throw noSuchSubscription(id)
-        const parent = await lockedSubscription(tx, principal, found)
+        const parent = await lockedParent(tx, principal, found)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
 
         const period = periodOf(values)
@@ -249,12 +244,7 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
         const today = await projectToday(tx, within, now)()
         if (period.validFrom < today) throw invalidRequest("body", [{ path: "validFrom", message: BEGINS_TODAY_OR_LATER }])
 
-        const [row] = await refuseOverlap({ [PAUSED_ALREADY]: PAUSED_ALREADY_SENTENCE }, () =>
-          tx
-            .insert(subscriptionPause)
-            .values({ id: newId(), companyId: principal.companyId, projectId: parent.projectId, subscriptionId: parent.id, ...period })
-            .returning(columns),
-        )
+        const row = await pauseSubscription(tx, principal.companyId, parent, { id: newId(), ...period })
         const containers = await containersOf(tx, principal.companyId, parent.id, windowOf(period))
         const { toRemove, runs } = await stopsLeft(tx, within, containers, windowOf(period))
         await askRuns(tx, principal, jobs, within, runs, now)
@@ -292,7 +282,7 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
         if (found === undefined) throw noSuchPause(id)
         const owner = await findSubscription(tx, principal, found.subscriptionId)
         if (owner === undefined) throw noSuchPause(id)
-        const parent = await lockedSubscription(tx, principal, owner)
+        const parent = await lockedParent(tx, principal, owner)
         const current = await findPause(tx, principal, id)
         if (current === undefined) throw noSuchPause(id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
@@ -308,7 +298,7 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
         }
         if (patch.validTo != null && patch.validTo < today) throw invalidRequest("body", [{ path: "validTo", message: ENDS_TODAY_OR_LATER }])
 
-        const [row] = await refuseOverlap({ [PAUSED_ALREADY]: PAUSED_ALREADY_SENTENCE }, () =>
+        const [row] = await refuseOverlap(PAUSE_OVERLAP, () =>
           tx.update(subscriptionPause).set(patch).where(and(scope(principal), eq(subscriptionPause.id, id))).returning(columns),
         )
         if (row === undefined) throw noSuchPause(id)
@@ -353,7 +343,7 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
         if (found === undefined) throw noSuchPause(id)
         const owner = await findSubscription(tx, principal, found.subscriptionId)
         if (owner === undefined) throw noSuchPause(id)
-        const parent = await lockedSubscription(tx, principal, owner)
+        const parent = await lockedParent(tx, principal, owner)
         const current = await findPause(tx, principal, id)
         if (current === undefined) throw noSuchPause(id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }

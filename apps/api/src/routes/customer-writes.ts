@@ -8,6 +8,7 @@
 // customer by — the registration number, which is unique, and the e-mail,
 // which is not: a housing administrator's address serves many organisations.
 import type { Customer, CustomerCreate, CustomerPatch } from "@waste/contracts/customers"
+import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { and, asc, count, eq } from "drizzle-orm"
@@ -79,15 +80,44 @@ export async function createCustomer(tx: Tx, principal: Principal, body: Custome
   return customerOf(row)
 }
 
-/** An organisation that becomes a person while people still speak for it (#291 C14): they would be contacts of a customer who is their own. */
+// Contact persons speak for an organisation (#291 C14): a person Customer is
+// their own contact, so no active contact person stands under one. The rule
+// has three doors, all judged here under the customer's lock, which each
+// takes before it reads: a contact registered under a person, or made active
+// again under one (routes/customer-contacts.ts, `refuseContactOfAPerson`),
+// and an organisation made a person while a contact is active under it
+// (`patchCustomer`). An inactive contact stays under the person it was left
+// under, the history of who spoke for the organisation.
+
+/** A contact registered, or made active, under a person customer. */
+export const CONTACTS_ARE_AN_ORGANISATIONS = "Contact persons speak for an organisation; a person customer is their own contact"
+
+/** An organisation that becomes a person while people still speak for it: they would be contacts of a customer who is their own. */
 export const keepsActiveContacts = (contacts: number) =>
   `This organisation has ${contacts} active contact ${contacts === 1 ? "person" : "persons"}; make ${contacts === 1 ? "them" : "each"} inactive before it becomes a person, who is their own contact`
+
+/** The customer a contact is written under, under its lock — taken before the contact's own — with the kind the rule reads; a 404 for one the company does not have. */
+export async function lockedContactHolder(tx: Tx, principal: Principal, id: string): Promise<{ id: string; kind: CustomerKind }> {
+  await lockRow(tx, customer, { companyId: principal.companyId, id })
+  const [row] = await tx
+    .select({ id: customer.id, kind: customer.kind })
+    .from(customer)
+    .where(and(eq(customer.companyId, principal.companyId), eq(customer.id, id)))
+    .limit(1)
+  if (row === undefined) throw noSuchCustomer(id)
+  return row
+}
+
+/** The rule at a contact's write (409): no contact registered under a person, whatever its status, and none left active under one. */
+export function refuseContactOfAPerson(holder: { kind: CustomerKind }, leavesActive = true): void {
+  if (leavesActive && holder.kind !== "organisation") throw problem(409, { detail: CONTACTS_ARE_AN_ORGANISATIONS })
+}
 
 /** Changes one customer of the caller's company; a 404 for one it does not have. */
 export async function patchCustomer(tx: Tx, principal: Principal, id: string, body: CustomerPatch): Promise<Customer> {
   const patch = lowercased(body)
   if (patch.kind === "person") {
-    // Under the customer's lock, which a contact's create takes too, so the count holds until the patch commits.
+    // Under the customer's lock, which a contact's every write takes too, so the count holds until the patch commits.
     await lockRow(tx, customer, { companyId: principal.companyId, id })
     const [{ active }] = await tx
       .select({ active: count() })

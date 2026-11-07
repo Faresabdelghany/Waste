@@ -85,7 +85,7 @@ import { count } from "@waste/domain/text"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
 import { createDb, type Tx } from "../client"
-import { systemGrantRows, systemRoleRows } from "../commands/provision-company"
+import { systemGrantRows, systemRoleRows } from "../commands/company-defaults"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from "./finance"

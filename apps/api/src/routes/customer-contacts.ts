@@ -7,8 +7,10 @@
 // them stays on its ledger naming them.
 //
 // The rules: contact persons are an organisation's, a person Customer being
-// their own contact (a 409 on the customer's state, under its lock, which a
-// customer's kind change takes too — customer-writes.ts); a contact is reached
+// their own contact — a contact is neither registered nor made active again
+// under one (a 409 on the customer's state, under its lock, which a
+// customer's kind change takes too: the rule's three doors are judged in
+// customer-writes.ts); a contact is reached
 // on an e-mail or a phone at least, which the create body holds and a patch is
 // held to against the stored row (a 400 at `email`), with the table's check as
 // the backstop; and the e-mail is stored lowercase, as a customer's is.
@@ -30,13 +32,10 @@ import { stampsOf } from "@waste/db/shapes/times"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { noSuchCustomer } from "./customer-writes"
+import { lockedContactHolder, noSuchCustomer, refuseContactOfAPerson } from "./customer-writes"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
-
-/** A person Customer is their own contact: contact persons are an organisation's. */
-export const CONTACTS_ARE_AN_ORGANISATIONS = "Contact persons speak for an organisation; a person customer is their own contact"
 
 const noSuchContact = (id: string) => problem(404, { detail: `No contact person ${id} in this company` })
 
@@ -70,18 +69,6 @@ export const contactOf = (row: Row): CustomerContact => ({
 const UNREACHABLE = { customer_contact_channel_shape: { input: "email", sentence: REACHABLE_ON_A_CHANNEL } }
 
 const lowercased = <T extends { email?: string | null }>(values: T): T => (values.email == null ? values : { ...values, email: values.email.toLowerCase() })
-
-/** The customer a contact is written under, locked, with the kind its rule reads; a 404 for one the company does not have. */
-async function lockedCustomer(tx: Tx, principal: Principal, id: string): Promise<{ id: string; kind: string }> {
-  await lockRow(tx, customer, { companyId: principal.companyId, id })
-  const [row] = await tx
-    .select({ id: customer.id, kind: customer.kind })
-    .from(customer)
-    .where(and(eq(customer.companyId, principal.companyId), eq(customer.id, id)))
-    .limit(1)
-  if (row === undefined) throw noSuchCustomer(id)
-  return row
-}
 
 async function findContact(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
@@ -155,8 +142,8 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const parent = await lockedCustomer(tx, principal, c.req.valid("param").id)
-        if (parent.kind !== "organisation") throw problem(409, { detail: CONTACTS_ARE_AN_ORGANISATIONS })
+        const parent = await lockedContactHolder(tx, principal, c.req.valid("param").id)
+        refuseContactOfAPerson(parent)
         const [row] = await refuseCheck(UNREACHABLE, () =>
           tx
             .insert(customerContact)
@@ -197,7 +184,7 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchCustomerContact",
         summary: "Change a contact person",
         description:
-          "Changes one contact person; every field is optional and at least one must be given. A null clears a channel, so long as the other is left; `status: inactive` is how a contact who has left is retired, since none is ever deleted.",
+          "Changes one contact person; every field is optional and at least one must be given. A null clears a channel, so long as the other is left; `status: inactive` is how a contact who has left is retired, since none is ever deleted. A contact left under an organisation that has since become a person is not made active again (409): a person is their own contact.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The contact person as it now stands.", CustomerContact),
@@ -205,6 +192,7 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.contacts`."),
           404: describeProblem("No contact person with that id in this company."),
+          409: describeProblem("The patch would leave the contact active under a person customer, who is their own contact."),
         },
       }),
       guard,
@@ -218,7 +206,7 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const found = await findContact(tx, principal, id)
         if (found === undefined) throw noSuchContact(id)
         // The customer's lock first, parent before child, as a create takes it.
-        await lockRow(tx, customer, { companyId: principal.companyId, id: found.customerId })
+        const holder = await lockedContactHolder(tx, principal, found.customerId)
         await lockRow(tx, customerContact, { companyId: principal.companyId, id })
         const current = await findContact(tx, principal, id)
         if (current === undefined) throw noSuchContact(id)
@@ -226,6 +214,8 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const email = patch.email === undefined ? current.email : patch.email
         const phone = patch.phone === undefined ? current.phone : patch.phone
         if (email === null && phone === null) throw invalidRequest("body", [{ path: patch.email === undefined ? "phone" : "email", message: REACHABLE_ON_A_CHANNEL }])
+        // The body's 400s first, then the customer's state: a contact is not left active under a person.
+        refuseContactOfAPerson(holder, (patch.status ?? current.status) === "active")
         const [row] = await refuseCheck(UNREACHABLE, () =>
           tx
             .update(customerContact)

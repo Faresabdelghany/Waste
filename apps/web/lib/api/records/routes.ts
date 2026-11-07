@@ -154,7 +154,7 @@ function projectOf(route: Route, context: MappingContext): { webId: string; name
   return { webId, name, timezone: record === undefined ? undefined : typed(record, "timezone") }
 }
 
-/** What ends a route's hold (#209, the API's `route-holds.ts`). */
+/** What ends a route's hold (#209, `@waste/db/commands/route-holds`). */
 const HOLD_RELEASED_BY = "Release hold; an edit of its scheme's start, depot or unloading station, or of its group's vehicle, driver or provider; a day taken from its collection; a dispatch or a cancel"
 
 /** Whether the office holds the route (#209): `release-hold` hands it back (#226). */
