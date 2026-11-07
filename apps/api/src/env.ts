@@ -1,55 +1,17 @@
-// The process environment, read once at startup and never again. Four
-// variables the process needs: where to listen, the database, and the
-// Supabase project whose Auth signs the tokens; the routing provider and its
-// key, which the guided setup's preview calls (#173); the address register,
-// its token and its gateway, which the address lookup calls (#291 C13); and
-// two knobs, the
-// request pool's size and the preview's calls a minute, absent unless set
-// (#149: the Pilot's are its host's environment, never a default here).
-// Every value arrives as a string, so
-// the schemas do the reading. An empty variable counts as not set, applied
-// once in parseEnv for every variable, so a new field is a plain schema with
-// a default, or without one when the process cannot run without it. Anything
-// else in the environment is dropped, not carried around.
+// The process environment, declared with @waste/server/env's pieces: where
+// to listen, the database, and the Supabase project whose Auth signs the
+// tokens; the routing provider and its key, which the guided setup's preview
+// calls (#173); the address register, its token and its gateway, which the
+// address lookup calls (#291 C13); and the knobs, absent unless set (#149:
+// the Pilot's are its host's environment, never a default here). The keys of
+// `Env` are the variables turbo.json hands `@waste/api#dev`, exactly.
+import type { Environment } from "@waste/process/environment"
+import { API_PORT } from "@waste/process/ports"
+import { Host, parseEnvironment, Port, PostgresUrl, wholeNumber } from "@waste/server/env"
 import * as z from "zod"
 
-/** The address to bind. Loopback by default; a container sets `0.0.0.0`. */
-const Host = z
-  .string()
-  .regex(/^[A-Za-z0-9._:-]+$/, {
-    error: "must be an IP address or a host name: no spaces, brackets, scheme or IPv6 zone id",
-  })
-  .default("127.0.0.1")
-
-/** A TCP port from a string of decimal digits, 1..65535. */
-const Port = z
-  .string()
-  .regex(/^\d+$/, { error: "must be a whole number" })
-  .transform(Number)
-  .pipe(z.int().min(1).max(65535))
-  .default(3001)
-
-/**
- * The database, as the API role `wms_api` (see .env.example at the repository
- * root; through Supabase's pooler the user is `wms_api.<project-ref>`). No
- * default: a process without a database is not the API, so it refuses to
- * start rather than answer 503 forever. Only the shape is checked here, a
- * Postgres URL with a host; whether it answers is /readyz's question, asked
- * on every probe, because the database may come and go while the process
- * stays up.
- */
-const DatabaseUrl = z.string().refine(isPostgresUrl, {
-  error: "must be a postgresql:// URL with a host, the API role's connection string",
-})
-
-function isPostgresUrl(value: string): boolean {
-  if (!/^postgres(ql)?:\/\//.test(value)) return false
-  try {
-    return new URL(value).hostname !== ""
-  } catch {
-    return false
-  }
-}
+/** The database, as the API role `wms_api` (see .env.example at the repository root; through Supabase's pooler the user is `wms_api.<project-ref>`). */
+const DatabaseUrl = PostgresUrl("the API role's connection string")
 
 /**
  * The Supabase project whose Auth issues the tokens this API accepts. The
@@ -78,18 +40,13 @@ function isOrigin(value: string): boolean {
 /**
  * The request pool's size: how many connections every authenticated request
  * shares (server.ts). postgres.js's 10 unless set; the probe pool is one more
- * and is not counted here. A whole number of at least one.
+ * and is not counted here.
  */
-const PoolMax = z
-  .string()
-  .regex(/^\d+$/, { error: "must be a whole number of connections, at least 1" })
-  .transform(Number)
-  .pipe(z.int().min(1))
-  .optional()
+const PoolMax = wholeNumber(1, " of connections, at least 1")
 
 export const Env = z.object({
   HOST: Host,
-  PORT: Port,
+  PORT: Port(API_PORT),
   DATABASE_URL: DatabaseUrl,
   SUPABASE_URL: SupabaseUrl,
   /** The routing provider's name (#170, #131): unset means the fake; the one validator of the value is providerFromEnv (@waste/routing/select), so the refusal has one spelling. */
@@ -99,12 +56,7 @@ export const Env = z.object({
   /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: the guided setup's preview calls the provider from the API (#173); one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
   OPENROUTESERVICE_API_KEY: z.string().optional(),
   /** How many preview calls a minute the API makes per family (#173): PREVIEW_CALLS_PER_MINUTE, 10, unless set — the rest of the plan's 40 beside the worker's ROUTING_CALLS_PER_MINUTE, on the one key. The preview is interactive, so the reserves are the worker's alone. */
-  ROUTING_PREVIEW_CALLS_PER_MINUTE: z
-    .string()
-    .regex(/^\d+$/, { error: "must be a whole number of calls a minute, at least 1" })
-    .transform(Number)
-    .pipe(z.int().min(1))
-    .optional(),
+  ROUTING_PREVIEW_CALLS_PER_MINUTE: wholeNumber(1, " of calls a minute, at least 1"),
   /** The address register's name (#291 C13): unset means none, and the lookup answers 503; `fake` only where named (CI, e2e, a developer's .env); the one validator of the value is addressRegisterFrom (address-register/select.ts), so the refusal has one spelling. */
   ADDRESS_PROVIDER: z.string().optional(),
   /** The owner's Dataforsyningen token (#77), when ADDRESS_PROVIDER names `dataforsyningen`: the address lookup calls the register from the API alone; server-side only, never logged; `addressRegisterFrom` refuses the register without it. */
@@ -113,36 +65,16 @@ export const Env = z.object({
   ADDRESS_REGISTER_URL: z.url({ protocol: /^https?$/ }).optional(),
   DATABASE_POOL_MAX: PoolMax,
   /** Each public client's requests a minute on the public door (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE, 60, unless set. */
-  PUBLIC_REQUESTS_PER_MINUTE: z
-    .string()
-    .regex(/^\d+$/, { error: "must be a whole number of requests a minute, at least 1" })
-    .transform(Number)
-    .pipe(z.int().min(1))
-    .optional(),
+  PUBLIC_REQUESTS_PER_MINUTE: wholeNumber(1, " of requests a minute, at least 1"),
   /**
    * How many proxies in front of the API append to X-Forwarded-For (ADR-0010):
    * the public door counts a client by the entry the outermost one wrote. Unset
    * is 0, which ignores the header and counts the socket's peer, since a header
    * no trusted proxy wrote is whatever the client says.
    */
-  PUBLIC_TRUSTED_PROXIES: z
-    .string()
-    .regex(/^\d+$/, { error: "must be a whole number of proxies, 0 or more" })
-    .transform(Number)
-    .pipe(z.int().min(0))
-    .optional(),
+  PUBLIC_TRUSTED_PROXIES: wholeNumber(0, " of proxies, 0 or more"),
 })
 export type Env = z.infer<typeof Env>
 
-/** Set-but-empty is how a shell says "not set". */
-const withoutEmpty = (source: Readonly<Record<string, string | undefined>>) =>
-  Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined && value !== ""))
-
 /** Reads the environment, or throws one error naming every bad variable. */
-export function parseEnv(source: Readonly<Record<string, string | undefined>>): Env {
-  const result = Env.safeParse(withoutEmpty(source))
-  if (!result.success) {
-    throw new Error(`Invalid environment:\n${z.prettifyError(result.error)}`)
-  }
-  return result.data
-}
+export const parseEnv = (source: Environment): Env => parseEnvironment(Env, source)

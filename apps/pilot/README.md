@@ -52,25 +52,6 @@ Only the account holder can do these (tracking issue #191 lists them). The value
 4. **The repository variable** `PILOT_API_URL`: the service's `https://<name>.suga.run`, which the release's proof reads.
 5. **The first release**: the next merge to `main` once CI passes (ADR-0011: every merge releases itself, with no approval), or `release` dispatched with `deploy_api` on; the run's Deploy step writes `pilot`, Suga builds and rolls out, the proof passes once `/healthz` names the commit and `/readyz` answers 200 three times running. A push made with the workflow's own token starts no Actions run (nothing should run on `pilot`) but does fire the GitHub App webhooks Suga listens to; if Suga does not build within a minute of the Deploy step, the place to look is the app's webhook deliveries (Settings › GitHub Apps › Suga) and the service's build log. Then the two readings ADR-0008 owes (#149's acceptance): the memory line and Supabase's egress meter after a day, and the authenticated readings with a tester's token.
 
-## The knobs, as the code reads them
+## The variables, as the code reads them
 
-Each is read once in the app's `env.ts` and applied in one place; absent means the code's own default, so a workstation and CI run as before.
-
-| Variable | Reads it | Absent | Effect |
-|---|---|---|---|
-| `DATABASE_POOL_MAX` | the API | postgres.js's 10 | the request pool's size (`apps/api/src/server.ts`) |
-| `WORKER_API_POOL_MAX`, `WORKER_POOL_MAX` | the worker | 10 each | the API-role and worker-role pools' sizes (`apps/worker/src/main.ts`); pg-boss's own pool stays at 3 |
-| `WORKER_POLLING_INTERVAL_SECONDS` | the worker | pg-boss's and the jobs' own | every queue's poll, the relay's successor delay and pg-boss's cron and flow intervals raised to it, never lowered, the cron two capped at pg-boss's 45 (`apps/worker/src/boss.ts`); no `schedule` cron is touched |
-| `WORKER_SUPERVISE_INTERVAL_SECONDS` | the worker | pg-boss's 60 | pg-boss's supervise pass and, with it, the monitor pass that refreshes the counts `/readyz` reads |
-| `WORKER_QUEUE_CACHE_INTERVAL_SECONDS` | the worker | pg-boss's 60 | pg-boss's queue-cache refresh |
-| `WORKER_BOSS_IDLE_TIMEOUT_SECONDS` | the worker | pg-pool's 10 | how long pg-boss's pool keeps an idle connection; 0 for never |
-| `PILOT_MEMORY_LOG_SECONDS` | the supervisor | off | the memory line's period |
-| `ROUTING_DIRECTIONS_RESERVE`, `ROUTING_OPTIMISATION_RESERVE` | the worker | the Standard plan's 500 and 100 | where batch routing work stops, per family, leaving the rest of the day's quota to the office's own calls (`@waste/routing/quota`, #132 §1) |
-| `ROUTING_CALLS_PER_MINUTE` | the worker | 30 | each routing family's calls a minute from the worker's jobs |
-| `ROUTING_PREVIEW_CALLS_PER_MINUTE` | the API | 10 | each routing family's calls a minute from the guided setup's preview (#173), which never waits for the minute and answers the estimate instead |
-| `PUBLIC_REQUESTS_PER_MINUTE` | the API | 60 | each public client's requests a minute on the public door (ADR-0010) |
-| `PUBLIC_TRUSTED_PROXIES` | the API | 0 | how many proxies in front append to `X-Forwarded-For`; 0 ignores the header and counts the socket's peer (`apps/api/src/auth/public-door.ts`) |
-| `SUPABASE_SERVICE_ROLE_KEY` | the API and the worker | no Storage | the API signs a proof's upload and its read URLs (`@waste/db/storage`), and without it `POST /driver/uploads` and `GET /pickups/:id/proof-objects` answer 503; the worker's purge removes nothing |
-| `PROOF_RETENTION_DAYS` | the worker | no purge | how many days a photo or a signature is kept before the nightly purge (`apps/worker/src/jobs/purge-proof-objects.ts`) removes it from Storage, unless an open ticket names its stop |
-
-The two defaults sum to the Standard plan's 40 calls a minute on the one key both processes call with, so raising one means lowering the other.
+Each process declares what it reads, and the declaration is the one place a variable's meaning, its refusal and what its absence means are written: the API's in `apps/api/src/env.ts`, the worker's in `apps/worker/src/env.ts` (each held to its `turbo.json` dev task by the app's env test), and the supervisor's own in `src/config.ts` (`SUPERVISOR_VARIABLES`). Absent means the code's own default, so a workstation and CI run as before. The table under step 3 names only declared variables (`src/__tests__/environment.test.ts`).

@@ -4,13 +4,13 @@ import { after, before, describe, test } from "node:test"
 
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import { createDb } from "@waste/db/client"
+import { REFUSED_URL } from "@waste/tooling/unreachable"
 import { generateSecret, SignJWT } from "jose"
 
 import { createApp } from "../app"
 import { TOKEN_AUDIENCE } from "../auth/verify"
 import { readProblem } from "./read-problem"
 import { signingKeys, signToken, TEST_ISSUER, type SigningKeys } from "./tokens"
-import { REFUSED_URL } from "./unreachable"
 
 // Every request here is refused before the database is asked anything, so the
 // pools go nowhere: a dial would fail the test, which is the point.

@@ -12,7 +12,8 @@
 // meets `ticket_source_event_id_idx` and reads the ticket the first delivery
 // made. Both processes read the error the same way, so the reading lives in
 // the package both consume; the API's problem.ts re-exports the three
-// readers under the names its routes and tests always used.
+// readers under the names its routes and tests always used. What of a
+// failure may be logged (`loggable`) is read here for the same reason.
 
 /** Two rows with the same key. */
 export const UNIQUE_VIOLATION = "23505"
@@ -63,10 +64,39 @@ export const DRIZZLE_QUERY = "Failed query: "
  * workflow summary that carried it whole would carry a row's values; its
  * first line names nothing but the statement's head, so the message is cut at
  * the statement, and the cause — postgres.js's error, whose message is the
- * database's own sentence — carries what matters. The worker's `loggable`
- * and the Pilot scripts' `step` both read it; any other message is returned
- * as it is.
+ * database's own sentence — carries what matters. `loggable` below and the
+ * Pilot scripts' `step` both read it; any other message is returned as it
+ * is.
  */
 export function messageWithoutStatement(message: string): string {
   return message.startsWith(DRIZZLE_QUERY) ? "Failed query" : message
+}
+
+/** How far down a `cause` chain `loggable` goes; Drizzle wraps postgres.js, which wraps nothing. */
+const LOG_CAUSE_DEPTH = 3
+
+/**
+ * What a failure leaves in a log or on a run row: a projection of the error,
+ * never the error itself. A postgres.js error carries the statement it sent
+ * and the `parameters` it bound, and Drizzle's wrapper spells both into its
+ * message and stack, so logging either whole would print an invitee's e-mail
+ * address, a company's registration number or whatever else a row held into
+ * the operator's log. What is kept is what an operator debugs with: who
+ * threw, what it said with the statement cut (`messageWithoutStatement`), the
+ * SQLSTATE and the constraint when Postgres named one, the stack, and the
+ * same projection of the cause, where Drizzle keeps the database's own error.
+ */
+export function loggable(error: unknown, depth: number = LOG_CAUSE_DEPTH): unknown {
+  if (typeof error !== "object" || error === null) return error
+  const { name, message, code, constraint_name: constraint, stack, cause } = error as Record<string, unknown>
+  // The stack begins with the message, so the statement is cut from it the same way.
+  const stackOf = (text: string): string => (typeof message === "string" && message.startsWith(DRIZZLE_QUERY) ? text.replace(message, messageWithoutStatement(message)) : text)
+  return {
+    ...(typeof name === "string" ? { name } : {}),
+    ...(typeof message === "string" ? { message: messageWithoutStatement(message) } : {}),
+    ...(typeof code === "string" ? { code } : {}),
+    ...(typeof constraint === "string" ? { constraint_name: constraint } : {}),
+    ...(typeof stack === "string" ? { stack: stackOf(stack) } : {}),
+    ...(cause === undefined || depth <= 0 ? {} : { cause: loggable(cause, depth - 1) }),
+  }
 }

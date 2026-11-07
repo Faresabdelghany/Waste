@@ -1,0 +1,29 @@
+{
+  "name": "@waste/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The kit the two Node servers, the API and the worker, share: the environment's primitives each app's env.ts declares its variables with (`src/env.ts`, over zod) and the bind and graceful close (`src/listen.ts`, over Hono's Node adapter). Built on @waste/process, the dependency-free half the supervisor and @waste/db read, so neither carries zod or Hono for it. Server-only: apps/web is fenced out in eslint.config.mjs. Ships TypeScript source for tsx consumers.",
+  "exports": {
+    "./package.json": "./package.json",
+    "./__tests__/*": null,
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@waste/process": "workspace:*",
+    "hono": "^4.13.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "tsx": "^4.23.12",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

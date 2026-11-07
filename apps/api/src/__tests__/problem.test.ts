@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import { PageRequest } from "@waste/contracts/pagination"
 import { refused, RefusedField } from "@waste/db/commands/shared"
+import { DrizzleQueryError } from "drizzle-orm/errors"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
@@ -120,6 +121,14 @@ describe("errorHandler", () => {
       })
       throw new Error("Failed query: insert into wms.user_account ...", { cause })
     })
+    // The same refusal as Drizzle really wraps it: the statement and the
+    // values bound to it spelled into the wrapper's own message.
+    hono.get("/drizzle-wrapped", () => {
+      const query = "insert into wms.user_account (id, company_id, email, full_name) values ($1, $2, $3, $4)"
+      const parameters = ["01a0d3a5-e5e0-7000-8000-000000000001", "01a0d3a5-e5e0-7000-8000-000000000002", "invitee@example.com", "Invited Person"]
+      const cause = Object.assign(new Error("insert or update on table violates foreign key constraint"), { code: "23503", constraint_name: "user_account_role_id_fk" })
+      throw new DrizzleQueryError(query, parameters, cause)
+    })
     return hono
   }
 
@@ -221,6 +230,19 @@ describe("errorHandler", () => {
     const printed = JSON.stringify(entries)
     assert.equal(printed.includes("invitee@example.com"), false, "an invitee's address is not the operator's to keep")
     assert.equal(printed.includes("Invited Person"), false)
+    assert.equal(printed.includes("values ($1"), false, "nor is the statement the route sent")
+  })
+
+  test("logs nothing of the statement or its parameters from Drizzle's own wrapper, whose message and stack spell both", async () => {
+    const { entries, log } = recorder()
+    const response = await app(log).request("/drizzle-wrapped")
+    assert.equal(response.status, 500)
+    assert.equal(entries.length, 1)
+    const logged = entries[0] as Record<string, unknown>
+    assert.equal(logged.message, "Failed query")
+    assert.equal((logged.cause as Record<string, unknown>).constraint_name, "user_account_role_id_fk", "the database's own sentence and constraint stay")
+    const printed = JSON.stringify(entries)
+    assert.equal(printed.includes("invitee@example.com"), false, "an invitee's address is not the operator's to keep")
     assert.equal(printed.includes("values ($1"), false, "nor is the statement the route sent")
   })
 })

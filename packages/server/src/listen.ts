@@ -1,6 +1,5 @@
-// Binding the probes to a TCP port on Node, and letting go of it again — the
-// API's listen.ts, unchanged but for this sentence. Node's own http server is
-// used directly (through node-server's request listener,
+// Binding the app to a TCP port on Node, and letting go of it again. Node's
+// own http server is used directly (through node-server's request listener,
 // with its global Request/Response override switched off) so that closing is
 // under our control: close() stops accepting, drops idle keep-alive
 // connections at once, waits for requests in flight, and cuts whatever is
@@ -8,13 +7,11 @@
 // process past its host's deadline. The port itself is released as soon as
 // close() is called; the promise resolves when the last connection is gone.
 import { getRequestListener } from "@hono/node-server"
+import { SHUTDOWN_GRACE_MS } from "@waste/process/shutdown"
 import type { Hono } from "hono"
 import { once } from "node:events"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
-
-/** How long close() waits for requests in flight before cutting connections. */
-export const SHUTDOWN_GRACE_MS = 5_000
 
 export type ListenOptions = {
   host: string

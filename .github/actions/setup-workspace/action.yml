@@ -1,0 +1,28 @@
+name: pnpm, Node and the workspace's dependencies
+description: >-
+  pnpm at the version the root package.json's packageManager pins, Node at
+  .nvmrc's, and the dependencies from the frozen lockfile: the whole
+  workspace's, or one filter's closure. The pnpm store is cached between runs
+  unless `cache` is off, as the protected pilot-database workflow (Issue #152)
+  has it: its jobs go on to hold the owner's secret, so they install from the
+  lockfile's integrity hashes and restore nothing another run saved.
+inputs:
+  filter:
+    description: A pnpm filter whose closure alone is installed (`@waste/db...`); empty installs the whole workspace.
+    default: ""
+  cache:
+    description: Whether the pnpm store is restored from and saved to the Actions cache.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+    - name: Install the dependencies
+      shell: bash
+      env:
+        FILTER: ${{ inputs.filter }}
+      run: pnpm install --frozen-lockfile ${FILTER:+--filter "$FILTER"}

@@ -2,11 +2,12 @@ import assert from "node:assert/strict"
 import { setTimeout as sleep } from "node:timers/promises"
 import { describe, test } from "node:test"
 
-import { createDb, type Database } from "@waste/db/client"
+import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
+import { REFUSED_URL, silentServer } from "@waste/tooling/unreachable"
 
-import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS, probePoolOptions } from "../readiness"
+import { createDb, type Database } from "../client"
+import { checkDatabase, probePoolOptions } from "../probe"
 import { databaseUnderTest } from "./database"
-import { REFUSED_URL, silentServer } from "./unreachable"
 
 const database = databaseUnderTest()
 
@@ -14,11 +15,11 @@ const database = databaseUnderTest()
 const sqlOf = (probe: unknown) => (() => probe) as unknown as Database["sql"]
 
 /** A probe that would blow up if the check ever cancelled it. */
-const neverCancelled = { cancel: () => assert.fail("the check must leave a probe it overtook alone; see the header of readiness.ts") }
+const neverCancelled = { cancel: () => assert.fail("the check must leave a probe it overtook alone; see the header of probe.ts") }
 
 describe("checkDatabase", () => {
   test("answers ok when the database answers", { skip: database.skip }, async () => {
-    const client = createDb(database.url, probePoolOptions())
+    const client = createDb(database.appUrl, probePoolOptions())
     try {
       assert.equal(await checkDatabase(client.sql), "ok")
     } finally {
@@ -52,10 +53,6 @@ describe("checkDatabase", () => {
       await client.sql.end({ timeout: 0 })
       await server.close()
     }
-  })
-
-  test("bounds the probe at two seconds by default: under every common balancer's probe timeout", () => {
-    assert.equal(DATABASE_CHECK_TIMEOUT_MS, 2_000)
   })
 
   test("leaves a probe the bound overtook to settle on its own, never cancelling it, and absorbs its late rejection", async () => {
@@ -96,7 +93,7 @@ describe("checkDatabase", () => {
 describe("probePoolOptions", () => {
   test("one connection, a dial that gives up with the bound, one second before the next dial after a failure", () => {
     assert.deepEqual(probePoolOptions(2_000), { max: 1, connectTimeoutSeconds: 2, backoffSeconds: 1 })
-    assert.deepEqual(probePoolOptions(), probePoolOptions(DATABASE_CHECK_TIMEOUT_MS))
+    assert.deepEqual(probePoolOptions(), probePoolOptions(CHECK_TIMEOUT_MS))
     assert.equal(probePoolOptions(500).connectTimeoutSeconds, 0.5)
   })
 

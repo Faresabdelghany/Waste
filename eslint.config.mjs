@@ -68,6 +68,10 @@ export default defineConfig([
               group: ["@waste/documents", "@waste/documents/*"],
               message: "Documents are rendered server-side (#291 C5): the web downloads an invoice's file through the API in apps/api.",
             },
+            {
+              group: ["@waste/process", "@waste/process/*", "@waste/server", "@waste/server/*"],
+              message: "The process kit is the API's, the worker's and the Pilot supervisor's: the web binds no port and reads none of their environment.",
+            },
           ],
         },
       ],
