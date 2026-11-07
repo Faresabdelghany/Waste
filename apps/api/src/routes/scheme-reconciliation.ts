@@ -29,13 +29,12 @@
 // page's schemes are judged on (today, for a page of schemes in force).
 import type { CollectionGroup, SchemeGeneration, SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
-import { dayInTimezone } from "@waste/domain/clock"
 import { lastDayIn } from "@waste/domain/periods"
+import { projectTodays } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription } from "@waste/db/schema/agreements"
 import { product, serviceFrequency } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { project } from "@waste/db/schema/organisation"
 import { intervalCollectionsPerWeek, schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/planning/frequency-reconciliation"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
 import { schemeSeasonsOf } from "@waste/domain/planning/scheme-seasons"
@@ -118,18 +117,11 @@ export async function schemeWarningsOf(tx: Tx, companyId: string, schemes: reado
   if (reconciled.length === 0) return warnings
 
   const projectIds = [...new Set(reconciled.map((scheme) => scheme.projectId))]
-  const zones = await tx
-    .select({ id: project.id, timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, companyId), inArray(project.id, projectIds)))
-  const instant = now()
-  const todayOf = new Map(zones.map((zone) => [zone.id, dayInTimezone(instant, zone.timezone)]))
+  const todayOf = await projectTodays(tx, companyId, projectIds, now())
 
   const byDay = new Map<string, SchemeToReconcile[]>()
   for (const scheme of reconciled) {
-    const today = todayOf.get(scheme.projectId)
-    if (today === undefined) throw new Error(`schemeWarningsOf: no project ${scheme.projectId} in company ${companyId}`)
-    const day = reconciledOn(scheme, today)
+    const day = reconciledOn(scheme, todayOf.get(scheme.projectId)!)
     byDay.set(day, [...(byDay.get(day) ?? []), scheme])
   }
 

@@ -18,6 +18,7 @@
 // first, since a driver holds one open session at a time and the next start
 // would be refused; CI's database is new every run, so there it finds none.
 import type { APIRequestContext } from "@playwright/test"
+import { dayInTimezone } from "@waste/domain/clock"
 
 import { expect } from "./fixtures"
 import { listAll } from "./tester"
@@ -47,7 +48,7 @@ const WINDOW_DAYS = 28
 
 /** The calendar day it is now in a timezone, `YYYY-MM-DD`. */
 export function dayIn(timezone: string, at: Date = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at)
+  return dayInTimezone(at, timezone)
 }
 
 export function addDays(day: string, days: number): string {

@@ -59,7 +59,7 @@ import { product } from "../schema/catalogue"
 import { customer } from "../schema/customers"
 import { billableEvent, priceList, priceListRow } from "../schema/finance"
 import { project } from "../schema/organisation"
-import type { Scope } from "./project-clock"
+import type { Scope } from "../query/project-clock"
 import { lockRow } from "./shared"
 import { eventColumns, eventOf, eventsFrom, UNNAMED, type EventReading, type EventRow } from "../shapes/billable-events"
 

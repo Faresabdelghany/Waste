@@ -31,6 +31,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
+import { changeProjectCalendars } from "@waste/db/commands/holiday-holds"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -39,7 +40,6 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { requireHolidayList } from "./holiday-lists"
-import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.organization"
@@ -247,7 +247,9 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const companyId = c.get("principal").companyId
-        if (patch.holidayList != null || (patch.paymentReferenceScheme !== undefined && patch.paymentReferenceScheme !== "none")) {
+        // A new weekend or holiday list re-decides the project's held routes (#226): the calendar is read before and after the patch.
+        const changesCalendar = patch.weekend !== undefined || patch.holidayList !== undefined
+        if (changesCalendar || (patch.paymentReferenceScheme !== undefined && patch.paymentReferenceScheme !== "none")) {
           // The path's row first (404), then the 400 of a list the company does not hold, then the 409 the body's scheme needs.
           const [found] = await tx.select({ id: project.id }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, id))).limit(1)
           if (found === undefined) throw noSuchProject(id)
@@ -258,19 +260,9 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ...(patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }),
           ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),
         }
-        // The holiday inputs as they stand before the patch, where it changes them (#226): `holidayList` matters by the days its list holds.
-        const holidayInputs = patch.weekend !== undefined || patch.holidayList !== undefined ? await projectCalendarOf(tx, companyId, id) : undefined
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(project)
-            .set(patch)
-            .where(and(eq(project.companyId, c.get("principal").companyId), eq(project.id, id)))
-            .returning(columns),
-        )
+        const update = () => refuseDuplicate(sentences, () => tx.update(project).set(patch).where(and(eq(project.companyId, companyId), eq(project.id, id))).returning(columns))
+        const [row] = changesCalendar ? await changeProjectCalendars(tx, companyId, [id], update) : await update()
         if (row === undefined) throw noSuchProject(id)
-        // The held routes the new weekend or list re-decides go back to their schemes (routes/route-holds.ts).
-        if (holidayInputs !== undefined) await releaseHolidayHolds(tx, companyId, id, { before: holidayInputs, after: await projectCalendarOf(tx, companyId, id) })
         return c.json(projectOf(row))
       },
     )

@@ -18,7 +18,7 @@ import type { BusinessRecord } from "../prototype-record"
 import { typedString } from "../record-values"
 import { formatWorkingDays } from "./calendar-list"
 import { holidayListEntries, holidayListNamed } from "./holiday-list-records"
-import { holidayListFromDates, holidayNamesFor, withCarriedNames } from "@waste/domain/planning/holiday-names"
+import { holidayListOf } from "@waste/domain/planning/generation"
 import type { SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { type HolidayList, NO_HOLIDAYS, type ServiceDay } from "@waste/domain/days"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
@@ -72,9 +72,9 @@ export function resolveProjectCalendar(
   return {
     list: {
       name,
-      dates: holidayListFromDates(
-        entries.map((entry) => entry.date),
-        withCarriedNames(new Map(entries.flatMap((entry) => (entry.name ? [[entry.date, entry.name] as const] : []))), holidayNamesFor(name)),
+      dates: holidayListOf(
+        entries.map((entry) => ({ day: entry.date, name: entry.name || null })),
+        name,
       ),
       ...(listRecord ? { listRecord } : {}),
     },

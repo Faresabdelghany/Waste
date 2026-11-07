@@ -78,7 +78,7 @@ import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { fitsOf, vehicleLabel } from "@waste/db/commands/fleet-fit"
-import { projectTimezone } from "@waste/db/commands/project-clock"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -105,15 +105,15 @@ const alreadyAllocated = (who: string): string => `${who} is already allocated o
 
 /**
  * The live allocations still naming a row — `naming` says how: as the vehicle
- * or as the trailer, or as the driver — not yet over on the database's clock,
- * what taking a vehicle or a driver out of service counts (routes/vehicles.ts,
+ * or as the trailer, or as the driver — not yet over at the app's `now`, what
+ * taking a vehicle or a driver out of service counts (routes/vehicles.ts,
  * routes/drivers.ts). `company_id` and the row's id and never `inProjects`:
  * the row was read under the caller's scope and an allocation's project is the
  * row's by the composite key, and a count that refuses a write must not be the
  * one statement that could miss a row.
  */
-export const liveAllocationsNaming = (companyId: string, naming: SQL | undefined): SQL | undefined =>
-  and(eq(vehicleAllocation.companyId, companyId), naming, inArray(vehicleAllocation.status, [...LIVE_ALLOCATION_STATUSES]), gt(vehicleAllocation.plannedTo, sql`now()`))
+export const liveAllocationsNaming = (companyId: string, naming: SQL | undefined, now: Date): SQL | undefined =>
+  and(eq(vehicleAllocation.companyId, companyId), naming, inArray(vehicleAllocation.status, [...LIVE_ALLOCATION_STATUSES]), gt(vehicleAllocation.plannedTo, now))
 
 /** What a command on a released allocation is told: the window is freed, and what is wanted is a new one. */
 const RELEASED_DOES_NOT_CHANGE = "Released allocations do not change; allocate anew"

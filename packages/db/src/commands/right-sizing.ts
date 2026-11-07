@@ -20,6 +20,7 @@ import type { FillLevel } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
+import { todayOnClock } from "../query/project-clock"
 import { rightSizingProposal } from "../schema/inspections"
 
 /** One subscription with its latest estimates, as the run reads it. */
@@ -54,6 +55,8 @@ export async function proposeRightSizing(tx: Tx, companyId: string, at: Date, pr
     projectIds.map((id) => sql`${id}::uuid`),
     sql`, `,
   )})`
+  // The subscription in force today on its project's clock.
+  const today = todayOnClock(at, sql`p.timezone`)
   const candidates = await tx.execute<Candidate>(sql`
     select s.id as subscription_id, s.project_id, s.product_id, ${iso(sql`s.updated_at`)} as updated_at,
            pr.kind, pr.waste_fraction_id, pr.service_frequency_id, ct.volume_litres,
@@ -80,8 +83,8 @@ export async function proposeRightSizing(tx: Tx, companyId: string, at: Date, pr
       ) f
      where s.company_id = ${companyId}
        and ${inProjects}
-       and s.valid_from <= (${at.toISOString()}::timestamptz at time zone p.timezone)::date
-       and (s.valid_to is null or s.valid_to > (${at.toISOString()}::timestamptz at time zone p.timezone)::date)
+       and s.valid_from <= ${today}
+       and (s.valid_to is null or s.valid_to > ${today})
        and f.fills is not null
        and not exists (select 1 from wms.right_sizing_proposal o where o.company_id = s.company_id and o.subscription_id = s.id and o.status = 'open')
      order by s.id

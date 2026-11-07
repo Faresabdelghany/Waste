@@ -33,14 +33,14 @@ import { route } from "@waste/db/schema/execution"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { project } from "@waste/db/schema/organisation"
 import { allocatedWithOthers, overlappingRoute, sameDayClash, sameDayUnconfirmed, spanOf, type DaySpan } from "@waste/domain/execution/crew-day"
-import { formatShortDay } from "@waste/domain/days"
+import { addDays, formatShortDay } from "@waste/domain/days"
 import { OPEN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { LIVE_ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm"
 import { labelOf, routeColumns, type RouteRow } from "@waste/db/shapes/routes"
-import { projectTimezone } from "@waste/db/commands/project-clock"
+import { instantOnClock, projectTimezone } from "@waste/db/query/project-clock"
 
 import { problem } from "../problem"
 import { driverName, vehicleName } from "./availability-rules"
@@ -83,8 +83,8 @@ export async function refuseAllocatedElsewhere(tx: Tx, scope: Scope, crew: Route
   if (named.length === 0) return
   await lockCrew(tx, scope.companyId, crew)
   // The day's bounds on the project's clock, rendered by the database from the project's timezone.
-  const dayStart = sql`(${day}::date)::timestamp at time zone ${project.timezone}`
-  const dayEnd = sql`((${day}::date) + 1)::timestamp at time zone ${project.timezone}`
+  const dayStart = instantOnClock(day, project.timezone)
+  const dayEnd = instantOnClock(addDays(day, 1), project.timezone)
   const rows = await tx
     .select({ vehicleId: vehicleAllocation.vehicleId, driverId: vehicleAllocation.driverId, trailerId: vehicleAllocation.trailerId, plannedFrom: vehicleAllocation.plannedFrom, plannedTo: vehicleAllocation.plannedTo })
     .from(vehicleAllocation)

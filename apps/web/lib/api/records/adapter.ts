@@ -240,7 +240,7 @@ const DAY_MS = 86_400_000
  * the hour, "Today", "Yesterday", "N days ago", then weeks and months. Days
  * are counted on the calendar of the clock's own timezone — the browser's,
  * not a project's: a stamp is presentation only, and every date rule proper
- * (`projectToday`, `dayInTimezone`) is the project's — so an edit at 23:50
+ * (`dayIn`, `dayInTimezone`) is the project's — so an edit at 23:50
  * read at 00:10 is "Yesterday" and not "Today".
  */
 export function relativeDay(iso: string, now = new Date()): string {

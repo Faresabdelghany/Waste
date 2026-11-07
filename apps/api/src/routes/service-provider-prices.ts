@@ -83,7 +83,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
-import { projectCurrency } from "@waste/db/commands/project-clock"
+import { projectCurrency } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"

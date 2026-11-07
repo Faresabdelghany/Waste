@@ -59,7 +59,7 @@
 // judged on the day the scheme's period starts or today on the project's
 // clock, whichever is later (#101 §6.18) — today being the app's injected
 // `now` rendered in `project.timezone`, read once per request through
-// `projectToday` (@waste/db/commands/project-clock) and only when a group asks — a 400 at `driverId` in the
+// `projectToday` (@waste/db/query/project-clock) and only when a group asks — a 400 at `driverId` in the
 // words an allocation refuses with, whatever the scheme's status; a scheme
 // patch that moves the start later judges its stored groups the same way,
 // over rows `fleetOf` reads in one statement each. And on a `validated`
@@ -105,7 +105,7 @@ import { refuseRetiredVehicle, refuseUnavailableDriver } from "@waste/domain/res
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
-import type { Today } from "@waste/db/commands/project-clock"
+import { todayOnClock, type Today } from "@waste/db/query/project-clock"
 import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
 import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
@@ -646,9 +646,9 @@ export async function requireGroupDriver(
  * one driver — `column` is `collection_group.vehicle_id` or `.driver_id` —
  * the count a fleet route refuses a retirement, an `inactive` or a
  * `suspended` with (routes/vehicles.ts, routes/drivers.ts, through
- * `refuseStranded`). Today is on each scheme's project's clock, read in the
- * statement (`now() at time zone project.timezone`), whatever the scheme's
- * status: a draft naming the vehicle is a plan that names it. A scheme that
+ * `refuseStranded`). Today is the app's `now` on each scheme's project's
+ * clock, read in the statement, whatever the scheme's status: a draft naming
+ * the vehicle is a plan that names it. A scheme that
  * has ended or has not begun counts for nothing, and nor does a parked group
  * — one with no days, which runs on nothing and so plans nothing with the
  * row (`isParked` / `groupRuns`, @waste/domain/planning/checks, spelled here
@@ -660,8 +660,8 @@ export async function requireGroupDriver(
  * never `inProjects`, since a count that refuses a write must not be the one
  * statement that could miss a row.
  */
-export function groupsInForceNaming(tx: Tx, column: typeof collectionGroup.vehicleId | typeof collectionGroup.driverId, companyId: string, id: string): SQL | undefined {
-  const today = sql`(now() at time zone ${project.timezone})::date`
+export function groupsInForceNaming(tx: Tx, column: typeof collectionGroup.vehicleId | typeof collectionGroup.driverId, companyId: string, id: string, now: Date): SQL | undefined {
+  const today = todayOnClock(now, project.timezone)
   const inForce = tx
     .select({ id: routeScheme.id })
     .from(routeScheme)

@@ -14,9 +14,9 @@
 //
 // The sweep is the one statement in the system that reads across tenants,
 // and the reason `wms_worker` has BYPASSRLS: one `select` over route_scheme
-// joined to project, "today" being `now()` rendered in each project's
-// timezone by Postgres (`at time zone`), so a scheme in Cairo and one in
-// Copenhagen are each judged on their own day at one instant. It reads on
+// joined to project, "today" being the job's `now` on each project's clock
+// (`todayOnClock`, @waste/db/query/project-clock), so a scheme in Cairo and
+// one in Copenhagen are each judged on their own day at one instant. It reads on
 // the worker role's pool and writes nothing; a write there is 42501 by grant.
 //
 // A scheme mid-generation is not queued twice: `planning.generate-routes` is
@@ -31,6 +31,7 @@
 // since one tenant's trouble is not another's, and the job then fails so the
 // count shows on /readyz.
 import { startGenerationRun } from "@waste/db/commands/generation"
+import { todayOnClock } from "@waste/db/query/project-clock"
 import { loggable } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
@@ -58,13 +59,14 @@ export type EligibleScheme = { companyId: string; projectId: string; routeScheme
  * force, so a scheme ending on the window's first day is not in it.
  */
 export async function eligibleSchemes(worker: JobContext["worker"], at: Date): Promise<EligibleScheme[]> {
+  const today = todayOnClock(at, sql`p.timezone`)
   const rows = await worker.db.execute<{ company_id: string; project_id: string; route_scheme_id: string; today: string; plan_ahead_days: number }>(sql`
-    select s.company_id, s.project_id, s.id as route_scheme_id, (${at.toISOString()}::timestamptz at time zone p.timezone)::date::text as today, s.plan_ahead_days
+    select s.company_id, s.project_id, s.id as route_scheme_id, ${today}::text as today, s.plan_ahead_days
     from wms.route_scheme s
     join wms.project p on p.company_id = s.company_id and p.id = s.project_id
     where s.plan_ahead and s.status = 'validated' and s.archived_at is null
-      and s.valid_from <= (${at.toISOString()}::timestamptz at time zone p.timezone)::date + s.plan_ahead_days
-      and (s.valid_to is null or s.valid_to > (${at.toISOString()}::timestamptz at time zone p.timezone)::date + 1)
+      and s.valid_from <= ${today} + s.plan_ahead_days
+      and (s.valid_to is null or s.valid_to > ${today} + 1)
     order by s.company_id, s.project_id, s.id
   `)
   return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, routeSchemeId: row.route_scheme_id, today: row.today, planAheadDays: row.plan_ahead_days }))

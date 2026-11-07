@@ -10,6 +10,7 @@
 // line in the log and the sweep goes on.
 import type { Database, Tx } from "@waste/db/client"
 import { routingJobHeld, routingQueueOf, sendRoutingJob } from "@waste/db/commands/plans"
+import { todayOnClock } from "@waste/db/query/project-clock"
 import { route } from "@waste/db/schema/execution"
 import { plan } from "@waste/db/schema/routing"
 import { loggable } from "@waste/db/sqlstate"
@@ -44,7 +45,7 @@ async function horizonRoutes(worker: Database, at: Date): Promise<HorizonRoute[]
     select r.company_id, r.id as route_id, d.today::text as today
     from wms.route r
     join wms.project p on p.company_id = r.company_id and p.id = r.project_id
-    cross join lateral (select (${at.toISOString()}::timestamptz at time zone p.timezone)::date as today) d
+    cross join lateral (select ${todayOnClock(at, sql`p.timezone`)} as today) d
     where p.status = 'active'
       and r.status in ('planned', 'ready')
       and r.operating_date between d.today + 1 and d.today + ${HORIZON_DAYS}::int

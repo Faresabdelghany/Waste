@@ -103,7 +103,7 @@ import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { labelOf, lastDayOf, linesBySettlement, lineOf, linesOf, periodEnd, settlementColumns, settlementDetailOf, settlementOf, settlementsFrom, type SettlementRow } from "@waste/db/shapes/settlements"
-import { projectCurrency, projectToday } from "@waste/db/commands/project-clock"
+import { projectCurrency, projectToday } from "@waste/db/query/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"

@@ -52,7 +52,7 @@ import { dropOffPoint, dropOffPointFraction } from "../schema/drop-off-points"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
 import { priceDraft } from "./billable-writes"
 import { emit } from "./outbox"
-import { projectTimezone, type Scope } from "./project-clock"
+import { projectTimezone, type Scope } from "../query/project-clock"
 import { lockRow, replayed } from "./shared"
 import { fractionsOf, siteVisitOf, visitColumns, type VisitRow } from "../shapes/site-visits"
 

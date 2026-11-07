@@ -75,4 +75,16 @@ describe("instantOnDay", () => {
     assert.equal(instantOnDay("2026-10-25", 0, "Europe/Copenhagen").toISOString(), "2026-10-24T22:00:00.000Z")
     assert.equal(instantOnDay("2026-10-25", 7 * HOUR, "Europe/Copenhagen").toISOString(), "2026-10-25T06:00:00.000Z")
   })
+
+  test("a time the clocks skip is read in the offset before the change, and a time they repeat in the offset after it, west of UTC as east: Postgres's reading", () => {
+    // Copenhagen skips 02:00–03:00 on 29 March and repeats 02:00–03:00 on 25 October.
+    assert.equal(instantOnDay("2026-03-29", 2.5 * HOUR, "Europe/Copenhagen").toISOString(), "2026-03-29T01:30:00.000Z", "02:30 read as winter time, which is 03:30 summer time")
+    assert.equal(instantOnDay("2026-10-25", 2.5 * HOUR, "Europe/Copenhagen").toISOString(), "2026-10-25T01:30:00.000Z", "the second 02:30, winter time's")
+    // New York skips 02:00–03:00 on 8 March and repeats 01:00–02:00 on 1 November.
+    assert.equal(instantOnDay("2026-03-08", 2.5 * HOUR, "America/New_York").toISOString(), "2026-03-08T07:30:00.000Z", "02:30 read as winter time, which is 03:30 summer time")
+    assert.equal(instantOnDay("2026-11-01", 1.5 * HOUR, "America/New_York").toISOString(), "2026-11-01T06:30:00.000Z", "the second 01:30, winter time's")
+    // Auckland repeats 02:00–03:00 on 5 April and skips 02:00–03:00 on 27 September.
+    assert.equal(instantOnDay("2026-04-05", 2.5 * HOUR, "Pacific/Auckland").toISOString(), "2026-04-04T14:30:00.000Z", "the second 02:30, winter time's")
+    assert.equal(instantOnDay("2026-09-27", 2.5 * HOUR, "Pacific/Auckland").toISOString(), "2026-09-26T14:30:00.000Z", "02:30 read as winter time, which is 03:30 summer time")
+  })
 })

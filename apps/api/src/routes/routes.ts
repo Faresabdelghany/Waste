@@ -83,17 +83,14 @@ import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule, type Route, type RouteDispatchResult } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
-import { listHolidayRows } from "@waste/db/query/holidays"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
-import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { NOT_A_STATION, notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
 import { confirmNonWorkingDay, operatingDayReading, type OperatingDayReading } from "@waste/domain/execution/operating-day"
 import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
 import type { OfficeCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
-import { holidayListOf } from "@waste/domain/planning/generation"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import { ACTIVE_VEHICLE_STATUSES, type VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
@@ -109,7 +106,7 @@ import type { JobSender } from "@waste/db/jobs"
 import { labelOf, routeColumns, routesOf, type RouteRow } from "@waste/db/shapes/routes"
 import { lockRow, lockRows, nextNumber } from "@waste/db/commands/shared"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
-import { projectToday } from "@waste/db/commands/project-clock"
+import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { receiptColumns, receiptOf } from "@waste/db/shapes/driver-commands"
 import { routeFitStops, vehicleLabel } from "@waste/db/commands/fleet-fit"
 import { timeOf } from "@waste/db/shapes/times"
@@ -424,13 +421,7 @@ export function dispatchRefusalOf(error: unknown): { status: 404 | 409; detail: 
  * service days, read through the domain's one rule (execution/operating-day).
  */
 async function operatingDayOf(tx: Tx, scope: Scope, current: RouteRow, day: string): Promise<OperatingDayReading> {
-  const [calendar] = await tx
-    .select({ weekend: project.weekend, holidayList: project.holidayList })
-    .from(project)
-    .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
-    .limit(1)
-  if (calendar === undefined) throw noSuchRoute(current.id)
-  const holidays = await listHolidayRows(tx, scope.companyId, calendar.holidayList, { from: day, to: day })
+  const calendar = await readProjectCalendar(tx, scope, { from: day, to: day })
   const [scheme] =
     current.routeSchemeId === null
       ? []
@@ -440,7 +431,7 @@ async function operatingDayOf(tx: Tx, scope: Scope, current: RouteRow, day: stri
           .where(and(eq(routeScheme.companyId, scope.companyId), eq(routeScheme.id, current.routeSchemeId)))
           .limit(1)
   return operatingDayReading(
-    { weekend: calendar.weekend, holidays: holidayListOf(holidays, calendar.holidayList) },
+    calendar,
     day,
     scheme === undefined ? null : { holidayPolicy: scheme.holidayPolicy, serviceDays: scheme.serviceDays },
   )

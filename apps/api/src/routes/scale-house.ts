@@ -54,7 +54,7 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { notTaken, stationTakes, writeUnload } from "@waste/db/commands/unloads"
 import { dayInTimezone } from "@waste/domain/clock"
-import { projectTimezone } from "@waste/db/commands/project-clock"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import { lockRow, nextNumber, refuseDuplicate } from "@waste/db/commands/shared"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { product } from "@waste/db/schema/catalogue"
@@ -663,11 +663,7 @@ export function scaleHouseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
           // One of our own vehicles' load: matched to its route and written as its Unload, or kept with why not.
           let match: { routeId: string | null; unloadId: string | null; unmatchedReason: WeighbridgeUnmatchedReason | null } = { routeId: null, unloadId: null, unmatchedReason: null }
           if (ticket.vehicleId !== null) {
-            const [held] = await tx
-              .select({ timezone: project.timezone })
-              .from(project)
-              .where(and(eq(project.companyId, principal.companyId), eq(project.id, ticket.projectId)))
-            const truck = { id: ticket.vehicleId, projectId: ticket.projectId, timezone: held!.timezone }
+            const truck = { id: ticket.vehicleId, projectId: ticket.projectId, timezone: await projectTimezone(tx, principal.companyId, ticket.projectId) }
             const routes = await routesOf(tx, principal.companyId, truck, weighedOutAt)
             const decision = matchTicket({ vehicleId: truck.id, ...routes, wasteFractionId: lines[0]!.wasteFractionId, stationTakes: true })
             if (decision.kind === "matched") {

@@ -26,11 +26,11 @@ import { PickupException, PickupExceptionHistory, PickupExceptionHistoryQuery, P
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
 import { exceptionRulesOf, laddersOf, latestOutcomeProofs, pickupExceptionRows } from "@waste/db/commands/pickup-exceptions"
+import { projectTimezone } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { product } from "@waste/db/schema/catalogue"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
-import { project } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import type { Action } from "@waste/domain/access/modules"
 import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, retiredCode, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
@@ -247,12 +247,7 @@ async function historyAt(tx: Tx, companyId: string, projectId: string, place: Pl
 
 /** The first service date a history reads when the query names none: the 365 days before the project's today. */
 async function defaultFrom(tx: Tx, companyId: string, projectId: string, now: Date): Promise<string> {
-  const [found] = await tx
-    .select({ timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
-    .limit(1)
-  return addDays(dayInTimezone(now, found?.timezone ?? "UTC"), -365)
+  return addDays(dayInTimezone(now, await projectTimezone(tx, companyId, projectId)), -365)
 }
 
 const historyDescription = (place: string) =>
