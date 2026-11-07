@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { viewedModules } from "@/lib/api/grants"
 import { keptOnApi } from "@/lib/api/records/server-records"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
@@ -37,7 +38,6 @@ import {
   previousWindow,
   rangeOf,
   tabsShown,
-  viewedModules,
   windowEnding,
   type DashboardRangeId,
   type DashboardTabId,

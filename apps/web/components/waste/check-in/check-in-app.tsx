@@ -30,32 +30,20 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import { checkInVisit, readVisitSites, searchVisitAddresses } from "@/lib/api/site-visits"
 import { BLOCK_REASON_LABELS } from "@/lib/data/commercial"
 import { answerHeadline, chargeSentence, CHECK_IN_MODES, CHECK_IN_PATH, checkInBodyOf, rememberedSite, toggled, type CheckInMode } from "@/lib/data/site-visits"
-import { CHECK_IN_SITE_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { CHECK_IN_SITE_STORAGE_KEY } from "@/lib/storage-keys"
 import { cn } from "@/lib/utils"
 
 /** How long the address search waits after the last key before it asks. */
 const SEARCH_DELAY_MS = 300
 
-/** The site the device remembers, by project: read defensively, since a browser may hold anything there. */
-function rememberedPick(): { projectId: string; siteId: string } | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = readPersisted(window.localStorage, CHECK_IN_SITE_STORAGE_KEY)
-    const parsed: unknown = raw === null ? null : JSON.parse(raw)
-    if (typeof parsed === "object" && parsed !== null && typeof (parsed as { projectId?: unknown }).projectId === "string" && typeof (parsed as { siteId?: unknown }).siteId === "string") return parsed as { projectId: string; siteId: string }
-  } catch {
-    // A value this page did not write: forget it.
-  }
-  return null
-}
-
-function remember(pick: { projectId: string; siteId: string }) {
-  try {
-    window.localStorage.setItem(CHECK_IN_SITE_STORAGE_KEY, JSON.stringify(pick))
-  } catch {
-    // A store that refuses writes: the site is picked again next time.
-  }
-}
+/** The site the device remembers, by project: read defensively, since a browser may hold anything there; a store that refuses writes has it picked again next time. */
+const keptPick = persistedStore<{ projectId: string; siteId: string }>(CHECK_IN_SITE_STORAGE_KEY, {
+  parse: (raw) => {
+    const parsed: unknown = JSON.parse(raw)
+    return typeof parsed === "object" && parsed !== null && typeof (parsed as { projectId?: unknown }).projectId === "string" && typeof (parsed as { siteId?: unknown }).siteId === "string" ? (parsed as { projectId: string; siteId: string }) : null
+  },
+})
 
 /** The sites read for a project, or why they could not be. */
 type SitesRead = { status: "reading" } | { status: "read"; projectId: string; sites: VisitSite[] } | { status: "refused"; sentence: string }
@@ -112,7 +100,7 @@ export function CheckInApp() {
 function CheckInForm({ projects }: { projects: readonly { id: string; name: string }[] }) {
   const client = useApiClient()
   const [pick, setPick] = useState(() => {
-    const saved = rememberedPick()
+    const saved = keptPick.read()
     const projectId = saved !== null && projects.some((project) => project.id === saved.projectId) ? saved.projectId : projects[0].id
     return { projectId, siteId: saved?.projectId === projectId ? saved.siteId : "" }
   })
@@ -176,7 +164,7 @@ function CheckInForm({ projects }: { projects: readonly { id: string; name: stri
     const next = { ...pick, siteId }
     setPick(next)
     setFractions([])
-    remember(next)
+    keptPick.write(next)
   }
   const pickProject = (projectId: string) => {
     setPick({ projectId, siteId: "" })

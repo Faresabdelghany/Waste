@@ -35,9 +35,10 @@ import {
   emptyBusinessFilters,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { getBusinessModuleHref } from "@/lib/data/business-links"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { planningAreaLayers, type PlanningAreaLayer } from "@waste/domain/map-planning/areas"
@@ -46,7 +47,8 @@ import {
   isBaseMapId,
   type BaseMapId,
 } from "@/lib/map-planning/base-maps"
-import { BASE_MAP_STORAGE_KEY, readPersisted } from "@/lib/storage-keys"
+import { persistedStore } from "@/lib/persisted-store"
+import { BASE_MAP_STORAGE_KEY } from "@/lib/storage-keys"
 import type { MapCluster } from "@/lib/map-planning/clusters"
 import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
@@ -134,6 +136,9 @@ type Highlight = { kind: "containers"; ids: readonly string[] } | { kind: "route
 /** The quantities line when no collection window bounds them. */
 const PER_COLLECTION_LABEL = "Per collection"
 
+/** The base map the person chose, kept in the browser; without it the theme's default stands. */
+const chosenBaseMap = persistedStore<BaseMapId>(BASE_MAP_STORAGE_KEY, { parse: (raw) => (isBaseMapId(raw) ? raw : null), serialize: (id) => id })
+
 export function MapPlanningView({
   containers,
   planningAreas,
@@ -182,20 +187,12 @@ export function MapPlanningView({
   // The base map choice lives in the browser only; read it after mount so
   // SSR and the first client render agree.
   useEffect(() => {
-    try {
-      const stored = readPersisted(globalThis.localStorage, BASE_MAP_STORAGE_KEY)
-      if (isBaseMapId(stored)) setBaseMapChoice(stored)
-    } catch {
-      // Storage may be unavailable; the theme default stands.
-    }
+    const stored = chosenBaseMap.read()
+    if (stored !== null) setBaseMapChoice(stored)
   }, [])
   const chooseBaseMap = (id: BaseMapId) => {
     setBaseMapChoice(id)
-    try {
-      globalThis.localStorage?.setItem(BASE_MAP_STORAGE_KEY, id)
-    } catch {
-      // Storage may be unavailable; the choice lasts the session.
-    }
+    chosenBaseMap.write(id)
   }
 
   const colorFor = useCallback(
@@ -800,7 +797,7 @@ export function MapPlanningView({
                   Play route
                 </Button>
                 <Button asChild variant="outline" size="sm" className="h-8 flex-1 gap-1.5 text-xs">
-                  <Link href={getBusinessModuleHref("route-studio", "routes", routeCard.route.id)}>
+                  <Link href={workspaceHref(ROUTES_MODULE, routeCard.route.id)}>
                     Open route
                     <ArrowSquareOut className="h-3.5 w-3.5" />
                   </Link>

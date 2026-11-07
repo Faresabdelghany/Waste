@@ -273,22 +273,48 @@ function migratePlanModuleHref(href: string): string {
 }
 
 /**
+ * Modules that left the page an old address names, by path and `?module=`:
+ * the Live board moved from Operate (and the bare home) to Route Studio,
+ * keeping its records; the Driver App became a surface of its own (Issue
+ * #145); Route Studio's History became its stops; and the customers' Inbox
+ * is gone, its address landing on the workspace.
+ */
+const MOVED_MODULES: Readonly<Record<string, Readonly<Record<string, { to: string; keepsRecord?: true }>>>> = {
+  "/": { "driver-app": { to: "/driver" }, live: { to: "/route-studio?module=live", keepsRecord: true } },
+  "/operate": { "driver-app": { to: "/driver" }, live: { to: "/route-studio?module=live", keepsRecord: true } },
+  "/route-studio": { history: { to: "/route-studio?module=pickups" } },
+  "/customers": { inbox: { to: "/customers" } },
+}
+
+function migrateMovedModuleHref(href: string): string {
+  const match = /^(\/[^?#]*)\?([^#]*)/.exec(href)
+  if (!match) return href
+  const params = new URLSearchParams(match[2])
+  const moved = Object.prototype.hasOwnProperty.call(MOVED_MODULES, match[1]) ? MOVED_MODULES[match[1]][params.get("module") ?? ""] : undefined
+  if (moved === undefined) return href
+  const record = params.get("record")
+  return moved.keepsRecord && record ? `${moved.to}&${new URLSearchParams({ record }).toString()}` : moved.to
+}
+
+/**
  * Rewrites app-relative hrefs: the retired `/contractors` and
- * `/contractor-workspace(/…)` paths plus `?module=` / `?record=` params, and
- * the Plan deep links into the moved Areas & Zones and Collection Calendars
- * modules. Absolute URLs and
- * non-app paths are returned untouched.
+ * `/contractor-workspace(/…)` paths plus `?module=` / `?record=` params, the
+ * Plan deep links into the moved Areas & Zones and Collection Calendars
+ * modules, and the addresses of the other moved modules (`MOVED_MODULES`).
+ * Absolute URLs and non-app paths are returned untouched.
  */
 export function migrateLegacyHref(href: string): string {
   if (!href.startsWith("/")) return href
-  return migratePlanModuleHref(
-    href
-      .replace(/^\/contractors(?=[/?#]|$)/, "/service-providers")
-      .replace(/^\/contractor-workspace(?=[/?#]|$)/, "/service-provider-workspace")
-      .replace(
-        /([?&](?:module|record)=)([a-z0-9.-]+)/g,
-        (_, prefix: string, id: string) => `${prefix}${migrateLegacyId(id)}`,
-      ),
+  return migrateMovedModuleHref(
+    migratePlanModuleHref(
+      href
+        .replace(/^\/contractors(?=[/?#]|$)/, "/service-providers")
+        .replace(/^\/contractor-workspace(?=[/?#]|$)/, "/service-provider-workspace")
+        .replace(
+          /([?&](?:module|record)=)([a-z0-9.-]+)/g,
+          (_, prefix: string, id: string) => `${prefix}${migrateLegacyId(id)}`,
+        ),
+    ),
   )
 }
 

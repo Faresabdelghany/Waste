@@ -25,7 +25,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useGrants } from "@/components/auth/use-grants"
 import { useApiClient } from "@/components/waste/api-session-store"
+import { mayTake, type ModuleAction } from "@/lib/api/grants"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useCommercialPickers, useCommercialResolver } from "@/components/waste/commands/commercial-pickers"
@@ -72,12 +74,19 @@ export function ProductsPrimarySurface({ label }: PrimarySurfaceProps) {
   return <AddPrice label={label} />
 }
 
-/** Price rows' primary actions: Explain price, and Add price. */
+/** Price rows' primary actions, each under the grant its API route checks: Explain price's `GET /price-lists/:id/resolve`, Add price's create. */
+export const PRICE_ROWS_PRIMARY_ACTIONS = {
+  explainPrice: { module: PRICE_ROWS_MODULE, action: "view" },
+  addPrice: { module: PRICE_ROWS_MODULE, action: "create" },
+} as const satisfies Record<string, ModuleAction>
+
+/** Price rows' primary actions: Explain price, and Add price, each where its grant is held. */
 export function PriceRowsPrimarySurface({ label }: PrimarySurfaceProps) {
+  const grants = useGrants()
   return (
     <div className="flex items-center gap-2">
-      <ExplainPrice />
-      <AddPrice label={label} />
+      {mayTake(grants, PRICE_ROWS_PRIMARY_ACTIONS.explainPrice) && <ExplainPrice />}
+      {mayTake(grants, PRICE_ROWS_PRIMARY_ACTIONS.addPrice) && <AddPrice label={label} />}
     </div>
   )
 }

@@ -12,11 +12,7 @@
 // resolution stays in the pure lib. Loaded client-only by
 // map-planning-view.tsx (next/dynamic).
 
-import {
-  Map as MapLibreMap,
-  NavigationControl,
-  type StyleSpecification,
-} from "maplibre-gl"
+import type { Map as MapLibreMap } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { Truck } from "@phosphor-icons/react/dist/ssr"
 import {
@@ -30,10 +26,11 @@ import {
   type RefObject,
 } from "react"
 
+import { useMapLibre } from "@/components/maps/use-maplibre"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { PlanningAreaLayer } from "@waste/domain/map-planning/areas"
-import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
+import type { BaseMapId } from "@/lib/map-planning/base-maps"
 import { clusterPoints, type MapCluster } from "@/lib/map-planning/clusters"
 import { NO_FRACTION_COLOR, SELECTION_COLOR } from "@/lib/map-planning/colors"
 import { UNCOVERED_COLOR } from "@waste/domain/map-planning/coverage-gaps"
@@ -47,14 +44,10 @@ import type { SelectionShape } from "@waste/domain/map-planning/selection"
 import type { ServiceAreaLayer } from "@waste/domain/map-planning/service-areas"
 import { cn } from "@/lib/utils"
 
-import { pointMapLibreWorkerAtRouteHandler } from "./maplibre-worker"
 import { useMapProjection } from "./use-map-projection"
 import type { RoadGeometryState } from "./use-road-geometries"
 
 export type DrawTool = "none" | "rectangle" | "polygon"
-
-// The tile worker's URL, see maplibre-worker.ts — set before the first Map.
-pointMapLibreWorkerAtRouteHandler()
 
 const INITIAL_ZOOM = 12
 /** No floor — the whole world is one zoom-out away. */
@@ -144,7 +137,8 @@ function clusterLabel(cluster: MapCluster, selected: number): string {
   return `${head}${fractions}${picked}`
 }
 
-const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
+/** A camera move's duration: eased once a style has loaded, else a jump, since MapLibre runs animation frames only then. */
+const eased = (styleLoaded: RefObject<boolean>, ms: number) => (styleLoaded.current ? ms : 0)
 
 /**
  * The selection ring (amber), outside it the highlight ring (foreground), and
@@ -210,71 +204,23 @@ export function PlanningMap({
   className,
 }: PlanningMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
-  const loadedRef = useRef(false)
-  const [ready, setReady] = useState(false)
-  // The map instance also lives in state because `project` runs during render
-  // (marker positions); the ref serves handlers and effects.
-  const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
+  // The draw overlay and the toolbar own double-click; the map keeps scroll and drag.
+  const { map: mapInstance, styleLoaded, baseMapFailed } = useMapLibre(containerRef, {
+    baseMap,
+    name: "planning-map",
+    camera: { center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat], zoom: INITIAL_ZOOM, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, doubleClickZoom: false },
+  })
   // A new projection on every camera change, so every overlay re-projects.
   const project = useMapProjection(mapInstance)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
-  const [baseMapFailed, setBaseMapFailed] = useState(false)
-
-  // MapLibre only runs animation frames once a style has loaded; without a
-  // base map (offline, blocked tiles) the camera jumps instead of easing so
-  // navigation still works.
-  const animationMs = (ms: number) => (loadedRef.current ? ms : 0)
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container || mapRef.current) return
-    const map = new MapLibreMap({
-      container,
-      style: styleOf(baseMap),
-      center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat],
-      zoom: INITIAL_ZOOM,
-      minZoom: MIN_ZOOM,
-      maxZoom: MAX_ZOOM,
-      attributionControl: { compact: true },
-      // The draw overlay and the toolbar own double-click; the map keeps scroll and drag.
-      doubleClickZoom: false,
-      // A planning map stays north-up and flat: the road overlay moves with
-      // one translate-and-scale transform, which assumes no rotation or pitch.
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-    })
-    map.touchZoomRotate.disableRotation()
-    map.keyboard.disableRotation()
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right")
-    // State flags for tests and debugging: the container says when a style
-    // has loaded and when the map is idle (every visible tile drawn).
-    const onStyleLoaded = () => {
-      loadedRef.current = true
-      setBaseMapFailed(false)
-      container.dataset.mapLoaded = "true"
-    }
-    map.on("load", onStyleLoaded)
-    map.on("style.load", onStyleLoaded)
-    map.on("idle", () => {
-      container.dataset.mapIdle = "true"
-    })
-    map.on("dataloading", () => {
-      delete container.dataset.mapIdle
-    })
-    map.on("error", (event) => {
-      // Tile misses after load are cosmetic; a failure before the style
-      // arrives means no base map at all — say so, the markers still stand.
-      console.warn("[planning-map]", event.error?.message ?? event)
-      if (!loadedRef.current) setBaseMapFailed(true)
-    })
-    ;(container as HTMLDivElement & { __planningMap?: MapLibreMap }).__planningMap = map
+    if (!mapInstance) return
+    const map = mapInstance
+    ;(map.getContainer() as HTMLDivElement & { __planningMap?: MapLibreMap }).__planningMap = map
     const onMove = () => setZoom(map.getZoom())
     map.on("move", onMove)
     map.on("resize", onMove)
-    mapRef.current = map
-    setMapInstance(map)
     if (apiRef) {
       apiRef.current = {
         fitBounds: (bounds) =>
@@ -283,51 +229,31 @@ export function PlanningMap({
               [bounds.west, bounds.south],
               [bounds.east, bounds.north],
             ],
-            { padding: FIT_PADDING_PX, duration: animationMs(600), maxZoom: FIT_MAX_ZOOM },
+            { padding: FIT_PADDING_PX, duration: eased(styleLoaded, 600), maxZoom: FIT_MAX_ZOOM },
           ),
         flyTo: (lngLat, targetZoom = FLY_ZOOM) =>
-          map.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: targetZoom, duration: animationMs(800) }),
+          map.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: targetZoom, duration: eased(styleLoaded, 800) }),
       }
     }
-    setReady(true)
     return () => {
-      map.remove()
-      mapRef.current = null
-      setMapInstance(null)
-      loadedRef.current = false
+      map.off("move", onMove)
+      map.off("resize", onMove)
       if (apiRef) apiRef.current = null
     }
-    // The map is created once; base map changes restyle it below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const firstStyleRef = useRef(true)
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    // The constructor already loaded the first style.
-    if (firstStyleRef.current) {
-      firstStyleRef.current = false
-      return
-    }
-    loadedRef.current = false
-    setBaseMapFailed(false)
-    map.setStyle(styleOf(baseMap))
-  }, [baseMap])
+  }, [apiRef, mapInstance, styleLoaded])
 
   // Cluster at half-zoom steps so a slow pan does not re-cluster every frame.
   const clusterZoom = Math.round(zoom * 2) / 2
   const clusters = useMemo(() => clusterPoints(points, clusterZoom), [points, clusterZoom])
 
   const unproject = useCallback((screen: ScreenPoint): LngLat => {
-    const map = mapRef.current
-    if (!map) return COPENHAGEN_CENTER
-    const lngLat = map.unproject([screen.x, screen.y])
+    if (!mapInstance) return COPENHAGEN_CENTER
+    const lngLat = mapInstance.unproject([screen.x, screen.y])
     return { lng: lngLat.lng, lat: lngLat.lat }
-  }, [])
+  }, [mapInstance])
 
   const handleClusterClick = (cluster: MapCluster, anchor: ScreenPoint) => {
-    const map = mapRef.current
+    const map = mapInstance
     if (!map) return
     if (cluster.singleLocation || zoom >= LIST_ZOOM) {
       onClusterList(cluster, anchor)
@@ -336,7 +262,7 @@ export function PlanningMap({
     map.easeTo({
       center: [cluster.lngLat.lng, cluster.lngLat.lat],
       zoom: Math.min(MAX_ZOOM, zoom + 2),
-      duration: animationMs(400),
+      duration: eased(styleLoaded, 400),
     })
   }
 
@@ -355,7 +281,7 @@ export function PlanningMap({
         </div>
       )}
 
-      {ready && (
+      {mapInstance && (
         <ShapesOverlay
           areas={areaLayers}
           serviceAreas={serviceAreaLayers}
@@ -374,7 +300,7 @@ export function PlanningMap({
         />
       )}
 
-      {ready && (
+      {mapInstance && (
         <TooltipProvider delayDuration={200}>
           <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" data-testid="planning-map-markers">
             {clusters.map((cluster) => {
@@ -560,7 +486,7 @@ export function PlanningMap({
         </TooltipProvider>
       )}
 
-      {ready && drawTool !== "none" && (
+      {mapInstance && drawTool !== "none" && (
         <DrawOverlay
           tool={drawTool}
           unproject={unproject}

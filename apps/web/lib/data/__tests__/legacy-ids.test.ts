@@ -88,3 +88,19 @@ describe("the demo tenant's record id: company-wastehero-dk → company-kystbyen
     assert.equal(hasLegacyIds(JSON.stringify({ id: COMPANY_ID })), false)
   })
 })
+
+describe("an address naming a module that moved", () => {
+  test("leads where the module is now, its record along where it still has records", () => {
+    assert.equal(migrateLegacyHref("/operate?module=live&record=route-1"), "/route-studio?module=live&record=route-1")
+    assert.equal(migrateLegacyHref("/?module=live"), "/route-studio?module=live")
+    assert.equal(migrateLegacyHref("/operate?module=driver-app&record=route-1"), "/driver")
+    assert.equal(migrateLegacyHref("/?module=driver-app"), "/driver")
+    assert.equal(migrateLegacyHref("/route-studio?module=history&record=pickup-1"), "/route-studio?module=pickups")
+    assert.equal(migrateLegacyHref("/customers?module=inbox"), "/customers")
+    assert.equal(migrateLegacyHref("/plan?module=areas&record=area-1"), "/settings?pane=areas&record=area-1")
+  })
+
+  test("is left alone where its module is where it names it", () => {
+    for (const href of ["/route-studio?module=live", "/operate?module=tickets", "/customers?module=contacts", "/route-studio?module=pickups", "/plan", "/operate"]) assert.equal(migrateLegacyHref(href), href)
+  })
+})

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { getBusinessModuleHref } from "../business-links"
+import { workspaceHref } from "../workspace-href"
 import { migrateLegacyHref } from "../legacy-ids"
 import { DEFAULT_SETTINGS_PANE, projectShown, settingsAddressShown, settingsHref, settingsNav, settingsPaneDrawnWithoutApi, settingsPaneHeading, settingsPaneOf, SETTINGS_PANES, settingsTabsOf } from "../settings-panes"
 import { footerItems } from "../sidebar"
@@ -124,10 +124,10 @@ describe("Settings addresses", () => {
   })
 
   test("a Configure module's record opens its pane, with the record where the pane reads one", () => {
-    assert.equal(getBusinessModuleHref("configure", "areas", "area-1"), "/settings?pane=areas&record=area-1")
-    assert.equal(getBusinessModuleHref("configure", "organization", "company-1"), `/settings?pane=${DEFAULT_SETTINGS_PANE}`)
-    assert.equal(getBusinessModuleHref("configure", "templates"), "/settings?pane=tickets")
-    assert.equal(getBusinessModuleHref("configure", "finance"), "/settings?pane=finance-invoicing")
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "areas" }, "area-1"), "/settings?pane=areas&record=area-1")
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "organization" }, "company-1"), `/settings?pane=${DEFAULT_SETTINGS_PANE}`)
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "templates" }), "/settings?pane=tickets")
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "finance" }), "/settings?pane=finance-invoicing")
     assert.equal(migrateLegacyHref("/plan?module=areas&record=area-1#map"), "/settings?pane=areas&record=area-1#map")
   })
 

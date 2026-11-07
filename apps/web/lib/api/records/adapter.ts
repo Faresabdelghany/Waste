@@ -22,6 +22,7 @@
 // field ids where the module has a form (the edit dialog seeds from them) and
 // by the wire's names where it has none.
 import type { AuditedTable } from "@waste/contracts/audit"
+import type { ModuleKey } from "@waste/domain/access/modules"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
@@ -173,7 +174,7 @@ export type ServerModule = {
    * has new rows since, or its projects' day has turned since it was read.
    * None names itself or another such module (modules.ts' test).
    */
-  derivedFrom?: readonly string[]
+  derivedFrom?: readonly ModuleKey[]
   /** Whether its records are read on the project's day (a boundary in force, a container's serving): the store reads it again once that day turns (#232). */
   readsTheDay?: true
   /**
@@ -187,7 +188,7 @@ export type ServerModule = {
    * ticket teams and types, which the people working tickets pick from
    * without keeping them (#545 of #544). A write is still its own grant's.
    */
-  alsoViewedUnder?: readonly string[]
+  alsoViewedUnder?: readonly ModuleKey[]
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */
@@ -197,7 +198,7 @@ export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
   typeof value === "object" && value !== null && typeof (value as LocalRefusal).path === "string" && typeof (value as LocalRefusal).message === "string"
 
 /** `${workspaceId}.${moduleId}`, the key every store, link and relation uses. */
-export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string) => `${workspaceId}.${moduleId}`
+export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string): ModuleKey => `${workspaceId}.${moduleId}` as ModuleKey
 
 /** `<prefix>-<uuid>`: a resource's web id. */
 export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`

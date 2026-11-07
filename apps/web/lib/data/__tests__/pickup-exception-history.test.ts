@@ -5,6 +5,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PickupExceptionHistory, type PickupException } from "@waste/contracts/pickup-exceptions"
+import type { Grant } from "@waste/domain/access/grants"
 
 import type { ApiClient } from "../../api/client"
 import { chargeSentence, exceptionSentence, historyReadable, historySummary, placePickupExceptions } from "../pickup-exception-history"
@@ -53,7 +54,7 @@ describe("the read", () => {
   })
 
   test("is the role's where it views the place's module and the stops, the API's two grants", () => {
-    const stops = { moduleKey: "route-studio.pickups", actions: ["view"] }
+    const stops: Grant = { moduleKey: "route-studio.pickups", actions: ["view"] }
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }, stops], "property"), true)
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }], "property"), false)
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }, stops], "shared-point"), false)

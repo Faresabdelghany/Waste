@@ -1,5 +1,4 @@
-import { settingsModuleDomains } from "@/lib/data/business-domain"
-import { DEFAULT_SETTINGS_PANE, settingsHref, type SettingsPaneId } from "@/lib/data/settings-panes"
+import { workspaceHref } from "@/lib/data/workspace-href"
 import {
   businessWorkspaces,
   type BusinessRecord,
@@ -22,30 +21,6 @@ type IndexedRecord = ModuleLocation & {
   identifiers: Set<string>
   numbers: Set<string>
   tokens: Set<string>
-}
-
-const workspacePaths: Record<Exclude<WorkspaceId, "configure">, string> = {
-  operate: "/tickets",
-  plan: "/plan",
-  "route-studio": "/route-studio",
-  fleet: "/fleet",
-  customers: "/customers",
-  resources: "/resources",
-  "service-providers": "/service-providers",
-  commercial: "/commercial",
-  improve: "/improve",
-  "control-center": "/control-center",
-}
-
-const settingsPaneByModule: Record<string, SettingsPaneId> = {
-  ...Object.fromEntries(
-    settingsModuleDomains.map((module) => [module.moduleId, module.settingsPaneId]),
-  ),
-  access: "access",
-  templates: "tickets",
-  finance: "finance-invoicing",
-  integrations: "integrations-on-api",
-  portals: "portals-on-api",
 }
 
 const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
@@ -127,41 +102,6 @@ function extractTokens(value: string): string[] {
 
 function hasTerm(value: string, term: string): boolean {
   return ` ${value} `.includes(` ${normalize(term)} `)
-}
-
-function moduleHref({
-  workspaceId,
-  moduleId,
-  recordId,
-}: ModuleLocation & { recordId?: string }): string {
-  // The Driver App is a surface of its own (Issue #145), never a workspace module.
-  if (workspaceId === "operate" && moduleId === "driver-app") {
-    return "/driver"
-  }
-
-  if (workspaceId === "configure") {
-    if (moduleId === "control-center") {
-      return moduleHref({
-        workspaceId: "control-center",
-        moduleId: "control-center",
-        recordId,
-      })
-    }
-
-    return settingsHref(settingsPaneByModule[moduleId] ?? DEFAULT_SETTINGS_PANE, { record: recordId })
-  }
-
-  const params = new URLSearchParams({ module: moduleId })
-  if (recordId) params.set("record", recordId)
-  return `${workspacePaths[workspaceId]}?${params.toString()}`
-}
-
-export function getBusinessModuleHref(
-  workspaceId: WorkspaceId,
-  moduleId: string,
-  recordId?: string,
-): string {
-  return moduleHref({ workspaceId, moduleId, recordId })
 }
 
 function indexRecord(
@@ -272,11 +212,7 @@ export function resolveBusinessRelation(value: string): ResolvedBusinessLink | n
       workspaceId: resolvedRecord.workspaceId,
       moduleId: resolvedRecord.moduleId,
       recordId: resolvedRecord.record.id,
-      href: moduleHref({
-        workspaceId: resolvedRecord.workspaceId,
-        moduleId: resolvedRecord.moduleId,
-        recordId: resolvedRecord.record.id,
-      }),
+      href: workspaceHref(resolvedRecord, resolvedRecord.record.id),
     }
   }
 
@@ -285,6 +221,6 @@ export function resolveBusinessRelation(value: string): ResolvedBusinessLink | n
   return {
     workspaceId: fallback.workspaceId,
     moduleId: fallback.moduleId,
-    href: moduleHref(fallback),
+    href: workspaceHref(fallback),
   }
 }

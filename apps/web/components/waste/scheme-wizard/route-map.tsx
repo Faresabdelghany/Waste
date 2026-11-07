@@ -13,15 +13,14 @@
 // with hashed pin positions — is gone: nothing on this map is invented.
 // Loaded client-only by step-route-map.tsx (next/dynamic).
 
-import { Map as MapLibreMap, NavigationControl, type StyleSpecification } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef } from "react"
 
-import { pointMapLibreWorkerAtRouteHandler } from "@/components/waste/map-planning/maplibre-worker"
+import { useMapLibre } from "@/components/maps/use-maplibre"
 import { useMapProjection, type ScreenPoint } from "@/components/waste/map-planning/use-map-projection"
 import type { RoadState } from "@/components/waste/map-planning/use-road-geometries"
 import { RoutingAttribution } from "@/components/waste/routing/routing-attribution"
-import { baseMapById, type BaseMapId } from "@/lib/map-planning/base-maps"
+import type { BaseMapId } from "@/lib/map-planning/base-maps"
 import { roadOverlay, roadOverlayPath, roadPath } from "@/lib/map-planning/road-geometry"
 import type { LngLatBounds } from "@waste/domain/map-planning/geo"
 import { COPENHAGEN_CENTER } from "@waste/domain/map-planning/positions"
@@ -29,9 +28,6 @@ import type { PreviewStop, RoutePreview } from "@waste/domain/map-planning/route
 import { SERVICE_DAY_LABELS, type ServiceDay } from "@waste/domain/days"
 
 import type { WizardRoute } from "./wizard-model"
-
-// The tile worker's URL, see maplibre-worker.ts — set before the first Map.
-pointMapLibreWorkerAtRouteHandler()
 
 const INITIAL_ZOOM = 11
 const MIN_ZOOM = 0
@@ -49,8 +45,6 @@ export type RouteMapProps = {
   /** Every drawn stop of the day, to frame; null when nothing is drawn. */
   bounds: LngLatBounds | null
 }
-
-const styleOf = (baseMap: BaseMapId) => baseMapById(baseMap).style as string | StyleSpecification
 
 const toPoints = (screen: readonly ScreenPoint[]) => screen.map((point) => `${point.x},${point.y}`).join(" ")
 
@@ -84,69 +78,13 @@ function StopMark({ stop, at, color, emphasised }: { stop: PreviewStop; at: Scre
 
 export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<MapLibreMap | null>(null)
-  const loadedRef = useRef(false)
-  const [mapInstance, setMapInstance] = useState<MapLibreMap | null>(null)
+  const { map: mapInstance, styleLoaded, baseMapFailed } = useMapLibre(containerRef, {
+    baseMap,
+    name: "route-map",
+    camera: { center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat], zoom: INITIAL_ZOOM, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, doubleClickZoom: true },
+  })
   // Before the framing effect below, so the first fit's move is heard.
   const project = useMapProjection(mapInstance)
-  const [baseMapFailed, setBaseMapFailed] = useState(false)
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || mapRef.current) return
-    const map = new MapLibreMap({
-      container,
-      style: styleOf(baseMap),
-      center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat],
-      zoom: INITIAL_ZOOM,
-      minZoom: MIN_ZOOM,
-      maxZoom: MAX_ZOOM,
-      attributionControl: { compact: true },
-      doubleClickZoom: true,
-      // North-up and flat, like the planning map: the road overlay is one
-      // translate-and-scale transform, which assumes no rotation or pitch.
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-    })
-    map.touchZoomRotate.disableRotation()
-    map.keyboard.disableRotation()
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right")
-    const onStyleLoaded = () => {
-      loadedRef.current = true
-      setBaseMapFailed(false)
-      container.dataset.mapLoaded = "true"
-    }
-    map.on("load", onStyleLoaded)
-    map.on("style.load", onStyleLoaded)
-    map.on("error", (event) => {
-      console.warn("[route-map]", event.error?.message ?? event)
-      if (!loadedRef.current) setBaseMapFailed(true)
-    })
-    mapRef.current = map
-    setMapInstance(map)
-    return () => {
-      map.remove()
-      mapRef.current = null
-      setMapInstance(null)
-      loadedRef.current = false
-    }
-    // The map is created once; base map changes restyle it below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const firstStyleRef = useRef(true)
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    if (firstStyleRef.current) {
-      firstStyleRef.current = false
-      return
-    }
-    loadedRef.current = false
-    setBaseMapFailed(false)
-    map.setStyle(styleOf(baseMap))
-  }, [baseMap])
 
   // Frame the day's routes whenever the set of drawn stops changes, and a
   // picked route alone while one is picked. The frame is one value per
@@ -156,18 +94,17 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
   const frameKey = boundsKey(selectedRoute?.preview.bounds ?? bounds)
   const frame = useMemo(() => parseBoundsKey(frameKey), [frameKey])
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !frame) return
+    if (!mapInstance || !frame) return
     // MapLibre only runs animation frames once a style has loaded; without a
     // base map (offline, blocked tiles) the camera jumps instead of easing.
-    map.fitBounds(
+    mapInstance.fitBounds(
       [
         [frame.west, frame.south],
         [frame.east, frame.north],
       ],
-      { padding: FIT_PADDING_PX, duration: loadedRef.current ? 500 : 0, maxZoom: FIT_MAX_ZOOM },
+      { padding: FIT_PADDING_PX, duration: styleLoaded.current ? 500 : 0, maxZoom: FIT_MAX_ZOOM },
     )
-  }, [frame, mapInstance])
+  }, [frame, mapInstance, styleLoaded])
 
 
   // Road paths are built once, in world pixels at the reference zoom

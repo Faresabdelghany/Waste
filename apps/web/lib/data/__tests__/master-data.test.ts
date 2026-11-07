@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { getBusinessModuleHref } from "../business-links"
+import { workspaceHref } from "../workspace-href"
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
 import { settingsModuleDomains } from "../business-domain"
 import { getBusinessFormSchema } from "../business-form-schemas"
@@ -238,7 +238,7 @@ describe("the rules a form is held to, inline", () => {
 
 describe("a master data row's link", () => {
   test("lands on the pane for a row of a kind", () => {
-    assert.equal(getBusinessModuleHref("configure", "master", "fraction-01"), "/settings?pane=master-data&record=fraction-01")
-    assert.equal(getBusinessModuleHref("configure", "master"), "/settings?pane=master-data")
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "master" }, "fraction-01"), "/settings?pane=master-data&record=fraction-01")
+    assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "master" }), "/settings?pane=master-data")
   })
 })

@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
-
 import { WorkspacePageShell } from "@/components/waste/workspace-page-shell"
+import { followMovedAddress } from "@/lib/moved-address"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.
@@ -10,10 +9,9 @@ export const instant = false;
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ module?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { module } = await searchParams
-  if (module === "inbox") redirect("/customers")
+  followMovedAddress("/customers", await searchParams)
 
   return <WorkspacePageShell workspaceId="customers" />
 }

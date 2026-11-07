@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import { NOT_A_FEATURE_COLLECTION } from "@waste/domain/imports/geojson"
 import { PROJECT_IMPORT_KINDS } from "@waste/domain/imports/rules"
 import { IMPORT_BATCH_MAX, IMPORT_KINDS, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
@@ -17,8 +18,9 @@ import {
   readImportFile,
   textOf,
 } from "../import-file"
+import type { Grants } from "../../api/grants"
 
-const grants = (...entries: [string, ...string[]][]) => entries.map(([moduleKey, ...actions]) => ({ moduleKey, actions }))
+const grants = (...entries: [ModuleKey, ...Action[]][]): Grants => entries.map(([moduleKey, ...actions]) => ({ moduleKey, actions }))
 
 describe("a planning areas' GeoJSON file (O30 of #290)", () => {
   const ring = [[12.5, 55.7], [12.6, 55.7], [12.6, 55.8], [12.5, 55.7]]

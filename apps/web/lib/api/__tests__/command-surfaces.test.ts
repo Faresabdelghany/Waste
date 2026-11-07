@@ -5,13 +5,19 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, primaryOf, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
+import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, primaryGranted, primaryOf, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
 import { RecordUnloadSurface } from "@/components/waste/commands/provider-money-surfaces"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { PRICE_ROWS_MODULE } from "@/lib/data/commercial"
+import { SETTLEMENTS_MODULE } from "@/lib/data/provider-money"
+import { SITE_VISITS_MODULE } from "@/lib/data/site-visits"
+import type { Action } from "@waste/domain/access/modules"
 import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
+import type { Grants } from "../grants"
 import { moduleKeyOf } from "../records/adapter"
 import { SERVER_MODULE_KEYS } from "../records/modules"
+import { ROUTES_MODULE } from "../records/routes"
 
 describe("the command surfaces", () => {
   test("name only switched modules", () => {
@@ -90,6 +96,21 @@ describe("a module's list on the Pilot (#147)", () => {
     assert.equal(primaryOf({ primary: "form" }, true, true), "form")
     assert.equal(primaryOf(undefined, true, true), "form", "a module without a surface: its form")
     assert.equal(primaryOf(undefined, true, false), null)
+  })
+
+  test("stands a surface's own primary on any of its actions' grants, each the one its API route checks; else on the module's create", () => {
+    const routes = COMMAND_SURFACES["route-studio.routes"]
+    const view = (moduleKey: Grants[number]["moduleKey"]) => ({ moduleKey, actions: ["view"] as Action[] })
+    const edit = (moduleKey: Grants[number]["moduleKey"]) => ({ moduleKey, actions: ["view", "edit"] as Action[] })
+    assert.equal(primaryGranted(routes, ROUTES_MODULE, [edit("route-studio.routes")]), true, "Dispatch day: POST /routes/dispatch, the routes' edit")
+    assert.equal(primaryGranted(routes, ROUTES_MODULE, [view("route-studio.routes"), edit("route-studio.pickups")]), true, "Balance day: /routes/balance, the stops' edit")
+    assert.equal(primaryGranted(routes, ROUTES_MODULE, [view("route-studio.routes"), view("route-studio.pickups")]), false)
+    assert.equal(primaryGranted(COMMAND_SURFACES["commercial.price-rows"], PRICE_ROWS_MODULE, [view("commercial.price-rows")]), true, "Explain price: GET /price-lists/:id/resolve, the price rows' view")
+    assert.equal(primaryGranted(COMMAND_SURFACES["operate.site-visits"], SITE_VISITS_MODULE, [view("operate.site-visits")]), true, "Likely trades: GET /site-visits/frequent, the visits' view")
+    assert.equal(primaryGranted(COMMAND_SURFACES["commercial.settlements"], SETTLEMENTS_MODULE, [edit("commercial.settlements")]), false, "a surface naming no actions stands on the create grant")
+    assert.equal(primaryGranted(undefined, ROUTES_MODULE, null), true, "nothing holds the account back")
+    const actions = (surface: CommandSurface) => surface.primaryActions?.map(({ module, action }) => `${moduleKeyOf(module.workspaceId, module.moduleId)}:${action}`)
+    assert.deepEqual(actions(routes), ["route-studio.routes:edit", "route-studio.pickups:edit", "route-studio.routes:create"])
   })
 
   test("opens only on categories its readers read, so no chip filters on nothing", () => {

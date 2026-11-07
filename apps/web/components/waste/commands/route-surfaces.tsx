@@ -49,7 +49,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { RouteMessagesSection } from "@/components/waste/commands/route-messages-section"
-import { allows } from "@/lib/api/grants"
+import { useGrants } from "@/components/auth/use-grants"
+import { allows, mayTake, type ModuleAction } from "@/lib/api/grants"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
@@ -92,13 +93,21 @@ const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assig
 /** The statuses a stop may be added in (#111): a route that has not started. */
 const TAKES_A_STOP = new Set(["planned", "ready"])
 
-/** The routes module's primary actions on the Pilot: Dispatch day (O5 of #290), Balance day (O15), then New route (#111). */
+/** The routes module's primary actions, each under the grant its API route checks: Dispatch day's `POST /routes/dispatch`, Balance day's `/routes/balance-preview` and `/routes/balance`, New route's `POST /routes`. */
+export const ROUTES_PRIMARY_ACTIONS = {
+  dispatchDay: { module: ROUTES_MODULE, action: "edit" },
+  balanceDay: { module: PICKUPS_MODULE, action: "edit" },
+  newRoute: { module: ROUTES_MODULE, action: "create" },
+} as const satisfies Record<string, ModuleAction>
+
+/** The routes module's primary actions on the Pilot: Dispatch day (O5 of #290), Balance day (O15), then New route (#111), each where its grant is held. */
 export function RoutesPrimarySurface() {
+  const grants = useGrants()
   return (
     <>
-      <DispatchDaySurface />
-      <BalanceDaySurface />
-      <NewRouteSurface />
+      {mayTake(grants, ROUTES_PRIMARY_ACTIONS.dispatchDay) && <DispatchDaySurface />}
+      {mayTake(grants, ROUTES_PRIMARY_ACTIONS.balanceDay) && <BalanceDaySurface />}
+      {mayTake(grants, ROUTES_PRIMARY_ACTIONS.newRoute) && <NewRouteSurface />}
     </>
   )
 }

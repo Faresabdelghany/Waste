@@ -1,5 +1,5 @@
 // The service-provider workspace on the Pilot (#291 C24): the shell read off
-// `/me` — the provider, the actor, the role's grants — the team switched onto
+// `/me` — the provider and the actor, its grants being grants.test.ts's — the team switched onto
 // `/users` under its own module, its invite held against the contracts'
 // `UserInvite`, and a provider's ticket opened in its route's project, which
 // it names by the id chip its route carries since a provider reads no project.
@@ -12,13 +12,14 @@ import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
-import { isLocalRefusal, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import type { Grants } from "../grants"
+import { isLocalRefusal, moduleKeyOf, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { serverModuleOf } from "../records/modules"
 import { teamModule, teamUserAdapter, userAdapter } from "../records/organisation"
 import { ticketAdapter } from "../records/tickets"
 import { clientOver, json, scripted } from "./scripted-fetch"
 
-const TEAM_KEY = `${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`
+const TEAM_KEY = moduleKeyOf(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)
 const providerId = "01a0d2a4-a280-7003-8000-000000000001"
 const projectId = "01a0d2a4-a280-7002-8000-000000000001"
 const routeId = "01a0d2a4-a280-7030-8000-000000000001"
@@ -53,22 +54,20 @@ function resolverOf(rows: readonly [BusinessRecord, string][]): Resolver {
 const context = (resolve: Resolver): MappingContext => ({ resolve })
 
 describe("the shell reads /me", () => {
-  test("a provider's account is its provider's workspace, acted in by its name, under its role's grants", () => {
+  test("a provider's account is its provider's workspace, acted in by its name", () => {
     const workspace = providerWorkspaceOf({
       user: { fullName: "Lars Mikkelsen" },
-      role: { grants: [{ moduleKey: "operate.tickets", actions: ["view", "create"] }, { moduleKey: "route-studio.routes", actions: ["view", "edit"] }] },
       serviceProvider: { id: providerId, legalName: "NordRen ApS" },
     })
     assert.deepEqual(workspace, {
       providerId,
       legalName: "NordRen ApS",
       actorName: "Lars Mikkelsen",
-      access: { "operate.tickets": ["view", "create"], "route-studio.routes": ["view", "edit"] },
     })
   })
 
   test("an office account has no provider's workspace", () => {
-    assert.equal(providerWorkspaceOf({ user: { fullName: "Olivia Larsen" }, role: { grants: [] }, serviceProvider: null }), null)
+    assert.equal(providerWorkspaceOf({ user: { fullName: "Olivia Larsen" }, serviceProvider: null }), null)
   })
 })
 
@@ -123,13 +122,13 @@ describe("the team", () => {
 })
 
 describe("what a surface offers the account signed in", () => {
-  const manager = [
+  const manager: Grants = [
     { moduleKey: "route-studio.routes", actions: ["view", "edit"] },
     { moduleKey: "route-studio.pickups", actions: ["view", "edit"] },
     { moduleKey: "operate.tickets", actions: ["view", "create"] },
     { moduleKey: TEAM_KEY, actions: ["view", "create", "edit"] },
   ]
-  const foreman = [{ moduleKey: "route-studio.routes", actions: ["view"] }, { moduleKey: TEAM_KEY, actions: ["view"] }]
+  const foreman: Grants = [{ moduleKey: "route-studio.routes", actions: ["view"] }, { moduleKey: TEAM_KEY, actions: ["view"] }]
 
   test("every command to the office, as before", () => {
     for (const command of ["cancel", "remove", "start", PATCH_RECORD]) assert.equal(commandOffered({ provider: false, grants: undefined }, "route-studio.routes", command), true)

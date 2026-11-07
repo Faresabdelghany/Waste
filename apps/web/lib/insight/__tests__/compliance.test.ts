@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { MODULE_KEYS } from "@waste/domain/access/modules"
+import { MODULE_KEYS, type ModuleKey } from "@waste/domain/access/modules"
 import { CSV_SEPARATORS } from "@waste/domain/imports/vocabulary"
 
 import type { ApiClient } from "../../api/client"
@@ -95,7 +95,7 @@ describe("the tab's grants", () => {
   })
 
   test("is not shown to a role that views Compliance but not the unloads, which would read nothing in it", () => {
-    const ids = (viewed: string[]) => tabsShown(new Set(viewed)).map((tab) => tab.id)
+    const ids = (viewed: ModuleKey[]) => tabsShown(new Set(viewed)).map((tab) => tab.id)
     assert.deepEqual(ids(["improve.performance", "improve.analytics", COMPLIANCE_MODULE, WEIGHTS_MODULE]), ["performance", "analytics", "compliance"])
     assert.deepEqual(ids(["improve.performance", "improve.analytics", COMPLIANCE_MODULE]), ["performance", "analytics"], "a Finance Specialist's Improve")
     assert.deepEqual(ids([WEIGHTS_MODULE]), [])
