@@ -46,7 +46,7 @@ import {
 import type { Tx } from "@waste/db/client"
 import { serviceArea, serviceAreaAssignment } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
-import { company, serviceProvider } from "@waste/db/schema/organisation"
+import { serviceProvider } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
@@ -74,11 +74,11 @@ import {
   type ActivityCommand,
   type ActivitySide,
 } from "@waste/domain/service-providers/activities"
-import { and, asc, eq, gt, inArray, max, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { lockRow } from "@waste/db/commands/shared"
+import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -652,16 +652,14 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
           if ("reason" in judged) throw new Refused(judged)
         }
         const proposed = body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" || body.kind === "waste-fraction-change" ? body : undefined
-        // The company's row first, so two opens take the next number one after the other; a key share, so the company's children still insert beside it.
-        await tx.select({ id: company.id }).from(company).where(eq(company.id, principal.companyId)).limit(1).for("no key update")
-        const [{ highest }] = await tx.select({ highest: max(serviceProviderActivity.number) }).from(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, principal.companyId))
+        const number = await nextNumberOf(tx, serviceProviderActivity, principal.companyId)
         const [row] = await tx
           .insert(serviceProviderActivity)
           .values({
             id: newId(),
             companyId: principal.companyId,
             projectId: body.projectId,
-            number: (highest ?? 0) + 1,
+            number,
             kind: body.kind,
             status: isProposal(body.kind) ? "pending-approval" : "open",
             serviceProviderId: body.serviceProviderId,

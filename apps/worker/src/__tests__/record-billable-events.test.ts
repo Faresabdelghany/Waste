@@ -596,6 +596,14 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await allEvents()).filter((event) => event.kind === "ticket" && event.links.ticketId !== null && seededHere.has(event.links.ticketId)).length, 5)
   })
 
+  test("a ticket-completed on a stop after its bin's fixed-term subscription ended reaches no agreement through the bin, whose placement an issue left open: the placement in force is the subscription's and the agreement's too", async () => {
+    const closedAt = new Date("2026-10-07T22:30:00Z")
+    const bin = await placeBin(pool, tenant, "BIN-TICKET-ENDED", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id, subscriptionValidTo: "2026-09-01" })
+    const seeded = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "remove", warehouseId: tenant.warehouse.id }])
+    const removal = await seedTicket(pool, tenant, { resolution: "recollected", pickup: { routeId: seeded.id, pickupId: seeded.pickupIds[0] } })
+    assert.equal((await handle(published("ticket-completed", removal.id, ticketPayload(removal.id, 9, "recollected", closedAt, { routeId: seeded.id, pickupId: seeded.pickupIds[0] })))).did, "nothing")
+  })
+
   test("a ticket-completed charges the product its completion named, else its kind's while that one is offered, priced as a pickup is by the customer's rows; a retired kind's product is no-product (#291 C3)", async () => {
     const closedAt = new Date("2026-10-07T22:30:00Z")
     const priced = async (ticketId: string, number: number, resolution: "recollected" | "serviced", links: { agreementId: string }, kind = "missed-collection") => {

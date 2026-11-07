@@ -6,7 +6,7 @@
 // alone. The set's own rules (one name each, no day shared, a daily scheme
 // none) are the contracts'; the route holds the last against the merged row,
 // since a patch may carry half the pair. A season moves the dates the scheme collects on,
-// as a change of frequency does, so it releases no hold (routes/route-holds.ts).
+// as a change of frequency does, so it releases no hold (@waste/db/commands/route-holds).
 import type { SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { routeSchemeSeason } from "@waste/db/schema/route-schemes"

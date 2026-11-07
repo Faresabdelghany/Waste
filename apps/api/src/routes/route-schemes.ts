@@ -46,7 +46,7 @@
 // Shortening the period is free: the next generation run cancels the planned
 // routes it leaves outside.
 //
-// A patch that moves what a held route keeps (#209, routes/route-holds.ts)
+// A patch that moves what a held route keeps (#209, @waste/db/commands/route-holds)
 // releases the holds in its own transaction: the start, the depot or the
 // station every held route of the scheme, a group's vehicle, driver or
 // provider that group's held routes alone; a day taken away, the scheme's or
@@ -96,7 +96,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
-import { releasePolicyHolds } from "@waste/db/commands/holiday-holds"
+import { releaseHolds, releasePolicyHolds, schemeReleases } from "@waste/db/commands/route-holds"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { timeOf } from "@waste/db/shapes/times"
@@ -108,7 +108,6 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
-import { releaseHolds, schemeReleases } from "./route-holds"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
 import {
@@ -416,18 +415,19 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             .returning(schemeColumns),
         )
         if (row === undefined) throw noSuchScheme(id)
-        // The holds the edit releases (#209, #226, routes/route-holds.ts): every held route of the scheme where what they all copy moved, else those on a service day taken away and those the groups' own moves release.
+        // The holds the edit releases (#209, #226, @waste/db/commands/route-holds): every held route of the scheme where what they all copy moved, else those on a service day taken away and those the groups' own moves release.
+        const held = { companyId: principal.companyId, projectId: current.projectId }
         const schemeRelease = schemeReleases(current, patch)
-        await releaseHolds(tx, principal, current.projectId, { routeSchemeId: id }, schemeRelease)
+        await releaseHolds(tx, held, { routeSchemeId: id }, schemeRelease)
         if (schemeRelease.kind !== "all" && edit !== undefined) {
           // The groups released whole in one statement; each group a day was taken from, by its own days.
           const groups = groupsReleasing(edit)
-          await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: groups.filter((group) => group.release.kind === "all").map((group) => group.groupId) }, { kind: "all" })
-          for (const { groupId, release } of groups) if (release.kind === "days") await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [groupId] }, release)
+          await releaseHolds(tx, held, { collectionGroupIds: groups.filter((group) => group.release.kind === "all").map((group) => group.groupId) }, { kind: "all" })
+          for (const { groupId, release } of groups) if (release.kind === "days") await releaseHolds(tx, held, { collectionGroupIds: [groupId] }, release)
         }
         if (patch.holidayPolicy !== undefined && patch.holidayPolicy !== current.holidayPolicy) {
           // A new holiday policy re-decides the scheme's holidays: the held routes it moves go back to the scheme (#226).
-          await releasePolicyHolds(tx, { companyId: principal.companyId, projectId: current.projectId }, { routeSchemeId: id, before: current.holidayPolicy, after: patch.holidayPolicy })
+          await releasePolicyHolds(tx, held, { routeSchemeId: id, before: current.holidayPolicy, after: patch.holidayPolicy })
         }
         // A set restated as it stands writes nothing, so the audit trail records only a change.
         if (seasons !== undefined && !sameSeasons(seasons, storedSeasons)) await writeSeasons(tx, scope, id, seasons, { replacing: true })

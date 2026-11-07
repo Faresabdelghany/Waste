@@ -31,7 +31,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { changeProjectCalendars } from "@waste/db/commands/holiday-holds"
+import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -261,7 +261,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),
         }
         const update = () => refuseDuplicate(sentences, () => tx.update(project).set(patch).where(and(eq(project.companyId, companyId), eq(project.id, id))).returning(columns))
-        const [row] = changesCalendar ? await changeProjectCalendars(tx, companyId, [id], update) : await update()
+        const [row] = changesCalendar ? await changeProjectCalendars(tx, [{ companyId, projectId: id }], update) : await update()
         if (row === undefined) throw noSuchProject(id)
         return c.json(projectOf(row))
       },

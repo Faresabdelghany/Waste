@@ -22,8 +22,11 @@
 //                  row lock, so two documents numbered at once take turns and
 //                  a transaction that fails rolls its number back with its
 //                  rows, the series unbroken. The route's counter is
-//                  generation's to take (#97 part B), in blocks, and the
-//                  office's one at a time for an ad-hoc route (#111).
+//                  generation's to take in blocks (`nextNumbers`, #97 part
+//                  B), and the office's one at a time for an ad-hoc route
+//                  (#111). A series with no counter, an Application's or a
+//                  Service Provider Activity's, is numbered from its rows'
+//                  highest under the same lock (`nextNumberOf`).
 //   a refusal    — a rule a statement holds and the caller answers for: the
 //                  API as its 409 or 400, the worker as a failed job or a
 //                  line in its log. A statement says no by throwing the
@@ -48,9 +51,9 @@
 //
 // A route imports `lockRow`, `lockRows` and `nextNumber` from here. Nothing
 // here knows a table or a resource but the company's row, which every series
-// lives on.
+// is numbered under.
 import { Refused, type Refusal } from "@waste/domain/refusal"
-import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-orm"
+import { and, asc, eq, getTableColumns, inArray, is, max, SQL, sql } from "drizzle-orm"
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -231,14 +234,38 @@ export async function advisoryLock(tx: Tx, key: string): Promise<void> {
 /** A company's document series: one of the counters its row declares (`COMPANY_COUNTERS`), which its audit trail ignores and the reset to the seed puts back. */
 export type Series = keyof typeof COMPANY_COUNTERS
 
-/** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
-export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
+/**
+ * The first of `count` numbers of a company's series, taken at once and never
+ * renumbered: the counter stepped past them in the database as an expression
+ * over its own column. Generation takes its routes' numbers in one block;
+ * nothing is taken for none.
+ */
+export async function nextNumbers(tx: Tx, companyId: string, series: Series, count: number): Promise<number> {
+  if (count === 0) return 0
   const column = COMPANY_COUNTERS[series]
   const [row] = await tx
     .update(company)
-    .set({ [series]: sql`${column} + 1` } as Partial<Record<Series, SQL>>)
+    .set({ [series]: sql`${column} + ${count}` } as Partial<Record<Series, SQL>>)
     .where(eq(company.id, companyId))
     .returning({ next: column })
   if (row === undefined) throw new Error(`no company ${companyId} to number a document in`)
-  return row.next - 1
+  return row.next - count
+}
+
+/** The next number of a company's series: a block of one. */
+export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
+  return await nextNumbers(tx, companyId, series, 1)
+}
+
+/**
+ * The next number of a series its rows keep rather than a counter on the
+ * company's row — an Application's, a Service Provider Activity's: one past
+ * the highest the company's rows hold, under the company's row lock, so two
+ * numbered at once take turns, and a key share, so the company's children
+ * still insert beside it.
+ */
+export async function nextNumberOf(tx: Tx, numbered: TenantTable & { number: PgColumn }, companyId: string): Promise<number> {
+  await lockRow(tx, company, { companyId, id: companyId })
+  const [{ highest }] = await tx.select({ highest: max(numbered.number) }).from(numbered).where(eq(numbered.companyId, companyId))
+  return (Number(highest) || 0) + 1
 }

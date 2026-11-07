@@ -9,7 +9,7 @@
 // A list is the company's, not a project's, so it is fenced by the company
 // alone; the grant is `configure.calendars`, the one a project's holidays
 // were always edited under. A change of a list's days re-decides the holds
-// of every project resting on it (#226, @waste/db/commands/holiday-holds), whatever
+// of every project resting on it (#226, @waste/db/commands/route-holds), whatever
 // projects the caller works in: the holds are the system's reading of the
 // days, not the office's word. A list a project rests on cannot be deleted
 // (409): the project is moved off it, or onto another, first.
@@ -22,7 +22,7 @@ import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
-import { changeProjectCalendars } from "@waste/db/commands/holiday-holds"
+import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -345,7 +345,7 @@ export function holidayListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (row === undefined) throw noSuchList(id)
         const projects = await projectsOn(tx, companyId, row.name)
         // The held routes the new set re-decides go back to their schemes, project by project (#226).
-        await changeProjectCalendars(tx, companyId, projects, async () => {
+        await changeProjectCalendars(tx, projects.map((projectId) => ({ companyId, projectId })), async () => {
           await tx.delete(holidayListHoliday).where(and(eq(holidayListHoliday.companyId, companyId), eq(holidayListHoliday.holidayListId, id)))
           await writeHolidays(tx, companyId, id, holidays)
         })

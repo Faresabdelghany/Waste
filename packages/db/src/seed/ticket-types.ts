@@ -6,7 +6,7 @@
 // the tenant's once there — the office renames them and adds its own beside —
 // so nothing is ever restored, and a run that finds them writes nothing.
 import type { Tx } from "../client"
-import { defaultTicketTypeRows } from "../commands/ticket-types"
+import { defaultTicketTypeRows } from "../commands/company-defaults"
 import { ticketType } from "../schema/resolution"
 import { counted, DEMO_COMPANY_ID } from "./ids"
 

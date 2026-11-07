@@ -52,7 +52,7 @@
 // leave them, and every sentence that fails is listed in a 409.
 //
 // A patch that moves the group's vehicle, driver or provider releases the
-// holds on its routes (#209, routes/route-holds.ts), and one that takes a day
+// holds on its routes (#209, @waste/db/commands/route-holds), and one that takes a day
 // away those on that day (#226), in the same transaction, so the next
 // generation run brings them back to the group.
 //
@@ -73,6 +73,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { groupReleases, releaseHolds } from "@waste/db/commands/route-holds"
 import { projectToday } from "@waste/db/query/project-clock"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -80,7 +81,6 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
-import { groupReleases, releaseHolds } from "./route-holds"
 import {
   assembleGroups,
   findScheme,
@@ -406,8 +406,8 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
             .returning(groupColumns),
         )
         if (row === undefined) throw noSuchGroup(id)
-        // A move of what the group's routes copy releases their holds, a day taken away those on it (#209, #226, routes/route-holds.ts).
-        await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] }, groupReleases(current, left))
+        // A move of what the group's routes copy releases their holds, a day taken away those on it (#209, #226, @waste/db/commands/route-holds).
+        await releaseHolds(tx, { companyId: principal.companyId, projectId: current.projectId }, { collectionGroupIds: [id] }, groupReleases(current, left))
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )

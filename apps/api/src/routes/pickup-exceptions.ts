@@ -26,7 +26,7 @@ import { PickupException, PickupExceptionHistory, PickupExceptionHistoryQuery, P
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
 import { exceptionRulesOf, laddersOf, latestOutcomeProofs, pickupExceptionRows } from "@waste/db/commands/pickup-exceptions"
-import { projectTimezone } from "@waste/db/query/project-clock"
+import { projectToday } from "@waste/db/query/project-clock"
 import { validOn } from "@waste/db/query/valid-on"
 import { product } from "@waste/db/schema/catalogue"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -35,7 +35,6 @@ import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupEx
 import type { Action } from "@waste/domain/access/modules"
 import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, retiredCode, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
 import { addDays } from "@waste/domain/days"
-import { dayInTimezone } from "@waste/domain/clock"
 import { ACTIVE_CONTAMINANT_CODE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { unofferedStep } from "@waste/domain/registry/catalogue"
 import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
@@ -246,8 +245,8 @@ async function historyAt(tx: Tx, companyId: string, projectId: string, place: Pl
 }
 
 /** The first service date a history reads when the query names none: the 365 days before the project's today. */
-async function defaultFrom(tx: Tx, companyId: string, projectId: string, now: Date): Promise<string> {
-  return addDays(dayInTimezone(now, await projectTimezone(tx, companyId, projectId)), -365)
+async function defaultFrom(tx: Tx, companyId: string, projectId: string, now: () => Date): Promise<string> {
+  return addDays(await projectToday(tx, { companyId, projectId }, now)(), -365)
 }
 
 const historyDescription = (place: string) =>
@@ -448,7 +447,7 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           .where(and(eq(property.companyId, principal.companyId), inProjects(property.projectId, principal), eq(property.id, id)))
           .limit(1)
         if (found === undefined) throw problem(404, { detail: `No property ${id} in the projects this account works in` })
-        const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now()))
+        const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now))
         return c.json(await historyAt(tx, principal.companyId, found.projectId, { kind: "property", id }, day))
       },
     )
@@ -483,7 +482,7 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           .where(and(eq(sharedCollectionPoint.companyId, principal.companyId), inProjects(sharedCollectionPoint.projectId, principal), eq(sharedCollectionPoint.id, id)))
           .limit(1)
         if (found === undefined) throw problem(404, { detail: `No shared collection point ${id} in the projects this account works in` })
-        const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now()))
+        const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now))
         return c.json(await historyAt(tx, principal.companyId, found.projectId, { kind: "point", id }, day))
       },
     )

@@ -1,12 +1,12 @@
-// The hold on a dated Route (#209). When the office moves a planned route's
-// day, start or Planned Assignment by hand — `reschedule` or `assign`
-// (routes/routes.ts) — the route is held (`held_at`, migration 0015), and
-// generation's refresh (apps/worker's generate-routes.ts) keeps its day, its
-// start and its assignment from then on, its pickups and its note still
-// refreshed, so the next run does not revert the office. One hold per route,
-// not per field: it covers the operating date, the planned start and the
-// Planned Assignment — the vehicle, the driver, the provider, the trailer, the
-// depot and the unloading station.
+// The hold on a dated Route (#209), and what releases it. When the office
+// moves a planned route's day, start or Planned Assignment by hand —
+// `reschedule` or `assign` (apps/api's routes/routes.ts) — the route is held
+// (`held_at`, migration 0015), and generation's refresh (apps/worker's
+// generate-routes.ts) keeps its day, its start and its assignment from then
+// on, its pickups and its note still refreshed, so the next run does not
+// revert the office. One hold per route, not per field: it covers the
+// operating date, the planned start and the Planned Assignment — the vehicle,
+// the driver, the provider, the trailer, the depot and the unloading station.
 //
 // A hold is a planned route's (`route_hold_shape`): generation refreshes
 // nothing else, so `dispatch` clears it, and so does either cancel — the
@@ -25,25 +25,35 @@
 // route on a weekday taken away is cancelled by the next run all the same,
 // which clears its hold; released here, it no longer reads as held on a
 // collection the scheme dropped. `release-hold` (routes/routes.ts) hands one
-// route back by hand. The scheme's `PATCH` (with or without `collectionGroups`,
-// routes/route-schemes.ts) and the group's `PATCH` (routes/collection-groups.ts)
-// both ask this module. Both hold the scheme's row lock, which a generation
+// route back by hand, asking a run over `handBackWindow`. The scheme's `PATCH`
+// (with or without `collectionGroups`) and the group's `PATCH` both release
+// through `releaseHolds`. Both hold the scheme's row lock, which a generation
 // run takes before it reads a route, so a release and a run take turns. A
 // held route is a planned one, so a release never writes a route that was
 // dispatched.
 //
 // A change of holiday inputs — the scheme's `holidayPolicy`, the project's
-// `weekend` or `holidayList`, a list's days — releases the held routes it
-// re-decides through `@waste/db/commands/holiday-holds` (#226).
-import type { Tx } from "@waste/db/client"
-import { route } from "@waste/db/schema/execution"
-import { WALK_CAP_DAYS } from "@waste/domain/planning/generation"
+// `weekend` or whether it has a `holidayList`, a list's days — releases the
+// held routes it re-decides (`holidayReleases` in the domain): one standing
+// where the scheme put its collection, held for its start or crew, when the
+// change moves that collection or skips it, and one the office moved when the
+// change makes its day one the scheme moves collections off. The project's and
+// the list's edits reach every held route of the project, fenced by the tenant
+// and the project the edit changed rather than by the caller's projects, since
+// the inputs are the project's whoever changes them; the scheme's reaches its
+// own routes. Those two edits hold no scheme's lock, so a run already reading
+// the route keeps the office's day once more, and the run after it moves it.
+// No run is asked: the next run re-plans.
 import { addDays } from "@waste/domain/days"
+import { holidayReleases, WALK_CAP_DAYS } from "@waste/domain/planning/generation"
+import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/planning/occurrences"
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
-import { timeOf } from "@waste/db/shapes/times"
 
-import type { Principal } from "../auth/principal"
-import { routeScope } from "./execution-shapes"
+import type { Tx } from "../client"
+import { readProjectCalendar, type Scope } from "../query/project-clock"
+import { route } from "../schema/execution"
+import { routeScheme } from "../schema/route-schemes"
+import { timeOf } from "../shapes/times"
 
 /** The scheme's fields a hold covers, as the stored row carries them: the start as Postgres spells a time. */
 type SchemeCovered = { plannedStartTime: string | null; depotId: string | null; unloadingStationId: string | null; serviceDays: readonly string[] }
@@ -103,11 +113,10 @@ export function groupReleases(before: GroupCovered, after: GroupCovered): HoldRe
  * Releases the holds of the scheme's routes, or of the named groups' routes,
  * as `release` says — all of them, or those on a weekday taken away — in the
  * edit's transaction: each released route goes back to being the scheme's,
- * which the next generation run then refreshes in full. Fenced like every
- * route statement (`routeScope`: the tenant and the caller's projects), and
- * to the scheme's own project.
+ * which the next generation run then refreshes in full. Fenced by the tenant
+ * and the scheme's own project, which the caller read the scheme under.
  */
-export async function releaseHolds(tx: Tx, principal: Principal, projectId: string, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }, release: HoldRelease): Promise<void> {
+export async function releaseHolds(tx: Tx, scope: Scope, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }, release: HoldRelease): Promise<void> {
   if (release.kind === "none") return
   const routes = "routeSchemeId" in of ? eq(route.routeSchemeId, of.routeSchemeId) : of.collectionGroupIds.length === 0 ? undefined : inArray(route.collectionGroupId, [...of.collectionGroupIds])
   if (routes === undefined) return
@@ -116,5 +125,58 @@ export async function releaseHolds(tx: Tx, principal: Principal, projectId: stri
   await tx
     .update(route)
     .set({ heldAt: null })
-    .where(and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt), away))
+    .where(and(eq(route.companyId, scope.companyId), eq(route.projectId, scope.projectId), routes, isNotNull(route.heldAt), away))
+}
+
+/** A change of holiday inputs: the project's calendar before and after it, and the scheme's policy where the change is the scheme's. */
+type HolidayChange = { before: SchemeCalendar; after: SchemeCalendar; policy?: { routeSchemeId: string; before: HolidayPolicy; after: HolidayPolicy } }
+
+/** Releases, in the edit's transaction, the held routes of the project the change re-decides, each judged under its scheme's policy. */
+async function releaseHolidayHolds(tx: Tx, scope: Scope, change: HolidayChange): Promise<void> {
+  const held = await tx
+    .select({ id: route.id, serviceDate: route.serviceDate, operatingDate: route.operatingDate, holidayPolicy: routeScheme.holidayPolicy })
+    .from(route)
+    .innerJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
+    .where(
+      and(
+        eq(route.companyId, scope.companyId),
+        eq(route.projectId, scope.projectId),
+        isNotNull(route.heldAt),
+        change.policy === undefined ? undefined : eq(route.routeSchemeId, change.policy.routeSchemeId),
+      ),
+    )
+  const released = held
+    .filter((row) =>
+      holidayReleases(
+        row,
+        { holidayPolicy: change.policy?.before ?? row.holidayPolicy, calendar: change.before },
+        { holidayPolicy: change.policy?.after ?? row.holidayPolicy, calendar: change.after },
+      ),
+    )
+    .map((row) => row.id)
+  if (released.length === 0) return
+  await tx
+    .update(route)
+    .set({ heldAt: null })
+    .where(and(eq(route.companyId, scope.companyId), eq(route.projectId, scope.projectId), inArray(route.id, released)))
+}
+
+/**
+ * Runs `write`, an edit of the projects' calendars — a project's weekend or
+ * holiday list, a list's days — reading each calendar before and after it,
+ * and releases in each project the held routes the change re-decides; what
+ * `write` answers.
+ */
+export async function changeProjectCalendars<T>(tx: Tx, scopes: readonly Scope[], write: () => Promise<T>): Promise<T> {
+  const before: SchemeCalendar[] = []
+  for (const scope of scopes) before.push(await readProjectCalendar(tx, scope))
+  const written = await write()
+  for (const [n, scope] of scopes.entries()) await releaseHolidayHolds(tx, scope, { before: before[n]!, after: await readProjectCalendar(tx, scope) })
+  return written
+}
+
+/** A scheme's holiday policy changed: releases the scheme's held routes the new policy re-decides on the project's calendar. */
+export async function releasePolicyHolds(tx: Tx, scope: Scope, policy: { routeSchemeId: string; before: HolidayPolicy; after: HolidayPolicy }): Promise<void> {
+  const calendar = await readProjectCalendar(tx, scope)
+  await releaseHolidayHolds(tx, scope, { before: calendar, after: calendar, policy })
 }

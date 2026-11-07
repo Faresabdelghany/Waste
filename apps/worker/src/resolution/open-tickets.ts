@@ -122,9 +122,9 @@ import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { labelOf, ticketColumns, type TicketRow } from "@waste/db/shapes/tickets"
+import { subscribedPlacementOn } from "@waste/db/query/placement-in-force"
 
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
-import { placementOn } from "../finance/facts"
 import type { JobContext } from "../runtime/definition"
 
 /** The two partial unique indexes that are the consumer's idempotency keys; a 23505 on either is an event handled before. */
@@ -189,13 +189,13 @@ const NOBODY = { agreementId: null, customerId: null }
  * What a stop's event reads beside its payload: the container's label, the
  * place's address, the route's two drivers, and — where the event can open a
  * case — the agreement the container served under on the route's service
- * date and its customer, through Finance's reading of the container's
- * placement valid that day, the one generation named the stop's place from.
+ * date and its customer, through the container's placement in force that
+ * day (`subscribedPlacementOn`), the one generation named the stop's place from.
  */
 async function stopReads(tx: Tx, event: RelayedEvent<ResolutionEventKind>, pickup: { routeId: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null }, opensCase: boolean) {
   const { companyId, projectId } = event
   const [label, address, onRoute] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await routeOf(tx, companyId, pickup.routeId)]
-  const placement = opensCase && onRoute.serviceDate !== null && pickup.containerId !== null ? await placementOn(tx, companyId, projectId, pickup.containerId, onRoute.serviceDate) : undefined
+  const placement = opensCase && onRoute.serviceDate !== null && pickup.containerId !== null ? await subscribedPlacementOn(tx, { companyId, projectId }, pickup.containerId, onRoute.serviceDate) : undefined
   return {
     containerLabel: label,
     address,
