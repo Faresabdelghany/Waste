@@ -31,8 +31,9 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // merged into it: the other route is one `routesToJoin` offers.
 import { MISSED_PICKUP_STATUSES, OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import { statusLabel } from "@/lib/records/fields"
-import { CONTAINERS_MODULE } from "../api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
@@ -44,6 +45,12 @@ import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
 import { NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 import { SERVICE_PROVIDERS_MODULE } from "./provider-money"
+
+/** The workspace module the routes are the rows of. */
+export const ROUTES_MODULE = moduleAt("route-studio.routes")
+
+/** The workspace module the pickups are the rows of. */
+export const PICKUPS_MODULE = moduleAt("route-studio.pickups")
 
 /** The route's commands that take a dialog. */
 export type RouteCommandWithForm = "assign" | "reschedule" | "cancel" | "add-stop"

@@ -19,7 +19,7 @@ import { useRowHistory } from "@/components/platform/use-command-support"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { draftRefusal, messageLine, routeMessages, sendRouteMessage } from "@/lib/api/records/route-messages"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { useServerModuleState } from "@/components/platform/business-record-store"
 
 /** How often an open thread is read again. */

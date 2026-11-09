@@ -11,13 +11,13 @@
 // adapter finds exactly one.
 import { systemRoleKept } from "@waste/domain/access/system-roles"
 
+import type { BusinessRecord } from "@/lib/data/business-modules"
+import { projectRecordsOf } from "@/lib/data/project-scope"
+import type { RoleAccessMap } from "@/lib/data/role-permissions"
 import { typed, typedFlag } from "@/lib/records/fields"
-import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
-import type { ModuleState } from "@/lib/api/records/server-records"
 
-import type { BusinessRecord } from "./business-modules"
-import { projectRecordsOf } from "./project-scope"
-import type { RoleAccessMap } from "./role-permissions"
+import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "./records/organisation"
+import type { ModuleState } from "./records/server-records"
 
 export type UserRow = {
   id: string

@@ -17,8 +17,8 @@ import type { GenerationRun } from "@waste/contracts/generation"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
 import { get, listPage, type ApiClient } from "../client"
-import { PICKUPS_MODULE } from "./pickups"
-import { ROUTES_MODULE } from "./routes"
+import { PICKUPS_MODULE } from "@/lib/data/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { problemOfError, type Problem } from "../problem"
 
 /** How often an open run is read again. */

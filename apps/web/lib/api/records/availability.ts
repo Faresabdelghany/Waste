@@ -18,6 +18,7 @@ import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/d
 import { isIsoDate } from "@waste/domain/days"
 import { firstDayOut } from "@waste/domain/periods"
 
+import { LAST_DAY_ON_OR_AFTER } from "@/lib/data/availability"
 import { moduleAt } from "@/lib/modules/keys"
 
 import { create, listAll, remove } from "../client"
@@ -40,9 +41,6 @@ export type AwayPeriod = { id: string; validFrom: string; validTo: string | null
 
 /** What the record form hands the action: the first day away, the last (blank while not known), why, and a note. */
 export type AwayInput = { validFrom: string; lastDay: string; reason: string; note: string }
-
-/** What the last day is told when it comes before the first. */
-export const LAST_DAY_ON_OR_AFTER = "The last day away is on or after the first"
 
 /** The body of a period's create, from the form, or a refusal naming the field. `reasons` are the wire's tokens. */
 export function periodBody(input: CommandInput, reasons: readonly string[]): { validFrom: string; validTo: string | null; reason: string; note?: string } | LocalRefusal {

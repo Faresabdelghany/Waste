@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { useModuleRecords } from "@/components/platform/business-record-store"
 import { RouteSurfacePage } from "@/components/waste/commands/route-surfaces"
-import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { TICKETS_MODULE } from "@/lib/data/tickets"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleDefinition } from "@/lib/data/business-modules"
 import { cn } from "@/lib/utils"

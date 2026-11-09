@@ -96,7 +96,7 @@ import {
   roleRowsOf,
   userRowsOf,
   type UserRow,
-} from "@/lib/data/users-roles"
+} from "@/lib/api/users-roles"
 import type { SettingsTabOf } from "@/lib/modules/settings-panes"
 import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { cn } from "@/lib/utils"

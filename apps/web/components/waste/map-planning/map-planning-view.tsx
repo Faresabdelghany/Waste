@@ -35,7 +35,7 @@ import {
   emptyBusinessFilters,
   type BusinessFilters,
 } from "@/lib/prototype/business-filters"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { workspaceHref } from "@/lib/data/workspace-href"

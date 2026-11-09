@@ -33,7 +33,8 @@ import { driverAdapter, vehicleAdapter } from "./fleet"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { callsignOf, routeAdapter } from "./routes"
-import { isTicketRecord, TICKET_NUMBER_FACT, TICKET_PREFIX } from "./tickets"
+import { isTicketRecord, TICKET_PREFIX } from "./tickets"
+import { TICKET_NUMBER_FACT } from "@/lib/data/tickets"
 
 /** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
 export const ALERTS_MODULE = moduleAt("operate.exceptions")

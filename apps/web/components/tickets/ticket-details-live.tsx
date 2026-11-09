@@ -41,37 +41,19 @@ import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } f
 import { useProofObjectLinks } from "@/components/platform/use-proof-object-links"
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/platform/provider-account"
-import { PATCH_RECORD } from "@/lib/data/provider-workspace"
+import { PATCH_RECORD } from "@/lib/api/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
 import { allows } from "@/lib/modules/grants"
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { statusLabel, webIdOf } from "@/lib/records/fields"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
-import { ADD_STOP, ROUTES_MODULE } from "@/lib/api/records/routes"
-import {
-  ASSIGN_TICKET,
-  commentOnTicket,
-  evidenceOutcome,
-  evidencePlace,
-  evidenceProofLine,
-  isOpenTicketStatus,
-  offersTicketCommand,
-  REPLY_WITH_EVIDENCE,
-  ticketDetail,
-  ticketEvidence,
-  TICKET_FIELD_VALUES_KEY,
-  ticketFieldValuesOf,
-  TICKET_LINKS,
-  TICKET_MACHINE_COMMANDS,
-  TICKET_NUMBER_FACT,
-  TICKET_SLA_FACT,
-  TICKETS_MODULE,
-  ticketOpened,
-  type TicketCommandName,
-} from "@/lib/api/records/tickets"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
+import { PICKUPS_MODULE } from "@/lib/data/routes"
+import { ADD_STOP } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
+import { ASSIGN_TICKET, commentOnTicket, evidenceOutcome, evidencePlace, evidenceProofLine, offersTicketCommand, REPLY_WITH_EVIDENCE, ticketDetail, ticketEvidence, TICKET_FIELD_VALUES_KEY, ticketFieldValuesOf, TICKET_LINKS, TICKET_MACHINE_COMMANDS, ticketOpened, type TicketCommandName } from "@/lib/api/records/tickets"
+import { isOpenTicketStatus, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "@/lib/data/tickets"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord, typeLetsRole } from "@/lib/api/records/ticket-types"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"

@@ -17,7 +17,8 @@ import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/ad
 import { isServerBacked } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
-import { differenceOf, REVIEW_LABELS, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
+import { differenceOf, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
+import { REVIEW_LABELS } from "@/lib/data/provider-money"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")

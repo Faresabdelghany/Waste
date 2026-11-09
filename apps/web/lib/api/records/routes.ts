@@ -59,13 +59,12 @@ import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopServic
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
 
-import { moduleAt } from "@/lib/modules/keys"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 import { formatDistance, formatDuration } from "@/lib/map-planning/format"
-import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
+import { ROUTE_ACTIVE_PLAN_KEY, ROUTES_MODULE, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
 import { said, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -78,9 +77,6 @@ import { serviceProviderAdapter } from "./organisation"
 import { projectServerIdOf, referenced, refusal, unloadingStationAdapter, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 import { shiftFact } from "./time-windows"
-
-/** The workspace module the routes are the rows of. */
-export const ROUTES_MODULE = moduleAt("route-studio.routes")
 
 /**
  * How far back the routes and their stops are read: a window from this many

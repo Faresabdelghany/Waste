@@ -11,7 +11,7 @@ import { TicketCreate } from "@waste/contracts/tickets"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 
 import { type BusinessRecord } from "../../data/business-modules"
-import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
+import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/api/provider-workspace"
 import type { Grants } from "@/lib/modules/grants"
 import { type MappingContext, type Resolver } from "../records/adapter"
 import { moduleKeyOf } from "@/lib/modules/keys"

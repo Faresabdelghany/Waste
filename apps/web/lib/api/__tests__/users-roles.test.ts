@@ -25,7 +25,7 @@ import {
   roleRowsOf,
   userRowsOf,
   type Invite,
-} from "../../data/users-roles"
+} from "@/lib/api/users-roles"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { webIdOf } from "@/lib/records/fields"

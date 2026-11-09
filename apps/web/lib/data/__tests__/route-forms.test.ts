@@ -14,7 +14,7 @@ import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES } from "@waste/domain/execu
 import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
 import { driverAdapter } from "../../api/records/fleet"
 import { CORRECT_PICKUP, pickupAdapter, REMOVE_PICKUP } from "../../api/records/pickups"
-import { CONTAINERS_MODULE } from "../../api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { ADD_STOP, ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { AGREEMENTS_MODULE } from "../agreements"

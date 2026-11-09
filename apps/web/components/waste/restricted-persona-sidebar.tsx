@@ -31,7 +31,7 @@ import { SidebarActiveRoutes, SidebarBrand, SidebarPages, SidebarSearch } from "
 import { useApiConfigured } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import { useProviderWorkspace } from "@/components/platform/provider-account"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { PROVIDER_PAGES, PROVIDER_WORKSPACE_PATH } from "@/lib/modules/provider-pages"
 import type { ProviderPageId } from "@/lib/modules/manifest"
 import {

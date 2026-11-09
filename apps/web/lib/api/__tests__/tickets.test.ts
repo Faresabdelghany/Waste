@@ -19,25 +19,8 @@ import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { actOnRecord, commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
-import {
-  ASSIGN_TICKET,
-  ASSIGNEE_ACCOUNT_KEY,
-  COMMENT_ON_TICKET,
-  commentOnTicket,
-  evidenceOutcome,
-  evidencePlace,
-  evidenceProofLine,
-  offersTicketCommand,
-  REPLY_WITH_EVIDENCE,
-  ticketAdapter,
-  ticketDetail,
-  ticketEvidence,
-  TICKETS_MODULE,
-  TICKET_NUMBER_FACT,
-  TICKET_SLA_FACT,
-  ticketOpened,
-  ticketsModule,
-} from "../records/tickets"
+import { ASSIGN_TICKET, COMMENT_ON_TICKET, commentOnTicket, evidenceOutcome, evidencePlace, evidenceProofLine, offersTicketCommand, REPLY_WITH_EVIDENCE, ticketAdapter, ticketDetail, ticketEvidence, ticketOpened, ticketsModule } from "../records/tickets"
+import { ASSIGNEE_ACCOUNT_KEY, TICKETS_MODULE, TICKET_NUMBER_FACT, TICKET_SLA_FACT } from "@/lib/data/tickets"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-01T10:00:00Z")

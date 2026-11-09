@@ -24,7 +24,7 @@ import { useServerModuleState } from "@/components/platform/business-record-stor
 import { useProjectRecords, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, typed } from "@/lib/records/fields"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { dayIn } from "@/lib/api/records/clock"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { containersAtProperty, dueSentence, inspectionBodyOf, lastEmptyingSentence, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankBodyOf, tanksEditable, tanksReadable, tankSummary, type InspectionTyped, type TankTyped } from "@/lib/data/tanks"

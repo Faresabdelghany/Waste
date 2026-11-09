@@ -16,7 +16,7 @@ import { emptyBusinessFilters } from "@/lib/prototype/business-filters"
 
 import type { Grants } from "@/lib/modules/grants"
 import { moduleKeyOf } from "@/lib/modules/keys"
-import { ROUTES_MODULE } from "../records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 
 describe("the command surfaces", () => {
   test("are a switched module's own, never a module the API does not back", () => {

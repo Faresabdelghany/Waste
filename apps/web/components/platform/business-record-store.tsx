@@ -53,7 +53,7 @@ import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } 
  * bare `contractor` field (the access form's field is `serviceProviderId`,
  * which the shared map already covers), so no browser is known to hold this
  * key. It is kept because `organizationForRecord` in
- * lib/data/users-roles.ts (the Users & roles pane's fixture rows) reads
+ * lib/api/users-roles.ts (the Users & roles pane's fixture rows) reads
  * `submittedValues.serviceProvider`, and without an explicit entry a bare
  * `contractor` key would fall through to the token rewrite and become
  * `"service-provider"`, which nothing reads.

@@ -15,21 +15,8 @@ import { ABSENCE_FORM, UNAVAILABILITY_FORM } from "../../data/availability"
 import type { BusinessRecord } from "../../data/business-modules"
 import { remove } from "../client"
 import type { MappingContext } from "../records/adapter"
-import {
-  awayLine,
-  DRIVER_AVAILABILITY_ACTIONS,
-  driverAbsences,
-  LAST_DAY_ON_OR_AFTER,
-  periodBody,
-  RECORD_ABSENCE,
-  RECORD_UNAVAILABILITY,
-  recordDriverAbsence,
-  REMOVE_ABSENCE,
-  REMOVE_UNAVAILABILITY,
-  removeVehicleUnavailability,
-  VEHICLE_AVAILABILITY_ACTIONS,
-  vehicleUnavailability,
-} from "../records/availability"
+import { awayLine, DRIVER_AVAILABILITY_ACTIONS, driverAbsences, periodBody, RECORD_ABSENCE, RECORD_UNAVAILABILITY, recordDriverAbsence, REMOVE_ABSENCE, REMOVE_UNAVAILABILITY, removeVehicleUnavailability, VEHICLE_AVAILABILITY_ACTIONS, vehicleUnavailability } from "../records/availability"
+import { LAST_DAY_ON_OR_AFTER } from "@/lib/data/availability"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 

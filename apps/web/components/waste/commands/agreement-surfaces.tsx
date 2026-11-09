@@ -21,7 +21,7 @@ import { useBusinessRecordStore, useModuleRecords } from "@/components/platform/
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { useModuleReady, useRelationPickers, useRowHistory } from "@/components/platform/use-command-support"
 import { cancelPause, changeService, pauseSubscription, resumePause, subscriptionPauses, terminateAgreement } from "@/lib/api/records/agreements"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { dayIn } from "@/lib/api/records/clock"
 import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, subscriptionProductOptions } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-form-types"

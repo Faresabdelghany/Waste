@@ -5,7 +5,7 @@
 // address, the full name, a role, and exactly one of every project, some
 // projects or a service provider. There is no company picker, since the API
 // invites into the caller's company, and the pickers list what the store
-// loaded from the API (lib/data/users-roles.ts), so a role that exists only
+// loaded from the API (lib/api/users-roles.ts), so a role that exists only
 // in the browser is never offered. A refusal — the 409 for an address the
 // company already has, a 400 naming the field — is shown in the API's own
 // sentence and the dialog stays open; nothing is sent to the person, and the
@@ -40,7 +40,7 @@ import {
   mintInviteId,
   type InviteAccess,
   type PickerOption,
-} from "@/lib/data/users-roles"
+} from "@/lib/api/users-roles"
 
 type AccessKind = InviteAccess["kind"]
 
