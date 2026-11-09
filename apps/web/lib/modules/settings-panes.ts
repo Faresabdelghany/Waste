@@ -324,8 +324,8 @@ export function settingsHref<Id extends SettingsPaneId>(paneId: Id, params?: Set
   return hrefOf(paneId, params ?? {})
 }
 
-/** The address of what Settings shows, `from` where Back to app returns. */
-export function settingsAddressHref(address: SettingsAddress, from: string): string {
+/** The address of what Settings shows, `from` where Back to app returns where one is given. */
+export function settingsAddressHref(address: SettingsAddress, from?: string): string {
   return hrefOf(address.pane, { ...address.params, from })
 }
 

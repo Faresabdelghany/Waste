@@ -18,8 +18,8 @@ import type { TicketType, TicketTypeAction, TicketTypeActionBody, TicketTypeCrea
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
-import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
-import { TICKET_TYPE_ACTIONS_KEY, TICKET_TYPE_FIELDS_KEY, TICKET_TYPE_PERMISSIONS_KEY, TICKET_TYPE_PREFIX, typeActionsOf, typeFieldsOf, typePermissionsOf } from "@/lib/data/ticket-types"
+import { TICKET_TEAM_PREFIX, TICKET_TYPE_PREFIX } from "@/lib/modules/configure"
+import { TICKET_TYPE_ACTIONS_KEY, TICKET_TYPE_FIELDS_KEY, TICKET_TYPE_PERMISSIONS_KEY, typeActionsOf, typeFieldsOf, typePermissionsOf } from "@/lib/data/ticket-types"
 
 import { create, listAll, patch, put } from "../client"
 import { type MappingContext, type RecordFields, type Resolver, type ResourceAdapter } from "./adapter"

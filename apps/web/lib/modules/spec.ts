@@ -8,7 +8,7 @@
 // order its page offers them.
 import type { WorkspaceKey } from "@waste/domain/access/modules"
 
-import type { SettingsPaneId } from "@/lib/modules/settings-panes"
+import type { SettingsAddress, SettingsPaneId } from "@/lib/modules/settings-panes"
 import type { BusinessRecord } from "@/lib/prototype/prototype-record"
 
 import type { ModuleIdOf, WorkspaceId } from "./keys"
@@ -19,9 +19,15 @@ import type { ModuleIdOf, WorkspaceId } from "./keys"
  * `deepLink`: the citizen portal, a provider's own workspace, Control Center),
  * an app of its own, which its records open too (the Driver App's
  * `deepLink`), or a Settings pane — `default` for a module whose pane is gone,
- * which opens Settings where it opens.
+ * which opens Settings where it opens. A pane's module whose records are kept
+ * on other panes by their kind names where a record opens (`opens`).
  */
-export type ModulePlacement = "tab" | "more" | "elsewhere" | "app" | { readonly pane: SettingsPaneId | "default" }
+export type ModulePlacement =
+  | "tab"
+  | "more"
+  | "elsewhere"
+  | "app"
+  | { readonly pane: SettingsPaneId | "default"; readonly opens?: (recordId: string) => SettingsAddress }
 
 /** A page of the service provider's own workspace (`/service-provider-workspace/<page>`). */
 export type ProviderPageId = "routes" | "fleet" | "tickets" | "activities" | "team"

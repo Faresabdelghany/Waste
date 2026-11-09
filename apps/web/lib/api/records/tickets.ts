@@ -45,8 +45,8 @@ import { isBillableResolution, OFFICE_TICKET_SOURCES, TICKET_COMMANDS, TICKET_KI
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
-import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
-import { fieldValuesFromForm, TICKET_TYPE_PREFIX } from "@/lib/data/ticket-types"
+import { TICKET_TEAM_PREFIX, TICKET_TYPE_PREFIX } from "@/lib/modules/configure"
+import { fieldValuesFromForm } from "@/lib/data/ticket-types"
 
 import { command, create, get, listAll, patch } from "../client"
 import { patchOf, said, type Client, type CommandInput, type MappingContext, type RecordAction, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"

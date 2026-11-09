@@ -26,7 +26,8 @@ import { problemSentence } from "@/lib/api/problem"
 import { webIdOf } from "@/lib/records/fields"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { accessUnknownSentence } from "@/lib/api/session"
-import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TICKET_TEAM_PREFIX, TICKET_TEAMS_MODULE, type TeamDefaultRow } from "@/lib/data/ticket-teams"
+import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TICKET_TEAMS_MODULE, type TeamDefaultRow } from "@/lib/data/ticket-teams"
+import { TICKET_TEAM_PREFIX } from "@/lib/modules/configure"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 /**
