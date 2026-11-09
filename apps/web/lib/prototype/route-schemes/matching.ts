@@ -23,7 +23,7 @@ import { CONTAINER_VEHICLE_COMPATIBILITY, STOP_MATCH_VEHICLE_TYPES, type Fixture
 
 /**
  * Only containers in service can be planned into routes — the prototype
- * analog of the real product's Active-agreement gate. Future, On hold, Defect, In storage, In transit,
+ * analog of the server's in-force-agreement gate. Future, On hold, Defect, In storage, In transit,
  * and Ended containers are excluded with a visible reason.
  */
 export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])

@@ -1,23 +1,22 @@
 // Service frequency — the typed home for the customer's collection-cadence
 // promise (issue #20).
 //
-// In the real product the frequency promise is a reusable, project-scoped
-// Pickup Setting record referenced by product and container — NOT a field on
-// the agreement (AgreementOutputSerializerV3 has no frequency field; agreement
-// views display what the container inherits). This catalog mirrors that shape
+// The frequency promise is a reusable, project-scoped Pickup Setting record
+// referenced by product and container — NOT a field on the agreement
+// (agreement views display what the container inherits). This catalog has that shape
 // under the canonical "Service frequency" name: containers and products
 // reference a definition by id (submittedValues.serviceFrequencyId), the
 // container's "Service frequency" fact is derived from it, and agreements
 // display the frequency inherited from their assigned container.
 //
-// Vocabulary follows the real interval model (collections/week plus
+// Vocabulary follows the server's interval model (collections/week plus
 // weeks-between or days-between — every-N-weeks is natively expressible by
 // shape even where no definition is seeded). The interval fields are what the
 // reconciliation validation (issue #21) actually compares against scheme
 // recurrence, via promisedCollectionsPerWeek. Each definition also names the
 // scheme RecurrenceFrequency its display label corresponds to; that mapping
 // is a vocabulary link, and the rate fallback for `monthly` only — the
-// prototype's `monthly` has no real-vocabulary counterpart (no weeks-between
+// prototype's `monthly` has no server-vocabulary counterpart (no weeks-between
 // value is faithful), so that definition carries only the scheme mapping.
 //
 // The catalogue is the demo tenant's: the web's fixture records name a

@@ -35,7 +35,7 @@ export type StopMatchVehicleType = (typeof STOP_MATCH_VEHICLE_TYPES)[number]
 
 /**
  * Which vehicle types can service each container type (the container side of
- * the real product's "fraction + vehicle type" stop matching). Lift-lifted
+ * the server's "fraction + vehicle type" stop matching). Lift-lifted
  * bins take any compactor-style body; igloo and underground containers are
  * crane-emptied; wastewater tanks need suction. A container type absent from
  * this map has no compatibility profile — it is excluded (with a visible
