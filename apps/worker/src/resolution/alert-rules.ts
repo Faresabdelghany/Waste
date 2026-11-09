@@ -1,5 +1,5 @@
 // The worker's alert rules (O4 of #290): every few minutes, across companies,
-// the four conditions — seven since O8, O26 and O20, below — the office should hear of without anyone raising them
+// the four conditions — eleven since O8, O26, O20 and M17, below — the office should hear of without anyone raising them
 // — a route still waiting half an hour after its planned start, a running
 // route's device silent for a quarter of an hour, an active driver's licence
 // within a month of running out or run out, and an open ticket past its due
@@ -25,7 +25,7 @@
 // the raise statements read only the occurrences no alert names yet,
 // and the clear statement only the open rule alerts whose condition no longer
 // holds, each with the few columns an alert or a resolution needs, so a quiet
-// tick reads eight empty results. They read across companies as `wms_worker`,
+// tick reads twelve empty results. They read across companies as `wms_worker`,
 // one after another, since the Pilot's worker pool is two connections the
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route

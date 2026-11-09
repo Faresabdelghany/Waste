@@ -1,5 +1,5 @@
 // The outbox's first consumer against Postgres (Issue #109 §6, part B), on the
-// shared local database with a tenant of this file's own: each of the four
+// shared local database with a tenant of this file's own: each of the five
 // kinds becomes the ticket §3's table says — its kind, priority, source, the
 // subject spelled from what was read beside the payload, the links the event
 // named, `created_by` null and `source_event_id` the event's — with its
@@ -19,8 +19,8 @@
 // reads the right facts, writes through `openTicket` fenced as the tenant,
 // and is idempotent by the event's id. The handler is called directly with
 // the job's data, since what pg-boss does with a queue is boot.test.ts's to
-// prove; the one wiring fact this file holds is the registry's four entries,
-// one per kind on the queue the relay publishes, and boot.test.ts holds that
+// prove; the one wiring fact this file holds is the registry's five entries,
+// one per kind on its own queue the relay sends to, and boot.test.ts holds that
 // a `RelayedEvent` sent there is worked by them.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"

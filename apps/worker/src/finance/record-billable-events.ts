@@ -69,7 +69,7 @@
 // to the cap, each with pg-boss's jitter, five to ten minutes in all, longer
 // than an ordinary failover of the database, so a job that met one is retried
 // past it and not failed under it — the retention a week, written over the
-// relay's defaults on the three queues at every start.
+// relay's defaults on its queues at every start.
 import type { Tx } from "@waste/db/client"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, ONE_WEIGHT_CHARGE_PER_STOP, recordBillableEvent, reversalOfEvent, weightChargeBySource } from "@waste/db/commands/billable-writes"
 import { lockRow } from "@waste/db/commands/shared"
@@ -186,7 +186,7 @@ export async function recordBillableEventFor(event: RelayedEvent<FinanceEventKin
   return outcome
 }
 
-/** The consumer's queue options: five retries backing off from ten seconds and capped at five minutes (five to ten minutes in all, past an ordinary failover), a finished job kept a week, written over the relay's defaults on the three queues at every start. */
+/** The consumer's queue options: five retries backing off from ten seconds and capped at five minutes (five to ten minutes in all, past an ordinary failover), a finished job kept a week, written over the relay's defaults on its queues at every start. */
 export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 5 * 60, deleteAfterSeconds: 60 * 60 * 24 * 7 } as const
 
 export const recordBillableEvents = defineOutboxConsumer({

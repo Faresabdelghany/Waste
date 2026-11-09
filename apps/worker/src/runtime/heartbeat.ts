@@ -1,4 +1,4 @@
-// The one job this skeleton ships: the proof the wiring works, end to end. A
+// The skeleton's first job: the proof the wiring works, end to end. A
 // heartbeat is scheduled every minute, handled by writing one line with the
 // process's clock and the count pg-boss handed it, and its rows then show in
 // pg-boss's tables like any other job's — completed within the minute, or
@@ -7,7 +7,7 @@
 // (Planning's generation, #97 part B) is the one that shows the fenced write.
 //
 // Every minute, not every few seconds: pg-boss's cron pass runs once a minute
-// and a job is retained seven days once done, so a faster beat would only
+// and a job is retained a day once done, so a faster beat would only
 // fill the table. The retry policy is none — a heartbeat that failed is not
 // worth a second try, and a failed row is exactly what the readiness count is
 // for. `missed: "skip"` (pg-boss's default, restated) means a worker that was

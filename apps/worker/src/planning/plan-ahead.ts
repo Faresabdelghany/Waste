@@ -12,7 +12,7 @@
 // (`@waste/db/commands/generation`, the start the API's trigger shares,
 // Issue #168), so neither is left without the other.
 //
-// The sweep is the one statement in the system that reads across tenants,
+// The sweep was the first statement in the system to read across tenants,
 // and the reason `wms_worker` has BYPASSRLS: one `select` over route_scheme
 // joined to project, "today" being the job's `now` on each project's clock
 // (`todayOnClock`, @waste/db/query/project-clock), so a scheme in Cairo and
