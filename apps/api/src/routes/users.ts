@@ -151,8 +151,6 @@ async function userWithAccess(tx: Tx, companyId: string, row: Row): Promise<User
 const EMAIL_TAKEN = "user_account_email_key"
 const emailTaken = (email: string) => `This company already has a user with the e-mail address ${JSON.stringify(email)}`
 
-
-
 /** The accounts of this company the caller reaches: every one for the office, its own provider's for a Service Provider's account (#291 slice 23b). */
 const { noSuch: noSuchUser, get: getUser, list: listUsers } = scoped(userAccount, {
   noun: "user",

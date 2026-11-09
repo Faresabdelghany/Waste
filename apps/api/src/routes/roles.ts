@@ -110,7 +110,6 @@ const grantRowsOf = (companyId: string, roleId: string, grants: readonly Grant[]
 const NAME_TAKEN = "role_name_key"
 const nameTaken = (name: string) => `This company already has a role called ${JSON.stringify(name)}`
 
-
 /**
  * The roles of this company the caller reads: every one for the office, and
  * for a Service Provider's account the roles of a provider's team

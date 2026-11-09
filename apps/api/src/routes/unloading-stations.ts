@@ -150,7 +150,6 @@ const CHECKS = { ...pointInvalid(LOCATION_INVALID), ...placeShapeInvalid("unload
 /** What an account that works in no project is told when it tries to register a station: the rule in the header, as a 403 since a better body would not help. */
 const REACHES_NO_STATION = "This account works in no project and reaches no unloading station"
 
-
 /** Whether the caller works in any project of the company — or in all of them, which is a grant and holds while the company has none yet: what reaching a station, which serves every project, takes. */
 const worksInAProject = (principal: Principal): boolean => principal.user.allProjects || projectIdsOf(principal).length > 0
 
@@ -160,13 +159,12 @@ const worksInAProject = (principal: Principal): boolean => principal.user.allPro
  * works in none, as `inProjects` answers such an account for a project-scoped
  * row, so its page is empty and its reads and writes find nothing.
  */
-const { scope: reaches, noSuch: noSuchStation, get: getStation, locked: lockedStation, list: listStations } = scoped(unloadingStation, {
+export const { scope: reaches, noSuch: noSuchStation, find: findStation, get: getStation, locked: lockedStation, list: listStations } = scoped(unloadingStation, {
   noun: "unloading station",
   reach: (principal) => (worksInAProject(principal) ? undefined : sql`false`),
   place: "in this company",
   columns,
 })
-
 
 /** The stations that accept a fraction: one `exists` over the set, so a station accepting it twice could never read as two. */
 const accepting = (companyId: string, wasteFractionId: string) =>

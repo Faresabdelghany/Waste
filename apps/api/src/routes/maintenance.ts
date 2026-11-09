@@ -66,7 +66,6 @@ export const alreadyClosed = (title: string, status: string): string => `The ord
 export const NEEDS_THE_ODOMETER = "The plan counts kilometres: give the odometer at the service"
 export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the service"
 
-
 /** What a list refuses beside the page rule. */
 const LIST_INVALID = ["a filter is malformed", "`projectId` is not a project this account works in"]
 
