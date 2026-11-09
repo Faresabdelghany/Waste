@@ -11,7 +11,7 @@
 //     once-a-month → dayOfMonth(date) <= 7 (the first occurrence of each
 //                    selected weekday in the month)
 //     the cadence is the season's in force on the date, if any (seasons.ts)
-//   Route identity = (schemeId, serviceDate) — deterministic, so
+//   Route identity = (schemeId, collectionGroupId, serviceDate) — deterministic, so
 //   regeneration can upsert instead of duplicating.
 //
 // The closed lists live in ../planning/vocabulary since Issue #97, where the

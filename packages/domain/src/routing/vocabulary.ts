@@ -6,7 +6,7 @@
 // API boundary and the check in the column cannot drift. A value is a
 // kebab-case token: a SQL literal and an enum member, the same string.
 
-/** Who ordered the Plan: the optimiser (≤ 50 stops), the dispatcher's reorder, or the generated order measured. */
+/** Who ordered the Plan: the optimiser, the dispatcher's reorder, or the generated order measured. */
 export const PLAN_SOLVERS = ["optimiser", "manual", "baseline"] as const
 export type PlanSolver = (typeof PLAN_SOLVERS)[number]
 

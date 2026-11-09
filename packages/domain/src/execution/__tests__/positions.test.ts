@@ -16,7 +16,7 @@ describe("metresBetween", () => {
   test("is the great-circle distance, to a metre at a street's scale, and nothing between a point and itself", () => {
     assert.equal(metresBetween(north(0), north(0)), 0)
     assert.ok(Math.abs(metresBetween(north(0), north(100)) - 100) < 1)
-    // Copenhagen's town hall to Nordhavn, about 4.5 km.
+    // Copenhagen's town hall to Nordhavn, about 4 km.
     const hall = { type: "Point" as const, coordinates: [12.5683, 55.6761] as [number, number] }
     const harbour = { type: "Point" as const, coordinates: [12.5951, 55.7089] as [number, number] }
     assert.ok(Math.abs(metresBetween(hall, harbour) - 3_950) < 100, String(metresBetween(hall, harbour)))
