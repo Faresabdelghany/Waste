@@ -47,6 +47,7 @@ import {
   whenSaved,
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
+import { useActorName } from "@/components/platform/shell-identity"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -71,13 +72,14 @@ import {
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { todayIso } from "@waste/domain/planning/recurrence"
 
-const ACTOR_NAME = "Olivia Larsen"
 
 const isAreasModule = (location: ModuleLocation) =>
   location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
 
 export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
@@ -181,7 +183,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const handleCreate = (values: BusinessFormValues) => {
     const record = createPlanningAreaRecord(values, {
       now: Date.now(),
-      actorName: ACTOR_NAME,
+      actorName,
       lookups,
     })
     whenSaved(upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record), () => {

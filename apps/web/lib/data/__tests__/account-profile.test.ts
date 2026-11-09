@@ -5,7 +5,9 @@ import { describe, test } from "node:test"
 
 import type { Me } from "@waste/contracts/me"
 
-import { initialsOf, profileOf } from "../account-profile"
+import { actorNameOf, initialsOf, profileOf } from "../account-profile"
+import { CITIZEN_IDENTITY, OPERATOR_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "../fixture-identity"
+import { createPlanningAreaRecord } from "../planning-areas"
 
 const COMPANY = { id: "01a0d2a4-a280-7001-8000-000000000001", name: "Kystbyen Renovation" }
 const ROLE = { id: "01a0d2a4-a280-7004-8000-000000000001", key: "company-administrator", name: "Company Administrator", scope: "Company", system: true, grants: [] }
@@ -69,5 +71,24 @@ describe("the account pane's profile on the Pilot (#282)", () => {
 
   test("initials are the first and last names' first letters, one letter for a single word", () => {
     assert.deepEqual(["Fares Abdelghany", "Mads Peter Jensen", "Olivia", "  ", "ålborg kommune"].map(initialsOf), ["FA", "MJ", "O", "", "ÅK"])
+  })
+})
+
+// Bug: on the Pilot the office stamped its fixture persona, Olivia Larsen, as the actor of every record it made, changed or deleted.
+describe("who acts in a shell", () => {
+  test("on the Pilot is the account /me names, Auth's e-mail until it answers; in fixture mode the shell's persona", () => {
+    assert.equal(actorNameOf(true, fares, "fares.abdelghany@kystbyen.example", OPERATOR_IDENTITY), "Fares Abdelghany")
+    assert.equal(actorNameOf(true, mads, undefined, SERVICE_PROVIDER_IDENTITY), "Mads Jensen")
+    assert.equal(actorNameOf(true, null, "fares.abdelghany@kystbyen.example", OPERATOR_IDENTITY), "fares.abdelghany@kystbyen.example")
+    assert.equal(actorNameOf(false, fares, "fares.abdelghany@kystbyen.example", OPERATOR_IDENTITY), "Olivia Larsen")
+    assert.equal(actorNameOf(false, null, null, SERVICE_PROVIDER_IDENTITY), "Lars Mikkelsen")
+    assert.equal(actorNameOf(false, null, null, CITIZEN_IDENTITY), "Østerbro Housing")
+  })
+
+  test("so a record made on the Pilot names /me's user as who submitted it", () => {
+    const lookups = { projectName: () => undefined, recordName: () => undefined }
+    const made = createPlanningAreaRecord({ name: "Østerbro Nord" }, { actorName: actorNameOf(true, fares, undefined, OPERATOR_IDENTITY), now: 1_700_000_000_000, lookups })
+    assert.equal(made.owner, "Fares Abdelghany")
+    assert.equal(made.facts["Submitted by"], "Fares Abdelghany")
   })
 })
