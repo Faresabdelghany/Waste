@@ -5,7 +5,7 @@
 import type { BulkyBooking, BulkyStop } from "@waste/contracts/bulky"
 import { bulkyBookingStatus } from "@waste/domain/execution/bulky"
 import { LIVE_STOP_STATUSES, type BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
-import { and, asc, eq, inArray, isNotNull, isNull, type SQL, type SQLWrapper } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { bulkyBooking, bulkyBookingItem } from "../schema/bulky"
@@ -15,20 +15,17 @@ import { instantOf, stampsOf } from "./times"
 /** The planned or completed stop naming a booking: at most one, which `pickup_bulky_booking_id_key` holds. */
 export const liveStop = and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, LIVE_STOP_STATUSES))
 
-/** What a booking's status reads: its cancellation stamp and its live stop's id and status, the booking's and `liveStop`'s columns unless a test names others. */
-type StatusColumns = { cancelledAt: SQLWrapper; stopId: SQLWrapper; stopStatus: SQLWrapper }
-
 /** `bulkyBookingStatus` as a condition over a booking and its live stop (`liveStop`): the stamp, then the stop. */
-export function bookingStatusIs(status: BulkyBookingStatus, { cancelledAt, stopId, stopStatus }: StatusColumns = { cancelledAt: bulkyBooking.cancelledAt, stopId: pickup.id, stopStatus: pickup.status }): SQL | undefined {
+export function bookingStatusIs(status: BulkyBookingStatus): SQL | undefined {
   switch (status) {
     case "cancelled":
-      return isNotNull(cancelledAt)
+      return isNotNull(bulkyBooking.cancelledAt)
     case "routed":
-      return and(isNull(cancelledAt), eq(stopStatus, "planned"))
+      return and(isNull(bulkyBooking.cancelledAt), eq(pickup.status, "planned"))
     case "collected":
-      return and(isNull(cancelledAt), eq(stopStatus, "completed"))
+      return and(isNull(bulkyBooking.cancelledAt), eq(pickup.status, "completed"))
     case "booked":
-      return and(isNull(cancelledAt), isNull(stopId))
+      return and(isNull(bulkyBooking.cancelledAt), isNull(pickup.id))
   }
 }
 
