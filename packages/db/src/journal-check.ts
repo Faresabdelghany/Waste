@@ -109,7 +109,6 @@ export function checkJournal(folder: MigrationFolder, rows: readonly AppliedMigr
     }
   })
 
-  // The database's rows against the folder.
   const recordedBy = new Map<string, number>()
   let newest: number | undefined
   const last = files.at(-1)
@@ -172,7 +171,6 @@ export function checkJournal(folder: MigrationFolder, rows: readonly AppliedMigr
   return { applied, pending, problems }
 }
 
-/** A journal the check refused, every problem in the message. */
 export class JournalError extends Error {
   readonly problems: readonly string[]
   constructor(problems: readonly string[]) {
@@ -185,7 +183,6 @@ export class JournalError extends Error {
   }
 }
 
-/** Throws the report's problems, if it has any. */
 export function assertJournal(report: JournalReport): void {
   if (report.problems.length > 0) throw new JournalError(report.problems)
 }

@@ -54,7 +54,6 @@ type Facts = {
 export type LoginRole = Facts & { readonly login: Exclude<RoleLogin, "never">; readonly urls: RoleUrls }
 export type DatabaseRole = LoginRole | (Facts & { readonly login: "never" })
 
-/** The admin URL's role. */
 export const OWNER: LoginRole = { name: "postgres", login: "owner", urls: { local: "DATABASE_ADMIN_URL", pilot: "PILOT_DATABASE_ADMIN_URL" }, barrier: false, fingerprint: false }
 
 export const DATABASE_ROLES: readonly DatabaseRole[] = [

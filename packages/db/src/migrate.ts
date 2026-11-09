@@ -109,7 +109,6 @@ export async function withMigrationLock<T>(
   }
 }
 
-/** The journal check against this checkout's folder, read on the connection that holds the lock. */
 async function journalUnderLock(lock: ReservedSql): Promise<JournalReport> {
   return checkJournal(readMigrationFolder(MIGRATIONS_FOLDER), await readAppliedMigrations(lock))
 }
