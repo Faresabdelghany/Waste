@@ -110,7 +110,6 @@ export type BankFile = {
 /** The longest text a line's key keeps: enough to tell lines apart, short enough to index. */
 const KEY_TEXT_MAX = 200
 
-/** A line's key: what it says, its text cut to KEY_TEXT_MAX, and how many identical lines the file held before it. */
 export function bankLineKey(line: Pick<BankLine, "bookedOn" | "amountMinor" | "currency" | "reference" | "text">, occurrence: number): string {
   return JSON.stringify([line.bookedOn, line.amountMinor, line.currency, line.reference.slice(0, 40), line.text.slice(0, KEY_TEXT_MAX), occurrence])
 }

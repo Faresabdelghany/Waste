@@ -116,10 +116,7 @@ export const BillableEvent = z.object({
 })
 export type BillableEvent = z.infer<typeof BillableEvent>
 
-/** What a body giving a price of its own without a reason, or a reason without a price, is told. */
 const overrideWithAReasonAt = { message: OVERRIDE_WITH_A_REASON, path: ["overrideReason"] }
-
-/** A person's price and its reason come together or not at all. */
 
 /** `POST /billable-events`: the office's manual event, priced by the resolver or by the person with a reason. The status, the links, the origin and the stamps are the server's. */
 export const BillableEventCreate = z

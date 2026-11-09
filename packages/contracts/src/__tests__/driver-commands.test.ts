@@ -23,7 +23,6 @@ const STAMPS = { createdAt: WHEN, updatedAt: WHEN }
 
 const envelope = { id: ID, routeId: OTHER, occurredAt: WHEN, deviceId: "device-7" }
 
-/** A valid body of each kind. */
 const bodies: Record<DriverCommandKind, object> = {
   "start-route": { vehicleId: THIRD, trailerId: ID, appVersion: "1.4.0", location: POINT, accuracyM: 12 },
   arrive: { pickupId: THIRD, location: POINT, accuracyM: 8 },
@@ -65,7 +64,6 @@ describe("DriverCommand", () => {
   })
 
   test("every kind refuses a member of another kind's body, by name", () => {
-    /** A member the kind's body does not have, from some other kind's. */
     const foreign: Record<DriverCommandKind, [string, unknown]> = {
       "start-route": ["pickupId", THIRD],
       arrive: ["vehicleId", THIRD],
@@ -120,7 +118,6 @@ describe("DriverCommand", () => {
     // The object key's shape; which ids it names is the applier's rule.
     assert.deepEqual(refusal(DriverCommand.safeParse(command("add-photo", { objectKey: "photo.jpg" }))), [{ path: "body.objectKey", message: PROOF_KEY_SHAPE }])
     assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { ...bodies["record-unload"], objectKey: "ticket.png" }))), [{ path: "body.objectKey", message: PROOF_KEY_SHAPE }])
-    // The unload's weights.
     assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200, grossKg: 12_400 }))), [{ path: "body.tareKg", message: BOTH_GROSS_AND_TARE }])
     assert.deepEqual(refusal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_000, grossKg: 12_400, tareKg: 8_200 }))), [{ path: "body.netKg", message: NET_IS_GROSS_LESS_TARE }])
     assert.equal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200 })).success, true, "net alone")

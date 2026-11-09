@@ -1,4 +1,3 @@
-// The proofs bucket's objects: each kind's key layout and formats.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

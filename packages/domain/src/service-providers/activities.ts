@@ -23,7 +23,6 @@ import type { ServiceProviderActivityKind, ServiceProviderActivityStatus } from 
 /** The two sides of an Activity: the office's accounts and the provider's. */
 export type ActivitySide = "office" | "provider"
 
-/** The commands that move an Activity. */
 export type ActivityCommand = "approve" | "reject" | "withdraw" | "complete" | "cancel"
 
 /** The kinds that ask for an Approval. */
@@ -34,7 +33,6 @@ export const isProposal = (kind: ServiceProviderActivityKind): boolean => (PROPO
 /** What an Activity is labelled by: the company's running number, as a letter or a call quotes it. */
 export const activityLabel = (number: number): string => `ACT-${number}`
 
-/** Where a new Activity of the kind stands. */
 export const initialStatus = (kind: ServiceProviderActivityKind): ServiceProviderActivityStatus => (isProposal(kind) ? "pending-approval" : "open")
 
 /** The sides that may open an Activity of each kind: the office raises its follow-ups, either side a proposal or a note. */
@@ -60,7 +58,6 @@ export function createRefusal(kind: ServiceProviderActivityKind, side: ActivityS
 /** The statuses an Activity may still be corrected in: a proposal while it is pending, any other kind while it is open. */
 export const OPEN_STATUSES: readonly ServiceProviderActivityStatus[] = ["pending-approval", "open"]
 
-/** What each command moves an Activity from, and to. */
 export const ACTIVITY_MOVES: Readonly<Record<ActivityCommand, { from: ServiceProviderActivityStatus; to: ServiceProviderActivityStatus }>> = {
   approve: { from: "pending-approval", to: "approved" },
   reject: { from: "pending-approval", to: "rejected" },

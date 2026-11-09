@@ -46,13 +46,10 @@ import { Label, Paragraph } from "./text"
 /** A count of vehicles a yard holds; zero is not a capacity. */
 const VehicleCapacity = PositiveInt
 
-/** What a body whose ownership and provider disagree is told, at the provider. */
 export const providerWithProviderOwnership = { message: PROVIDER_WITH_PROVIDER_OWNERSHIP, path: ["serviceProviderId"] }
 
-/** What a body giving one opening time is told, at the closing time. */
 const bothHoursOrNeither = { message: BOTH_HOURS_OR_NEITHER, path: ["closesAt"] }
 
-/** Both times or neither (@waste/domain/resources/places), as a create body sees it: an absent time is none. */
 const hoursShapeGiven = (body: { opensAt?: string | null; closesAt?: string | null }): boolean => hoursShape({ opensAt: body.opensAt ?? null, closesAt: body.closesAt ?? null })
 
 export const Warehouse = z.object({
@@ -108,7 +105,6 @@ export const Depot = z.object({
   /** Opening hours on the project's clock, both or neither; an overnight window is two times. */
   opensAt: IsoTime.nullable(),
   closesAt: IsoTime.nullable(),
-  /** How many vehicles the yard holds. */
   vehicleCapacity: VehicleCapacity.nullable(),
   status: DepotStatus,
   notes: Paragraph.nullable(),
@@ -202,19 +198,16 @@ export type UnloadingStationPatch = z.infer<typeof UnloadingStationPatch>
 export const UnloadingStationFractionsSet = z.strictObject({ wasteFractionIds: WasteFractionIdsBody }).refine((body) => eachOnce(body.wasteFractionIds), eachFractionOnce)
 export type UnloadingStationFractionsSet = z.infer<typeof UnloadingStationFractionsSet>
 
-/** A page of warehouses, from one project and of one status. */
 export const WarehouseListQuery = ProjectScopedListQuery.extend({
   status: WarehouseStatus.optional(),
 })
 export type WarehouseListQuery = z.infer<typeof WarehouseListQuery>
 
-/** A page of depots, from one project and of one status. */
 export const DepotListQuery = ProjectScopedListQuery.extend({
   status: DepotStatus.optional(),
 })
 export type DepotListQuery = z.infer<typeof DepotListQuery>
 
-/** A page of unloading stations: the company's, of one status, accepting one fraction. */
 export const UnloadingStationListQuery = PageRequest.extend({
   status: UnloadingStationStatus.optional(),
   /** The stations that accept this fraction. */

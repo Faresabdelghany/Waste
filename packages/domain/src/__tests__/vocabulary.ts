@@ -28,7 +28,6 @@ export const TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/
  * `beside` the arrays it exports that are not lists.
  */
 export function defineVocabularyTests(context: string, module: Record<string, unknown>, named: Record<string, readonly string[]>, count: number, beside: readonly string[] = []): void {
-  /** Every list the module exports, by shape: the tuples, less the values named beside them, and not the object that names them. */
   const exported = Object.entries(module).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]) && !beside.includes(entry[0]))
 
   describe(`the ${context} vocabulary`, () => {

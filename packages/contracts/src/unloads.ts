@@ -70,7 +70,6 @@ export const LoadReading = z.object({
 })
 export type LoadReading = z.infer<typeof LoadReading>
 
-/** The two weighing rules together (@waste/domain/execution/unloads), for a body or a row. */
 export const unloadWeights = (weights: Weights): boolean => weightsPaired(weights) && weightsAddUp(weights)
 
 export const Unload = z

@@ -12,7 +12,6 @@ const Cursor = z.string().min(1)
 /** A page size from a query string or a JSON body, a whole number spelled plainly. An empty string or null means "not given" and takes the default. */
 const Limit = z.preprocess((value) => (value === "" || value === null ? undefined : value), QueryWhole.pipe(z.int().min(1).max(PAGE_LIMIT_MAX)).default(PAGE_LIMIT_DEFAULT))
 
-/** Query parameters of a list request. */
 export const PageRequest = z.object({
   limit: Limit,
   cursor: Cursor.optional(),

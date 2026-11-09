@@ -41,7 +41,6 @@ import { bothGrossAndTare, netIsGrossLessTare } from "./unloads"
 export const OutboundLoadStatus = z.enum(OUTBOUND_LOAD_STATUSES)
 export type OutboundLoadStatus = z.infer<typeof OutboundLoadStatus>
 
-/** What a load sent back to the station it left from is told, at the receiving station. */
 export const stationsApart = { message: SAME_STATION, path: ["toStationId"] }
 
 /** The receiving site's ticket, read against our out-weighing. */
@@ -153,7 +152,6 @@ export type OutboundLoadReason = z.infer<typeof OutboundLoadReason>
 export const OutboundLoadReconcile = z.strictObject({ note: Paragraph.optional() })
 export type OutboundLoadReconcile = z.infer<typeof OutboundLoadReconcile>
 
-/** A page of loads: one project's, in one status, from or to one station. */
 export const OutboundLoadListQuery = ProjectScopedListQuery.extend({
   status: OutboundLoadStatus.optional(),
   fromStationId: Id.optional(),
@@ -211,7 +209,6 @@ export const MaterialAdjustmentCreate = z.strictObject({
 })
 export type MaterialAdjustmentCreate = z.infer<typeof MaterialAdjustmentCreate>
 
-/** A page of a station's adjustments: one project's, of one fraction. */
 export const MaterialAdjustmentListQuery = ProjectScopedListQuery.extend({
   wasteFractionId: Id.optional(),
 })

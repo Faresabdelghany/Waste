@@ -78,7 +78,6 @@ export const ServiceProviderActivity = z.object({
 })
 export type ServiceProviderActivity = z.infer<typeof ServiceProviderActivity>
 
-/** What every create names: the project, the provider, the subject, and optionally the award and a body. */
 const createBase = {
   projectId: Id,
   serviceProviderId: Id,
@@ -191,7 +190,6 @@ export const ActivityReject = z.strictObject({
 })
 export type ActivityReject = z.infer<typeof ActivityReject>
 
-/** A page of Activities: one project's or every one the caller reaches, one provider's, kind's or status's. */
 export const ServiceProviderActivityListQuery = ProjectScopedListQuery.extend({
   serviceProviderId: Id.optional(),
   kind: ActivityKind.optional(),

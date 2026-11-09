@@ -48,12 +48,10 @@ const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = 
   ...values,
 })
 
-/** A problem reported on the route, naming no stop: the problem proof's reason and note, and Mads, who ran it. */
 const routeProblem = (values: Partial<RouteProblemFacts> = {}): RouteProblemFacts => ({ kind: "route-problem-reported", routeId: ROUTE, reason: null, note: null, actualDriverId: MADS, ...values })
 
 const rejection = (values: Partial<CommandRejectedFacts> = {}): CommandRejectedFacts => ({ kind: "command-rejected", routeId: ROUTE, pickupId: PICKUP, driverId: MADS, detail: "Pickup 12 is already completed", ...values })
 
-/** The links a pickup event's ticket carries: the stop's, with the driver given, and the customer and agreement it served under. */
 const stopLinks = (driverId: string | null) => ({ routeId: ROUTE, pickupId: PICKUP, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: null, driverId, customerId: CUSTOMER, agreementId: AGREEMENT })
 
 describe("ticketFor", () => {

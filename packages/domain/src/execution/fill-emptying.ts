@@ -20,10 +20,8 @@ import { daysBetween } from "../days"
 /** The days ahead within which the next scheduled emptying is soon enough: today or tomorrow books nothing. */
 export const FILL_EMPTYING_LEAD_DAYS = 1
 
-/** A route as the choice reads it. */
 export type EmptyingRoute = { id: string; label: string; operatingDate: string; routeSchemeId: string | null; collectionGroupId: string | null }
 
-/** What the choice came to. */
 export type FillEmptyingChoice =
   | { kind: "book"; route: EmptyingRoute }
   | { kind: "soon-enough"; next: EmptyingRoute }

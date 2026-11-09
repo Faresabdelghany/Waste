@@ -71,7 +71,6 @@ export type ContaminantCodePatch = z.infer<typeof ContaminantCodePatch>
 export const ContaminantCodeFractionsSet = z.strictObject({ wasteFractionIds: FractionIds })
 export type ContaminantCodeFractionsSet = z.infer<typeof ContaminantCodeFractionsSet>
 
-/** A page of codes: every one of the company's, or one status's. */
 export const ContaminantCodeListQuery = PageRequest.extend({ status: ContaminantCodeStatus.optional() })
 export type ContaminantCodeListQuery = z.infer<typeof ContaminantCodeListQuery>
 
@@ -123,7 +122,6 @@ export type PickupExceptionRuleCreate = z.infer<typeof PickupExceptionRuleCreate
 export const PickupExceptionRulePatch = pickupExceptionRuleBodies.patch
 export type PickupExceptionRulePatch = z.infer<typeof PickupExceptionRulePatch>
 
-/** A page of rules: one project's, in force on a day where `validOn` says. */
 export const PickupExceptionRuleListQuery = ProjectScopedListQuery.extend({ validOn: IsoDate.optional() })
 export type PickupExceptionRuleListQuery = z.infer<typeof PickupExceptionRuleListQuery>
 

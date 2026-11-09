@@ -120,7 +120,6 @@ export const PickupDetail = Pickup.extend({
 })
 export type PickupDetail = z.infer<typeof PickupDetail>
 
-/** The shape of a stop the office adds, each issue at its field (@waste/domain/execution/office-stops). */
 const addedStopShaped = (body: Parameters<typeof addedStopIssues>[0], context: z.RefinementCtx): void => {
   for (const issue of addedStopIssues(body)) context.addIssue({ code: "custom", message: issue.message, path: [issue.path] })
 }

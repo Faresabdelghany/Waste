@@ -40,7 +40,6 @@ export function assetStateOf(movement: { toKind: StockPlaceKind }): AssetStatus 
   return movement.toKind === "supplier" ? null : ASSET_STATUS_OF_PLACE[movement.toKind]
 }
 
-/** For each kind, where it comes from and where it goes to. */
 export type MovementShape = { readonly from: readonly StockPlaceKind[]; readonly to: readonly StockPlaceKind[] }
 
 /** The pairs each kind allows: the one table the database's `stock_movement_kind_shape` spells too. */
@@ -53,7 +52,6 @@ export const MOVEMENT_SHAPES: Readonly<Record<StockMovementKind, MovementShape>>
   adjustment: { from: STOCK_PLACE_KINDS.filter((place) => place !== "service"), to: ADJUSTMENT_TARGETS },
 }
 
-/** Whether a movement of this kind may go from `fromKind` to `toKind`. */
 export function movementShape(kind: StockMovementKind, fromKind: StockPlaceKind, toKind: StockPlaceKind): boolean {
   const shape = MOVEMENT_SHAPES[kind]
   return shape.from.includes(fromKind) && shape.to.includes(toKind)

@@ -17,7 +17,6 @@ const calendar = { holidays: NO_HOLIDAYS, weekend: ["saturday", "sunday"] as con
 const summer: SchemeSeason = { name: "Summer", startsOn: "05-01", endsOn: "10-01", frequency: "weekly" }
 const winter: SchemeSeason = { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" }
 
-/** Every other Monday all year, weekly in summer, odd weeks in winter. */
 const recurrence: SchemeRecurrence = {
   frequency: "every-2-weeks",
   weekRotation: "even",

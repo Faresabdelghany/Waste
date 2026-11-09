@@ -31,7 +31,6 @@ const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = 
 })
 const rejection: CommandRejectedFacts = { kind: "command-rejected", routeId: "route", pickupId: "pickup", driverId: "mads", detail: "Pickup 12 is already completed" }
 
-/** The rule for an event the consumer makes a ticket of. */
 const ruleOf = (facts: EventFacts) => {
   const draft = ticketFor(facts)
   assert.ok(draft !== undefined, `${facts.kind} is a case`)

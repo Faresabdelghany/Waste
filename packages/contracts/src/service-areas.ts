@@ -76,7 +76,6 @@ export type ServiceAreaAssignmentCreate = z.infer<typeof ServiceAreaAssignmentCr
 export const ServiceAreaAssignmentPatch = assignmentBodies.patch
 export type ServiceAreaAssignmentPatch = z.infer<typeof ServiceAreaAssignmentPatch>
 
-/** An area: the resource the two answers below extend, its period's rule with it. */
 export const ServiceArea = effectiveDated(
   z.object({
     ...stamped,
@@ -155,7 +154,6 @@ export type ServiceAreaDetail = z.infer<typeof ServiceAreaDetail>
 
 const providerNeedsADay = { message: PROVIDER_NEEDS_A_DAY, path: ["validOn"] }
 
-/** A page of areas: one project's, in force on a day, naming a planning area, or held by a provider on the day. */
 export const ServiceAreaListQuery = ProjectScopedListQuery.extend({
   /** The day the period is read against; absent asks for every area, whenever it ran. */
   validOn: IsoDate.optional(),
@@ -166,7 +164,6 @@ export const ServiceAreaListQuery = ProjectScopedListQuery.extend({
 }).refine((query) => query.serviceProviderId === undefined || query.validOn !== undefined, providerNeedsADay)
 export type ServiceAreaListQuery = z.infer<typeof ServiceAreaListQuery>
 
-/** A page of assignments across the areas of a project, or of one area, one provider, in force on a day. */
 export const ServiceAreaAssignmentListQuery = ProjectScopedListQuery.extend({
   serviceAreaId: Id.optional(),
   serviceProviderId: Id.optional(),

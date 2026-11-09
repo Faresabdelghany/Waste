@@ -70,7 +70,6 @@ function isBody(node: Node, depth = 0): boolean {
   return inner !== undefined && isBody(inner, depth + 1)
 }
 
-/** Every whole number inside a schema, by the path a body reaches it at, unbounded ones first to fail. */
 function wholeNumbers(node: Node, path: string, seen = new Set<Node>()): { path: string; node: Node }[] {
   if (seen.has(node)) return []
   seen.add(node)

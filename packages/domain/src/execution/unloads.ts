@@ -19,7 +19,6 @@ export const WEIGHT_TOLERANCE_PERCENT = { min: 1, max: 100 } as const
 /** A weighing as any body or row carries it: net always, gross and tare together or not at all — an unload's, a weighbridge ticket's, an outbound load's (`weights_shape` on each table). */
 export type Weights = { netKg: number; grossKg?: number | null; tareKg?: number | null }
 
-/** Gross and tare come together or not at all. */
 export const weightsPaired = (weights: Weights): boolean => (weights.grossKg == null) === (weights.tareKg == null)
 
 /** What a weighing giving one of gross and tare without the other is told, at the tare. */

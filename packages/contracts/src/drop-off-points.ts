@@ -121,7 +121,6 @@ export type DropOffPointHoursSet = z.infer<typeof DropOffPointHoursSet>
 export const DropOffPointExceptionsSet = z.strictObject({ exceptions: Exceptions })
 export type DropOffPointExceptionsSet = z.infer<typeof DropOffPointExceptionsSet>
 
-/** A page of drop-off points, from one project, of one status and one kind. */
 export const DropOffPointListQuery = ProjectScopedListQuery.extend({
   status: DropOffPointStatus.optional(),
   kind: DropOffPointKind.optional(),

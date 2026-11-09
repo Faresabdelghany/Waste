@@ -43,7 +43,6 @@ export function billableEventStatus(reading: BillableEventReading): BillableEven
 /** Whether an event of this reading may still go on an invoice: priced, not cancelled, not on a line, not reversed. */
 export const isReady = (reading: BillableEventReading): boolean => billableEventStatus(reading) === "ready"
 
-/** An Unload's review status: the latest review's decision, or `captured` when there is none. */
 export const weightReviewStatus = (latestDecision: WeightReviewDecision | null): WeightReviewStatus => latestDecision ?? "captured"
 
 /** How much of a line, or of an invoice, a credit note has taken back. A type and not a vocabulary: nothing stores it and no column checks it. */

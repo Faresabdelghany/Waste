@@ -17,7 +17,6 @@ import { stamped } from "./resource"
 import { Paragraph } from "./text"
 import { effectiveDated, effectiveDatedBodies } from "./validity"
 
-/** Why a driver is away. */
 export const DriverAbsenceReason = z.enum(DRIVER_ABSENCE_REASONS)
 export type DriverAbsenceReason = z.infer<typeof DriverAbsenceReason>
 
@@ -25,11 +24,9 @@ export type DriverAbsenceReason = z.infer<typeof DriverAbsenceReason>
 export const VehicleUnavailabilityReason = z.enum(VEHICLE_UNAVAILABILITY_REASONS)
 export type VehicleUnavailabilityReason = z.infer<typeof VehicleUnavailabilityReason>
 
-/** A driver's absence: the days the driver is away, and why. */
 export const DriverAbsence = effectiveDated(z.object({ ...stamped, projectId: Id, note: Paragraph.nullable(), driverId: Id, reason: DriverAbsenceReason }))
 export type DriverAbsence = z.infer<typeof DriverAbsence>
 
-/** A vehicle's unavailability: the days the vehicle or trailer is out of use, and why. */
 export const VehicleUnavailability = effectiveDated(z.object({ ...stamped, projectId: Id, note: Paragraph.nullable(), vehicleId: Id, reason: VehicleUnavailabilityReason }))
 export type VehicleUnavailability = z.infer<typeof VehicleUnavailability>
 

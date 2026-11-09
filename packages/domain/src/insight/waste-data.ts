@@ -113,7 +113,6 @@ function warningPlace(warning: WasteDataWarning): [municipality: string, station
   }
 }
 
-/** The report as a CSV file's text. */
 export function wasteDataCsv(report: { from: string; to: string; rows: readonly WasteDataRow[]; warnings: readonly WasteDataWarning[] }, separator: "," | ";" = ","): string {
   const line = (fields: readonly string[]) => fields.map((field) => csvField(field, separator)).join(separator)
   const period = [report.from, report.to]

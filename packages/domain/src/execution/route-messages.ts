@@ -2,7 +2,6 @@
 // route's driver, read at a stop. A message says something once its spaces
 // are trimmed, and no more than a driver reads standing at a bin.
 
-/** The longest message. */
 export const ROUTE_MESSAGE_BODY_MAX = 1000
 
 /** What a message of nothing but spaces is told. */

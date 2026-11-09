@@ -32,7 +32,6 @@ const exemplar = (kind: ProofKind): ProofRow => {
   }
 }
 
-/** A whole proof of the kind, on the wire: the exemplar's columns beside the ids, the instant and the device. */
 const proof = (kind: ProofKind, row: ProofRow = exemplar(kind)) => ({
   id: ID,
   recordedAt: WHEN,

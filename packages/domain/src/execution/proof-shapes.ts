@@ -33,7 +33,6 @@
 import type { Presence } from "../presence"
 import { CODED_PROOF_KINDS, type ExecutionSource, type PickupOutcome, type PickupReason, type ProofKind } from "./vocabulary"
 
-/** What one kind of proof carries. */
 export type ProofShape = {
   /** Whether the kind is a stop's, may stand on the route alone, or is the route's and never a stop's. */
   pickup: "required" | "optional" | "none"

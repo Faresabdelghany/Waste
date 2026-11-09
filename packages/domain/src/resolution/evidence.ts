@@ -26,7 +26,6 @@ import type { TicketKind } from "./vocabulary"
 /** A coordinate pair, longitude first, as the wire's points are. */
 export type Coordinates = readonly [number, number]
 
-/** The stop as its record reads. */
 export type EvidenceStop = { status: PickupStatus; reason: PickupReason | null; service: PickupService; arrivedAt: string | null; outcomeAt: string | null }
 
 /** One proof recorded at the stop, in recording order: the stop's own, since a route's proofs name no stop. */

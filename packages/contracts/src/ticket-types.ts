@@ -80,7 +80,6 @@ export const TicketFieldKey = z.string().max(TICKET_FIELD_KEY_MAX, TICKET_FIELD_
 export const TicketFieldValue = z.union([z.string(), z.number(), z.boolean()])
 export type TicketFieldValue = z.infer<typeof TicketFieldValue>
 
-/** A ticket's values, by field key. */
 export const TicketFieldValues = z.record(TicketFieldKey, TicketFieldValue)
 export type TicketFieldValues = z.infer<typeof TicketFieldValues>
 
@@ -241,6 +240,5 @@ export const TicketTypeActionsSet = z
   })
 export type TicketTypeActionsSet = z.infer<typeof TicketTypeActionsSet>
 
-/** A page of types: every one of the company's, or one status's, or one kind's. */
 export const TicketTypeListQuery = PageRequest.extend({ status: TicketTypeStatus.optional(), kind: TicketKind.optional() })
 export type TicketTypeListQuery = z.infer<typeof TicketTypeListQuery>

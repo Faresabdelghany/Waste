@@ -51,7 +51,6 @@ export function expectedKg(stop: { volumeLitres: number | null; densityKgPerCubi
   return roundHalfAwayFromZero((stop.volumeLitres * stop.densityKgPerCubicMetre) / 1000)
 }
 
-/** A stop's seconds at the kerb: an emptying its container type's, a work order its service's, a bulky collection its own. */
 export function serviceSecondsOf(stop: { service: PickupService; containerServiceSeconds: number | null }): number {
   if (stop.service === "bulky") return BULKY_SERVICE_SECONDS
   if (stop.service !== "empty") return WORK_ORDER_SERVICE_SECONDS[stop.service]
@@ -83,7 +82,6 @@ export type RouteWorkload = {
   overCapacityKg: number | null
 }
 
-/** Whether the route serves the stop: one done or still to do, never one skipped or failed. */
 const serves = (stop: WorkloadStop) => stop.status === "planned" || stop.status === "completed"
 
 /** Whether the stop puts waste on the truck: an emptying, a swap's full container and a bulky collection's items, whose weight nothing says; a delivery's is empty, and a repair or a wash loads nothing. */
@@ -94,7 +92,6 @@ export function stopLoadKg(stop: Pick<WorkloadStop, "service" | "volumeLitres" |
   return loadsWaste(stop) ? expectedKg(stop) : 0
 }
 
-/** A route's workload, against its planned vehicle's payload. */
 export function routeWorkload(stops: readonly WorkloadStop[], capacityKg: number | null): RouteWorkload {
   let stopSeconds = 0
   let known = 0

@@ -42,7 +42,6 @@ export const ADDRESS_QUERY_MAX = 200
 /** What a search shorter than the fewest is told. */
 export const ADDRESS_QUERY_TOO_SHORT = `Type at least ${ADDRESS_QUERY_MIN} characters of the address`
 
-/** The most addresses one search answers with. */
 export const ADDRESS_SEARCH_MAX = 10
 
 /** What the register's data is credited as, wherever a surface shows it. */

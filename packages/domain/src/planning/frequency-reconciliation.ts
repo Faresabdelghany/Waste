@@ -54,7 +54,6 @@ export type SchemeFrequencyPromise = {
 }
 
 export type SchemeFrequencyReconciliationInput = {
-  /** The scheme's recurrence cadence. */
   frequency: RecurrenceFrequency
   promises: SchemeFrequencyPromise[]
   /**
@@ -145,7 +144,6 @@ export function schemeFrequencyReconciliationWarnings(
   return [...own, ...seasonal]
 }
 
-/** One cadence's warnings against the promises: under-served first, then over-served. */
 function cadenceWarnings(frequency: RecurrenceFrequency, promises: readonly SchemeFrequencyPromise[]): string[] {
   const schemeLabel = RECURRENCE_FREQUENCY_LABELS[frequency]
   const groups = new Map<

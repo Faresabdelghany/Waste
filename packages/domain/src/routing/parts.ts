@@ -21,7 +21,6 @@ export type PartPosition = readonly [number, number]
 /** The parts one optimised route may be asked in: ten requests, up to some 490 stops. */
 export const OPTIMISER_MAX_PARTS = 10
 
-/** How many requests `stops` take at `size` stops each. */
 export const partsNeeded = (stops: number, size: number): number => Math.max(1, Math.ceil(stops / size))
 
 /**
@@ -37,7 +36,6 @@ export function sweepParts(depot: PartPosition, stops: readonly PartPosition[], 
   const scale = Math.cos((depot[1] * Math.PI) / 180)
   const bearings = stops.map((stop, index) => ({ index, angle: Math.atan2(stop[1] - depot[1], (stop[0] - depot[0]) * scale) }))
   bearings.sort((a, b) => a.angle - b.angle || a.index - b.index)
-  // Start after the widest gap between neighbouring bearings, the wrap-around one included.
   let start = 0
   let widest = -1
   for (let at = 0; at < bearings.length; at += 1) {

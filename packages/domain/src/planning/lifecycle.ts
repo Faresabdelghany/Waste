@@ -38,7 +38,6 @@ export const PLAN_AHEAD_DAYS_DEFAULT = 7
 export const PLAN_AHEAD_DAYS_MAX = 28
 export const PLAN_AHEAD_DAYS_BOUND = `The nightly job plans at most ${PLAN_AHEAD_DAYS_MAX} days ahead`
 
-/** Whether a number of days is a window the sweep plans: a whole number in 1..`PLAN_AHEAD_DAYS_MAX`. */
 export const planAheadDaysAllowed = (days: number): boolean => Number.isInteger(days) && days >= 1 && days <= PLAN_AHEAD_DAYS_MAX
 
 /** The days a scheme's nightly run plans: tomorrow through `days` days ahead, both inclusive. */

@@ -32,7 +32,6 @@ export type BulkyBookingStatus = z.infer<typeof BulkyBookingStatus>
 
 const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, path: ["weekRotation"] }
 
-/** How many bookings one day takes, at most. */
 const SlotsPerDay = PositiveInt.max(BULKY_SLOTS_PER_DAY_MAX)
 
 export const BulkySchedule = effectiveDated(
@@ -73,11 +72,9 @@ export type BulkyScheduleCreate = z.infer<typeof BulkyScheduleCreate>
 export const BulkySchedulePatch = bulkyScheduleBodies.patch
 export type BulkySchedulePatch = z.infer<typeof BulkySchedulePatch>
 
-/** A page of schedules: one project's or one area's, in force on a day where `validOn` says. */
 export const BulkyScheduleListQuery = ProjectScopedListQuery.extend({ planningAreaId: Id.optional(), validOn: IsoDate.optional() })
 export type BulkyScheduleListQuery = z.infer<typeof BulkyScheduleListQuery>
 
-/** One item a booking lists: what it is, and how many. */
 export const BulkyItem = z.strictObject({
   description: Label,
   quantity: PositiveInt.max(BULKY_ITEM_QUANTITY_MAX),

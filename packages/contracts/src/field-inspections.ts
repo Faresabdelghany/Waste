@@ -57,7 +57,6 @@ export const FieldInspection = z.object({
 })
 export type FieldInspection = z.infer<typeof FieldInspection>
 
-/** The verdict and its findings agree, the disagreement told at `findings`. */
 const findingsAgree = (value: { outcome: FieldInspectionOutcome; findings: InspectionFinding[] }, context: z.RefinementCtx) => {
   const issue = findingsIssue(value.outcome, value.findings)
   if (issue !== undefined) context.addIssue({ code: "custom", message: issue, path: ["findings"] })
@@ -89,7 +88,6 @@ export type FieldInspectionCreate = z.infer<typeof FieldInspectionCreate>
 export const FieldInspectionPatch = fieldInspectionBodies.patch
 export type FieldInspectionPatch = z.infer<typeof FieldInspectionPatch>
 
-/** A page of inspections: one project's, one subject's, one verdict's, open or closed. */
 export const FieldInspectionListQuery = ProjectScopedListQuery.extend({
   containerId: Id.optional(),
   propertyId: Id.optional(),

@@ -36,7 +36,6 @@ export const Session = z.object({
 })
 export type Session = z.infer<typeof Session>
 
-/** A page of sessions: one project's, one route's, one driver's, the open ones or the ended ones. */
 export const SessionListQuery = ProjectScopedListQuery.extend({
   routeId: Id.optional(),
   driverId: Id.optional(),

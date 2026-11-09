@@ -4,7 +4,7 @@
 // Unload's review status does under a decision. The API reads a row under its
 // lock, asks here, and either writes the next status — and appends the
 // history row or the review row — or answers the sentence as its 409; the
-// shape is Execution's `Transition` (execution/transitions.ts), so a reader of
+// shape is `Transition` (../machine), as Execution's (execution/transitions.ts) is, so a reader of
 // one machine reads the other.
 //
 // The settlement machine: `open | calculated → calculated` by `calculate` (a
@@ -46,7 +46,6 @@ import type { Transition } from "../machine"
 import { lastDayIn } from "../periods"
 import { type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "./vocabulary"
 
-/** What moves a settlement: the three commands. */
 export const SETTLEMENT_COMMANDS = ["calculate", "close", "reopen"] as const
 export type SettlementCommand = (typeof SETTLEMENT_COMMANDS)[number]
 

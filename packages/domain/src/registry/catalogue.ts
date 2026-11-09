@@ -39,7 +39,6 @@ export const VAT_PERCENT = { min: 0, max: 100 } as const
 /** What a set naming a waste fraction twice is told: a place's, a compartment's, an award's, a contaminant code's. */
 export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction")
 
-/** A status a product is not offered in. */
 export type UnofferedStatus = Exclude<ProductStatus, (typeof OFFERED_PRODUCT_STATUSES)[number]>
 
 /** What a body naming a product that is not offered is told: the status it has, and what the reference needs. Read by the descriptions that quote it, so the document says what the route says. */

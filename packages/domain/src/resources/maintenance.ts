@@ -57,7 +57,6 @@ export type MaintenanceDue = {
 
 const worse = (a: MaintenanceDueState, b: MaintenanceDueState): MaintenanceDueState => (MAINTENANCE_DUE_STATES.indexOf(a) >= MAINTENANCE_DUE_STATES.indexOf(b) ? a : b)
 
-/** One limit against its reading: passed, within the margin, or not yet. */
 const against = (reading: number | null, limit: number | null, margin: number): MaintenanceDueState => {
   if (reading === null || limit === null) return "ok"
   if (reading >= limit) return "overdue"

@@ -58,7 +58,6 @@ export type TeamPatch = z.infer<typeof TeamPatch>
 export const TeamMembersSet = z.strictObject({ memberUserAccountIds: MemberIdsBody }).refine((body) => eachOnce(body.memberUserAccountIds), eachMemberOnce)
 export type TeamMembersSet = z.infer<typeof TeamMembersSet>
 
-/** A page of teams: every one of the company's, or one status's. */
 export const TeamListQuery = PageRequest.extend({ status: TeamStatus.optional() })
 export type TeamListQuery = z.infer<typeof TeamListQuery>
 

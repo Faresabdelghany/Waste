@@ -61,7 +61,6 @@ export const BOOKED_BY_NO_OTHER: Readonly<Record<BookedField, string>> = {
   replacementContainerId: "Only a swap names a replacement",
 }
 
-/** A field a stop the office adds may name. */
 export type AddedStopField = "containerId" | "propertyId" | "sharedCollectionPointId" | "wasteFractionId" | "bulkyBookingId" | BookedField
 
 /** A stop as the office's body names it; a null counts as not given, as a form sends one for the field it leaves empty. */

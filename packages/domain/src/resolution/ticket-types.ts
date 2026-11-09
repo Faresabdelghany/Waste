@@ -49,13 +49,11 @@ export const DEFAULT_TICKET_TYPE_NAMES: Readonly<Record<TicketKind, string>> = {
 /** A field's key: lowercase letters and digits in words joined by single hyphens, starting with a letter. */
 export const TICKET_FIELD_KEY = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 
-/** The longest key. */
 export const TICKET_FIELD_KEY_MAX = 40
 
 /** What a key of another shape is told. */
 export const TICKET_FIELD_KEY_SHAPE = `A key is lowercase words of letters and digits joined by hyphens, starting with a letter, at most ${TICKET_FIELD_KEY_MAX} characters`
 
-/** The most fields a type holds. */
 export const TICKET_TYPE_FIELDS_MAX = 30
 
 /** What a ticket's body naming more values than a type has fields is told. */
@@ -79,7 +77,6 @@ export const DEFAULT_TYPE_OFFERED = "A kind's default type is offered to every t
 /** A default type is active: the table's `ticket_type_default_shape`, over a body that carries both. */
 export const defaultIsActive = (body: { status?: string; isDefault?: boolean }): boolean => body.isDefault !== true || body.status !== "inactive"
 
-/** The most choices a choice field offers. */
 export const TICKET_FIELD_CHOICES_MAX = 50
 
 /** The longest value of a one-line field, and of a paragraph. */

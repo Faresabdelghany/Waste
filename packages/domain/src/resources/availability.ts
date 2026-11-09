@@ -35,7 +35,6 @@ export function awayOver<P extends AwayPeriod>(periods: readonly P[], from: stri
   return [...periods].filter((period) => overlapsDays(period, from, toExclusive)).sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0]
 }
 
-/** The period covering the day, or undefined. */
 export const awayOn = <P extends AwayPeriod>(periods: readonly P[], day: string): P | undefined => awayOver(periods, day, addDays(day, 1))
 
 /** The period as a person reads it, by its last day in: "on Mon 5 Oct", "Mon 5 Oct – Fri 9 Oct", "from Mon 5 Oct". */
@@ -84,7 +83,6 @@ export const alreadyAbsent = (name: string, period: AwayPeriod): string => `${na
 /** A second period of unavailability over a day one already covers. */
 export const alreadyUnavailable = (label: string, period: AwayPeriod): string => `${label} is already unavailable ${periodPhrase(period)} (${period.reason}); one period covers a day`
 
-/** Who a crew member is on a route: its driver, its vehicle or its trailer. */
 export type CrewRole = "driver" | "vehicle" | "trailer"
 
 /** The crew a route takes on its day: each member, less the one away, and the period that left each off. A trailer is a vehicle's period too. */

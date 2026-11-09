@@ -106,7 +106,6 @@ describe("ticketTransition", () => {
   })
 })
 
-/** The alert machine spelled out. */
 const alertTable: Record<AlertStatus, Record<AlertCommand, Transition<AlertStatus>>> = {
   new: {
     acknowledge: { kind: "move", to: "acknowledged" },

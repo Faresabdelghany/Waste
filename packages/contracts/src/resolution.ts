@@ -1,9 +1,9 @@
 // Resolution's closed lists at the API boundary (Issue #109): each of
 // @waste/domain/resolution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because two modules
-// read them — `tickets.ts` the ticket's seven, `alerts.ts` the alert's four —
-// and a list spelled in one place is a list that cannot drift between them.
+// would refuse it as a 500 naming nothing. Shared here because several
+// modules read them, and a list spelled in one place is a list that cannot
+// drift between them.
 //
 // A comment's attachment is a Storage object under an agreed key,
 // `<companyId>/<ticketId>/<objectId>.<ext>` in the bucket `ticket-attachments`
@@ -22,15 +22,12 @@ import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUS
 import { ATTACHMENT_KEY_PATTERN, ATTACHMENT_KEY_SHAPE } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
-/** Where a Ticket stands. */
 export const TicketStatus = z.enum(TICKET_STATUSES)
 export type TicketStatus = z.infer<typeof TicketStatus>
 
-/** What kind of case a Ticket is. */
 export const TicketKind = z.enum(TICKET_KINDS)
 export type TicketKind = z.infer<typeof TicketKind>
 
-/** How urgent. */
 export const TicketPriority = z.enum(TICKET_PRIORITIES)
 export type TicketPriority = z.infer<typeof TicketPriority>
 
@@ -42,7 +39,6 @@ export type TicketSource = z.infer<typeof TicketSource>
 export const TicketResolution = z.enum(TICKET_RESOLUTIONS)
 export type TicketResolution = z.infer<typeof TicketResolution>
 
-/** What a row of a Ticket's history is. */
 export const TicketEventKind = z.enum(TICKET_EVENT_KINDS)
 export type TicketEventKind = z.infer<typeof TicketEventKind>
 
@@ -50,11 +46,9 @@ export type TicketEventKind = z.infer<typeof TicketEventKind>
 export const TicketVisibility = z.enum(TICKET_VISIBILITIES)
 export type TicketVisibility = z.infer<typeof TicketVisibility>
 
-/** What an Alert is about. */
 export const AlertKind = z.enum(ALERT_KINDS)
 export type AlertKind = z.infer<typeof AlertKind>
 
-/** How severe an Alert is. */
 export const AlertSeverity = z.enum(ALERT_SEVERITIES)
 export type AlertSeverity = z.infer<typeof AlertSeverity>
 
@@ -62,7 +56,6 @@ export type AlertSeverity = z.infer<typeof AlertSeverity>
 export const AlertSource = z.enum(ALERT_SOURCES)
 export type AlertSource = z.infer<typeof AlertSource>
 
-/** Where an Alert stands. */
 export const AlertStatus = z.enum(ALERT_STATUSES)
 export type AlertStatus = z.infer<typeof AlertStatus>
 

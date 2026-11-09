@@ -59,7 +59,6 @@ const exemplar = (kind: TicketEventKind): TicketEventRow => {
   return { status: "in-progress", body: shape.body === "none" ? null : full.body, objectKey: shape.objectKey === "none" ? null : full.objectKey, visibility: "internal", resolution: null }
 }
 
-/** A whole history row of the kind, on the wire: the exemplar's columns beside the ids and the stamp. */
 const event = (kind: TicketEventKind, row: TicketEventRow = exemplar(kind)) => ({ id: THIRD, recordedAt: WHEN, projectId: OTHER, ticketId: ID, kind, assigneeUserAccountId: THIRD, sourceEventId: null, recordedBy: OTHER, ...row })
 
 const alert = {

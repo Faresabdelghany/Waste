@@ -32,7 +32,6 @@ export interface IndexableRow {
   readonly productActive: boolean
 }
 
-/** One row's verdict: indexed at a price, or skipped for a reason. */
 export type IndexVerdict =
   | { readonly id: string; readonly outcome: "indexed"; readonly fromMinor: number; readonly toMinor: number }
   | { readonly id: string; readonly outcome: "skipped"; readonly fromMinor: number; readonly reason: IndexSkipReason }
@@ -49,7 +48,6 @@ export interface IndexPlan {
 /** Whether a row is in the plan at all: in force on the day, or starting after it. A half-open period, `validTo` the first day out. */
 export const inIndexPlan = (row: Pick<IndexableRow, "validTo">, appliedFrom: string): boolean => row.validTo === null || row.validTo > appliedFrom
 
-/** The verdict on one row. */
 function verdictOf(row: IndexableRow, appliedFrom: string, basisPoints: number): IndexVerdict {
   const skipped = (reason: IndexSkipReason): IndexVerdict => ({ id: row.id, outcome: "skipped", fromMinor: row.unitPriceMinor, reason })
   if (row.validFrom > appliedFrom) return skipped("scheduled")

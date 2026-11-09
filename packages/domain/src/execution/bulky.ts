@@ -43,13 +43,11 @@ export const ONE_PLACE = "Name a property or a shared collection point, one of t
 /** The units a bulky collection is charged by (#449): the booking as one job, or each of its items. */
 export const BULKY_PRODUCT_UNITS = ["job", "item"] as const satisfies readonly ProductUnit[]
 
-/** Whether a product of this unit may charge a bulky collection. */
 export const isBulkyProductUnit = (unit: ProductUnit): boolean => (BULKY_PRODUCT_UNITS as readonly ProductUnit[]).includes(unit)
 
 /** What a schedule naming a product of another unit is told. */
 export const A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM = "A bulky collection is charged at a product sold by the job or by the item"
 
-/** How many of the product a collected booking is charged: its items' count for a product sold by the item, one job otherwise. */
 export function bulkyQuantity(unit: ProductUnit, items: readonly { quantity: number }[]): number {
   return unit === "item" ? items.reduce((total, item) => total + item.quantity, 0) : 1
 }
@@ -124,7 +122,6 @@ export function refuseBulkyDay(days: readonly BulkyDay[], day: string, today: st
   return undefined
 }
 
-/** Where a booking stands: cancelled by its stamp, else by the status of its live stop — planned routes it, completed collected it — and booked with none. */
 export function bulkyBookingStatus(booking: { cancelledAt: unknown; stopStatus: PickupStatus | null }): BulkyBookingStatus {
   if (booking.cancelledAt !== null && booking.cancelledAt !== undefined) return "cancelled"
   if (booking.stopStatus === "planned") return "routed"
