@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { initialsOf } from "@/lib/data/account-profile"
+import { actorNameOf, initialsOf } from "@/lib/data/account-profile"
 import { settingsHref } from "@/lib/modules/settings-panes"
 import type { LinearThemeId } from "@/lib/app-themes"
 import { cn } from "@/lib/utils"
@@ -46,7 +46,7 @@ export function TopAccountMenu() {
   const [changingPassword, setChangingPassword] = useState(false)
 
   const email = apiConfigured ? (me?.user.email ?? session?.email ?? "") : ""
-  const name = apiConfigured ? (me?.user.fullName ?? email) : fixture.name
+  const name = actorNameOf(apiConfigured, me, session?.email, fixture)
   const detail = apiConfigured ? (me?.role.name ?? "") : fixture.detail
   const initials = apiConfigured ? initialsOf(name) : fixture.initials
 

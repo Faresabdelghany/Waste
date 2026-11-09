@@ -39,6 +39,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useActorName } from "@/components/platform/shell-identity"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
@@ -71,7 +72,6 @@ import {
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-const ACTOR_NAME = "Olivia Larsen"
 const STATUS_OPTIONS = ["Effective"] as const
 
 /** What the table's detail column says of a row: the fact its kind is known by. */
@@ -94,6 +94,8 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
 
 export function MasterDataSettings({ params }: SettingsPaneProps) {
   const { upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(params.kind) ? params.kind : "waste-fraction")
   const [query, setQuery] = useState("")
@@ -176,7 +178,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
 
   const handleCreate = (values: BusinessFormValues) => {
     if (saving) return
-    const record = createMasterDataRecord(kind, values, { now: Date.now(), actorName: ACTOR_NAME, lookups })
+    const record = createMasterDataRecord(kind, values, { now: Date.now(), actorName, lookups })
     setSaving(true)
     whenSaved(
       upsertRecord(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, record),

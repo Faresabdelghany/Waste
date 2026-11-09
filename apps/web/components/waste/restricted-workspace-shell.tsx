@@ -54,8 +54,6 @@ type RestrictedWorkspaceDefinition = {
   fixedScopeLabel: string
   /** Every record and relation option is isolated to this service provider. */
   serviceProviderScopeId?: string
-  /** Signed-in identity written to audit events and created records. */
-  actorName?: string
   pages: readonly RestrictedWorkspacePage[]
 }
 
@@ -86,7 +84,6 @@ const restrictedWorkspaceDefinitions: Record<
     fixedProjectScope: FIXTURE_PROJECT_IDS.copenhagen,
     fixedScopeLabel: "NordRen ApS · CA-Ø-2",
     serviceProviderScopeId: FIXTURE_SERVICE_PROVIDER_IDS.nordren,
-    actorName: "Lars Mikkelsen",
     pages: PROVIDER_PAGES.map((page) => ({
       id: page.id,
       workspaceId: page.workspaceId,
@@ -111,7 +108,6 @@ type WorkspaceScope = {
   fixedProjectScope: ProjectScope
   fixedScopeLabel: string
   serviceProviderScopeId?: string
-  actorName?: string
   onApi: boolean
 }
 
@@ -217,14 +213,12 @@ export function RestrictedWorkspaceShell({
           fixedProjectScope: definition.fixedProjectScope,
           fixedScopeLabel: definition.fixedScopeLabel,
           serviceProviderScopeId: definition.serviceProviderScopeId,
-          actorName: definition.actorName,
           onApi: false,
         }
       : {
           fixedProjectScope: ALL_PROJECTS,
           fixedScopeLabel: provider.legalName,
           serviceProviderScopeId: providerWebId,
-          actorName: provider.actorName,
           onApi: true,
         }
   const showPrimaryAction = scope.onApi ? page.showWorkspaceActionsOnApi ?? page.showWorkspaceActions : page.showWorkspaceActions
@@ -250,7 +244,6 @@ export function RestrictedWorkspaceShell({
           showPrimaryAction={showPrimaryAction}
           showFilters={page.showFilters}
           serviceProviderScopeId={scope.serviceProviderScopeId}
-          actorName={scope.actorName}
         />
       </Suspense>
     </RestrictedFrame>

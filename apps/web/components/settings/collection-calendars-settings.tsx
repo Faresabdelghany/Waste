@@ -44,6 +44,7 @@ import {
   whenSaved,
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
+import { useActorName } from "@/components/platform/shell-identity"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -70,10 +71,11 @@ import { calendarRowSummary } from "@/lib/prototype/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-const ACTOR_NAME = "Olivia Larsen"
 
 export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
@@ -177,7 +179,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const handleCreate = (values: BusinessFormValues) => {
     const record = createCollectionCalendarRecord(values, {
       now: Date.now(),
-      actorName: ACTOR_NAME,
+      actorName,
       lookups,
     })
     whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () => {
