@@ -41,7 +41,7 @@ import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } f
 import { useProofObjectLinks } from "@/components/platform/use-proof-object-links"
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/platform/provider-account"
-import { PATCH_RECORD } from "@/lib/api/provider-workspace"
+import { PATCH_RECORD } from "@/lib/api/provider-commands"
 import type { ApiClient } from "@/lib/api/client"
 import { mayOn } from "@/lib/modules/grants"
 import { moduleKeyOf } from "@/lib/modules/keys"

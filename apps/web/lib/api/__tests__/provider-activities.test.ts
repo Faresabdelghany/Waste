@@ -17,7 +17,7 @@ import { COMMAND_SURFACES } from "@/components/waste/commands/command-surfaces"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { activityCommandsOffered, activityCorrectable, activityOpenForm, closeBodyOf, createActivityRecord, kindsOpenedBy, REASON_NEEDED, rejectBodyOf } from "../../data/provider-activities"
-import { commandOffered } from "@/lib/api/provider-workspace"
+import { commandOffered } from "@/lib/api/provider-commands"
 import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isLocalRefusal } from "@/lib/records/fields"
 import { isServerBacked, SERVER_MODULES } from "../records/modules"

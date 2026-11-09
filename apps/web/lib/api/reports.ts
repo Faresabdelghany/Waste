@@ -16,7 +16,7 @@ import type {
   WasteDataReport,
 } from "@waste/contracts/reports"
 
-import type { FileSeparator, WasteDataQuery } from "@/lib/insight/compliance"
+import type { FileSeparator, WasteDataQuery } from "@/lib/insight/waste-data"
 
 import { get, getFile, withQuery, type ApiClient, type ApiFile } from "./client"
 

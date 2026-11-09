@@ -39,7 +39,7 @@ import { tankSummary } from "@/lib/data/tank-words"
 import { sessionRecords } from "@/lib/driver/position-recorder"
 import { endRouteWarning, entriesInOrder, mapsHref, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, waitingOn } from "@/lib/driver/route-view"
 import { stopsInOrder } from "@waste/domain/execution/routes"
-import { DRIVER_REASON_LABELS, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS } from "@/lib/data/route-labels"
+import { PICKUP_STATUS_LABELS, pickupReasonLabel, ROUTE_STATUS_LABELS } from "@/lib/data/route-labels"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
@@ -234,7 +234,7 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
           <p className="text-sm text-muted-foreground">{stopCollects(stop)}</p>
           {stop.reason !== null && (
             <p className="text-sm text-muted-foreground">
-              {PICKUP_STATUS_LABELS[stop.status]} · {stop.reason in DRIVER_REASON_LABELS ? DRIVER_REASON_LABELS[stop.reason as keyof typeof DRIVER_REASON_LABELS] : stop.reason.replaceAll("-", " ")}
+              {PICKUP_STATUS_LABELS[stop.status]} · {pickupReasonLabel(stop.reason)}
             </p>
           )}
         </div>

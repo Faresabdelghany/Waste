@@ -11,7 +11,8 @@
 
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts"
 
-import { tonnageLabelOf, weightOf, type TonnageLine } from "@/lib/insight/dashboard"
+import { tonnageLabelOf, type TonnageLine } from "@/lib/insight/dashboard"
+import { compactWeight, weightOf } from "@/lib/format/measures"
 
 type Datum = { key: string; label: string; netKg: number; approvedKg: number; capturedKg: number; rejectedKg: number }
 
@@ -36,8 +37,6 @@ function TonnageTooltip({ active, payload }: TooltipProps<number, string>) {
   )
 }
 
-const compactKg = (kg: number) => (kg >= 1000 ? `${Math.round(kg / 100) / 10} t` : `${kg} kg`)
-
 export function TonnageChart({ lines, orientation }: { lines: readonly TonnageLine[]; orientation: "bars" | "columns" }) {
   const data: Datum[] = lines.map((line) => ({ key: line.key, label: tonnageLabelOf(line), netKg: line.netKg, approvedKg: line.approvedKg, capturedKg: line.capturedKg, rejectedKg: line.rejectedKg }))
   if (orientation === "bars") {
@@ -46,7 +45,7 @@ export function TonnageChart({ lines, orientation }: { lines: readonly TonnageLi
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 56, left: 8, bottom: 0 }} barCategoryGap="28%">
             <CartesianGrid horizontal={false} stroke="var(--border)" />
-            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickFormatter={compactKg} />
+            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickFormatter={compactWeight} />
             <YAxis type="category" dataKey="label" axisLine={false} tickLine={false} width={140} tick={{ fill: "var(--foreground)", fontSize: 11 }} />
             <Tooltip content={TonnageTooltip} cursor={{ fill: "var(--accent)", opacity: 0.4 }} />
             <Bar dataKey="netKg" name="Net" fill="var(--chart-1)" radius={[0, 4, 4, 0]} maxBarSize={24} isAnimationActive={false}>
@@ -63,7 +62,7 @@ export function TonnageChart({ lines, orientation }: { lines: readonly TonnageLi
         <BarChart data={data} margin={{ top: 8, right: 8, left: -4, bottom: 0 }} barCategoryGap="24%">
           <CartesianGrid vertical={false} stroke="var(--border)" />
           <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} width={48} tickFormatter={compactKg} />
+          <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} width={48} tickFormatter={compactWeight} />
           <Tooltip content={TonnageTooltip} cursor={{ fill: "var(--accent)", opacity: 0.4 }} />
           <Bar dataKey="netKg" name="Net" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
         </BarChart>

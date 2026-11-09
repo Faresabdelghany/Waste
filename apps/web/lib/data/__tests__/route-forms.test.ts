@@ -273,7 +273,7 @@ describe("the stop's dialogs", () => {
     assert.deepEqual(fieldOf(form, "outcome")?.options?.map((option) => option.value), [...PICKUP_OUTCOMES])
     assert.deepEqual(fieldOf(form, "reason")?.visibleWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
     assert.deepEqual(fieldOf(form, "reason")?.requiredWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
-    // The reasons in the Driver App's words (lib/driver/route-view.ts), the system's four spelled out.
+    // The reasons in the Driver App's words (lib/data/route-labels.ts), the system's four spelled out.
     const reasons = new Map(fieldOf(form, "reason")?.options?.map((option) => [option.value, option.label]))
     assert.equal(reasons.get("capacity"), "Over capacity")
     assert.equal(reasons.get("not-presented"), "Not presented")
