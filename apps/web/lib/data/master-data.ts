@@ -464,7 +464,7 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
       : []),
     ...(kind === "service-frequency"
       ? [
-          { id: "projectId", label: "Project", type: "select" as const, required: true, relation: { workspaceId: "configure" as const, moduleId: "organization" } },
+          { id: "projectId", label: "Project", type: "select" as const, required: true, relation: moduleAt("configure.organization") },
           { id: "description", label: "Description", type: "textarea" as const },
           { id: "collectionsPerWeek", label: "Collections per week", type: "number" as const, min: 1, placeholder: "Blank is on demand" },
           { id: "weeksBetween", label: "Weeks between", type: "number" as const, min: 1, placeholder: "Once a week or less often" },

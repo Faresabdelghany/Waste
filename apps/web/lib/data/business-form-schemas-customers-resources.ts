@@ -1,23 +1,15 @@
+import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import { CHANNEL_OPTIONS as APPLICATION_CHANNEL_OPTIONS, KIND_OPTIONS as APPLICATION_KIND_OPTIONS } from "@/lib/data/applications"
 import { DROP_OFF_KIND_OPTIONS } from "@/lib/data/drop-off-points"
 import { WAREHOUSE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 import { SERVICE_FREQUENCIES } from "@waste/fixtures/service-frequencies"
 
-const projectRelation = {
-  workspaceId: "configure",
-  moduleId: "organization",
-} as const
+const projectRelation = moduleAt("configure.organization")
 
-const customerOrCompanyRelation = {
-  workspaceId: "customers",
-  moduleId: "contacts",
-} as const
+const customerOrCompanyRelation = moduleAt("customers.contacts")
 
-const propertyRelation = {
-  workspaceId: "customers",
-  moduleId: "properties",
-} as const
+const propertyRelation = moduleAt("customers.properties")
 
 const sourceOptions = [
   { value: "manual", label: "Entered by an office user" },
@@ -290,10 +282,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "select",
             description:
               "Required when the selected service effect is Agreement; the Agreement remains the authoritative commercial record.",
-            relation: {
-              workspaceId: "customers",
-              moduleId: "agreements",
-            },
+            relation: moduleAt("customers.agreements"),
           },
           {
             id: "effectiveFrom",
@@ -692,9 +681,9 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
           { id: "kind", label: "Kind", type: "select", required: true, defaultValue: "plate", options: [{ value: "plate", label: "Plate" }, { value: "card", label: "Card" }] },
           { id: "value", label: "Plate or card number", type: "text", required: true },
           { id: "label", label: "Label", type: "text" },
-          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "A household's; or the business and its agreement below." },
-          { id: "customerId", label: "Customer", type: "select", relation: { workspaceId: "customers", moduleId: "contacts" } },
-          { id: "agreementId", label: "Agreement", type: "select", relation: { workspaceId: "customers", moduleId: "agreements" } },
+          { id: "propertyId", label: "Property", type: "select", relation: moduleAt("customers.properties"), description: "A household's; or the business and its agreement below." },
+          { id: "customerId", label: "Customer", type: "select", relation: moduleAt("customers.contacts") },
+          { id: "agreementId", label: "Agreement", type: "select", relation: moduleAt("customers.agreements") },
           { id: "validFrom", label: "First day in force", type: "date", required: true },
           { id: "lastDay", label: "Last day in force", type: "date" },
         ],
@@ -722,10 +711,10 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
           { id: "kind", label: "Applies for", type: "select", required: true, options: APPLICATION_KIND_OPTIONS },
           { id: "channel", label: "Received by", type: "select", required: true, defaultValue: "email", options: APPLICATION_CHANNEL_OPTIONS },
           { id: "receivedOn", label: "Received on", type: "date", required: true },
-          { id: "customerId", label: "Customer", type: "select", required: true, relation: { workspaceId: "customers", moduleId: "contacts" } },
-          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "The address it concerns, or a shared point below; not both." },
-          { id: "sharedCollectionPointId", label: "Shared point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" } },
-          { id: "subscriptionId", label: "Subscription", type: "select", relation: { workspaceId: "customers", moduleId: "agreements" } },
+          { id: "customerId", label: "Customer", type: "select", required: true, relation: moduleAt("customers.contacts") },
+          { id: "propertyId", label: "Property", type: "select", relation: moduleAt("customers.properties"), description: "The address it concerns, or a shared point below; not both." },
+          { id: "sharedCollectionPointId", label: "Shared point", type: "select", relation: moduleAt("customers.shared") },
+          { id: "subscriptionId", label: "Subscription", type: "select", relation: moduleAt("customers.agreements") },
           { id: "statement", label: "What the customer asks", type: "textarea", required: true },
         ],
       },
@@ -810,19 +799,13 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "propertyGroupId",
             label: "Service property group",
             type: "select",
-            relation: {
-              workspaceId: "customers",
-              moduleId: "groups",
-            },
+            relation: moduleAt("customers.groups"),
           },
           {
             id: "sharedPointId",
             label: "Shared collection point",
             type: "select",
-            relation: {
-              workspaceId: "customers",
-              moduleId: "shared",
-            },
+            relation: moduleAt("customers.shared"),
           },
         ],
       },
@@ -879,10 +862,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "productId",
             label: "Product or service",
             type: "select",
-            relation: {
-              workspaceId: "commercial",
-              moduleId: "products",
-            },
+            relation: moduleAt("commercial.products"),
           },
           {
             id: "priceListId",
@@ -903,10 +883,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "select",
             description:
               "Service frequency is inherited from the assigned container's frequency record.",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "containers",
-            },
+            relation: moduleAt("resources.containers"),
           },
           {
             id: "internalNotes",
@@ -946,10 +923,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Published portal configuration",
             type: "select",
             required: true,
-            relation: {
-              workspaceId: "configure",
-              moduleId: "portals",
-            },
+            relation: moduleAt("configure.portals"),
           },
           {
             id: "propertyId",
@@ -1207,7 +1181,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "planningAreaId",
             label: "Planning area",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "areas" },
+            relation: moduleAt("configure.areas"),
             description:
               "The operational planning geography this container is serviced in. Route Scheme stop-matching rules resolve containers by this area (issue #19); containers in storage have none.",
           },
@@ -1237,7 +1211,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Storage depot",
             type: "select",
             requiredWhen: { fieldId: "status", equals: "in_storage" },
-            relation: { workspaceId: "resources", moduleId: "warehouses" },
+            relation: moduleAt("resources.warehouses"),
             description:
               "Required for In storage. Saving the depot also appends an inventory-ledger movement.",
           },
@@ -1474,10 +1448,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Stock item",
             type: "select",
             required: true,
-            relation: {
-              workspaceId: "resources",
-              moduleId: "inventory",
-            },
+            relation: moduleAt("resources.inventory"),
           },
           {
             id: "quantity",
@@ -1502,28 +1473,19 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "originWarehouseId",
             label: "Origin warehouse",
             type: "select",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "warehouses",
-            },
+            relation: moduleAt("resources.warehouses"),
           },
           {
             id: "destinationWarehouseId",
             label: "Destination warehouse",
             type: "select",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "warehouses",
-            },
+            relation: moduleAt("resources.warehouses"),
           },
           {
             id: "individualAssetId",
             label: "Individually tracked asset",
             type: "select",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "containers",
-            },
+            relation: moduleAt("resources.containers"),
           },
         ],
       },
@@ -1540,19 +1502,13 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "routeId",
             label: "Related route",
             type: "select",
-            relation: {
-              workspaceId: "route-studio",
-              moduleId: "routes",
-            },
+            relation: moduleAt("route-studio.routes"),
           },
           {
             id: "ticketId",
             label: "Related ticket",
             type: "select",
-            relation: {
-              workspaceId: "operate",
-              moduleId: "tickets",
-            },
+            relation: moduleAt("operate.tickets"),
           },
         ],
       },
@@ -1680,10 +1636,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "select",
             description:
               "Optional physical relationship only; it does not merge the Warehouse ledger with Fleet operations.",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "depots",
-            },
+            relation: moduleAt("resources.depots"),
           },
         ],
       },
@@ -1805,10 +1758,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             id: "serviceProviderId",
             label: "Owning service provider",
             type: "select",
-            relation: {
-              workspaceId: "service-providers",
-              moduleId: "service-providers",
-            },
+            relation: moduleAt("service-providers.service-providers"),
           },
           {
             id: "operatingHours",
@@ -1825,10 +1775,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "multiselect",
             description:
               "Required for an Unloading Station; route assignment validates compatibility.",
-            relation: {
-              workspaceId: "configure",
-              moduleId: "master",
-            },
+            relation: moduleAt("configure.master"),
           },
           {
             id: "vehicleCapacity",
@@ -1857,10 +1804,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             type: "select",
             description:
               "Physical relationship only; stock and route-resource ledgers remain separate.",
-            relation: {
-              workspaceId: "resources",
-              moduleId: "warehouses",
-            },
+            relation: moduleAt("resources.warehouses"),
           },
         ],
       },
@@ -1955,7 +1899,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Takes",
             type: "multiselect",
             description: "The fractions a resident may hand in here; the public map lists the points that take each fraction.",
-            relation: { workspaceId: "configure", moduleId: "master" },
+            relation: moduleAt("configure.master"),
           },
           { id: "openAlways", label: "Open always", type: "checkbox", description: "A bring bank on a street: no hours to keep." },
           {

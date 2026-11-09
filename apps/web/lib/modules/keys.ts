@@ -22,6 +22,9 @@ export type ModuleLocation = {
 /** A key's location, its two halves typed as the key spells them. */
 export type LocationOf<Key extends ModuleKey> = Key extends `${infer Workspace}.${infer Module}` ? { readonly workspaceId: Workspace; readonly moduleId: Module } : never
 
+/** Control Center's twin: the registry's workspace of Configure's Control Center module, whose form the twin's key holds. */
+export const CONTROL_CENTER_TWIN: { readonly workspaceId: typeof CONTROL_CENTER; readonly moduleId: typeof CONTROL_CENTER } = { workspaceId: CONTROL_CENTER, moduleId: CONTROL_CENTER }
+
 /** A module's location, by its key: the one way a module is named in code, so a key the domain does not hold is a compile error. */
 export function moduleAt<Key extends ModuleKey>(key: Key): LocationOf<Key> {
   const dot = key.indexOf(".")

@@ -46,8 +46,8 @@ export const INSPECTION_FORM: BusinessFormSchema = {
       title: "What was inspected",
       description: "A container, or a property: one of the two.",
       fields: [
-        { id: "containerId", label: "Container", type: "select", relation: { workspaceId: "resources", moduleId: "containers" } },
-        { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" } },
+        { id: "containerId", label: "Container", type: "select", relation: moduleAt("resources.containers") },
+        { id: "propertyId", label: "Property", type: "select", relation: moduleAt("customers.properties") },
       ],
     },
     {
