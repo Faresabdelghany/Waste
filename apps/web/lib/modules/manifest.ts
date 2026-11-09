@@ -28,6 +28,7 @@ export type Workspace<W extends WorkspaceId = WorkspaceId> = {
   readonly id: W
   readonly label: string
   readonly description: string
+  readonly alsoAt?: readonly string[]
   readonly modules: Readonly<Record<string, ModuleSpec>>
 } & WorkspacePath<W>
 

@@ -79,6 +79,8 @@ export type WorkspacePath<W extends WorkspaceId> = W extends "configure" ? { rea
 export type WorkspaceSpec<W extends WorkspaceKey> = {
   label: string
   description: string
+  /** The other pages that show the workspace, besides its own (`/routes` opens Route Studio on its routes). */
+  alsoAt?: readonly string[]
   modules: { readonly [Module in ModuleIdOf<W>]: ModuleSpec }
 } & WorkspacePath<W>
 

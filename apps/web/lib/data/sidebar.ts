@@ -13,6 +13,8 @@ export type NavItem = {
   id: NavItemId
   label: string
   href: string
+  /** The pages it is the item of, the active one where a page's path starts with one of them. */
+  paths: readonly string[]
 }
 
 export type ActiveRouteSummary = {
@@ -30,13 +32,35 @@ export type SidebarFooterItem = {
   pane: SettingsPaneId
 }
 
+/**
+ * The pages a workspace's item stands for: the item's own, the workspace's,
+ * the other pages that show it (`alsoAt`), and the surfaces its modules are
+ * shown on elsewhere (the citizen portal, a provider's own workspace).
+ */
+function pathsOf(id: NavItemId, href: string): readonly string[] {
+  const workspace = WORKSPACES[id]
+  const elsewhere = Object.values(workspace.modules).flatMap((spec) => (spec.shown === "elsewhere" && spec.deepLink !== undefined ? [spec.deepLink] : []))
+  return [...new Set([href, workspace.path, ...(workspace.alsoAt ?? []), ...elsewhere])]
+}
+
+const itemOf = (id: NavItemId, href: string): NavItem => ({ id, label: WORKSPACES[id].label, href, paths: pathsOf(id, href) })
+
 /** The Dashboard leads the sidebar, at its own page; every other workspace follows in the domain's order, at its page, under its name. */
-const DASHBOARD: NavItem = { id: "improve", label: WORKSPACES.improve.label, href: "/performance" }
+const DASHBOARD: NavItem = itemOf("improve", "/performance")
+
+/** The item the root shows: without the API `/` is Operate's page, and on the Pilot it lands a person by `/me`. */
+const HOME: NavItemId = "operate"
 
 export const navItems: NavItem[] = [
   DASHBOARD,
-  ...WORKSPACE_KEYS.flatMap((id) => (id === "configure" || id === DASHBOARD.id ? [] : [{ id, label: WORKSPACES[id].label, href: WORKSPACES[id].path }])),
+  ...WORKSPACE_KEYS.flatMap((id) => (id === "configure" || id === DASHBOARD.id ? [] : [itemOf(id, WORKSPACES[id].path)])),
 ]
+
+/** Whether a nav item is the page's: the root's is Operate, any other page's the item one of whose paths it starts with. */
+export function navItemActive(item: NavItem, pathname: string): boolean {
+  if (pathname === "/") return item.id === HOME
+  return item.paths.some((path) => pathname.startsWith(path))
+}
 
 /**
  * A nav item's badge (#248): a count of rows the API answered — the open

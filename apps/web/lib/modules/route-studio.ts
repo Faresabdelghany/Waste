@@ -5,6 +5,7 @@ export const ROUTE_STUDIO = workspaceSpec("route-studio", {
   description:
     "Monitor live service, design recurring routes, manage route days and their generated Pickups, and control route weights.",
   path: "/route-studio",
+  alsoAt: ["/routes"],
   modules: {
     live: {
       shown: "tab",

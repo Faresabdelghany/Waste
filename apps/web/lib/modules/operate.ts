@@ -9,6 +9,7 @@ export const OPERATE = workspaceSpec("operate", {
   description:
     "Manage customer and operational tickets, then triage the exceptions and alerts that require resolution work.",
   path: "/tickets",
+  alsoAt: ["/operate"],
   modules: {
     tickets: {
       shown: "tab",
