@@ -495,7 +495,7 @@ type RoutePageParts = { information: ReactNode; tickets: { count: number; conten
 
 function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "sheet" | "page"; page?: RoutePageParts }) {
   const pickers = useRelationPickers()
-  const messageGrants = useGrants()
+  const grants = useGrants()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
   const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId)
   const moduleReady = useModuleReady(ROUTES_MODULE)
@@ -590,7 +590,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
     />
   )
   const sessionsBlock = <ReadRows read={{ rows: detail?.sessions ?? null, problem: reads.problem }} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="route-sessions" line={(session) => sessionLine(session, timezone)} />
-  const messagesBlock = <RouteMessagesSection record={record} timezone={timezone} canSend={mayOn(messageGrants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
+  const messagesBlock = <RouteMessagesSection record={record} timezone={timezone} canSend={mayOn(grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
   const logBlock = (
     <ReadRows
       read={log}

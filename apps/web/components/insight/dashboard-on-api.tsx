@@ -16,6 +16,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { UploadSimple } from "@phosphor-icons/react/dist/ssr"
+import type { ModuleKey } from "@waste/domain/access/modules"
 
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Button } from "@/components/ui/button"
@@ -62,7 +63,8 @@ export function DashboardOnApi() {
 
   const projects = useMemo(() => me?.projects ?? [], [me])
   const grants = useGrants()
-  const viewed = useMemo(() => modulesMayView(grants), [grants])
+  // In fixture mode the Dashboard is the prototype's control room: no report tab, no Imports.
+  const viewed = useMemo(() => (onApi ? modulesMayView(grants) : new Set<ModuleKey>()), [onApi, grants])
   const tabs = tabsShown(viewed)
   const tab = tabs.find((candidate) => candidate.id === tabChoice) ?? tabs[0]
   const projectId = projects.some((candidate) => candidate.id === projectChoice) ? projectChoice : undefined
@@ -141,7 +143,7 @@ export function DashboardOnApi() {
               </p>
             )}
             {/* Improve's Imports (#291 slice 12), for a role that reads them. */}
-            {mayViewImports(grants) && (
+            {onApi && mayViewImports(grants) && (
               <PageActions>
                 <Button asChild variant="outline" size="sm">
                   <Link href="/improve/imports" data-testid="dashboard-imports">

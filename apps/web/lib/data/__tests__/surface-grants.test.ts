@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 
 import { MODULE_KEYS } from "@waste/domain/access/modules"
 
-import { importableKinds, mayImport, mayView } from "@/lib/imports/import-file"
+import { IMPORT_KIND_OPTIONS, importableKinds, mayImport, mayView } from "@/lib/imports/import-file"
 import { modulesMayView } from "@/lib/modules/grants"
 
 import { scheduleAccessOf } from "../bulky"
@@ -46,7 +46,7 @@ describe("a Pilot surface's grants", () => {
   test("offer what the surface would while nothing holds the account back, as the workspace does", () => {
     for (const [name, rule] of Object.entries(RULES)) for (const [flag, allowed] of Object.entries(rule(null))) assert.equal(allowed, true, `${name}.${flag}`)
     assert.equal(alertsWithheldBecause(null), null)
-    assert.ok(importableKinds(null).length > 0)
+    assert.deepEqual(importableKinds(null), [...IMPORT_KIND_OPTIONS], "every kind an import is offered for")
     assert.equal(modulesMayView(null).size, MODULE_KEYS.length)
   })
 
