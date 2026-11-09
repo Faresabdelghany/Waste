@@ -39,6 +39,7 @@ import { countryCode, countryName, languageName, patchOf, type ResourceAdapter, 
 import { hasPrefix, isLocalRefusal, ofKind, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { projectWebIdOf } from "./me-projects"
 import { referencedServerId } from "./references"
+import { capitalised } from "@/lib/format/words"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -259,7 +260,7 @@ function toleranceOf(record: BusinessRecord): number | undefined {
 
 /** `Sat–Sun`, the fixture's spelling of a weekend, from the wire's day list. */
 export function weekendLabel(weekend: readonly string[]): string {
-  const short = weekend.map((day) => day.charAt(0).toUpperCase() + day.slice(1, 3))
+  const short = weekend.map((day) => capitalised(day.slice(0, 3)))
   return short.length === 2 && consecutive(weekend[0], weekend[1]) ? `${short[0]}–${short[1]}` : short.join(", ")
 }
 
@@ -289,7 +290,7 @@ function projectCalendarBody(record: BusinessRecord): { weekend?: string[]; holi
 function kindOfContext(context: string): string {
   const [, kind] = context.split("·").map((part) => part.trim())
   const text = kind ?? context
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Project"
+  return text ? capitalised(text) : "Project"
 }
 
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import { actionOf, said, type Client, type CommandInput, type RecordAction } fro
 import { statusLabel, type LocalRefusal } from "@/lib/records/fields"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
+import { capitalised } from "@/lib/format/words"
 
 /** The two modules whose rows the periods belong to. */
 const DRIVERS = moduleAt("fleet.drivers")
@@ -125,5 +126,5 @@ export function removeVehicleUnavailability(sendAction: SendAction, recordId: st
 /** A period as its line reads: "Mon 12 Oct – Wed 14 Oct · Holiday · Autumn break", "From Mon 2 Nov · Leave". */
 export function awayLine(period: AwayPeriod): string {
   const phrase = periodPhrase(period)
-  return [`${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`, statusLabel(period.reason), period.note].filter((part) => part !== null && part !== "").join(" · ")
+  return [capitalised(phrase), statusLabel(period.reason), period.note].filter((part) => part !== null && part !== "").join(" · ")
 }

@@ -23,6 +23,7 @@ import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"
+import { capitalised } from "@/lib/format/words"
 
 /** Where the Activities live: the providers' workspace, the module the API's grant names. */
 export const PROVIDER_ACTIVITIES_MODULE = moduleAt("service-providers.activities")
@@ -37,7 +38,7 @@ export const ACTIVITY_STATUS_KEY = "status"
 /** What a person calls each kind: the domain's words, capitalised. */
 export const kindLabel = (kind: string): string => {
   const words = KIND_WORDS[kind as ServiceProviderActivityKind]
-  return words === undefined ? kind : words.charAt(0).toUpperCase() + words.slice(1)
+  return words === undefined ? kind : capitalised(words)
 }
 
 const DAY_LABELS: Readonly<Record<ServiceDay, string>> = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" }

@@ -3,6 +3,7 @@
 // reads — and the refusal a write is answered with before the API sees it.
 // The adapters (lib/api/records) and the record rules (lib/data) both read
 // them here, so neither reaches into the other for them.
+import { capitalised } from "@/lib/format/words"
 import type { BusinessRecord } from "@/lib/prototype/prototype-record"
 
 /** A write the adapter refused before the API saw it, in the API's own words: a 400 with the field it names. */
@@ -32,8 +33,7 @@ export const ofKind = (prefix: string, recordKinds: readonly string[]) => (recor
 
 /** `active` → `Active`, `service-contact` → `Service contact`: a wire token as a status or a fact reads. */
 export function statusLabel(token: string): string {
-  const words = token.replace(/[-_]+/g, " ")
-  return words.charAt(0).toUpperCase() + words.slice(1)
+  return capitalised(token.replace(/[-_]+/g, " "))
 }
 
 /** The inverse: `Active` → `active`, `Service contact` → `service-contact`. */
