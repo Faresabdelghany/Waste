@@ -1,4 +1,4 @@
-// The pure helpers of routes/shared.ts that need no request: how a row's
+// The pure helpers the routes share that need no request: how a row's
 // stamps and a `time` column are spelled on the wire (Issue #97), the
 // whole-day window a pair of days makes and the skew check (Issue #109). No
 // database.

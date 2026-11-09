@@ -1,6 +1,6 @@
 // An id a body names, held to the scope its key allows (Issue #78).
 //
-// `requireRow` (routes/shared.ts) is the statement — a row of this company,
+// `requireRow` (below) is the statement — a row of this company,
 // under whatever else its key demands — and the sentence was left with the
 // route, which knows what the thing is called. That held while one route
 // named a thing. It stopped holding when the second did: a container type is
@@ -208,7 +208,7 @@ export async function requireServiceProvider(tx: Tx, companyId: string, id: stri
   await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
 }
 
-/** The same check as the field error or nothing (`rowIssue`, routes/shared.ts), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
+/** The same check as the field error or nothing (`rowIssue`, below), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
 export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<ProblemFieldError | undefined> {
   if (id == null) return undefined
   return await rowIssue(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
@@ -302,7 +302,7 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 // routes/fleet-lookups.ts reads it, refusing in the sentences spelled here.
 // Both checks answer the row's status (round B of the #101 review, #79's
 // rule: a status gates a new reference and never an existing one) through
-// `requireStatus` in routes/shared.ts — `requireRow`'s statement with one
+// `requireStatus` below — `requireRow`'s statement with one
 // column more, the same 400 at the field when there is no such row — so a
 // route naming a vehicle or a driver afresh can refuse a retired or an
 // unavailable one through @waste/domain/status-gates without a second statement, and

@@ -21,7 +21,7 @@
 // boundary (contracts/unloads.ts: net given, gross and tare together or not
 // at all, and net gross less tare where both are); and `occurredAt` may run
 // ahead of the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
-// routes/shared.ts, the one constant the ledger, the driver door and this
+// `@waste/domain/execution/commands`, the one constant the ledger, the driver door and this
 // capture read, and `requireNotAhead` the one check over it) and no further,
 // in the domain's words. The `unload-recorded` event is written in the same
 // transaction, carrying the unload as answered.

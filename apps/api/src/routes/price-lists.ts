@@ -379,7 +379,7 @@ export function priceListRoutes(deps: RouteDeps) {
 
         // The row this patch counts rows against, locked before it is read: a
         // shortening and a row being added to it are the two halves of one
-        // rule, and they serialise here (routes/shared.ts).
+        // rule, and they serialise here (`@waste/db/commands/shared`).
         const current = await lockedPriceList(tx, principal, id)
 
         const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined

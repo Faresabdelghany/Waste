@@ -315,7 +315,7 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, b
   const { serviceWindow, ...patch } = body
   // The row this patch counts children against, locked before it is
   // read: a shortening and a subscription being added to it are the
-  // two halves of one rule, and they serialise here (routes/shared.ts).
+  // two halves of one rule, and they serialise here (`@waste/db/commands/shared`).
   const current = await lockedAgreement(tx, principal, id)
   const parties = await partyStatuses(
     tx,

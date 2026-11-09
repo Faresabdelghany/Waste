@@ -59,7 +59,7 @@
 //                   vehicle and the trailer of the route's project, whether
 //                   the station and the fraction are the company's, and the
 //                   clock (`OCCURRED_AT_SKEW_MS` ahead, `COMMAND_BACKDATE_MS`
-//                   behind, routes/shared.ts). Every rule of §3 is the
+//                   behind, the domain's and this file's). Every rule of §3 is the
 //                   domain's and every sentence is spelled there;
 //   the effects   — as statements, in the order decided: `start-route` opens
 //                   the session with the command's id and copies the actual

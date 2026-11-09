@@ -91,7 +91,7 @@ async function findAlert(tx: Tx, principal: Principal, id: string): Promise<Aler
 /**
  * The alert the path names, locked and read: every command holds a rule the
  * API rather than the database holds — the machine, the one link — so it
- * takes the row lock first and reads afterwards (routes/shared.ts), and two
+ * takes the row lock first and reads afterwards (`@waste/db/commands/shared`), and two
  * commands on one alert take turns.
  */
 async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow> {

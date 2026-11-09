@@ -24,7 +24,7 @@
 // it in the file; the partial unique index behind it answers a race.
 //
 // "Within what the payment has and what the invoice owes" is the API's rule,
-// read under row locks and written after (routes/shared.ts): the project's
+// read under row locks and written after (`@waste/db/commands/shared`): the project's
 // row first, since a payment, its allocations and the invoice they pay are
 // all one project's, then the run that issued the invoice, whose lock a
 // credit note against it takes too (routes/invoices.ts), so a credit note and

@@ -243,7 +243,7 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
   if (stop !== undefined && pickupMissed(stop.status)) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
-/** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */
+/** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (`@waste/db/commands/shared`). */
 async function lockedTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow> {
   await lockRow(tx, ticket, { companyId: principal.companyId, id })
   const current = await findTicket(tx, principal, id)

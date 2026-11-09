@@ -327,7 +327,7 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         // The row every rule below is held against, locked before it is
         // read: a narrowing of the days and a group being added on one of
         // them are two halves of one rule, and they serialise here
-        // (routes/shared.ts); the group routes take this same lock.
+        // (`@waste/db/commands/shared`); the group routes take this same lock.
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
         const current = await findScheme(tx, principal, id)
         if (current === undefined) throw noSuchScheme(id)

@@ -12,7 +12,7 @@
 // holds the patch against the stored row before the update goes out and
 // refuses in the contracts' own words at the contracts' own paths, so one rule
 // has one sentence wherever it was noticed: the provider through
-// `providerShapeIssue` (routes/shared.ts, the one refusal shape the fleet
+// `providerShapeIssue` (below, the one refusal shape the fleet
 // shares), and the hours, both collected into one 400 listing every rule the
 // patch breaks, the way the validator lists a body's issues, so a client
 // mending one is not told about the other on its next try. `requirePlacePatch`

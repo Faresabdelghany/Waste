@@ -438,7 +438,7 @@ export function userRoutes(deps: RouteDeps) {
         // written after, so the row is locked before the read: a transfer in
         // flight to this very account has committed by the time it is read,
         // and the account is refused as the primary administrator it now is
-        // (routes/shared.ts on why a rule the API holds needs the lock). A
+        // (`@waste/db/commands/shared` on why a rule the API holds needs the lock). A
         // change of access writes the account's provider (`accessColumns`),
         // a key column the Service Provider Access rows name, so it takes the
         // lock `for update`.

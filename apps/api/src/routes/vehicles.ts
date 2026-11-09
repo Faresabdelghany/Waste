@@ -372,7 +372,7 @@ export async function createVehicle(tx: Tx, principal: Principal, body: VehicleC
 /** Changes one vehicle the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and a retirement refused under what it would strand. */
 export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch, now: () => Date): Promise<Vehicle> {
   // The row every rule below is held against, locked before it is read
-  // (routes/shared.ts): a retirement and an allocation being made are two
+  // (`@waste/db/commands/shared`): a retirement and an allocation being made are two
   // halves of one rule, and they serialise here.
   await lockRow(tx, vehicle, { companyId: principal.companyId, id }, strengthFor(vehicle, patch))
   const current = await findVehicle(tx, principal, id)
@@ -380,7 +380,7 @@ export async function patchVehicle(tx: Tx, principal: Principal, id: string, pat
   const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
   const merged = { ...current, ...patch }
 
-  // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+  // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/place-rules.ts): a patch carries one half and the stored row the other.
   requireOwnFleet(principal, { kind: patch.ownership, serviceProviderId: patch.serviceProviderId }, "vehicle", "patch")
   requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
   await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)

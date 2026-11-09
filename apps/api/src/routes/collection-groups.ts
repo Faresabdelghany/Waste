@@ -42,7 +42,7 @@
 // shared with the scheme's create.
 //
 // Every write here holds two rules across the scheme's groups, so every write
-// takes the scheme's row lock first (routes/shared.ts; the scheme's own patch
+// takes the scheme's row lock first (`@waste/db/commands/shared`; the scheme's own patch
 // takes the same lock) and reads the group underneath it: a group's days lie
 // within the scheme's service days (400 at `days`), and no container is
 // picked by two groups that run on a shared day (400 at the entry, naming the

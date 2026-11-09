@@ -40,7 +40,7 @@
 // Agreement and a request adding a Subscription to it each read a state the
 // other has not committed yet and both pass. Every route that holds this
 // rule therefore takes the parent's lock before it reads it (`lockRow`,
-// routes/shared.ts) — the Agreement for a subscription's create or patch and
+// `@waste/db/commands/shared`) — the Agreement for a subscription's create or patch and
 // for the agreement's own patch, the Subscription for a placement's create
 // or patch and for the subscription's own — and where a route locks two, it
 // takes them from the top down, the Agreement before the Subscription, so no

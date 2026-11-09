@@ -79,7 +79,7 @@ export function scoped<Columns extends SelectedFields & { id: PgColumn }>(table:
       if (row === undefined) throw noSuch(id)
       return row
     },
-    /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (routes/shared.ts); or the family's 404. */
+    /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`); or the family's 404. */
     async locked(tx: Tx, principal: Principal, id: string, strength?: LockStrength): Promise<Row> {
       await lockRow(tx, table, { companyId: principal.companyId, id }, strength)
       const row = await find(tx, principal, id)

@@ -220,7 +220,7 @@ export function depotRoutes(deps: RouteDeps) {
         // The row's lock, then the row, then what the patch points at and
         // what it leaves behind: the shape rules are held against the stored
         // row, and two patches of one depot each read and then write, so the
-        // lock makes the second read what the first wrote (routes/shared.ts).
+        // lock makes the second read what the first wrote (`@waste/db/commands/shared`).
         // An id nobody minted locks nothing and is a 404 here as in every
         // other family.
         const current = await lockedDepot(tx, principal, id, strengthFor(depot, patch))

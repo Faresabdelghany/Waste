@@ -33,7 +33,7 @@
 // periods overlap — a 409 at the entry, "Planning area OP-CEN-01 is already
 // in service area CA-Ø-2 over part of that period" — held under the planning
 // areas' own row locks: every planning area the body names is locked in id
-// order (`lockRows`, routes/shared.ts) before the conflict is looked for, so
+// order (`lockRows`, `@waste/db/commands/shared`) before the conflict is looked for, so
 // two awards claiming the same ground take turns on it and the second reads
 // the membership the first wrote. The rows the check finds are not what is
 // locked, since a check that finds nothing would then hold nothing and two
@@ -535,7 +535,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
 
         // The row this patch counts assignments against, locked before it is
         // read: a shortening and an assignment being added are the two halves
-        // of one rule, and they serialise here (routes/shared.ts).
+        // of one rule, and they serialise here (`@waste/db/commands/shared`).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
         const current = await findArea(tx, writable(principal), id)
         if (current === undefined) throw noSuchArea(id)
@@ -588,7 +588,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         // The area's lock, then the area, then the ids proved, then the
         // one-award rule over them, then the replacement: routes/id-sets.ts's
         // steps spelled out, since the rule runs between the proof and the
-        // write and takes the planning areas' locks (routes/shared.ts).
+        // write and takes the planning areas' locks (`@waste/db/commands/shared`).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
         const current = await findArea(tx, writable(principal), id)
         if (current === undefined) throw noSuchArea(id)

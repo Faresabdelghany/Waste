@@ -188,7 +188,7 @@ export const orderMismatch = (missing: number, strangers: number): string =>
 /**
  * The route the path names, locked and read: every command holds a rule the
  * API rather than the database holds — the status, the licence, the order —
- * so it takes the row lock first and reads afterwards (routes/shared.ts).
+ * so it takes the row lock first and reads afterwards (`@waste/db/commands/shared`).
  * Exported for the Plan endpoints (routes/plans.ts), whose optimise is a
  * command over the route.
  */

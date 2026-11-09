@@ -150,7 +150,7 @@ async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promi
   return row
 }
 
-/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (routes/shared.ts), and a provider's account, which commands nothing, finds no row. */
+/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (`@waste/db/commands/shared`), and a provider's account, which commands nothing, finds no row. */
 async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<SettlementRow> {
   await lockRow(tx, settlement, { companyId: principal.companyId, id })
   const current = await findSettlement(tx, writable(principal), id)

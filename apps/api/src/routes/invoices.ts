@@ -27,7 +27,7 @@
 // `invoice-issued` is emitted with it (@waste/db/commands/invoice-writes).
 //
 // The rule "at most what remains" is the API's, so it is held under a row
-// lock and read afterwards (routes/shared.ts). The invoice itself is a ledger
+// lock and read afterwards (`@waste/db/commands/shared`). The invoice itself is a ledger
 // row the API role may not lock: `appendOnly` revokes UPDATE from it, and
 // `SELECT … FOR UPDATE` needs UPDATE on the table. So the command takes the
 // lock of the invoice's parent, the billing run that issued it (a
