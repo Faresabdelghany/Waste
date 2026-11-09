@@ -32,7 +32,6 @@ export const RING_POSITIONS_MIN = 4
 /** The fewest distinct positions a ring has, besides the closing one. */
 export const RING_CORNERS_MIN = 3
 
-/** Whether a ring ends where it starts. */
 export const ringCloses = (ring: readonly Ordinates[]): boolean => {
   const first = ring[0]
   const last = ring[ring.length - 1]
@@ -47,7 +46,6 @@ export const RING_OPEN = "a linear ring ends where it starts"
 export const RING_WITHOUT_AREA = "a linear ring has at least three distinct positions"
 export const POLYGON_WITHOUT_RING = "a polygon has an outer ring"
 
-/** The fewest positions a line has. */
 export const LINE_POSITIONS_MIN = 2
 export const LINE_TOO_SHORT = "a line string has at least two positions"
 

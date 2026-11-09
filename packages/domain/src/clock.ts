@@ -42,7 +42,6 @@ function wallFormatter(timeZone: string): Intl.DateTimeFormat {
   return formatter
 }
 
-/** The wall clock `instant` reads in `timeZone`. */
 export function wallClockIn(instant: Date, timeZone: string): WallClock {
   const parts = wallFormatter(timeZone).formatToParts(instant)
   const part = (type: Intl.DateTimeFormatPartTypes): number => {
@@ -53,7 +52,6 @@ export function wallClockIn(instant: Date, timeZone: string): WallClock {
   return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute"), second: part("second") }
 }
 
-/** The `YYYY-MM-DD` day `instant` falls on in `timeZone`. */
 export function dayInTimezone(instant: Date, timeZone: string): string {
   const wall = wallClockIn(instant, timeZone)
   return `${pad(wall.year, 4)}-${pad(wall.month)}-${pad(wall.day)}`

@@ -26,7 +26,6 @@ export type AttachmentExtension = (typeof ATTACHMENT_EXTENSIONS)[number]
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
-/** Three lowercase ids, a slash between each, and one of the formats after a dot, as a regular expression's source. */
 const threeIdsAndFormat = (extensions: readonly string[]): string => `^${UUID}/${UUID}/${UUID}\\.(${extensions.join("|")})$`
 
 /** A proof's object key: `<companyId>/<routeId>/<commandId>.<ext>`, one of the image formats. */
@@ -46,7 +45,6 @@ export function objectKeyNames(key: string, ids: { companyId: string; routeId: s
 export const ATTACHMENT_KEY_PATTERN = threeIdsAndFormat(ATTACHMENT_EXTENSIONS)
 export const ATTACHMENT_KEY_SHAPE = "An attachment key is <companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>"
 
-/** The ids an inspection photo's key is made of. */
 export type InspectionPhotoIds = { companyId: string; inspectionId: string; photoId: string }
 
 /** Where an inspection photo's bytes live: under the inspections' own prefix, `inspections/<companyId>/<inspectionId>/<photoId>.<ext>`. */

@@ -7,7 +7,6 @@
 // parsed by the same table.
 import { WHOLE_NUMBER_PATTERN } from "./requests"
 
-/** Each numbered document's prefix. */
 export const NUMBER_PREFIXES = {
   route: "RC-",
   ticket: "T-",

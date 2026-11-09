@@ -23,7 +23,6 @@ export const PARAGRAPH_MAX = 2000
 /** The longest a key may be: a slug the rest of the system quotes, not a sentence. */
 export const KEY_MAX = 50
 
-/** Whether a text says something: anything but whitespace. */
 export const saysSomething = (text: string): boolean => text.trim().length > 0
 
 /** What a blank text is told, a name and a note alike. */

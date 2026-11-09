@@ -31,7 +31,6 @@ export const SERVICE_DAY_SHORT_LABELS: Record<ServiceDay, string> = {
   sunday: "Sun",
 }
 
-/** The months, January first. */
 export const MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const
 
 export const MONTH_SHORT_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
