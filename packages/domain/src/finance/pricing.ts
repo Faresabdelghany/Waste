@@ -1,9 +1,7 @@
 // The resolver (Issue #112 §3): `RESOLUTION_RULE` as code, on the server.
 // "The row matching the most conditions wins. A negotiated row for the
 // specific customer always wins. Remaining ties go to the row with the newest
-// effective-from date." — the sentence the web's pricing modules state, which
-// the prototype ran over its rows; this is
-// the same sentence over the rows of one Price List valid on one day, with
+// effective-from date." — over the rows of one Price List valid on one day, with
 // the third tie-break the prototype left to array order and a server cannot
 // (§7.5): a tie on the score and on `validFrom` goes to the lower `id`, a
 // lower UUIDv7 being the row made first.
