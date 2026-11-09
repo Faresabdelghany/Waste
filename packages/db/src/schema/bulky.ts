@@ -116,7 +116,6 @@ export const bulkyBooking = wms.table(
     tenantReference(t, [t.cancelledBy], userAccount),
     projectKey(t),
     exactlyOne(t, "place", [t.propertyId, t.sharedCollectionPointId]),
-    // A cancellation is its instant and its reason together; the person only with them.
     check(tableObjectName(t.id.table, "cancel_shape", "bulkyBooking"), sql`(${t.cancelledAt} is null) = (${t.cancelReason} is null) and (${t.cancelledBy} is null or ${t.cancelledAt} is not null)`),
     // A day's bookings, which its slots are counted over.
     index(tableObjectName(t.companyId.table, "schedule_id_day_idx", "bulkyBooking")).on(t.companyId, t.scheduleId, t.day),
@@ -156,7 +155,6 @@ export const bulkyBookingItem = wms.table(
     positive(t.quantity),
     positive(t.position),
     tenantIndex(t, t.projectId),
-    // A booking's items in the order they were listed, each place once.
     tenantUnique(t, t.bookingId, t.position),
   ],
 )

@@ -109,7 +109,6 @@ export const generationMatch = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.collectionGroupId], collectionGroup),
     projectReference(t, [t.generationRunId], generationRun),
-    // One stamp per group per run at most.
     tenantUnique(t, t.collectionGroupId, t.generationRunId),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.generationRunId),

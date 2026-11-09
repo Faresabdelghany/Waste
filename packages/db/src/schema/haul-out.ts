@@ -4,7 +4,7 @@
 // disposal costs; and the material adjustment, the office's correction of
 // what a station holds after a stock count.
 //
-// What a station holds is a reading and not a table (query/material-stock.ts,
+// What a station holds is a reading and not a table (`GET /unloading-stations/:id/stock`,
 // @waste/domain/execution/haul-out): by project and fraction, the Unloads
 // tipped there by their weight review, less the loads sent on, plus the
 // adjustments. So the Unload is never copied here, and a weight review that

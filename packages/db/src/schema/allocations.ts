@@ -101,7 +101,6 @@ export const vehicleAllocationEvent = wms.table(
     depotId: uuid(),
     ...window,
     reason: text(),
-    /** The caller's account. */
     recordedBy: uuid().notNull(),
   },
   (t) => [

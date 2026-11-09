@@ -110,7 +110,6 @@ export const message = wms.table(
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.contactId),
     tenantIndex(t, t.userAccountId),
-    // A customer's message or a staff member's, never both and never neither.
     exactlyOne(t, "recipient", [t.customerId, t.userAccountId]),
     // An event tells one staff member once: a redelivered event writes nothing the second time.
     uniqueIndex(tableObjectName(t.id.table, "source_event_id_user_account_id_idx", "message"))
@@ -124,7 +123,6 @@ export const message = wms.table(
     oneOf(t.purpose),
     oneOf(t.status),
     check(tableObjectName(t.id.table, "attempts_range", "message"), sql`${t.attempts} >= 0`),
-    // A sent message names when and by whom, and only a sent one does.
     check(tableObjectName(t.id.table, "sent_shape", "message"), sql`(${t.status} = 'sent') = (${t.sentAt} is not null and ${t.provider} is not null)`),
   ],
 )

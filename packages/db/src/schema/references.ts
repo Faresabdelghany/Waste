@@ -65,7 +65,6 @@ export type ProjectColumns = TenantColumns & { projectId: PgColumn }
 /** A table a project-scoped reference can point at: `company_id`, `project_id` and `id`, with `projectKey` in its extra config. */
 export type ProjectTable = TenantTable & { projectId: PgColumn }
 
-/** The columns' database names joined, for the object's name. */
 const named = (columns: PgColumn[]): string => columns.map(columnName).join("_")
 
 /**

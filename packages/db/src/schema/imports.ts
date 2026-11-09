@@ -69,7 +69,6 @@ export const importRun = wms.table(
     positive(t.rowCount),
     // A project's kinds name their project, the company's — its Customers and its catalogue (O30 of #290) — none.
     check(tableObjectName(t.id.table, "project_shape", "importRun"), sql`(${t.kind} in (${sql.raw(COMPANY_IMPORT_KINDS.map(literal).join(", "))})) = (${t.projectId} is null)`),
-    // Never fewer than none, never more than the file held.
     check(
       tableObjectName(t.id.table, "counts_shape", "importRun"),
       sql`${t.createdCount} >= 0 and ${t.updatedCount} >= 0 and ${t.unchangedCount} >= 0 and ${t.refusedCount} >= 0 and ${t.createdCount} + ${t.updatedCount} + ${t.unchangedCount} + ${t.refusedCount} <= ${t.rowCount}`,
@@ -107,7 +106,6 @@ export const importRunRow = wms.table(
     tenantUnique(t, t.importRunId, t.rowNumber),
     oneOf(t.outcome),
     check(tableObjectName(t.id.table, "row_number_shape", "importRunRow"), sql`${t.rowNumber} >= 2`),
-    // A refusal says why and names no record; every other outcome names its record and says nothing.
     check(
       tableObjectName(t.id.table, "outcome_shape", "importRunRow"),
       sql`(${t.outcome} = 'refused') = (${t.detail} is not null) and (${t.outcome} = 'refused') = (${t.resourceId} is null)`,
