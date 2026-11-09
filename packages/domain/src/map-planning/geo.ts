@@ -68,7 +68,6 @@ export function inBounds(point: LngLat, bounds: LngLatBounds): boolean {
   )
 }
 
-/** The four corners of a bounds, as a polygon. */
 export function boundsPolygon(bounds: LngLatBounds): LngLat[] {
   return [
     { lng: bounds.west, lat: bounds.south },

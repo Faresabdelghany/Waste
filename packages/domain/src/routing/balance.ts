@@ -44,7 +44,6 @@ export const BALANCE_SPEED = 30_000 / 3600
 /** `[longitude, latitude]`. */
 export type BalancePosition = readonly [number, number]
 
-/** A stop as the balance reads it: where it is, what it weighs and takes at the kerb, its fraction and its window, beside what a move judges. */
 export type BalanceStop = MovingStop & {
   /** Its place, or null for one that cannot be located: never moved. */
   at: BalancePosition | null
@@ -89,7 +88,6 @@ export type DayLoad = {
   overShiftSeconds: number | null
 }
 
-/** One stop moved. */
 export type BalanceMove = { pickupId: string; fromRouteId: string; toRouteId: string }
 
 export type BalanceProposal = {
@@ -98,16 +96,13 @@ export type BalanceProposal = {
   routes: { routeId: string; before: DayLoad; after: DayLoad }[]
 }
 
-/** Straight-line metres as seconds of road. */
 const roadSeconds = (metres: number): number => Math.round((metres * DETOUR_FACTOR) / BALANCE_SPEED)
 
-/** A route's drive where it has no measured Plan: its open stops in their order, stop to stop. */
 function estimatedDrive(stops: readonly BalanceStop[]): number {
   const located = stops.filter((stop) => stop.status === "planned" && stop.at !== null).map((stop) => stop.at as BalancePosition)
   return located.slice(1).reduce((sum, at, index) => sum + roadSeconds(haversineMetres(located[index], at)), 0)
 }
 
-/** The detour a stop costs a route, there and back from the nearest of its other open stops; null where it has none located. */
 function detourSeconds(stop: BalanceStop, stops: readonly BalanceStop[]): number | null {
   if (stop.at === null) return null
   let nearest = Number.POSITIVE_INFINITY
@@ -118,7 +113,6 @@ function detourSeconds(stop: BalanceStop, stops: readonly BalanceStop[]): number
   return nearest === Number.POSITIVE_INFINITY ? null : 2 * roadSeconds(nearest)
 }
 
-/** Where a route works: from its start to its shift's end, the whole day without a shift. */
 function workingWindow(route: BalanceRoute, startsAt: string | null): [number, number] {
   const from = startsAt === null ? 0 : secondsOfDay(startsAt)
   return [from, route.shift === null ? 86_400 : secondsOfDay(route.shift.to)]
@@ -141,7 +135,6 @@ function loadOf(working: Working): DayLoad {
   }
 }
 
-/** How far a route runs over, as a share of what it has: the larger of its load over its payload and its work outside its shift. */
 function excess(working: Working, load: DayLoad): number {
   const { route } = working
   const overKg = route.capacityKg === null || route.capacityKg === 0 ? 0 : (load.overCapacityKg ?? 0) / route.capacityKg
@@ -170,7 +163,6 @@ export function balanceDay(routes: readonly BalanceRoute[]): BalanceProposal {
   const moves: BalanceMove[] = []
   const stuck = new Set<string>()
   while (moves.length < BALANCE_MOVES_MAX) {
-    // The route furthest over that still has a move to make.
     const over = working
       .filter((day) => !stuck.has(day.route.id) && !within(loadOf(day)))
       .sort((a, b) => excess(b, loadOf(b)) - excess(a, loadOf(a)) || (a.route.id < b.route.id ? -1 : 1))[0]

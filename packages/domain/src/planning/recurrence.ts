@@ -134,11 +134,9 @@ export type CadenceOn = {
   weekRotation?: WeekRotation
   /** The day an every-3/4-weeks count starts from; empty where there is none. */
   anchor: string
-  /** The season in force on the date, if any. */
   season?: SchemeSeason
 }
 
-/** The cadence the recurrence runs at on the date: the season's in force there, or the scheme's own. */
 export function cadenceOn(recurrence: SchemeRecurrence, iso: string): CadenceOn {
   const season = seasonOn(recurrence.seasons, iso)
   if (season === undefined) {

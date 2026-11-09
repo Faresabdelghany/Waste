@@ -82,8 +82,6 @@ import { lastDayIn } from "../periods"
 import type { SchemeRecurrence } from "./recurrence"
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
-/* --------------------------------- window ---------------------------------- */
-
 /**
  * The furthest the day walk reaches past a window's start: from + 366 days,
  * 367 dates. Dates past it are never judged, so anything that cancels on
@@ -94,18 +92,11 @@ export const WALK_CAP_DAYS = 366
 /** The window a run is asked for, both days inclusive, `YYYY-MM-DD`. */
 export type GenerationWindow = { from: string; to: string }
 
-/**
- * The days a run actually judges: the window, its end capped at
- * `WALK_CAP_DAYS` past its start. An inverted window walks nothing but its
- * first day, which no recurrence matches twice.
- */
 export function walkWindow(window: GenerationWindow): GenerationWindow {
   if (window.to < window.from) return { from: window.from, to: window.from }
   const cap = addDays(window.from, WALK_CAP_DAYS)
   return { from: window.from, to: window.to < cap ? window.to : cap }
 }
-
-/* ------------------------------- recurrence -------------------------------- */
 
 /** The stored recurrence of a scheme as its row carries it: the period is `validity`'s, `validTo` the first day out of force. */
 export type StoredRecurrence = {
@@ -148,8 +139,6 @@ export function schemeRecurrenceOf(scheme: StoredRecurrence): SchemeRecurrence {
   }
 }
 
-/* -------------------------------- holidays --------------------------------- */
-
 /** A holiday as a collection calendar stores it: the day, and the name where somebody gave one. */
 export type StoredHoliday = { day: string; name: string | null }
 
@@ -171,8 +160,6 @@ export function holidayListOf(rows: readonly StoredHoliday[], holidayList: strin
   )
 }
 
-/* -------------------------------- sentences -------------------------------- */
-
 /** The cleanup's first sentence: the date is no longer one the scheme serves. */
 export const NO_LONGER_SERVES_DATE = "Scheme no longer serves this date"
 /** The cleanup's second: the date is served, but not by this group any more. */
@@ -189,16 +176,13 @@ export const skippedHoliday = (holiday: string | undefined): string => `Skipped 
 export const keptOffHoliday = (operatingDate: string, holiday: string | undefined): string =>
   `Kept on ${formatShortDay(operatingDate)} by the office, off ${holiday ?? "Holiday"}`
 
-/** A scheme's holiday inputs: its policy and its project's calendar, as a run judges a date by them. */
 export type HolidayInputs = { holidayPolicy: HolidayPolicy; calendar: SchemeCalendar }
 
-/** Where the scheme puts the collection of a recurrence date: the day it runs on, or null where the policy skips it. */
 const collectedOn = (serviceDate: string, inputs: HolidayInputs): string | null => {
   const decision = holidayDecision(serviceDate, inputs.holidayPolicy, inputs.calendar)
   return decision.status === "skipped" ? null : decision.date
 }
 
-/** A day the scheme moves a collection off: a holiday under any policy but collect. */
 const movesOff = (date: string, inputs: HolidayInputs): boolean => inputs.holidayPolicy !== "collect" && inputs.calendar.holidays.has(date)
 
 /**
@@ -217,22 +201,17 @@ export function holidayReleases(route: { serviceDate: string; operatingDate: str
   return !movesOff(route.operatingDate, before) && movesOff(route.operatingDate, after)
 }
 
-/** The run's warning for a day with no boundary of the scheme's planning area in force: rule groups match nothing that day. */
 export const noBoundaryInForce = (serviceDate: string): string => `No planning area boundary in force on ${serviceDate}; rule groups match no containers that day`
 
 /** The run's warning for a day with no boundary in force of the planning area a rule group matches within of its own (O30 of #290): that group matches nothing that day. */
 export const noGroupBoundaryInForce = (group: string, serviceDate: string): string => `No boundary of collection group ${group}'s planning area in force on ${serviceDate}; it matches no containers that day`
 
-/** The route's deviation note for an occurrence the holiday policy touched: shifted off a holiday, or collecting on one; null for a plain date. */
 export function occurrenceNote(occurrence: Occurrence): string | null {
   if (occurrence.status === "shifted") return `Shifted ${shiftedNote(occurrence)}`
   if (occurrence.status === "holiday") return `Collects on a holiday · ${occurrence.note ?? "Holiday"}`
   return null
 }
 
-/* --------------------------------- routes ---------------------------------- */
-
-/** A collection group as the plan reads it: its order, the days it runs on, and how it finds its stops. */
 export type GenerationGroup = {
   id: string
   position: number
@@ -370,8 +349,6 @@ export function planRoutes(input: PlanRoutesInput): RoutePlan {
   return { walk, occurrences, decisions, holidaysSkipped }
 }
 
-/* ---------------------------------- stops ---------------------------------- */
-
 /** A container of the project as the database answers it for one service date: under a placement, subscription and agreement valid that day. */
 export type StopCandidate = {
   containerId: string
@@ -413,7 +390,6 @@ export function matchAreas(schemeAreaId: string | null, rules: readonly Pick<Sto
   return [...new Set([schemeAreaId, ...rules.map((rule) => rule.planningAreaId)].filter((id): id is string => id !== null))]
 }
 
-/** Whether a candidate's location lies inside the area its rule matches within. */
 const containedFor = (candidate: Pick<StopCandidate, "containedIn">, rule: Pick<StopRule, "planningAreaId">): boolean => rule.planningAreaId !== null && candidate.containedIn.includes(rule.planningAreaId)
 
 /** A collection group as the stop resolution reads it: a rule, or the containers picked in stop order. */
@@ -425,7 +401,6 @@ export type StopGroup = {
   pickedContainerIds: readonly string[]
 }
 
-/** One stop of one route: the container, and the place and fraction the day resolved for it. */
 export type PlannedStop = {
   containerId: string
   position: number
@@ -514,7 +489,6 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
         if (candidate.located || passedOver(candidate) || !ruleMatches(candidate, group.rule, compatible)) continue
         // A manual group planned it already, its place looked up by the pick and not by geometry: it has a stop, and is not unlocated for a rule that would have wanted it too.
         if (claimed.has(candidate.containerId)) continue
-        // The rule wants it and nobody can say where it is.
         unlocated.add(candidate.containerId)
       }
       for (const candidate of ruleMatchSet(candidates, group.rule, compatible)) {
@@ -528,8 +502,6 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
 
   return { stops, unlocated: [...unlocated].sort() }
 }
-
-/* --------------------------------- pickups --------------------------------- */
 
 /** A pickup of a planned route as the database has it. */
 export type ExistingPickup = {
@@ -611,8 +583,6 @@ export function pickupChanges(existing: readonly ExistingPickup[], planned: read
   }
   return changes
 }
-
-/* ---------------------------------- stamps --------------------------------- */
 
 /** A rule group's drift stamp: the signature it matched under, and the sorted set it matched. */
 export type MatchStamp = { ruleSignature: string; containerIds: readonly string[] }

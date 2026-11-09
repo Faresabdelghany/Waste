@@ -44,7 +44,6 @@ import {
   WALK_CAP_DAYS,
 } from "../generation"
 
-/** Mondays and Thursdays, from October 2026, open-ended. */
 const weekly: SchemeRecurrence = { frequency: "weekly", serviceDays: ["monday", "thursday"], effectiveFrom: "2026-10-01", effectiveTo: "" }
 const restingWeekend: SchemeCalendar = { holidays: new Map(), weekend: ["saturday", "sunday"] }
 /** Thursday 2026-10-08 is a holiday; the Monday after, the 12th, is not. */
@@ -268,8 +267,6 @@ describe("planRoutes", () => {
   })
 })
 
-/* ---------------------------------- stops ---------------------------------- */
-
 const candidate = (containerId: string, label: string, values: Partial<StopCandidate> = {}): StopCandidate => ({
   containerId,
   label,
@@ -371,7 +368,6 @@ describe("resolveStops", () => {
   })
 
   test("a container a manual group planned is not counted unlocated for a rule group that would have wanted it: it has a stop, written from the pick's place, and the run's count is of containers nobody planned", () => {
-    // c5's place has no geometry; a manual group picks it and a rule group's fraction matches it. One stop on the manual group, nothing unlocated.
     const candidates = [candidate("c1", "BIN-1"), candidate("c5", "BIN-5", { located: false, containedIn: [] })]
     const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c5"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility, ANY_DAY)
     assert.deepEqual(stops.get("picked")?.map((stop) => stop.containerId), ["c5"])
@@ -431,8 +427,6 @@ describe("resolveStops", () => {
   })
 })
 
-/* --------------------------------- pickups --------------------------------- */
-
 const stop = (containerId: string, position: number, values: Partial<PlannedStop> = {}): PlannedStop => ({ containerId, position, propertyId: `property-of-${containerId}`, sharedCollectionPointId: null, wasteFractionId: "residual", ...values })
 const existingPickup = (id: string, containerId: string | null, position: number, values: Partial<ExistingPickup> = {}): ExistingPickup => ({
   id,
@@ -489,7 +483,6 @@ describe("pickupChanges", () => {
     assert.deepEqual(changes.update, [{ ...stop("c1", 2), id: "p1", resurrect: false }])
     assert.deepEqual(changes.skip, [])
     assert.equal(changes.unchanged, 3, "each of the office's three stands as the office left it, counted once")
-    // A plan that holds nothing any more skips the run's own stop and none of the office's.
     assert.deepEqual(pickupChanges(existing, []).skip, [{ id: "p1", note: REMOVED_FROM_DAY_PLAN }])
   })
 
@@ -515,8 +508,6 @@ describe("pickupChanges", () => {
     assert.equal(changes.unchanged, 3)
   })
 })
-
-/* ---------------------------------- stamps --------------------------------- */
 
 describe("the drift stamp", () => {
   test("the signature spells the planning area, the sorted fractions, the vehicle type and the sorted container types", () => {

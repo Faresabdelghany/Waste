@@ -106,7 +106,6 @@ export function formatClockTime(time: string | undefined): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
 }
 
-/** A day that is neither on the project's weekend nor on its holiday list. */
 export function isWorkingDay(calendar: SchemeCalendar, iso: string): boolean {
   return !calendar.weekend.includes(serviceDayOf(iso)) && !calendar.holidays.has(iso)
 }
