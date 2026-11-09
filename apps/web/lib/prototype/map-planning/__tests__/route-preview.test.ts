@@ -2,10 +2,13 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord } from "../../prototype-record"
-import { inBounds } from "@waste/domain/map-planning/geo"
+import type { LngLat, LngLatBounds } from "@waste/domain/map-planning/geo"
 import { containerLocation, placeLocation } from "../positions"
 import { previewsBounds, routePreview } from "../route-preview"
 import { TEST_GAZETTEER } from "./gazetteer-fixture"
+
+/** Whether a point lies in the box, its edges included. */
+const inBounds = (point: LngLat, bounds: LngLatBounds): boolean => point.lng >= bounds.west && point.lng <= bounds.east && point.lat >= bounds.south && point.lat <= bounds.north
 
 function record(id: string, facts: Record<string, string>, extra: Partial<BusinessRecord> = {}): BusinessRecord {
   return {
