@@ -10,13 +10,12 @@
 // row is there, and what refuses is where it is on those days. The routes
 // that keep the periods (availability.ts) ask the same reads.
 import type { Tx } from "@waste/db/client"
-import { validOver } from "@waste/db/query/valid-on"
-import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
+import { awayPeriodsOver, type AwayFamily, type AwayRow } from "@waste/db/query/away-periods"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { absentDriver, absentForDispatch, awayOver as earliestOver, unavailableForDispatch, unavailableVehicle, type AvailabilityNeed, type AwayPeriod } from "@waste/domain/resources/availability"
 import { firstDayOut } from "@waste/domain/periods"
-import { and, asc, eq, inArray, ne } from "drizzle-orm"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { and, eq } from "drizzle-orm"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 
 import { problem } from "../problem"
 import type { Period } from "./periods"
@@ -28,53 +27,9 @@ export const oneDay = (day: string): Period => ({ validFrom: day, validTo: first
 /** The days from `first` through `last`, both in: an allocation's window as its project reads it. */
 export const daysThrough = (first: string, last: string): Period => ({ validFrom: first, validTo: firstDayOut(last) })
 
-/** A period as the routes read it back: its id and whose it is beside the period itself. */
-export type AwayRow = AwayPeriod & { id: string; ownerId: string }
-
-/** Whose periods a read asks for: a driver's absences or a vehicle's (or a trailer's) unavailability. */
-export type AwayFamily = "driver" | "vehicle"
-
-/**
- * The periods of the owners touching `period`, earliest first, in the
- * scope's company and project — the one project a driver's or a vehicle's
- * periods live in. `except` leaves out the row a patch moves.
- */
-export async function periodsOver(tx: Tx, family: AwayFamily, scope: Scope, ownerIds: readonly string[], period: Period, except?: string): Promise<AwayRow[]> {
-  const owners = [...new Set(ownerIds)]
-  if (owners.length === 0) return []
-  if (family === "driver") {
-    return tx
-      .select({ id: driverAbsence.id, ownerId: driverAbsence.driverId, validFrom: driverAbsence.validFrom, validTo: driverAbsence.validTo, reason: driverAbsence.reason })
-      .from(driverAbsence)
-      .where(
-        and(
-          eq(driverAbsence.companyId, scope.companyId),
-          eq(driverAbsence.projectId, scope.projectId),
-          inArray(driverAbsence.driverId, owners),
-          validOver(driverAbsence, period),
-          except === undefined ? undefined : ne(driverAbsence.id, except),
-        ),
-      )
-      .orderBy(asc(driverAbsence.validFrom))
-  }
-  return tx
-    .select({ id: vehicleUnavailability.id, ownerId: vehicleUnavailability.vehicleId, validFrom: vehicleUnavailability.validFrom, validTo: vehicleUnavailability.validTo, reason: vehicleUnavailability.reason })
-    .from(vehicleUnavailability)
-    .where(
-      and(
-        eq(vehicleUnavailability.companyId, scope.companyId),
-        eq(vehicleUnavailability.projectId, scope.projectId),
-        inArray(vehicleUnavailability.vehicleId, owners),
-        validOver(vehicleUnavailability, period),
-        except === undefined ? undefined : ne(vehicleUnavailability.id, except),
-      ),
-    )
-    .orderBy(asc(vehicleUnavailability.validFrom))
-}
-
 /** The earliest period of one owner touching `period`, or undefined. */
 export async function awayOver(tx: Tx, family: AwayFamily, scope: Scope, ownerId: string, period: Period, except?: string): Promise<AwayRow | undefined> {
-  const [row] = await periodsOver(tx, family, scope, [ownerId], period, except)
+  const [row] = await awayPeriodsOver(tx, family, scope, [ownerId], period, except)
   return row
 }
 
@@ -116,7 +71,7 @@ async function refuseAway(tx: Tx, scope: Scope, crews: readonly (Crew & { days: 
     validFrom: crews.map((crew) => crew.days.validFrom).reduce((a, b) => (a < b ? a : b)),
     validTo: crews.some((crew) => crew.days.validTo === null) ? null : crews.map((crew) => crew.days.validTo as string).reduce((a, b) => (a > b ? a : b)),
   }
-  const [vehicles, drivers] = await Promise.all([periodsOver(tx, "vehicle", scope, vehicleIds, span), periodsOver(tx, "driver", scope, driverIds, span)])
+  const [vehicles, drivers] = await Promise.all([awayPeriodsOver(tx, "vehicle", scope, vehicleIds, span), awayPeriodsOver(tx, "driver", scope, driverIds, span)])
   const awayFor = (rows: readonly AwayRow[], ownerId: string, days: Period) =>
     earliestOver(
       rows.filter((row) => row.ownerId === ownerId),

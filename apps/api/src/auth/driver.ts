@@ -48,6 +48,9 @@ export type DriverProfile = {
 /** What a request from a login that no active driver profile is bound to is told: the whole request, one sentence. */
 export const NOT_A_DRIVERS_LOGIN = "This account is not an active driver's login"
 
+/** What else refuses a caller of the driver door, as its 403 says it beside the grant. */
+export const NO_DRIVER_PROFILE = "no active driver profile is bound to this login"
+
 /**
  * The driver profile bound to the principal's account, active, or a 403 for
  * the request. One statement, always with `company_id`: the API binds the

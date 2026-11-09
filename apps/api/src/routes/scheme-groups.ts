@@ -107,7 +107,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
 import { todayOnClock, type Today } from "@waste/db/query/project-clock"
 import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"

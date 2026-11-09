@@ -40,7 +40,7 @@ import type { PgColumn } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
 import { refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"

@@ -233,9 +233,9 @@ export function unloadingStationRoutes(deps: RouteDeps) {
         action: "create",
         body: UnloadingStationCreate,
         invalid: ["the body is missing a field, names a member the server owns, holds a point off the globe, names a provider without service-provider ownership or none with it, gives one opening time without the other, names the same fraction twice, or names a service provider or a waste fraction that is not this company's"],
+        forbidden: "the account works in no project of the company and so reaches no station",
         responses: {
           201: describeCreated("The unloading station as it was written, with its fractions by id.", UnloadingStation),
-          403: describeProblem("No active account here, the caller's role does not allow `create` on `resources.depots`, or the account works in no project of the company and so reaches no station."),
           409: describeProblem("The company already has an unloading station with that code, or one with that name."),
         },
       },

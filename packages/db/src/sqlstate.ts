@@ -6,7 +6,7 @@
 // Registry's effective-dated tables, Issue #78); a check violation (23514) is
 // a row alone whose own value will not do. The API turns the first two into
 // a 409 and the third, where a route foresaw it, into a 400 on the field
-// (apps/api/src/problem.ts, routes/shared.ts) — and the worker (Issue #109
+// (apps/api/src/problem.ts, and `refuseCheck` in commands/shared.ts) — and the worker (Issue #109
 // part B) reads the first the way the driver door does, as a key already
 // taken meaning the work was done before: an outbox event delivered twice
 // meets `ticket_source_event_id_idx` and reads the ticket the first delivery

@@ -31,9 +31,6 @@ import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
 import { vehicleLabel } from "../shapes/vehicles"
 
-// The API's routes still read the label here; its home is shapes/vehicles.ts.
-export { vehicleLabel } from "../shapes/vehicles"
-
 /** A vehicle as the fleet rules read it, with the label a sentence names it by and its type. */
 export type FitRow = FitVehicle & { id: string; label: string; vehicleTypeId: string }
 

@@ -12,7 +12,7 @@
 // holds the patch against the stored row before the update goes out and
 // refuses in the contracts' own words at the contracts' own paths, so one rule
 // has one sentence wherever it was noticed: the provider through
-// `providerShapeIssue` (below, the one refusal shape the fleet
+// `providerShapeIssue` (routes/provider-shape.ts, the one refusal shape the fleet
 // shares), and the hours, both collected into one 400 listing every rule the
 // patch breaks, the way the validator lists a body's issues, so a client
 // mending one is not told about the other on its next try. `requirePlacePatch`
@@ -43,9 +43,10 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import type { CheckRefusal } from "@waste/db/commands/shared"
 import { timeOf } from "@waste/db/shapes/times"
-import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "@waste/domain/resources/places"
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 
 import { invalidRequest } from "../problem"
+import { providerShapeIssue } from "./provider-shape"
 import { serviceProviderIssue } from "./references"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
@@ -130,31 +131,3 @@ export const NOT_A_VALID_POINT = "Not a valid point"
 export const pointInvalid = (constraint: string, path = "location"): Record<string, CheckRefusal> => ({
   [constraint]: { input: path, sentence: NOT_A_VALID_POINT },
 })
-
-// Resources, round A (Issue #101 review): the owning provider's shape, once.
-// A depot, an unloading station, a vehicle and a driver each name a service
-// provider exactly when their ownership (or a driver's employment) says so,
-// and each route held that against its stored row in its own lines. The
-// refusal has one shape here: the rule is the contracts' (`providerShape`,
-// @waste/contracts/places, which judges a half-seen pair as fine and leaves
-// it to the route to merge the stored row in), the path is always
-// `serviceProviderId`, and the sentence is the family's, since a depot's and
-// a driver's differ. It comes in two doors: `providerShapeIssue` answers the
-// field error or nothing, for a caller that holds a row to more than one
-// rule and lists every refusal in one 400 (routes/place-rules.ts, the two
-// places), and `requireProviderShape` throws it, for a caller with one rule
-// to hold (routes/vehicles.ts and routes/drivers.ts, since the closing
-// round). Both take the row as the write leaves it — the provider merged onto
-// the stored row, `string | null` and never absent — so a raw patch, whose
-// provider may be undefined, does not compile.
-
-/** The provider rule's answer for a row as a write leaves it — `owner` its ownership or employment, `body` its provider — at `serviceProviderId` with the family's sentence; undefined where the row holds. */
-export function providerShapeIssue(owner: string, body: { serviceProviderId: string | null }, sentence: string): ProblemFieldError | undefined {
-  return providerShape(owner, body) ? undefined : { path: "serviceProviderId", message: sentence }
-}
-
-/** Holds a row as a write leaves it to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence: `providerShapeIssue`, thrown. */
-export function requireProviderShape(owner: string, body: { serviceProviderId: string | null }, sentence: string): void {
-  const issue = providerShapeIssue(owner, body, sentence)
-  if (issue !== undefined) throw invalidRequest("body", [issue])
-}

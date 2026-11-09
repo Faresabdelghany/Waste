@@ -384,7 +384,6 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         invalid: ["`from` is not a calendar day"],
         responses: {
           200: describeJson("The property's exception history.", PickupExceptionHistory),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`customers.properties\` and on \`${STOPS}\`.`),
           404: describeProblem("No property with that id in the projects this account works in."),
         },
       },
@@ -417,7 +416,6 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         invalid: ["`from` is not a calendar day"],
         responses: {
           200: describeJson("The shared collection point's exception history.", PickupExceptionHistory),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`customers.shared\` and on \`${STOPS}\`.`),
           404: describeProblem("No shared collection point with that id in the projects this account works in."),
         },
       },
