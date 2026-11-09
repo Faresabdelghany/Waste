@@ -142,7 +142,6 @@ export class FakeProvider implements RoutingProvider {
     )
   }
 
-  /** One call of the family: the next scripted response if there is one, else the answer, the reading counted down. */
   private call<Result>(family: QuotaFamily, answer: () => { result: Result } | { refused: string }): ProviderAnswer<Result> {
     this.calls[family] += 1
     const scripted = this.responses[family].shift()

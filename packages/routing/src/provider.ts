@@ -132,7 +132,6 @@ export type QuotaReading = {
   resetAt: string | null
 }
 
-/** One call's answer. */
 export type ProviderAnswer<Result> =
   | { kind: "answered"; result: Result; quota: QuotaReading }
   /** The minute's window is full (429): wait and try again, `retryAfterSeconds` where the provider said. */
