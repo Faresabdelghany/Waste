@@ -23,7 +23,6 @@ export type OutgoingMessage = {
   body: string
 }
 
-/** What a provider answers for a message it took. */
 export type SendReceipt = { providerMessageId: string }
 
 export type MessagingProvider = {

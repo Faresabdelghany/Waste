@@ -45,11 +45,9 @@ export const PLAN_AHEAD_QUEUE = "planning.plan-ahead"
 export const PLAN_AHEAD_SCHEDULE = "0 3 * * *"
 
 export type PlanAheadData = {
-  /** Where the sweep came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
-/** One scheme the sweep found, with the day it is judged on and how many days ahead it keeps planned. */
 export type EligibleScheme = { companyId: string; projectId: string; routeSchemeId: string; today: string; planAheadDays: number }
 
 /**
@@ -73,7 +71,6 @@ export async function eligibleSchemes(worker: JobContext["worker"], at: Date): P
   return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, routeSchemeId: row.route_scheme_id, today: row.today, planAheadDays: row.plan_ahead_days }))
 }
 
-/** What one sweep did: the runs it wrote and sent, the schemes it found already mid-generation, and the companies whose writes failed. */
 export type PlanAheadOutcome = { eligible: number; queued: string[]; alreadyQueued: string[]; failed: string[] }
 
 /**

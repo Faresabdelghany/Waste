@@ -41,10 +41,8 @@ import type { JobContext } from "../runtime/definition"
 /** The module whose view grant reads an alert: the board's. */
 export const ALERTS_MODULE = "operate.exceptions"
 
-/** One notice to one account. */
 type Addressed = { userAccountId: string; notice: Notice }
 
-/** The project's and the company's names, which every notice is signed and placed with. */
 async function namesOf(tx: Tx, companyId: string, projectId: string): Promise<{ projectName: string; companyName: string }> {
   const [row] = await tx
     .select({ projectName: project.name, companyName: company.name })
@@ -56,7 +54,6 @@ async function namesOf(tx: Tx, companyId: string, projectId: string): Promise<{ 
   return row
 }
 
-/** The active accounts asking for alerts at or above this one's severity who can read it on the board. */
 async function alertRecipients(tx: Tx, companyId: string, raised: Alert): Promise<Addressed[]> {
   const asking = await tx
     .select({ userAccountId: userAccount.id, minSeverity: notificationPreference.minSeverity })
@@ -81,7 +78,6 @@ async function alertRecipients(tx: Tx, companyId: string, raised: Alert): Promis
   return reached.map(({ userAccountId }) => ({ userAccountId, notice }))
 }
 
-/** The assignee, where active and asking to hear of a ticket given to them. */
 async function ticketRecipients(tx: Tx, companyId: string, assigned: Ticket): Promise<Addressed[]> {
   if (assigned.assigneeUserAccountId === null) return []
   const [assignee] = await tx
@@ -105,7 +101,6 @@ async function ticketRecipients(tx: Tx, companyId: string, assigned: Ticket): Pr
 /** What one event came to: how many notices were queued, the rest having been queued before or reaching nobody. */
 export type Notified = { event: string; kind: NotificationEvent; queued: number }
 
-/** One event to the notices it owes, queued in one fenced transaction as the tenant. */
 export async function notifyStaffFor(event: RelayedEvent<NotificationEvent>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Notified> {
   const queued = await withCompany(api.db, event.companyId, async (tx) => {
     const addressed = event.kind === "alert-raised" ? await alertRecipients(tx, event.companyId, payloadOf(event)) : await ticketRecipients(tx, event.companyId, payloadOf(event))

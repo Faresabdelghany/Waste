@@ -51,13 +51,10 @@ import { and, eq } from "drizzle-orm"
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
 import type { JobContext } from "../runtime/definition"
 
-/** What one event came to: the notice it is, the messages queued for it, and why any customer was not told. */
 export type Noticed = { event: string; kind: CustomerNoticeKind; notice: CustomerNoticeEvent | null; messageIds: string[]; why: string[] }
 
-/** Who a notice goes to and what it fills in. */
 type Recipients = { customerIds: readonly string[]; values: Partial<Record<MessageVariable, string>> }
 
-/** The facts `customerNoticeOf` reads off the payload: the booking a stop collects, the rule an alert is of. */
 function factsOf(event: RelayedEvent<CustomerNoticeKind>): { bulkyBookingId?: string | null; alertRule?: string | null } {
   switch (event.kind) {
     case "pickup-completed":
@@ -80,7 +77,6 @@ async function routeRecipients(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, 
   return { customerIds, values: { collectionDate: operatingDate } }
 }
 
-/** Who the event's notice goes to, read in the event's transaction. */
 async function recipientsOf(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, ruleId: string): Promise<Recipients> {
   switch (event.kind) {
     case "bulky-booking-booked":
@@ -130,7 +126,6 @@ async function recipientsOf(tx: Tx, event: RelayedEvent<CustomerNoticeKind>, rul
   }
 }
 
-/** One event to the notices it owes, queued in one fenced transaction as the tenant, a customer refused counted and the rest still told. */
 export async function noticeCustomerFor(event: RelayedEvent<CustomerNoticeKind>, { api, send, log }: Pick<JobContext, "api" | "send" | "log">): Promise<Noticed> {
   const notice = customerNoticeOf(event.kind, factsOf(event))
   const outcome: Noticed = { event: event.id, kind: event.kind, notice, messageIds: [], why: [] }

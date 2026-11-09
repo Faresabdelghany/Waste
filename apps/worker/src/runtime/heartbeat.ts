@@ -15,7 +15,6 @@
 import { defineJob } from "./definition"
 
 export type HeartbeatData = {
-  /** Where the beat came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 

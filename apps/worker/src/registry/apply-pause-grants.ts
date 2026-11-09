@@ -35,13 +35,11 @@ import { and, eq } from "drizzle-orm"
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
 import type { JobContext } from "../runtime/definition"
 
-/** What one decision came to. */
 export type PauseApplied = { event: string; did: "paused" | "nothing" | "already-paused" | "replayed"; pauseId: string | null }
 
 /** The reason the audit trail carries: the Application by the number a decision letter quotes. */
 export const grantReason = (number: number) => `Application ${number} granted`
 
-/** One decision to what was done with it, in one fenced transaction as the tenant. */
 export async function applyPauseGrant(event: RelayedEvent<"application-decided">, { api, log, now }: Pick<JobContext, "api" | "log" | "now">): Promise<PauseApplied> {
   const application = payloadOf(event)
   const { decision } = application

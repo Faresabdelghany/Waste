@@ -82,7 +82,6 @@ let started = false
 /** What the boot has made so far: pg-boss running with its queues once `startBoss` answered, the listener once it bound. A shutdown closes what is there. */
 const made: { running?: Boss; listening?: Listening } = {}
 
-/** pg-boss started with every job, and the probes bound; a failure of either is the process's exit. */
 async function boot() {
   const running = await startBoss<WorkerContext>(boss, JOBS, {
     api,

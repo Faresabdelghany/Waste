@@ -27,7 +27,6 @@ export const SWEEP_HORIZON_QUEUE = "routing.sweep-horizon"
 export const SWEEP_HORIZON_SCHEDULE = "30 3 * * *"
 
 export type SweepHorizonData = {
-  /** Where the sweep came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
@@ -56,10 +55,8 @@ async function horizonRoutes(worker: Database, at: Date): Promise<HorizonRoute[]
   return rows.map((row) => ({ companyId: row.company_id, routeId: row.route_id, today: row.today }))
 }
 
-/** A calculating Plan created more than a day before the sweep: one whose job may be gone. */
 type AgedPlan = { companyId: string; planId: string }
 
-/** Every calculating Plan created more than a day before `at`, across companies, as the worker role, oldest first. */
 async function agedCalculatingPlans(worker: Database, at: Date): Promise<AgedPlan[]> {
   const rows = await worker.db.execute<{ company_id: string; id: string }>(sql`
     select company_id, id from wms.plan
@@ -95,15 +92,8 @@ async function recoverPlan(context: Pick<JobContext, "api" | "send">, aged: Aged
   })
 }
 
-/** What one sweep did: the routes it looked at, those it asked a Plan for (nearest date first), the lost jobs it re-sent, and the routes and Plans whose transaction failed. */
 export type SweepOutcome = { inWindow: number; asked: string[]; recovered: string[]; failed: string[] }
 
-/**
- * The night's sweep: every route inside the horizon whose active Plan is
- * missing or no longer answers it asked a Plan, then every aged calculating
- * Plan whose job is gone given its job back. Each route and each Plan is its
- * own transaction, so one company's trouble is logged and the sweep goes on.
- */
 export async function sweepHorizon(context: RoutingContext, jobId: string | null = null): Promise<SweepOutcome> {
   const at = context.now()
   const routes = await horizonRoutes(context.worker, at)

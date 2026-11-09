@@ -38,9 +38,7 @@ const WorkerDatabaseUrl = SessionUrl("the worker role's connection string", "pg-
  */
 const DatabaseUrl = SessionUrl("the API role's connection string", "the worker's pools need")
 
-/** A pool's size: one connection or more. */
 const PoolMax = wholeNumber(1, " of connections, at least 1")
-/** An interval in whole seconds, at least one. */
 const Seconds = wholeNumber(1, " of seconds, at least 1")
 
 export const Env = z.object({
