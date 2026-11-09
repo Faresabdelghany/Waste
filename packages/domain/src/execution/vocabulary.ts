@@ -77,7 +77,7 @@ export const PICKUP_SERVICES = ["empty", "deliver", "remove", "swap", "repair", 
 export const BULKY_BOOKING_STATUSES = ["booked", "routed", "collected", "cancelled"] as const
 /** Why a route was cancelled (O5 of #290): the office's eight, then the one the system writes when a run no longer plans the route. */
 export const ROUTE_CANCEL_REASON_CODES = ["vehicle-breakdown", "crew-unavailable", "weather", "road-closure", "holiday", "duplicate", "merged", "other", "regeneration"] as const
-/** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
+/** What a Proof of Service is: seven driver events — five about a stop, two about the route — five kinds of evidence, and the dispatcher's correction. */
 export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const

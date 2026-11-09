@@ -22,7 +22,6 @@ import { secondsOfDay } from "./shift"
 /** A route's span of its operating day: seconds from midnight, half-open. */
 export type DaySpan = readonly [number, number]
 
-/** A route's span from its start and its work, or null where either is not known. */
 export function spanOf(day: { startsAt: string | null; workSeconds: number | null }): DaySpan | null {
   if (day.startsAt === null || day.workSeconds === null) return null
   const from = secondsOfDay(day.startsAt)

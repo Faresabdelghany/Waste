@@ -12,7 +12,6 @@
 // without pickups is done at zero, not divided by zero.
 import { PICKUP_STATUSES, type PickupStatus } from "./vocabulary"
 
-/** How many pickups stand in each status. */
 export type PickupCounts = Readonly<Record<PickupStatus, number>>
 
 /** The counts, the total, and the fraction of pickups that have an outcome, 0..1. */

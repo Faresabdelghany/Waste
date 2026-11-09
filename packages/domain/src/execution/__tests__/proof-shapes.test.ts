@@ -4,9 +4,7 @@ import { describe, test } from "node:test"
 import { PROOF_SHAPES, proofShape, proofShapeIssue, type ProofRow } from "../proof-shapes"
 import { CODED_PROOF_KINDS, EXECUTION_SOURCES, PROOF_KINDS, type ProofKind } from "../vocabulary"
 
-/** A row with every column given, from the driver's device. */
 const full: ProofRow = { pickupId: "pickup", reason: "inaccessible", objectKey: "c/r/k.jpg", weightKg: 148, volumeLitres: 2800, outcome: "failed", note: "Gate locked", source: "driver-app" }
-/** A row with nothing given but the source. */
 const bare: ProofRow = { pickupId: null, reason: null, objectKey: null, weightKg: null, volumeLitres: null, outcome: null, note: null, source: "driver-app" }
 
 /** The one row of each kind that carries exactly what the kind requires and nothing it forbids, from the source it may come from. */

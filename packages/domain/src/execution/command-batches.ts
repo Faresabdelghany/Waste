@@ -29,5 +29,4 @@ export const PROBLEM_WITH_A_REJECTION = "A rejected command carries its problem,
  */
 export const UNLOCATED_COMMAND_KINDS = ["pause", "resume", "add-weight", "add-note", "record-fill", "record-positions", "record-volume"] as const satisfies readonly DriverCommandKind[]
 
-/** Whether a command of this kind carries the device's position. */
 export const carriesLocation = (kind: DriverCommandKind): boolean => !(UNLOCATED_COMMAND_KINDS as readonly DriverCommandKind[]).includes(kind)

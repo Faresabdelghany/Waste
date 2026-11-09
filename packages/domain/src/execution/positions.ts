@@ -79,7 +79,6 @@ export function keepsFix(last: PositionFix | null, next: PositionFix): boolean {
   return metresBetween(last.location, next.location) >= POSITION_RULES.minDistanceM
 }
 
-/** Whether a command's open batch is due to be closed and queued: two minutes after its first fix, or full. */
 export function batchDue(batch: readonly PositionFix[], now: number): boolean {
   const first = batch[0]
   if (first === undefined) return false
