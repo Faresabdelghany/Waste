@@ -34,7 +34,6 @@ export const SUPERVISOR_VARIABLES = [
 const own = (source: Environment): Partial<Record<(typeof SUPERVISOR_VARIABLES)[number], string>> => withoutEmpty(source)
 
 export type Host = {
-  /** Whether a bundle exists at the path. */
   exists: (path: string) => boolean
   /** The node to run the children with: process.execPath. */
   execPath: string

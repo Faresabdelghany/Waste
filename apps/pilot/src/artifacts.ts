@@ -33,7 +33,6 @@ type Expected = { repository: string; workflowPath: string }
 /** The triggers of this workflow's own runs: by hand, and the automatic release after CI on main. */
 const SOURCE_EVENTS: readonly string[] = ["workflow_dispatch", "workflow_run"]
 
-/** Refuses a run that is not a run of this workflow on main, by hand or after CI. */
 export function checkSourceRun(run: WorkflowRun, { repository, workflowPath }: Expected): void {
   if (run.repository.full_name !== repository) throw new Error(`Run ${run.id} is a run of ${run.repository.full_name}, not of ${repository}`)
   if (run.path !== workflowPath) throw new Error(`Run ${run.id} is a run of ${run.path}, not of ${workflowPath}`)
@@ -64,7 +63,6 @@ export type SourceArtifactOptions = RepositoryOptions & {
   kind: ArtifactKind
 }
 
-/** Reads the source run and its artifacts, checks the run, and answers the artifact to download with the run's commit. */
 export async function fetchSourceArtifact({ runId, kind, workflowPath, ...github }: SourceArtifactOptions): Promise<ArtifactPick & { commit: string }> {
   if (!/^\d+$/.test(runId)) throw new Error(`"${runId}" is not a run id`)
   const { read } = gitHubRepository(github)

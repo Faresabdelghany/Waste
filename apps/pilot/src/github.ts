@@ -41,7 +41,6 @@ async function githubSaid(response: Response): Promise<string> {
   }
 }
 
-/** Throws GitHub's answer to a request it refused, naming what the request was doing. */
 export async function refuse(response: Response, doing: string): Promise<never> {
   throw new Error(`GitHub answered ${response.status} ${doing}: ${await githubSaid(response)}`)
 }
