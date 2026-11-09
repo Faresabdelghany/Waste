@@ -133,7 +133,6 @@ describe("a Scale Ticket's charges", { skip }, () => {
     createdAt: NOON.toISOString(),
     updatedAt: NOON.toISOString(),
   })
-  /** The ticket as its void answers it. */
   const voidedOf = (answered: ScaleTicket): ScaleTicket => ({ ...answered, status: "voided", voidReason: "entered-in-error", voidedAt: NOON.toISOString() })
   const chargesOf = (lineId: string) =>
     admin.db

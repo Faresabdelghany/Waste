@@ -436,7 +436,6 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     }
   })
 
-  /** Polls `holds` until it does, or fails with `what` after five seconds. */
   const expectEventually = async (holds: () => Promise<boolean>, what: string) => {
     for (const started = Date.now(); Date.now() - started < 5_000; await new Promise((resolve) => setTimeout(resolve, 25))) if (await holds()) return
     assert.fail(what)
@@ -450,7 +449,6 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     })
     return id
   }
-  /** The stop's open cases, oldest first. */
   const openCasesOf = async (pickupId: string) =>
     withCompany(pool.db, tenant.companyId, (tx) =>
       tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.pickupId, pickupId), inArray(ticket.status, [...OPEN_TICKET_STATUSES]))).orderBy(asc(ticket.id)),
