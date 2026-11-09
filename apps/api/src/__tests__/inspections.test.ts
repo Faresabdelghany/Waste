@@ -14,6 +14,7 @@ import { Pickup } from "@waste/contracts/pickups"
 import { createDb, type Database } from "@waste/db/client"
 import { createJobSender } from "@waste/db/jobs"
 import type { ProofStorage } from "@waste/db/storage"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { A_FINDING_TO_FOLLOW_UP, COMPLIANT_FINDS_NOTHING, ONE_SUBJECT } from "@waste/domain/inspections/rules"
 import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
@@ -227,6 +228,14 @@ describe("M23a: the fill estimate and field inspections", { skip: database.skip 
       )
       const without = await readProblem(await oliviaWithout(`/field-inspections/${made.id}/photo-objects`), NO_PROOF_STORAGE)
       assert.equal(without.status, 503)
+    })
+
+    test("a photo's two Storage routes answer a reason that does not decode as they answer none: they write nothing the audit keeps", async () => {
+      const made = await inspection(await olivia("/field-inspections", { method: "POST", body: { containerId: bin(), outcome: "minor", findings: ["blocked-access"] } }), 201)
+      const headers = { [CHANGE_REASON_HEADER]: "%E0%A4%A" }
+      const signed = await olivia(`/field-inspections/${made.id}/uploads`, { method: "POST", body: { extension: "jpg" }, headers })
+      assert.equal(signed.status, 200, JSON.stringify(await signed.clone().json()))
+      assert.equal((await olivia(`/field-inspections/${made.id}/photo-objects`, { headers })).status, 200)
     })
 
     test("is the office's alone: a Service Provider's account reads none, and another company's is not there", async () => {

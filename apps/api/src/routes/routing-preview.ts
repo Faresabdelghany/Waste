@@ -37,8 +37,8 @@ import { quotaRows, recordQuota } from "@waste/db/commands/routing-quota"
 import { loggable } from "@waste/db/sqlstate"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { distinctConsecutive, samePosition } from "@waste/domain/geo"
-import { DEFAULT_PROFILE, type RoutedLeg, type RoutingProvider } from "@waste/routing/provider"
-import { quotaKnobs, QuotaEngine, type Outcome } from "@waste/routing/quota"
+import { DEFAULT_PROFILE, type RoutedLeg } from "@waste/routing/provider"
+import type { Outcome } from "@waste/routing/quota"
 
 import type { Transact } from "../auth/principal"
 import type { RouteDeps } from "../deps"
@@ -47,14 +47,6 @@ import { describeProblem, problem } from "../problem"
 import { describeJson } from "./shared"
 
 const MODULE = "route-studio.schemes"
-
-/**
- * The preview's calls a minute per family unless ROUTING_PREVIEW_CALLS_PER_MINUTE
- * says otherwise: with the worker's 30 (ROUTING_CALLS_PER_MINUTE), the
- * Standard plan's 40 on the one key both processes call with — raising one
- * means lowering the other.
- */
-export const PREVIEW_CALLS_PER_MINUTE = 10
 
 /** How many answers the cache holds. */
 export const PREVIEW_CACHE_ENTRIES = 50
@@ -150,19 +142,15 @@ function answerOf(provider: string, points: readonly Position2D[], outcome: Outc
 /** Whether an outcome stands for the same request asked again: the road and the provider's refusal of the points do; a deferral and a key refused are the quota's and the key's state, not the request's. */
 const standsFor = (outcome: Outcome<unknown>): boolean => outcome.kind === "answered" || outcome.kind === "refused"
 
-/** The quota engine the preview asks through: the provider's, interactive and never waiting inside a request, at `callsPerMinute` (ROUTING_PREVIEW_CALLS_PER_MINUTE) or the preview's own. */
-export const previewEngine = (provider: RoutingProvider, callsPerMinute = PREVIEW_CALLS_PER_MINUTE): QuotaEngine =>
-  new QuotaEngine(provider, { ...quotaKnobs({ callsPerMinute }), waits: false })
-
 export function routingPreviewRoutes(deps: RouteDeps) {
   const { routingEngine: engine, now, log } = deps
   const cache = new PreviewCache()
   const asking = new Map<string, Promise<RoutingPreview>>()
 
   /** One call through the engine, bracketed by the company's readings — taken before, written after when the engine learned something — and the answer cached where it stands. */
-  async function ask(key: string, companyId: string, transact: Transact, points: readonly Position2D[]): Promise<RoutingPreview> {
+  async function ask(key: string, companyId: string, fenced: Transact, points: readonly Position2D[]): Promise<RoutingPreview> {
     const keys = { companyId, provider: engine.name }
-    const rows = await transact((tx) => quotaRows(tx, keys))
+    const rows = await fenced((tx) => quotaRows(tx, keys))
     for (const { family, updatedAt, ...standing } of rows) engine.refresh(family, { ...standing, observedAt: updatedAt })
     const before = engine.state("directions").observedAt?.getTime() ?? null
     const distinct = distinctConsecutive(points)
@@ -178,7 +166,7 @@ export function routingPreviewRoutes(deps: RouteDeps) {
     const learned = engine.state("directions")
     if ((learned.observedAt?.getTime() ?? null) !== before) {
       try {
-        await transact((tx) => recordQuota(tx, { ...keys, family: "directions" }, learned))
+        await fenced((tx) => recordQuota(tx, { ...keys, family: "directions" }, learned))
       } catch (error) {
         // Bookkeeping, not the preview's answer: the engine holds the reading, and the next call writes it again.
         log(loggable(error))
@@ -219,7 +207,7 @@ export function routingPreviewRoutes(deps: RouteDeps) {
       if (held !== undefined) return c.json(held)
       let pending = asking.get(key)
       if (pending === undefined) {
-        pending = ask(key, c.get("principal").companyId, c.get("transact"), points).finally(() => asking.delete(key))
+        pending = ask(key, c.get("principal").companyId, c.get("fenced"), points).finally(() => asking.delete(key))
         asking.set(key, pending)
       }
       try {

@@ -8,8 +8,8 @@ import { createJobSender, type JobSender } from "@waste/db/jobs"
 import type { ProofStorage } from "@waste/db/storage"
 import type { BuildInfo } from "@waste/contracts/health"
 import { FakeProvider } from "@waste/routing/fake"
-import type { RoutingIdentity } from "@waste/routing/provider"
-import type { QuotaEngine } from "@waste/routing/quota"
+import type { RoutingIdentity, RoutingProvider } from "@waste/routing/provider"
+import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import type { Context, MiddlewareHandler } from "hono"
 
 import type { AddressRegister } from "./address-register/register"
@@ -17,7 +17,18 @@ import { authenticate, identify } from "./auth/principal"
 import { Allowance, FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS, FeedAllowance, PUBLIC_REQUESTS_PER_MINUTE, publicDoor, type PublicEnv } from "./auth/public-door"
 import type { Verifier } from "./auth/verify"
 import type { Guards } from "./operation"
-import { previewEngine } from "./routes/routing-preview"
+
+/**
+ * The preview's calls a minute per family unless ROUTING_PREVIEW_CALLS_PER_MINUTE
+ * says otherwise: with the worker's 30 (ROUTING_CALLS_PER_MINUTE), the
+ * Standard plan's 40 on the one key both processes call with — raising one
+ * means lowering the other.
+ */
+export const PREVIEW_CALLS_PER_MINUTE = 10
+
+/** The quota engine the guided setup's preview asks through (#173): the provider's, interactive and never waiting inside a request, at `callsPerMinute` or the preview's own. */
+export const previewEngine = (provider: RoutingProvider, callsPerMinute = PREVIEW_CALLS_PER_MINUTE): QuotaEngine =>
+  new QuotaEngine(provider, { ...quotaKnobs({ callsPerMinute }), waits: false })
 
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: server.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
@@ -55,7 +66,9 @@ export type AppOptions = {
    * test injects one over a scripted fake.
    */
   routingEngine?: QuotaEngine
-  /** Each public client's requests a minute on the public door (ADR-0010); a test injects one with a small allowance or a pinned clock. */
+  /** Each public client's requests a minute on the public door (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE unless set, on the app's clock. */
+  publicRequestsPerMinute?: number
+  /** The public door's allowance itself, where a test injects one with a small allowance or a pinned clock. */
   publicAllowance?: Allowance
   /** Each company's ingest batches a minute at `POST /sensor-readings` (O26 of #290); the module's own unless a test injects a small allowance or a pinned clock. */
   sensorIngestAllowance?: Allowance
@@ -100,7 +113,8 @@ export function routeDeps({
   jobs = createJobSender(probe),
   routingEngine = previewEngine(new FakeProvider()),
   routing = { name: routingEngine.name },
-  publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
+  publicRequestsPerMinute = PUBLIC_REQUESTS_PER_MINUTE,
+  publicAllowance = new Allowance(publicRequestsPerMinute, now),
   feedAllowance = new FeedAllowance(FEED_REQUESTS_PER_ADDRESS, FEED_ADDRESSES_PER_CLIENT, now),
   peer = () => undefined,
   trustedProxies = 0,

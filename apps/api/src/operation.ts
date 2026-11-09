@@ -12,7 +12,8 @@
 // The guard is `authenticate` — the request's transaction, `c.get("tx")` —
 // unless the route says `transaction: false`: a route that calls another
 // service holds no transaction across the call (#124 §4), so its guard is
-// `identify`, and it opens short ones of its own through `c.get("transact")`.
+// `identify`, and it opens short ones of its own: `c.get("transact")` for rows
+// the audit keeps, `c.get("fenced")` for the rest.
 // A public route names its `door` (ADR-0010) and takes no token.
 import { PageRequest } from "@waste/contracts/pagination"
 import type { Action, ModuleKey } from "@waste/domain/access/modules"

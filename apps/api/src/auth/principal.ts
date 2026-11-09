@@ -34,9 +34,10 @@
 // exception, declared `transaction: false` (operation.ts): no transaction may
 // be held across that call (#124 §4), so its guard, `identify`, makes the
 // same checks through the same function and ends the transaction before the
-// handler runs, which opens short ones through `transact`, each fenced and
-// written by the Principal as the request's own would be. Hono answers a thrown error at the handler
-// (its compose catches the throw and calls the app's error handler there), so
+// handler runs, which opens short ones of its own, each fenced: `transact`
+// for rows the audit keeps, written by the Principal as the request's own
+// would be, and `fenced` for the rest. Hono answers a thrown error at the
+// handler (its compose catches the throw and calls the app's error handler there), so
 // the throw never reaches this middleware; what does is `c.error`, set on the
 // context when that happened. The transaction is therefore rolled back when
 // the context carries an error or the response is an error status, and
@@ -47,7 +48,7 @@ import type { Actor } from "@waste/db/commands/shared"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { driver } from "@waste/db/schema/fleet"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
-import { actAs, withCompany } from "@waste/db/tenant"
+import { withCompany } from "@waste/db/tenant"
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
 import type { Grant } from "@waste/domain/access/grants"
 import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
@@ -57,7 +58,7 @@ import type { MiddlewareHandler } from "hono"
 
 import { grantsOfRows } from "../access-shape"
 import { problem } from "../problem"
-import { writerOf, writtenBy } from "./audit"
+import { writtenBy } from "./audit"
 import { bearerToken, type VerifiedClaims, type Verifier } from "./verify"
 
 export type Principal = {
@@ -80,11 +81,18 @@ export type Principal = {
 /** The context variables an authenticated route reads: `c.get("principal")` and `c.get("tx")`, on a `Hono<AuthEnv>`. */
 export type AuthEnv = { Variables: { principal: Principal; tx: Tx } }
 
-/** Opens one transaction under the Principal's company fence, written by the Principal with the request's reason, as `authenticate` opens the request's. */
+/** Opens one short transaction under the Principal's company fence. */
 export type Transact = <T>(work: (tx: Tx) => Promise<T>) => Promise<T>
 
-/** What a route behind `identify` reads: the principal, and `transact` for its short transactions, since the guard's ended before the handler (#173). */
-export type IdentifiedEnv = { Variables: { principal: Principal; transact: Transact } }
+/**
+ * What a route behind `identify` reads: the principal, and its short
+ * transactions, since the guard's ended before the handler (#173) — `transact`
+ * for rows the audit keeps, written by the Principal with the request's reason
+ * (read as each opens, so a reason that will not do is refused there), and
+ * `fenced` for the rest, the reads and the routing quota, which names no
+ * writer and reads no reason.
+ */
+export type IdentifiedEnv = { Variables: { principal: Principal; transact: Transact; fenced: Transact } }
 
 /** Who a shared statement of `@waste/db/commands` acts for when the principal asks: its company, and its account recording the rows. */
 export const actorOf = (principal: Principal): Actor => ({ companyId: principal.companyId, userAccountId: principal.user.id })
@@ -279,7 +287,7 @@ export function authenticate(options: AuthenticateOptions): MiddlewareHandler<Au
  * the handler runs, so no transaction is held open across the call (#124 §4)
  * and no pooled connection sits idle through it. The handler reads
  * `principal` and no `tx`, and opens the short transactions it needs through
- * `transact`, none of them across the call.
+ * `transact` or `fenced`, none of them across the call.
  */
 export function identify(options: AuthenticateOptions): MiddlewareHandler<IdentifiedEnv> {
   return async (c, next) => {
@@ -289,15 +297,14 @@ export function identify(options: AuthenticateOptions): MiddlewareHandler<Identi
     })
     if (resolved === undefined) throw new Error("identify: the guard answered without a principal")
     const principal = resolved
-    // The reason is read before the handler, as `authenticate` reads it: one that will not do is the request's 400.
-    const writer = writerOf(principal, c.req.header(CHANGE_REASON_HEADER))
     c.set("principal", principal)
     c.set("transact", (work) =>
       withCompany(options.pool.db, principal.companyId, async (tx) => {
-        await actAs(tx, writer)
+        await writtenBy(tx, principal, c.req.header(CHANGE_REASON_HEADER))
         return await work(tx)
       }),
     )
+    c.set("fenced", (work) => withCompany(options.pool.db, principal.companyId, work))
     await next()
   }
 }

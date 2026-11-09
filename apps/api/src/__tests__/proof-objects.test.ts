@@ -13,6 +13,7 @@ import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
 import { createJobSender } from "@waste/db/jobs"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { NO_PROOF_STORAGE, objectKeyOf } from "@waste/domain/storage-objects"
 import { notActive } from "@waste/domain/execution/transitions"
@@ -151,6 +152,12 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       assert.equal(fake.asked.at(-1), `upload ${objectKey}`)
     })
 
+    test("a reason that does not decode is answered as none: signing writes nothing the audit keeps", async () => {
+      const route = await activeRoute()
+      const response = await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" }, headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    })
+
     test("a key the bucket holds already is uploaded: a retry after a lost answer puts nothing again", async () => {
       const route = await activeRoute()
       const commandId = mint()
@@ -251,6 +258,12 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
         { proofId: signature, objectKey: signatureKey, url: null, expiresAt },
       ])
       assert.equal(fake.asked.at(-1), `read ${photoKey},${signatureKey} for ${READ_URL_TTL_SECONDS}s`, "one call for the stop's keys")
+    })
+
+    test("a reason that does not decode is answered as none: a read writes nothing the audit keeps", async () => {
+      const { stop } = await stopWithObjects()
+      const response = await olivia(`/pickups/${stop}/proof-objects`, { headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     })
 
     test("a stop with no object asks Storage for nothing", async () => {

@@ -50,7 +50,7 @@ type Spec = {
 /** The order an operation's lines take under one path. */
 const METHODS = ["get", "post", "put", "patch", "delete"]
 
-// `t.assert.snapshot` (Node 22.13), which the installed @types/node (22.0) does not declare yet.
+// `t.assert.snapshot`, stable since Node 22.13 (the root `engines`), which the installed @types/node (22.0) does not declare yet.
 declare module "node:test" {
   interface TestContext {
     readonly assert: { snapshot(value: unknown, options?: { serializers?: ((value: unknown) => unknown)[] }): void }

@@ -18,6 +18,7 @@ import { quotaRows, recordQuota } from "@waste/db/commands/routing-quota"
 import { plan, routingQuota } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { FakeProvider, type FakeScript } from "@waste/routing/fake"
 import type { RoutingProvider } from "@waste/routing/provider"
 import { KEY_REFUSED, QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
@@ -136,6 +137,12 @@ describe("POST /routing/preview (#173)", { skip: database.skip }, () => {
     assert.deepEqual(plans, [], "a Plan belongs to a Route; the preview has none")
     const [row] = await storedRows(a.companyId)
     assert.deepEqual([row.family, row.remaining, row.exhaustedAt, row.keyRefusedAt], ["directions", null, null, null], "the fake reports no limit, and the row says so")
+  })
+
+  test("a reason that does not decode is answered as none: the preview's readings are no rows the audit keeps", async () => {
+    const { olivia } = previewing()
+    const response = await olivia("/routing/preview", { method: "POST", body: { points: [depot, station] }, headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
   })
 
   test("the same points again are the cache's, for another person or another company alike; other points, or the same in another order, are a call of their own", async () => {

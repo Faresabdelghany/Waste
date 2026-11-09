@@ -105,7 +105,7 @@ export function proofObjectRoutes(deps: RouteDeps) {
         const bucket = required()
         const { routeId, commandId, extension } = c.req.valid("json")
         const principal = c.get("principal")
-        await c.get("transact")(async (tx) => {
+        await c.get("fenced")(async (tx) => {
           const profile = await resolveDriver(tx, principal)
           const assigned = await findAssignedRoute(tx, principal, profile, routeId)
           if (assigned === undefined) throw noSuchAssignedRoute(routeId)
@@ -139,7 +139,7 @@ export function proofObjectRoutes(deps: RouteDeps) {
         const bucket = required()
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
-        const objects = await c.get("transact")(async (tx) => {
+        const objects = await c.get("fenced")(async (tx) => {
           const [stop] = await tx.select({ id: pickup.id }).from(pickup).where(and(pickupReach(tx, principal), eq(pickup.id, id))).limit(1)
           if (stop === undefined) throw noSuchPickup(id)
           return await tx

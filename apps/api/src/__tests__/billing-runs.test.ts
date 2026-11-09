@@ -7,6 +7,7 @@ import { InvoiceDetail } from "@waste/contracts/invoices"
 import { type Database, type Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { withCompany } from "@waste/db/tenant"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { PERIOD_ENDS_BY_TODAY } from "@waste/domain/finance/billing-runs"
 import { and, eq } from "drizzle-orm"
 
@@ -103,6 +104,17 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.deepEqual(await written(), before, "nothing run")
       const today = await olivia("/billing-runs/preview", { method: "POST", body: period("2027-02-01", "2027-02-05") })
       assert.equal(today.status, 200, JSON.stringify(await today.clone().json()))
+    })
+
+    test("reads the run's reason when its first transaction opens: after the grant and the body, a reason that does not decode refused at the header with nothing run", async () => {
+      const before = await written()
+      const headers = { [CHANGE_REASON_HEADER]: "%E0%A4%A" }
+      assert.equal((await suite.ungranted("/billing-runs", { method: "POST", body: period("2026-10-01", "2026-10-31"), headers })).status, 403, "the grant first")
+      const shapeless = await readProblem(await olivia("/billing-runs", { method: "POST", body: { projectId: copenhagen }, headers }))
+      assert.deepEqual([shapeless.status, shapeless.errors?.map((error) => error.path)], [400, ["periodFrom", "periodTo"]], "the body next")
+      const malformed = await readProblem(await olivia("/billing-runs", { method: "POST", body: period("2026-10-01", "2026-10-31"), headers }))
+      assert.deepEqual([malformed.status, malformed.errors?.map((error) => error.path)], [400, [CHANGE_REASON_HEADER]])
+      assert.deepEqual(await written(), before, "nothing run")
     })
 
     test("previews the counts, the totals per currency and the exclusions, and writes nothing", async () => {

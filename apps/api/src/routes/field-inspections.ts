@@ -410,7 +410,7 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const { extension } = c.req.valid("json")
         const principal = c.get("principal")
-        await c.get("transact")(async (tx) => {
+        await c.get("fenced")(async (tx) => {
           const found = await findInspection(tx, principal, id)
           if (found === undefined) throw noSuchInspection(id)
           // A photo no append can land for is one nothing ever names.
@@ -444,7 +444,7 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
         const bucket = required()
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
-        const photos = await c.get("transact")(async (tx) => {
+        const photos = await c.get("fenced")(async (tx) => {
           const found = await findInspection(tx, principal, id)
           if (found === undefined) throw noSuchInspection(id)
           return (await photosOf(tx, principal.companyId, [id])).get(id) ?? []
