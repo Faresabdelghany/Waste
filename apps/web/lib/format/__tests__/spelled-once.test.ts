@@ -16,6 +16,7 @@ import { KIND_WORDS } from "@waste/domain/service-providers/activities"
 import { count } from "@waste/domain/text"
 
 import { kindLabel } from "@/lib/data/provider-activities"
+import { credentialStatusOf } from "@/lib/data/site-visits"
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
 import { ACTION_COMMAND_OPTIONS, COMMAND_HEADINGS, TRIGGER_HEADINGS } from "@/lib/data/ticket-types"
 import { weekendLabel } from "@/lib/api/records/organisation"
@@ -96,6 +97,9 @@ describe("a token as a person reads it", () => {
     for (const option of ACTION_COMMAND_OPTIONS) assert.equal(option.label, FORMER.capitalisedByIndex(TICKET_COMMAND_VERBS[option.value as keyof typeof TICKET_COMMAND_VERBS]), option.value)
     assert.equal(weekendLabel(["saturday", "sunday"]), `${FORMER.weekday("saturday")}–${FORMER.weekday("sunday")}`)
     assert.equal(weekendLabel(["friday"]), FORMER.weekday("friday"))
+    const credentialStanding = { upcoming: "Upcoming", "in-force": "In force", ended: "Ended" }
+    for (const [standing, label] of Object.entries(credentialStanding)) assert.equal(statusLabel(standing), label, standing)
+    assert.deepEqual(["2026-06-01", "2026-01-01", "2025-01-01"].map((validFrom) => credentialStatusOf({ blockedAt: null, validFrom, validTo: validFrom === "2025-01-01" ? "2025-06-01" : null }, "2026-03-01")), ["Upcoming", "In force", "Ended"])
   })
 })
 

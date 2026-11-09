@@ -18,10 +18,11 @@ import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, S
 
 import { moduleAt } from "@/lib/modules/keys"
 import { allows, type Grants } from "@/lib/modules/grants"
-import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
+import { firstDayOut, lastDayIn, periodOn } from "@waste/domain/periods"
 import { count } from "@waste/domain/text"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
+import { statusLabel } from "@/lib/records/fields"
 
 /** Where the register is: Customers › Site access. */
 export const SITE_ACCESS_MODULE = moduleAt("customers.site-access") satisfies ModuleLocation
@@ -61,10 +62,9 @@ export const visitStatusOf = (visit: Pick<SiteVisit, "outcome" | "voidedAt">): s
 /** A credential's status on a day: blocked first, then ended, not yet started, or in force. */
 export function credentialStatusOf(credential: Pick<AccessCredential, "blockedAt" | "validFrom" | "validTo">, today: string): string {
   if (credential.blockedAt !== null) return "Blocked"
-  return CREDENTIAL_STANDING[periodOn(credential, today)]
+  // Upcoming, In force or Ended: the standing as a status reads.
+  return statusLabel(periodOn(credential, today))
 }
-
-const CREDENTIAL_STANDING: Record<PeriodStanding, string> = { upcoming: "Upcoming", "in-force": "In force", ended: "Ended" }
 
 /** "1st", "2nd", "3rd", "11th", "22nd": a visit's place in its year. */
 export function ordinal(n: number): string {
