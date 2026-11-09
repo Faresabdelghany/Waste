@@ -131,13 +131,11 @@ import type { JobContext } from "../runtime/definition"
 const TICKET_SOURCE_INDEX = tableObjectName(ticket, "source_event_id_idx", "openTickets")
 const EVENT_SOURCE_INDEX = tableObjectName(ticketEvent, "source_event_id_idx", "openTickets")
 
-/** What one job did, for its output. */
 export type OpenTicketsOutcome =
   | { outcome: "opened"; ticketId: string; superseded?: { ticketId: string; as: Superseding } }
   | { outcome: "commented" | "replayed"; ticketId: string }
   | { outcome: "nothing" }
 
-/** The ticket already made from an event, or the ticket a comment already made from it was appended to. */
 async function handled(tx: Tx, companyId: string, eventId: string): Promise<string | undefined> {
   const [own] = await tx
     .select({ id: ticket.id })
@@ -160,7 +158,6 @@ async function containerLabel(tx: Tx, companyId: string, containerId: string | n
   return found?.label ?? null
 }
 
-/** The place's address as one text: the property's, or the shared collection point's. */
 async function addressOf(tx: Tx, companyId: string, place: { propertyId: string | null; sharedCollectionPointId: string | null }): Promise<string | null> {
   if (place.propertyId !== null) {
     const [found] = await tx.select({ address: property.address }).from(property).where(and(eq(property.companyId, companyId), eq(property.id, place.propertyId))).limit(1)
@@ -264,7 +261,6 @@ async function factsOf(tx: Tx, event: RelayedEvent<ResolutionEventKind>): Promis
   }
 }
 
-/** The domain's draft as `openTicket` takes it: the event's project and instant, the project's SLA for the due date, nobody assigned, the nine links with the parent the consumer never names null, no alert. */
 const asTicketDraft = (event: RelayedEvent<ResolutionEventKind>, draft: DomainDraft): TicketDraft => ({
   projectId: event.projectId,
   kind: draft.kind,
@@ -381,7 +377,6 @@ async function bookedTicketOf(tx: Tx, event: RelayedEvent<ResolutionEventKind>):
   return { row, missed: stopMissed({ position: stop.position, route: onRoute === undefined ? stop.routeId : routeLabel(onRoute.number), service: stop.service ?? "empty", outcome, reason, open }) }
 }
 
-/** One event, in one transaction as the tenant: the reads, the rule, the fold or the ticket, and what the ticket supersedes. */
 async function consume(api: Database, event: RelayedEvent<ResolutionEventKind>, now: () => Date, send: Send): Promise<OpenTicketsOutcome> {
   return await withCompany(api.db, event.companyId, async (tx) => {
     const { companyId, projectId } = event
@@ -420,7 +415,6 @@ async function readBack(api: Database, event: RelayedEvent<ResolutionEventKind>)
   return await withCompany(api.db, event.companyId, (tx) => handled(tx, event.companyId, event.id))
 }
 
-/** One event to its outcome: consumed, and a duplicate met at a key read back. */
 export async function openTicketFor(event: RelayedEvent<ResolutionEventKind>, { api, now, log, send }: Pick<JobContext, "api" | "now" | "log" | "send">): Promise<OpenTicketsOutcome> {
   try {
     const outcome = await consume(api, event, now, send)
@@ -440,7 +434,6 @@ export async function openTicketFor(event: RelayedEvent<ResolutionEventKind>, { 
 /** The consumer's queue options: three retries with a short backoff, written over the relay's defaults on the five queues at every start. */
 export const OPEN_TICKETS_QUEUE_OPTIONS = { retryLimit: 3, retryDelay: 5, retryBackoff: true } as const
 
-/** The five registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const openTickets = defineOutboxConsumer({
   name: "resolution",
   kinds: RESOLUTION_EVENT_KINDS,

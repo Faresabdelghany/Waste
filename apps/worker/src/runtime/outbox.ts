@@ -96,7 +96,6 @@ export const OUTBOX_DEAD_QUEUE = "outbox.dead"
 
 /** What a job on an `outbox.<kind>` queue carries: the contracts' `OutboxEvent`, stamped, with the tenant it belongs to. */
 export const RelayedJob = OutboxEvent.extend({
-  /** The company whose event this is: what a consumer opens `withCompany` on. */
   companyId: Id,
 })
 export type RelayedJob = z.infer<typeof RelayedJob>
@@ -104,7 +103,6 @@ export type RelayedJob = z.infer<typeof RelayedJob>
 /** A relayed job as a consumer reads it: an event of one of the kinds, about the aggregate its kind is about, its payload as the write left it for `payloadOf` to read. */
 export type RelayedEvent<Kind extends OutboxKind = OutboxKind> = Kind extends OutboxKind ? Omit<RelayedJob, "kind" | "aggregateKind"> & { kind: Kind; aggregateKind: AggregateOf<Kind> } : never
 
-/** A job's data as a relayed event: the row parsed with the contracts, about the aggregate its kind is about. */
 export function relayedEventOf(data: unknown): RelayedEvent {
   const job = RelayedJob.parse(data)
   const about = aggregateOf(job.kind)
@@ -138,7 +136,6 @@ export const CONSUMED_OUTBOX_QUEUE_OPTIONS: JobQueueOptions = { retentionSeconds
 /** The dead-letter queue's own options: no retry (nobody works it), a dead letter kept ninety days for a redrive. */
 export const DEAD_LETTER_QUEUE_OPTIONS: JobQueueOptions = { retryLimit: 0, retentionSeconds: DEAD_LETTER_RETENTION_SECONDS }
 
-/** Every outbox queue, one per kind, as the relay publishes them (`publishes` in its definition). */
 export const OUTBOX_QUEUES: readonly PublishedQueue[] = OutboxKind.options.map((kind) => ({ queue: outboxQueue(kind), queueOptions: OUTBOX_QUEUE_OPTIONS }))
 
 /** The dead-letter queue as the relay publishes it: first, so it exists before any consumer's queue names it. */
@@ -147,7 +144,6 @@ export const OUTBOX_DEAD: PublishedQueue = { queue: OUTBOX_DEAD_QUEUE, queueOpti
 export type OutboxConsumer<Kind extends OutboxKind, Context extends JobContext = JobContext> = {
   /** Who it is, as its queues spell it (`CONSUMER_NAME`): `resolution`, `finance`. */
   name: string
-  /** The kinds the consumer takes, a queue of its own each. */
   kinds: readonly Kind[]
   /** What the consumer does with an event, one sentence; each queue's description is this and its kind. */
   description: string

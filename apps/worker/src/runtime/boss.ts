@@ -78,7 +78,6 @@ import { PgBoss, type ConstructorOptions, type WorkOptions } from "pg-boss"
 
 import { updatableOptions, type AnyJob, type JobContext, type JobQueueOptions, type PollingKnob } from "./definition"
 
-/** The knobs and the intervals a caller may name, all optional. */
 export type BossIntervals = {
   /** How often pg-boss's cron pass runs — reads the clock and sends the occurrences due — in seconds: pg-boss's 30 in production, 1 in a test that waits for a beat. */
   cronMonitorIntervalSeconds?: number
@@ -101,14 +100,12 @@ export type BossOptions = BossIntervals & {
   url: string
   /** pg-boss's pool size; three is one for the poll, one for a cron pass and one for maintenance. */
   max?: number
-  /** Where pg-boss's own errors and warnings go; console.error unless a test wants to look. */
   log?: (line: string) => void
 }
 
 /** pg-boss's own defaults for the intervals the polling knob may raise, and its cap on the two cron ones. */
 const PGBOSS = { cronMonitorSeconds: 30, cronWorkerSeconds: 5, flowSeconds: 5, cronCapSeconds: 45, workPollSeconds: 2 }
 
-/** An interval raised to the knob where it polls more often than the knob, never lowered, capped where pg-boss caps it; undefined without the knob. */
 const raised = (defaultSeconds: number, knob: number | undefined, cap = Number.POSITIVE_INFINITY): number | undefined =>
   knob === undefined ? undefined : Math.min(Math.max(defaultSeconds, knob), cap)
 
@@ -146,10 +143,8 @@ export function workOptionsUnder(options: WorkOptions | undefined, pollingInterv
   return { ...options, ...named("pollingIntervalSeconds", polling) }
 }
 
-/** pg-boss as the process holds it: the instance, and what was registered on it. */
 export type Boss = {
   boss: PgBoss
-  /** The queues registered, in registry order. */
   queues: readonly string[]
   /** The queues the jobs publish to and none of them works, in registry order, each once. */
   published: readonly string[]
