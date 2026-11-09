@@ -4,7 +4,8 @@
 // (lib/modules). The Driver App opens its own surface. An address a module has
 // left is redirected by lib/data/legacy-ids.ts (`migrateLegacyHref`) and
 // next.config.mjs, never here.
-import { CONTROL_CENTER, WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
+import { CONTROL_CENTER_TWIN } from "@/lib/modules/keys"
+import { WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
 
 import { DEFAULT_SETTINGS_PANE, settingsHref } from "./settings-panes"
 
@@ -30,6 +31,6 @@ export function workspaceHref(location: ModuleLocation, recordId?: string, { pag
   const shown = moduleSpecOf(location)?.shown
   if (typeof shown === "object") return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
   // Configure's one module with no pane, Control Center, opens its twin.
-  if (workspaceId === "configure") return workspaceHref({ workspaceId: CONTROL_CENTER, moduleId }, recordId)
+  if (workspaceId === "configure") return workspaceHref(CONTROL_CENTER_TWIN, recordId)
   return `${WORKSPACES[workspaceId].path}?${params.toString()}`
 }

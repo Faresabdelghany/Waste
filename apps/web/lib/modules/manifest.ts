@@ -21,13 +21,14 @@ import type { ModuleSpec, ProviderPageId, WorkspacePath } from "./spec"
 
 export type { LocationOf, ModuleIdOf, ModuleLocation, WorkspaceId } from "./keys"
 export { CONTROL_CENTER, moduleAt } from "./keys"
-export type { ModulePlacement, ModuleSpec, ModuleView, ProviderPageId, RichModuleTable } from "./spec"
+export type { ModuleDetails, ModuleFilters, ModuleLayout, ModulePicked, ModulePlacement, ModuleSpec, ModuleView, ModuleWrites, ProviderForm, ProviderPageId, RichModuleTable } from "./spec"
 
 /** A workspace of the registry as the web reads it: its words, its page, and its modules by id in the order its page offers them. */
 export type Workspace<W extends WorkspaceId = WorkspaceId> = {
   readonly id: W
   readonly label: string
   readonly description: string
+  readonly alsoAt?: readonly string[]
   readonly modules: Readonly<Record<string, ModuleSpec>>
 } & WorkspacePath<W>
 
@@ -62,6 +63,12 @@ export const MODULES = Object.fromEntries(
 /** The spec of the module at a location, or undefined where the registry holds none. */
 export function moduleSpecOf({ workspaceId, moduleId }: ModuleLocation): ModuleSpec | undefined {
   return Object.hasOwn(WORKSPACES, workspaceId) && Object.hasOwn(WORKSPACES[workspaceId].modules, moduleId) ? WORKSPACES[workspaceId].modules[moduleId] : undefined
+}
+
+/** The spec of the module a `workspace.module` key names, a form's own; undefined for any other key (a command's form, `customers.applications.decide`). */
+export function moduleSpecOfKey(key: string): ModuleSpec | undefined {
+  const dot = key.indexOf(".")
+  return dot < 0 ? undefined : moduleSpecOf({ workspaceId: key.slice(0, dot) as WorkspaceId, moduleId: key.slice(dot + 1) })
 }
 
 /** The ids of the modules a workspace's page shows, tabs and More, in its order: not one shown elsewhere or in Settings. */

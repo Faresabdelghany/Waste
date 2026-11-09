@@ -1,4 +1,5 @@
 import { RESOLUTION_RULE } from "@waste/domain/finance/pricing"
+import { CONTROL_CENTER_TWIN, moduleAt } from "@/lib/modules/keys"
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
 import { SERVICE_FREQUENCIES } from "@waste/fixtures/service-frequencies"
 
@@ -123,7 +124,7 @@ export const commercialImproveBusinessFormSchemas = [
         id: "row-target",
         title: "Product and amount",
         fields: [
-          { id: "productId", label: "Product", type: "select", required: true, relation: { workspaceId: "commercial", moduleId: "products" } },
+          { id: "productId", label: "Product", type: "select", required: true, relation: moduleAt("commercial.products") },
           { id: "amount", label: "Amount", type: "number", required: true, min: 0, unit: "EUR" },
           {
             id: "unit",
@@ -219,14 +220,14 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            relation: moduleAt("service-providers.service-providers"),
           },
           {
             id: "productId",
             label: "Product",
             type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "products" },
+            relation: moduleAt("commercial.products"),
           },
           {
             id: "serviceAreaId",
@@ -235,8 +236,7 @@ export const commercialImproveBusinessFormSchemas = [
             required: true,
             description: "Only the selected service provider's awarded areas are offered.",
             relation: {
-              workspaceId: "service-providers",
-              moduleId: "service-areas",
+              ...moduleAt("service-providers.service-areas"),
               allowedStatuses: ["Upcoming", "Active", "Expiring"],
             },
           },
@@ -349,7 +349,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "relationshipStart",
@@ -367,7 +367,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "serviceAreaId",
             label: "Proposed service area",
             type: "select",
-            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
+            relation: moduleAt("service-providers.service-areas"),
             description:
               "Optional relationship only. Award dates and approval are completed in the Create service area action.",
           },
@@ -414,14 +414,14 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            relation: moduleAt("service-providers.service-providers"),
           },
           {
             id: "projectId",
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
         ],
       },
@@ -456,7 +456,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "productIds",
             label: "Products",
             type: "multiselect",
-            relation: { workspaceId: "commercial", moduleId: "products" },
+            relation: moduleAt("commercial.products"),
           },
           {
             // Deliberate cross-domain reference (issue #12): a Service area's
@@ -465,7 +465,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "zoneIds",
             label: "Planning areas",
             type: "multiselect",
-            relation: { workspaceId: "configure", moduleId: "areas" },
+            relation: moduleAt("configure.areas"),
           },
           {
             id: "validFrom",
@@ -511,21 +511,21 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            relation: moduleAt("service-providers.service-providers"),
           },
           {
             id: "projectId",
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "serviceAreaId",
             label: "Allowed service area",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
+            relation: moduleAt("service-providers.service-areas"),
           },
           {
             id: "firstName",
@@ -594,21 +594,21 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Service provider",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            relation: moduleAt("service-providers.service-providers"),
           },
           {
             id: "serviceAreaId",
             label: "Service area",
             type: "select",
             required: true,
-            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
+            relation: moduleAt("service-providers.service-areas"),
           },
           {
             id: "productId",
             label: "Service product",
             type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "products" },
+            relation: moduleAt("commercial.products"),
           },
           {
             id: "compensationUnit",
@@ -653,7 +653,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "periodStart",
@@ -688,7 +688,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Settlement",
             type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "settlements" },
+            relation: moduleAt("commercial.settlements"),
           },
           {
             id: "action",
@@ -754,14 +754,14 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "customerId",
             label: "Customer",
             type: "select",
             required: true,
-            relation: { workspaceId: "customers", moduleId: "properties" },
+            relation: moduleAt("customers.properties"),
             description:
               "Relationship: billed customer. Property, payer, and agreement must resolve within the same project.",
           },
@@ -776,7 +776,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Agreement",
             type: "select",
             required: true,
-            relation: { workspaceId: "customers", moduleId: "agreements" },
+            relation: moduleAt("customers.agreements"),
           },
           {
             id: "evidenceReference",
@@ -798,7 +798,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Product",
             type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "products" },
+            relation: moduleAt("commercial.products"),
           },
           {
             id: "occurredAt",
@@ -911,7 +911,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "runMode",
@@ -928,7 +928,7 @@ export const commercialImproveBusinessFormSchemas = [
             id: "scheduleId",
             label: "Billing schedule",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "finance" },
+            relation: moduleAt("configure.finance"),
             description: "Required when Period source is Configured billing schedule.",
           },
           {
@@ -1042,20 +1042,20 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "invoiceId",
             label: "Invoice paid",
             type: "select",
-            relation: { workspaceId: "commercial", moduleId: "invoices" },
+            relation: moduleAt("commercial.invoices"),
             description: "Optional: without one, the payment waits unmatched for the office.",
           },
           {
             id: "customerId",
             label: "Payer",
             type: "select",
-            relation: { workspaceId: "customers", moduleId: "contacts" },
+            relation: moduleAt("customers.contacts"),
             description: "Optional: the invoice's payer where an invoice is named.",
           },
           { id: "amount", label: "Amount", type: "number", required: true, min: 0, unit: "DKK" },
@@ -1089,7 +1089,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Invoice",
             type: "select",
             required: true,
-            relation: { workspaceId: "commercial", moduleId: "invoices" },
+            relation: moduleAt("commercial.invoices"),
           },
           {
             id: "creditType",
@@ -1221,14 +1221,14 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "metricId",
             label: "Governed metric",
             type: "select",
             required: true,
-            relation: { workspaceId: "improve", moduleId: "compliance" },
+            relation: moduleAt("improve.compliance"),
           },
           {
             id: "analysisFrom",
@@ -1413,7 +1413,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "audience",
@@ -1525,7 +1525,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "validFrom",
@@ -1582,7 +1582,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Expected-impact metric",
             type: "select",
             required: true,
-            relation: { workspaceId: "improve", moduleId: "compliance" },
+            relation: moduleAt("improve.compliance"),
           },
         ],
       },
@@ -1680,7 +1680,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "dataType",
@@ -1710,7 +1710,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Configured mapping",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "integrations" },
+            relation: moduleAt("configure.integrations"),
           },
           {
             id: "partialCommit",
@@ -1752,7 +1752,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Destination",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "integrations" },
+            relation: moduleAt("configure.integrations"),
           },
           {
             id: "schedule",
@@ -1793,7 +1793,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Source job",
             type: "select",
             required: true,
-            relation: { workspaceId: "improve", moduleId: "imports" },
+            relation: moduleAt("improve.imports"),
           },
           {
             id: "retryFailedOnly",
@@ -1839,7 +1839,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "subjectType",
@@ -1858,14 +1858,14 @@ export const commercialImproveBusinessFormSchemas = [
             id: "serviceProviderId",
             label: "Service provider",
             type: "select",
-            relation: { workspaceId: "service-providers", moduleId: "service-providers" },
+            relation: moduleAt("service-providers.service-providers"),
             description: "Required for Service provider or Service area subject.",
           },
           {
             id: "serviceAreaId",
             label: "Service area",
             type: "select",
-            relation: { workspaceId: "service-providers", moduleId: "service-areas" },
+            relation: moduleAt("service-providers.service-areas"),
           },
         ],
       },
@@ -2020,7 +2020,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Project",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "classification",
@@ -2167,13 +2167,13 @@ export const commercialImproveBusinessFormSchemas = [
             id: "leadId",
             label: "Source lead",
             type: "select",
-            relation: { workspaceId: "control-center", moduleId: "control-center" },
+            relation: CONTROL_CENTER_TWIN,
           },
           {
             id: "tenantId",
             label: "Target tenant",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
             description: "Optional until the prospect tenant exists.",
           },
           {
@@ -2221,13 +2221,13 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Accepted offer",
             type: "select",
             required: true,
-            relation: { workspaceId: "control-center", moduleId: "control-center" },
+            relation: CONTROL_CENTER_TWIN,
           },
           {
             id: "projectId",
             label: "Project scope",
             type: "select",
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "planCode",
@@ -2278,7 +2278,7 @@ export const commercialImproveBusinessFormSchemas = [
             label: "Buyer tenant",
             type: "select",
             required: true,
-            relation: { workspaceId: "configure", moduleId: "organization" },
+            relation: moduleAt("configure.organization"),
           },
           {
             id: "cartLines",
@@ -2360,7 +2360,7 @@ export const serviceProviderPriceIndexationFormSchema: BusinessFormSchema = {
           label: "Service provider prices",
           type: "multiselect",
           required: true,
-          relation: { workspaceId: "commercial", moduleId: "service-provider-prices" },
+          relation: moduleAt("commercial.service-provider-prices"),
           description: "Pick the rows to index — filter by service provider or service area as you select.",
         },
       ],

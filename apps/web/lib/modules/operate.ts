@@ -9,9 +9,23 @@ export const OPERATE = workspaceSpec("operate", {
   description:
     "Manage customer and operational tickets, then triage the exceptions and alerts that require resolution work.",
   path: "/tickets",
+  alsoAt: ["/operate"],
   modules: {
     tickets: {
       shown: "tab",
+      details: "ticket-dialog",
+      filters: "tickets",
+      // A provider's manager raises a ticket on its own work for the office to
+      // resolve, so the office's fields go: Project and Source are known from the
+      // account; the response SLAs, a parent ticket and the customer/internal
+      // split are the office's to manage; Category comes from the Ticket type;
+      // and evidence is uploaded rather than referenced.
+      providerForm: {
+        description:
+          "Raise a scoped case on your own work for the office to resolve. Assignment and resolution history remain separate parts of the Ticket.",
+        hides: ["projectId", "responseDueAt", "occurredAt", "parentTicketId", "internalComment", "customerMessage", "source", "category"],
+        uploads: "attachmentReferences",
+      },
       providerPage: "tickets",
       // The rich record table for every persona — the operator's queue list
       // was retired so /tickets matches the service provider workspace. Tickets

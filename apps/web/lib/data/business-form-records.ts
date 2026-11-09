@@ -17,11 +17,24 @@ import { splitList } from "@/lib/prototype/record-values"
 import type {
   BusinessFormField,
   BusinessFormSchema,
+  BusinessFormValidationRule,
   BusinessFormValue,
   BusinessFormValues,
   BusinessRelationTarget,
 } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+
+/**
+ * The fields a `filled` rule tells its message at where the values shown
+ * break it: none where its condition does not hold, or where enough of its
+ * fields hold a value.
+ */
+export function filledRuleBreaks(rule: Extract<BusinessFormValidationRule, { type: "filled" }>, shown: BusinessFormValues): readonly string[] {
+  const condition = shown[rule.when.fieldId]
+  if (typeof condition !== "string" || !rule.when.oneOf.includes(condition)) return []
+  const filled = rule.fields.filter((fieldId) => Boolean(shown[fieldId])).length
+  return (rule.exactly ? filled !== 1 : filled === 0) ? rule.at : []
+}
 
 export type FormRecordResolvers = {
   /** Display name of a linked record — facts and relation labels show it instead of the id. */

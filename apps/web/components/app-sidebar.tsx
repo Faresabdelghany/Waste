@@ -42,7 +42,7 @@ import { projectScopeOfMe, projectWebIdOf } from "@/lib/api/records/me-projects"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { settingsHref } from "@/lib/data/settings-panes"
-import { footerItems, navBadgeOf, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { footerItems, navBadgeOf, navItemActive, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
 import { projectScopeLabel, selectedProjectIds } from "@/lib/data/project-scope"
@@ -84,22 +84,6 @@ export function AppSidebar() {
     [getRecords, starredRouteIds],
   )
 
-  const isItemActive = (id: NavItemId): boolean => {
-    if (id === "operate")
-      return pathname === "/" || pathname.startsWith("/operate") || pathname.startsWith("/tickets")
-    if (id === "plan") return pathname.startsWith("/plan")
-    if (id === "route-studio")
-      return pathname.startsWith("/route-studio") || pathname.startsWith("/routes")
-    if (id === "fleet") return pathname.startsWith("/fleet")
-    if (id === "customers") return pathname.startsWith("/customers") || pathname.startsWith("/portal")
-    if (id === "resources") return pathname.startsWith("/resources")
-    if (id === "service-providers")
-      return pathname.startsWith("/service-providers") || pathname.startsWith("/service-provider-workspace")
-    if (id === "commercial")
-      return pathname.startsWith("/commercial")
-    if (id === "improve") return pathname.startsWith("/improve") || pathname.startsWith("/performance")
-    return false
-  }
 
   return (
     <Sidebar className="border-none shadow-none">
@@ -135,7 +119,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {navItems.map((item) => {
-                const active = isItemActive(item.id)
+                const active = navItemActive(item, pathname)
                 const badge = badgeOf(item)
 
                 return (
