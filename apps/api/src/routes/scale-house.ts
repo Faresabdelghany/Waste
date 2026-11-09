@@ -109,7 +109,7 @@ function tareKeys(body: { plate: string; trailerPlate?: string | null; container
   return keys as { plate: string; trailerPlate: string | null; containerRef: string | null }
 }
 
-const { noSuch: noSuchTare, find: findTare, get: getTare, list: listTares } = scoped(vehicleTare, { noun: "registered tare", reach: "projects", columns: tareColumns })
+const { get: getTare, list: listTares } = scoped(vehicleTare, { noun: "registered tare", reach: "projects", columns: tareColumns })
 
 // --- The tickets -------------------------------------------------------------
 
@@ -296,7 +296,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const principal = c.get("principal")
           const tx = c.get("tx")
           await lockRow(tx, vehicleTare, { companyId: principal.companyId, id })
-          if ((await findTare(tx, principal, id)) === undefined) throw noSuchTare(id)
+          await getTare(tx, principal, id)
           await requireCustomer(tx, principal.companyId, patch.customerId)
           const [row] = await refuseDuplicate({ vehicle_tare_active_key: TARE_TAKEN }, () =>
             tx

@@ -73,7 +73,7 @@ import { describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem, WORKER_QUEUE_MISSING } from "../problem"
 import { scoped } from "../scoped"
-import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
+import { getScheme, MODULE, requireNotArchived } from "./scheme-groups"
 
 const GenerationRunPage = Page(GenerationRun)
 
@@ -193,8 +193,7 @@ export function generationRoutes(deps: RouteDeps) {
         const window = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const scheme = await findScheme(tx, principal, id)
-        if (scheme === undefined) throw noSuchScheme(id)
+        const scheme = await getScheme(tx, principal, id)
         requireNotArchived(scheme)
         if (scheme.status !== "validated") throw problem(409, { detail: DRAFT_GENERATES_NOTHING })
 
@@ -227,7 +226,7 @@ export function generationRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findScheme(tx, principal, id)) === undefined) throw noSuchScheme(id)
+        await getScheme(tx, principal, id)
         const page = await listRuns(tx, principal, at, eq(generationRun.routeSchemeId, id), status === undefined ? undefined : eq(generationRun.status, status))
         return c.json(mapPage(page, runOf))
       },

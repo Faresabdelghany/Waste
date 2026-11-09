@@ -80,7 +80,7 @@ import { created, describeCreated, describeJson, IdParam, routes } from "../oper
 import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
-import { assembleGroups, CREW_THERE, findScheme, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, type GroupRow, groupScope, groupsOf, listGroups, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, writeGroupSets } from "./scheme-groups"
+import { assembleGroups, CREW_THERE, getScheme, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, type GroupRow, groupScope, groupsOf, listGroups, MODULE, noSuchGroup, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, writeGroupSets } from "./scheme-groups"
 
 const GroupPage = Page(CollectionGroup)
 
@@ -177,7 +177,7 @@ export function collectionGroupRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findScheme(tx, principal, id)) === undefined) throw noSuchScheme(id)
+        await getScheme(tx, principal, id)
         const { items, nextCursor } = await listGroups(tx, principal, at, eq(collectionGroup.routeSchemeId, id))
         return c.json({ items: await assembleGroups(tx, principal.companyId, items), nextCursor })
       },
@@ -211,8 +211,7 @@ export function collectionGroupRoutes(deps: RouteDeps) {
         // The scheme this group is held inside, locked before it is read, so
         // a patch narrowing its days cannot commit between the two.
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
-        const scheme = await findScheme(tx, principal, id)
-        if (scheme === undefined) throw noSuchScheme(id)
+        const scheme = await getScheme(tx, principal, id)
         requireNotArchived(scheme)
         const within: Scope = { companyId: principal.companyId, projectId: scheme.projectId }
 

@@ -370,7 +370,7 @@ export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow
 /** The same for a group, which carries the project its scheme is in. */
 export const { scope: groupScope, noSuch: noSuchGroup, list: listGroups } = scoped(collectionGroup, { noun: "collection group", reach: "projects", columns: groupColumns })
 
-export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
+export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, get: getScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
 
 /** Every id a body names across its groups, by what it names: the rule's fractions, container types, vehicle type and planning area, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {

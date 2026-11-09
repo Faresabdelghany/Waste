@@ -198,7 +198,7 @@ function eventOf(row: EventRow): VehicleAllocationEvent {
   }
 }
 
-const { scope: allocationScope, noSuch: noSuchAllocation, find: findAllocation, get: getAllocation, locked: lockedAllocation, list: listAllocations } = scoped(vehicleAllocation, { noun: "vehicle allocation", reach: "projects", columns })
+const { scope: allocationScope, noSuch: noSuchAllocation, get: getAllocation, locked: lockedAllocation, list: listAllocations } = scoped(vehicleAllocation, { noun: "vehicle allocation", reach: "projects", columns })
 
 /**
  * The `where` fragment matching the rows whose window touches the one given:
@@ -628,7 +628,7 @@ export function vehicleAllocationRoutes(deps: RouteDeps) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findAllocation(tx, principal, id)) === undefined) throw noSuchAllocation(id)
+        await getAllocation(tx, principal, id)
         const rows = await tx
           .select(eventColumns)
           .from(vehicleAllocationEvent)

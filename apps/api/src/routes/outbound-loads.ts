@@ -114,7 +114,7 @@ async function loadsOf(tx: Tx, companyId: string, rows: readonly LoadRow[]): Pro
   })
 }
 
-const { noSuch: noSuchLoad, find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, { noun: "outbound load", reach: "projects", columns: loadColumns })
+const { find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, { noun: "outbound load", reach: "projects", columns: loadColumns })
 
 const { list: listAdjustments } = scoped(materialAdjustment, { noun: "material adjustment", reach: "projects", columns: adjustmentColumns })
 
@@ -195,7 +195,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
   async function command(c: Context<AuthEnv>, id: string, name: OutboundLoadCommand, sets: (found: LoadRow) => Partial<typeof outboundLoad.$inferInsert>): Promise<Response> {
     const principal = c.get("principal")
     const tx = c.get("tx")
-    if ((await findLoad(tx, principal, id)) === undefined) throw noSuchLoad(id)
+    await getLoad(tx, principal, id)
     await lockRow(tx, outboundLoad, { companyId: principal.companyId, id })
     const found = (await findLoad(tx, principal, id))!
     const transition = outboundLoadTransition(found.status, name)
@@ -330,7 +330,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findLoad(tx, principal, id)) === undefined) throw noSuchLoad(id)
+        await getLoad(tx, principal, id)
         await lockRow(tx, outboundLoad, { companyId: principal.companyId, id })
         const found = (await findLoad(tx, principal, id))!
         if (patch.note === null && found.status === "disputed") throw invalidRequest("body", [{ path: "note", message: SAY_WHY }])

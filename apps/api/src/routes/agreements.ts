@@ -614,7 +614,7 @@ export function agreementRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findAgreement(tx, principal, id)) === undefined) throw noSuchAgreement(id)
+        await getAgreement(tx, principal, id)
         const page = await listSubscriptions(tx, principal, at, eq(subscription.agreementId, id), day === undefined ? undefined : validOn(subscription, day))
         return c.json(mapPage(page, subscriptionOf))
       },

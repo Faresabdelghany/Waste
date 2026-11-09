@@ -167,7 +167,7 @@ const polygonInvalid = (path: string): Record<string, CheckRefusal> => ({
   [POLYGON_INVALID]: { input: path, sentence: NOT_A_VALID_POLYGON },
 })
 
-const { scope, noSuch: noSuchArea, find: findArea, get: getArea, list: listAreas } = scoped(planningArea, { noun: "planning area", reach: "projects", columns })
+const { scope, noSuch: noSuchArea, get: getArea, list: listAreas } = scoped(planningArea, { noun: "planning area", reach: "projects", columns })
 
 const { scope: boundaryScope, noSuch: noSuchBoundary, get: getBoundary, list: listBoundaries } = scoped(planningAreaBoundary, { noun: "planning area boundary", reach: "projects", columns: boundaryColumns })
 
@@ -402,7 +402,7 @@ export function planningAreaRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findArea(tx, principal, id)) === undefined) throw noSuchArea(id)
+        await getArea(tx, principal, id)
         const page = await listBoundaries(tx, principal, at, eq(planningAreaBoundary.planningAreaId, id), day === undefined ? undefined : validOn(planningAreaBoundary, day))
         return c.json(mapPage(page, boundaryOf))
       },

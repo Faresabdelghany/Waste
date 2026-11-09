@@ -227,7 +227,7 @@ async function sensorsOf(tx: Tx, companyId: string, rows: readonly SensorRow[], 
   })
 }
 
-const { scope: sensorScope, noSuch: noSuchSensor, find: findSensor, get: getSensor, list: listSensors } = scoped(sensor, { noun: "sensor", reach: "projects", columns: sensorColumns })
+const { scope: sensorScope, find: findSensor, get: getSensor, list: listSensors } = scoped(sensor, { noun: "sensor", reach: "projects", columns: sensorColumns })
 
 const { get: getPairing, list: listPairings } = scoped(sensorPairing, { noun: "sensor pairing", reach: "projects", columns: pairingColumns })
 
@@ -440,7 +440,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findSensor(tx, principal, id)) === undefined) throw noSuchSensor(id)
+        await getSensor(tx, principal, id)
         await lockRow(tx, sensor, { companyId: principal.companyId, id }, strengthFor(sensor, patch))
         const found = (await findSensor(tx, principal, id))!
         if (patch.status === "retired" && found.status !== "retired") {
@@ -479,7 +479,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const { limit, cursor } = c.req.valid("query")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findSensor(tx, principal, id)) === undefined) throw noSuchSensor(id)
+        await getSensor(tx, principal, id)
         const at = pageAt({ cursor, limit })
         const page = await listPairings(tx, principal, at, eq(sensorPairing.sensorId, id))
         return c.json({ ...page, items: page.items.map(pairingOf) })
@@ -508,7 +508,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const values = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findSensor(tx, principal, id)) === undefined) throw noSuchSensor(id)
+        await getSensor(tx, principal, id)
         // The sensor's lock before its status is read: a retirement and a new pairing do not pass each other.
         await lockRow(tx, sensor, { companyId: principal.companyId, id })
         const found = (await findSensor(tx, principal, id))!
@@ -603,7 +603,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const { limit, cursor } = c.req.valid("query")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findSensor(tx, principal, id)) === undefined) throw noSuchSensor(id)
+        await getSensor(tx, principal, id)
         const after = afterCursor(cursor)
         const rows = await readingsFrom(tx, principal.companyId)
           .where(and(eq(fillReading.companyId, principal.companyId), eq(fillReading.sensorId, id), after === undefined ? undefined : lt(fillReading.id, after)))

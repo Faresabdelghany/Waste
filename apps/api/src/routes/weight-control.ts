@@ -73,7 +73,7 @@ import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { findUnload, getUnload, noSuchUnload } from "./execution-shapes"
+import { getUnload } from "./execution-shapes"
 
 const MODULE = "route-studio.weights"
 
@@ -87,11 +87,9 @@ const ReviewPage = Page(WeightReview)
  * may have moved while the lock was waited for.
  */
 async function lockedUnload(tx: Tx, principal: Principal, id: string): Promise<UnloadRow> {
-  const found = await findUnload(tx, principal, id)
-  if (found === undefined) throw noSuchUnload(id)
+  const found = await getUnload(tx, principal, id)
   await lockRow(tx, route, { companyId: principal.companyId, id: found.routeId })
-  const current = await findUnload(tx, principal, id)
-  if (current === undefined) throw noSuchUnload(id)
+  const current = await getUnload(tx, principal, id)
   return current
 }
 
