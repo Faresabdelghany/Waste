@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { initialsOf } from "@/lib/data/account-profile"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import type { LinearThemeId } from "@/lib/app-themes"
 import { cn } from "@/lib/utils"
 

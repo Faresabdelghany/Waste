@@ -57,7 +57,7 @@ import {
   weekendLabel,
   type ProjectCalendar,
 } from "@/lib/prototype/route-schemes/project-calendar"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import { SCHEME_EDIT_POLICY_LABELS } from "@/lib/prototype/route-schemes/creation"
 import { schemeEditPolicy } from "@/lib/prototype/route-schemes/edit"

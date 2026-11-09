@@ -14,7 +14,7 @@ import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/busi
 import { pickupMissed } from "@waste/domain/execution/vocabulary"
 import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
-import { statusLabel, statusToken } from "../api/records/adapter"
+import { statusLabel, statusToken } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { accessModule } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"

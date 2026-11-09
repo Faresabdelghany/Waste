@@ -13,7 +13,7 @@ import type { Message } from "@waste/contracts/messaging"
 import type { NotificationPreferences } from "@waste/contracts/notifications"
 import type { AlertSeverity } from "@waste/contracts/resolution"
 
-import { allows, type Grants } from "../api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 
 /** The module whose `view` an alert e-mail needs: the alerts' board. */
 export const ALERTS_MODULE_KEY = "operate.exceptions" satisfies ModuleKey

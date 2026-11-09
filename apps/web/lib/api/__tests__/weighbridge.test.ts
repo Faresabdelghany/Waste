@@ -9,7 +9,8 @@ import { WeighbridgeTicketDismiss, WeighbridgeTicketMatch, type WeighbridgeTicke
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { UNMATCHED_LABELS, WEIGHBRIDGE_MODULE } from "../../data/weighbridge"
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { isServerBacked } from "../records/modules"
 import { keptRefusal, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { DISMISS_TICKET, MATCH_TICKET, ticketCommandsOffered, weighbridgeTicketAdapter } from "../records/weighbridge"

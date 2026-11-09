@@ -71,7 +71,9 @@ import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/do
 import { SLUG_PATTERN } from "@waste/domain/text"
 
 import { create, get, listAll, patch, withQuery } from "../client"
-import { isLocalRefusal, moduleKeyOf, NOTHING_RESOLVED, patchOf, statusLabel, statusToken, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NOTHING_RESOLVED, patchOf, type Client, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { isLocalRefusal, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { planningAreaAdapter } from "./planning"
 import { dayIn, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"

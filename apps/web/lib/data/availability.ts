@@ -6,7 +6,7 @@
 // to the wire.
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
 
-import { statusLabel } from "@/lib/api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 import { LAST_DAY_ON_OR_AFTER } from "@/lib/api/records/availability"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValidationRule } from "./business-form-types"

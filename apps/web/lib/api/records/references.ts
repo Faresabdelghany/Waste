@@ -8,7 +8,8 @@
 // never refused. The server-to-web direction is places.ts' `referenced`.
 import type { BusinessRecord } from "@/lib/data/business-modules"
 
-import { typed, type LocalRefusal, type MappingContext } from "./adapter"
+import { type MappingContext } from "./adapter"
+import { typed, type LocalRefusal } from "@/lib/records/fields"
 import { referenced, refusal } from "./places"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

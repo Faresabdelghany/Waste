@@ -21,7 +21,7 @@ import { TicketDefaultTeamsSettings } from "@/components/settings/ticket-teams-s
 import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
 import type { ProjectPick } from "@/components/settings/use-project-setting"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { settingsTabsOf, type SettingsTabOf } from "@/lib/data/settings-panes"
+import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
 
 type TicketsTab = SettingsTabOf<"tickets">
 

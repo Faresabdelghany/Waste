@@ -17,7 +17,8 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 
 import { create, get, listAll, patch, put, remove } from "../client"
-import { ofKind, patchOf, typed, type LocalRefusal, type RecordAction, type ResourceAdapter } from "./adapter"
+import { patchOf, type RecordAction, type ResourceAdapter } from "./adapter"
+import { ofKind, typed, type LocalRefusal } from "@/lib/records/fields"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })

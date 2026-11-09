@@ -26,7 +26,8 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { STATIONS_MODULE } from "@/lib/data/haul-out"
 
 import { get, listAll, post } from "../client"
-import { actionOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction } from "./adapter"
+import { actionOf, type CommandInput, type MappingContext, type RecordAction } from "./adapter"
+import { type LocalRefusal } from "@/lib/records/fields"
 import { instantOn } from "./clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 

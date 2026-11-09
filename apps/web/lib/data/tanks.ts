@@ -11,8 +11,8 @@ import { TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import type { TankInspectionOutcome, TankKind, TankOutlet } from "@waste/domain/registry/vocabulary"
 
 import { command, create, listAll, patch, type ApiClient } from "../api/client"
-import { allows, type Grants } from "../api/grants"
-import type { LocalRefusal } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessRecord } from "./business-modules"
 import { thousands } from "./tank-words"
 

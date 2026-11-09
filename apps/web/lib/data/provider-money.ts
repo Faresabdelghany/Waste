@@ -17,7 +17,7 @@
 import { periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { hasPrefix, ofKind } from "@/lib/api/records/adapter"
+import { hasPrefix, ofKind } from "@/lib/records/fields"
 
 import type { BusinessRecord } from "./business-modules"
 import { SERVICE_AREAS_MODULE } from "./service-areas"

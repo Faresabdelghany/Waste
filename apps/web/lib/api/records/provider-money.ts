@@ -55,7 +55,8 @@ import {
 } from "@/lib/data/provider-money"
 
 import { command, create, get, listAll, patch } from "../client"
-import { patchOf, said, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, said, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { statusLabel, typed, webIdOf } from "@/lib/records/fields"
 import { shownOn } from "./clock"
 import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"

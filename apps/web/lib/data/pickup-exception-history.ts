@@ -9,8 +9,8 @@
 import type { PickupException, PickupExceptionHistory } from "@waste/contracts/pickup-exceptions"
 
 import { get, type ApiClient } from "../api/client"
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 
 /** The place kinds a history is read for, and the path each is under. */
 export type ExceptionPlace = "property" | "shared-point"

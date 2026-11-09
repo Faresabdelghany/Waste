@@ -1,7 +1,7 @@
 "use client"
 
 // Settings: the nav, the search, the pane an address shows and the frame
-// around it, all read from the Settings table (lib/data/settings-panes.ts);
+// around it, all read from the Settings table (lib/modules/settings-panes.ts);
 // each pane is drawn by its view (settings-pane-views.tsx), and where no API
 // is configured a pane the API holds says so in its place.
 
@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApiConfigured } from "@/components/platform/api-session-store"
 import { keptOnApi } from "@/lib/api/records/server-records"
-import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, settingsPaneDrawnWithoutApi, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/data/settings-panes"
+import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, settingsPaneDrawnWithoutApi, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/modules/settings-panes"
 import { cn } from "@/lib/utils"
 
 type SettingsWorkspaceProps = {

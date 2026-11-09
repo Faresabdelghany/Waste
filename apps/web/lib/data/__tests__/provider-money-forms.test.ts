@@ -13,7 +13,8 @@ import { SettlementCreate, SettlementReopen } from "@waste/contracts/settlements
 import { UnloadCreate } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject } from "@waste/contracts/weight-control"
 
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../../api/records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { wasteFractionAdapter } from "../../api/records/master-data"
 import { projectAdapter } from "../../api/records/organisation"
 import { productAdapter } from "../../api/records/pricing"

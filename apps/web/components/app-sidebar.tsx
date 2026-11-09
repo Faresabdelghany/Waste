@@ -34,7 +34,7 @@ import {
 import { projectScopeOfMe, projectWebIdOf } from "@/lib/api/records/me-projects"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { footerItems, navBadgeOf, navItemActive, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"

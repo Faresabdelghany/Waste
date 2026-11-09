@@ -31,7 +31,7 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // merged into it: the other route is one `routesToJoin` offers.
 import { MISSED_PICKUP_STATUSES, OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
-import { statusLabel } from "../api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"

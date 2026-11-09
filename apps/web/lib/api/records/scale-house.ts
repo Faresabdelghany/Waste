@@ -36,7 +36,8 @@ import {
 } from "@/lib/data/scale-house"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { isLocalRefusal, ofKind, said, typed, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, type CommandInput, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { shownOn } from "./clock"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference } from "./references"

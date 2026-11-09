@@ -12,7 +12,8 @@ import { DropOffPointCreate, DropOffPointExceptionsSet, DropOffPointHoursSet, Dr
 import type { Project } from "@waste/contracts/organisation"
 
 import type { BusinessRecord } from "../../data/business-modules"
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { DROP_OFF_EXCEPTIONS_KEY, DROP_OFF_FRACTIONS_KEY, DROP_OFF_HOURS_KEY, dropOffPointAdapter, dropOffPointsModule } from "../records/drop-off-points"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"

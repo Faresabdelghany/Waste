@@ -9,8 +9,8 @@ import type { TicketSla, TicketSlaSet } from "@waste/contracts/ticket-sla"
 import { duplicateSlaTarget, SLA_TARGET_ONCE, slaTargetKey, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 import { scopeOfValue, typeLabel, typeScope, valueOfScope, type TypeChoice } from "./ticket-scope"
 
 /** The kind picker's value for every kind: the wire's null. */

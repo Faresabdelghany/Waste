@@ -2,7 +2,7 @@
 
 import { useShellIdentity } from "@/components/platform/shell-identity"
 import { useApiSession } from "@/components/platform/api-session-store"
-import { accountGrants, type Grants } from "@/lib/api/grants"
+import { accountGrants, type Grants } from "@/lib/modules/grants"
 
 /**
  * The grants the account signed in works under, the office's and a

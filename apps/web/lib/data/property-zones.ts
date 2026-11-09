@@ -8,7 +8,7 @@
 import type { PlanningAreasAt } from "@waste/contracts/planning-areas"
 
 import { get, type ApiClient } from "../api/client"
-import { allows, type Grants } from "../api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 
 /** The property's zones today, as the one row `useRowHistory` reads. */
 export const propertyZones = (client: ApiClient, serverId: string): Promise<PlanningAreasAt[]> => get<PlanningAreasAt>(client, `/properties/${serverId}/zones`).then((zones) => [zones])

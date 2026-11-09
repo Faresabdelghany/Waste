@@ -35,23 +35,8 @@ import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabe
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
 import { command, create, get, listAll, patch, put } from "../client"
-import {
-  countryCode,
-  countryName,
-  hasPrefix,
-  isLocalRefusal,
-  ofKind,
-  languageName,
-  patchOf,
-  statusLabel,
-  statusToken,
-  typed,
-  typedFlag,
-  webIdOf,
-  type LocalRefusal,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { countryCode, countryName, languageName, patchOf, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, ofKind, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { projectWebIdOf } from "./me-projects"
 import { referencedServerId } from "./references"
 

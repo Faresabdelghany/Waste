@@ -38,8 +38,8 @@ import { navItems, type NavItemId } from "../data/sidebar"
 import { tabsShown } from "../insight/dashboard"
 import { pageModuleIds } from "../modules/manifest"
 import { PROVIDER_WORKSPACE_PATH } from "../modules/provider-pages"
-import { viewedModules, type Grants } from "./grants"
-import { moduleKeyOf } from "./records/adapter"
+import { viewedModules, type Grants } from "@/lib/modules/grants"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import type { SessionEnding } from "./session"
 
 /** The one page the gate never stands in front of. */

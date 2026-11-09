@@ -15,8 +15,8 @@ import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabu
 
 import { moduleAt } from "@/lib/modules/keys"
 
-import { allows, type Grants } from "../api/grants"
-import { moduleKeyOf } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "../api/records/provider-activities"

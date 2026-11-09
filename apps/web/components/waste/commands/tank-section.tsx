@@ -23,7 +23,7 @@ import { useApiClient, useApiSession } from "@/components/platform/api-session-s
 import { useServerModuleState } from "@/components/platform/business-record-store"
 import { useProjectRecords, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
-import { isLocalRefusal, typed } from "@/lib/api/records/adapter"
+import { isLocalRefusal, typed } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { dayIn } from "@/lib/api/records/clock"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"

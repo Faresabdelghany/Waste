@@ -23,7 +23,7 @@ import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 
-import { allows, type Grants } from "../api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 import { itemsSentence } from "./pickup-services"
 
 /** Where the bookings are: Operate › Bulky Bookings. */

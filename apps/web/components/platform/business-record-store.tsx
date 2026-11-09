@@ -23,7 +23,8 @@ import {
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
 import { problemSentence } from "@/lib/api/problem"
-import { moduleKeyOf, type CommandInput, type Resolver } from "@/lib/api/records/adapter"
+import { type CommandInput, type Resolver } from "@/lib/api/records/adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { ME_PROJECTS } from "@/lib/api/records/me-projects"
 import { serverModuleOf } from "@/lib/api/records/modules"
 import { createRecordStore, type RecordStore, type RecordStoreNotices } from "@/lib/api/records/record-store"

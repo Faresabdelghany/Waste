@@ -20,7 +20,8 @@ import { CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CR
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
-import { isLocalRefusal, ofKind, typed, type LocalRefusal, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, typed, type LocalRefusal } from "@/lib/records/fields"
 import { projectTimezoneOf, todayIn } from "./clock"
 import { projectMoved, projectServerIdOf, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"

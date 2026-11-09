@@ -83,7 +83,9 @@ import {
 } from "@/lib/data/commercial"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { moduleKeyOf, NOTHING_RESOLVED, said, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { NOTHING_RESOLVED, said, type Client, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { statusLabel, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"

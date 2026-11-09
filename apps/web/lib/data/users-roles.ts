@@ -11,7 +11,7 @@
 // adapter finds exactly one.
 import { systemRoleKept } from "@waste/domain/access/system-roles"
 
-import { typed, typedFlag } from "@/lib/api/records/adapter"
+import { typed, typedFlag } from "@/lib/records/fields"
 import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
 import type { ModuleState } from "@/lib/api/records/server-records"
 

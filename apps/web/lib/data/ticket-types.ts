@@ -23,8 +23,8 @@ import { ACTION_KIND_WORDS, actionIssue, plannedService, TRIGGER_WORDS } from "@
 import { fieldKeyOf, TICKET_COMMAND_VERBS } from "@waste/domain/resolution/ticket-types"
 import { isClosedTicketStatus, TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_COMMANDS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_KINDS, TICKET_MESSAGE_RECIPIENTS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, type TicketActionKind, type TicketActionTrigger, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormFieldType, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"

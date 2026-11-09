@@ -21,7 +21,8 @@ import { firstDayOut } from "@waste/domain/periods"
 import { moduleAt } from "@/lib/modules/keys"
 
 import { create, listAll, remove } from "../client"
-import { actionOf, said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
+import { actionOf, said, type Client, type CommandInput, type RecordAction } from "./adapter"
+import { statusLabel, type LocalRefusal } from "@/lib/records/fields"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 

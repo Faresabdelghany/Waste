@@ -16,7 +16,7 @@ import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 import { count } from "@waste/domain/text"
 
-import { typed } from "@/lib/api/records/adapter"
+import { typed } from "@/lib/records/fields"
 import { dayIn } from "@/lib/api/records/clock"
 import type { ModuleState } from "@/lib/api/records/server-records"
 

@@ -10,8 +10,8 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 import { accessModule } from "../api/records/organisation"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"

@@ -23,10 +23,10 @@
 import type { ComponentType } from "react"
 
 import { AlertCommandsSurface, NewTicketSurface, RaiseAlertSurface } from "@/components/tickets/resolution-surfaces"
-import { mayTake, type Grants, type ModuleAction } from "@/lib/api/grants"
+import { mayTake, type Grants, type ModuleAction } from "@/lib/modules/grants"
 import type { BusinessRecord, ModuleLocation, WorkspaceId } from "@/lib/data/business-modules"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { isServerBacked, type SwitchedModuleKey } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"

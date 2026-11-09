@@ -8,7 +8,7 @@
 // order its page offers them.
 import type { WorkspaceKey } from "@waste/domain/access/modules"
 
-import type { SettingsPaneId } from "@/lib/data/settings-panes"
+import type { SettingsPaneId } from "@/lib/modules/settings-panes"
 import type { BusinessRecord } from "@/lib/prototype/prototype-record"
 
 import type { ModuleIdOf, WorkspaceId } from "./keys"

@@ -87,21 +87,9 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from 
 import { PLAN_AHEAD_DAYS_KEY, ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 import { create, get, listAll, patch, post, withQuery } from "../client"
-import {
-  isLocalRefusal,
-  moduleKeyOf,
-  ofKind,
-  statusLabel,
-  statusToken,
-  typed,
-  webIdOf,
-  type Client,
-  type LocalRefusal,
-  type MappingContext,
-  type RecordAction,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { type Client, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { isLocalRefusal, ofKind, statusLabel, statusToken, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { parseServiceDays, SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 

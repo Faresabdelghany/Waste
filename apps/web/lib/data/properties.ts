@@ -48,7 +48,7 @@ import {
 } from "@waste/domain/registry/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { ofKind, statusLabel } from "@/lib/api/records/adapter"
+import { ofKind, statusLabel } from "@/lib/records/fields"
 
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "./agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"

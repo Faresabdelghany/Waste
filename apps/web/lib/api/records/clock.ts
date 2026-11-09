@@ -11,7 +11,8 @@ import { formatDayMonth } from "@waste/domain/days"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 
-import { typed, type MappingContext } from "./adapter"
+import { type MappingContext } from "./adapter"
+import { typed } from "@/lib/records/fields"
 
 const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
 

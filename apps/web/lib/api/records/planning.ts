@@ -70,16 +70,8 @@ import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/pl
 
 import { create, get, listAll, patch } from "../client"
 import { holidayListAdapter } from "./holiday-lists"
-import {
-  ofKind,
-  patchOf,
-  typed,
-  webIdOf,
-  type Client,
-  type LocalRefusal,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { patchOf, type Client, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { todayIn } from "./clock"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })

@@ -82,7 +82,8 @@ import {
 } from "@/lib/data/properties"
 
 import { create, get, listAll, patch, put } from "../client"
-import { isLocalRefusal, PartialWrite, patchOf, statusLabel, typed, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { PartialWrite, patchOf, type Client, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, statusLabel, typed, type LocalRefusal } from "@/lib/records/fields"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { todayIn } from "./clock"

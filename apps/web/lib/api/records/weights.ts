@@ -36,7 +36,8 @@ import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } fro
 import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { said, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
+import { typed, webIdOf } from "@/lib/records/fields"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"

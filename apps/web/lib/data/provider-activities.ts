@@ -19,7 +19,7 @@ import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES, ty
 
 import { moduleAt } from "@/lib/modules/keys"
 
-import type { LocalRefusal } from "../api/records/adapter"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"

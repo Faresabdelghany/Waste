@@ -17,7 +17,7 @@ import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DA
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { allows, type Grants } from "@/lib/api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"

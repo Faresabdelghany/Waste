@@ -21,7 +21,7 @@
 // outcome: a missed one is what a complaint is about.
 import { useModuleRecords } from "@/components/platform/business-record-store"
 import { useRelationPickers, type RelationPickers } from "@/components/platform/use-command-support"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"

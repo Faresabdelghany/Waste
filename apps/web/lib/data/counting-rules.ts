@@ -14,7 +14,7 @@ import { addDays } from "@waste/domain/days"
 import { lastDayIn } from "@waste/domain/periods"
 import { COUNTING_PERIODS, type CountingPeriod } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "../api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 
 /** What the person may do here: the templates' grant, and the stops' besides to simulate, since a simulation reads them. */
 export const countingRulesAccessOf = (grants: Grants | undefined) => ({

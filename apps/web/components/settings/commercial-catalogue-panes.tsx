@@ -33,7 +33,7 @@ import { recordStatusTone } from "@/components/platform/business-record-views"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/platform/use-command-support"
-import { typed } from "@/lib/api/records/adapter"
+import { typed } from "@/lib/records/fields"
 import { indexPriceList } from "@/lib/api/records/indexation"
 import { dayIn } from "@/lib/api/records/clock"
 

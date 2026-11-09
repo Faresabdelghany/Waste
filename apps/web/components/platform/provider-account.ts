@@ -6,7 +6,7 @@
 // a provider's account the ones the API gives a provider, where its role
 // allows them. Null while the adapter is off, before `/me` has answered, and
 // for an office account.
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { webIdVia } from "@/lib/api/records/references"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { commandOffered, providerWorkspaceOf, type ProviderWorkspace } from "@/lib/data/provider-workspace"

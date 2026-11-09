@@ -22,7 +22,7 @@ import { useBusinessRecordStore } from "@/components/platform/business-record-st
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
-import { allows } from "@/lib/api/grants"
+import { allows } from "@/lib/modules/grants"
 import { CONTACT_ROLE_LABELS, contactLine, customerContacts, draftOf, NEW_CONTACT, saveContact, takesContacts, type ContactDraft } from "@/lib/api/records/customer-contacts"
 import { customerKindOf } from "@/lib/api/records/registry"
 import { CONTACTS_MODULE } from "@/lib/data/properties"

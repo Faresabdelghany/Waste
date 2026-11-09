@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useModuleRecords, useServerResolver } from "@/components/platform/business-record-store"
 import { problemSentence } from "@/lib/api/problem"
-import { isLocalRefusal } from "@/lib/api/records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { readTicketCharges, replaceTicketCharges } from "@/lib/api/ticket-charges"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"

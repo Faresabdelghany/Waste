@@ -16,7 +16,8 @@ import { takesReference } from "@waste/domain/status-gates"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 
 import { create, listAll, listPage } from "../client"
-import type { CommandInput, LocalRefusal, RecordAction } from "./adapter"
+import type { CommandInput, RecordAction } from "./adapter"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 /** The customer's action that sends it a message. */

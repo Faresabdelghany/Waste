@@ -10,7 +10,8 @@ import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-ca
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { createHolidayListRecord, nextYearEntries, withHolidayListDraft, withHolidayListEntries } from "../../data/holiday-lists"
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { holidayListAdapter } from "../records/holiday-lists"
 import { collectionCalendarsModule } from "../records/planning"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
