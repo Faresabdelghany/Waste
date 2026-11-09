@@ -21,11 +21,9 @@ import type { Job } from "pg-boss"
 import { defineJob, type JobContext } from "../runtime/definition"
 
 export type ProposeRightSizingData = {
-  /** Where the run came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
-/** The companies with an active project, in id order: the one cross-tenant read. */
 async function companiesToRun({ worker }: JobContext): Promise<string[]> {
   const rows = await worker.db
     .selectDistinct({ id: company.id })

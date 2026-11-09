@@ -81,7 +81,7 @@
 // often, and never lowered below its five seconds. The queue's
 // policy is `short` — one job queued at a time — so the successor and the
 // schedule's occurrence collapse into one row instead of two chains
-// racing, and a relay that fell over (a failed handler sends no successor) is
+// racing, and a relay that fell over is
 // picked up by the schedule within the minute; `missed: "skip"` keeps a
 // worker down for an hour from ticking sixty times when it is back. A tick
 // that found a batch's worth (BATCH_SIZE rows or more across companies: some
@@ -119,7 +119,6 @@ import type { SendOptions } from "pg-boss"
 import { defineJob, type AnyJob, type JobContext, type JobDefinition, type PollingKnob } from "./definition"
 import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, routesOf, type OutboxRoutes, type RelayedJob } from "./outbox"
 
-/** The relay's own queue. */
 export const RELAY_QUEUE = "execution.relay-outbox"
 /** How many unpublished rows one tick takes of each company, oldest first: the cap is per company, so one company's backlog never crowds another's rows out of the sweep. */
 export const BATCH_SIZE = 100
@@ -140,7 +139,6 @@ export function successorDelaySeconds(outcome: Pick<RelayOutcome, "swept"> | und
 export const OUTBOX_STALE_MS = 60 * 60 * 1_000
 
 export type RelayOutboxData = {
-  /** Where the tick came from: the minute's schedule, the previous tick, or a caller who sent one by hand. */
   source: "schedule" | "successor" | "manual"
 }
 
@@ -150,7 +148,6 @@ export type RelayOutcome = {
   published: number
 }
 
-/** The stamped row as a queue carries it: `RelayedJob`, the contracts' `OutboxEvent` with the tenant. */
 function toRelayed(row: typeof outboxEvent.$inferSelect, stamp: { publishedAt: Date; updatedAt: Date }): RelayedJob {
   return {
     id: row.id,
@@ -207,7 +204,6 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send">, ro
       const stamp = stamps.get(row.id)
       if (!stamp) throw new Error(`execution.relay-outbox: row ${row.id} was locked and not stamped`)
       const event = toRelayed(row, stamp)
-      // One door, one transaction: a job on each consumer's queue of the kind, or on the kind's own where none takes it yet.
       for (const queue of routes.get(event.kind) ?? [outboxQueue(event.kind)]) await context.send(queue, event, options)
     }
     return rows.length

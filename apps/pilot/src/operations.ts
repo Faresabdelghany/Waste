@@ -18,7 +18,6 @@ import { observeRelease, releaseToDeployBranch, requireChecks, resolveReleaseOrd
 /** This workflow's file: a restore or a recovery reads only from its own runs. */
 export const WORKFLOW = ".github/workflows/pilot-database.yml"
 
-/** The repository, the job's token and the API, as the step's environment names them. */
 const github = (context: Context): RepositoryOptions => ({
   repository: context.required("GITHUB_REPOSITORY"),
   token: context.required("GITHUB_TOKEN"),

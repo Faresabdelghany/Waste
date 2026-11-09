@@ -8,7 +8,7 @@
 //
 // The table mirrors the demo registry: the streets of the seeded properties
 // (./seeded-registry) plus those of the explicit fixture records in
-// apps/web/lib/data/business-modules.ts, which the seed copies. It
+// packages/db/src/seed/registry.ts. It
 // deliberately does NOT mirror the fixture pickups' streets: a pickup at no
 // registry container is placed by its address only on a listed street, and
 // most fixture stops are on unlisted ones, so a fixture route day is drawable

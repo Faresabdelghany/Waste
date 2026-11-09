@@ -60,12 +60,10 @@ import { NO_TICKET_LINKS } from "@waste/db/shapes/tickets"
 import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/outbox"
 import type { JobContext } from "../runtime/definition"
 
-/** What one stop's event came to: the tickets its count opened, by rule. */
 export type EmptyingCounted = { event: string; opened: { countingRuleId: string; ticketId: string }[] }
 
 type Rule = typeof countingRule.$inferSelect
 
-/** The name a fraction or a type is read by, for the ticket's words; null where the rule names none. */
 async function nameOf(tx: Tx, table: typeof wasteFraction | typeof containerType, companyId: string, id: string | null): Promise<string | null> {
   if (id === null) return null
   const [found] = await tx
@@ -112,7 +110,6 @@ async function noticeTeam(tx: Tx, send: JobContext["send"], companyId: string, o
   }
 }
 
-/** One rule's count at the stop's property: the ticket it opened, or undefined where the count is short or the period's ticket is open already. */
 async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">, companyId: string, stop: Pickup & { propertyId: string }, serviceDate: string, rule: Rule): Promise<string | undefined> {
   const period = periodOf(serviceDate, rule.period)
   const [already] = await tx
@@ -163,7 +160,6 @@ async function countFor(tx: Tx, { send, now }: Pick<JobContext, "send" | "now">,
   return row.id
 }
 
-/** One stop's event to the tickets its count opened, in one fenced transaction as the tenant. */
 export async function countEmptying(event: RelayedEvent<"pickup-completed" | "pickup-corrected">, { api, log, now, send }: Pick<JobContext, "api" | "log" | "now" | "send">): Promise<EmptyingCounted> {
   const stop = payloadOf(event)
   const { propertyId } = stop

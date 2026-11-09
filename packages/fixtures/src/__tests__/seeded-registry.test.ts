@@ -1,8 +1,7 @@
 // The generated half of the demo registry, pinned by the rows the web
 // prototype showed and `pnpm db:seed` wrote before the one spelling moved here
 // (issue #99): a changed street, owner rotation or modulus fails here by the
-// row it moves, since the same record id would stand elsewhere on the server
-// than in the browser.
+// row it moves.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

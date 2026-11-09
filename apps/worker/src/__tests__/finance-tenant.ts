@@ -234,8 +234,7 @@ export async function placePublicBin(pool: Database, tenant: FinanceTenant, labe
   return placed
 }
 
-/** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
-/** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
+/** A stop as a test seeds it: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111); an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
 export type StopSeed = {
   containerId: string | null
   /** The stop's place: a property, or null for one at a shared collection point. */

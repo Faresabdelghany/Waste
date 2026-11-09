@@ -79,7 +79,6 @@ export type Turn = "asked" | "fresh" | "waiting" | "outside"
 /** When a route is asked for: generation's reshaped route whatever its Plan reads; the sweep's only when its active Plan is missing or no longer answers it. */
 export type Occasion = "reshaped" | "unanswered"
 
-/** The active Plan as the horizon reads it: its solver, its status, its fingerprint and the stops it names; null when its row is gone. */
 async function activePlanOf(tx: Tx, companyId: string, planId: string): Promise<{ id: string; solver: PlanSolver; status: PlanStatus; fingerprint: string; named: string[] } | null> {
   const [row] = await tx
     .select({ solver: plan.solver, status: plan.status, fingerprint: plan.fingerprint })
@@ -158,7 +157,6 @@ export async function planRoute(context: RoutingContext, companyId: string, rout
   })
 }
 
-/** A route a generation run created or reshaped, with the day it operates on now. */
 export type ReshapedRoute = { id: string; operatingDate: string }
 
 /** What the horizon did for a run's routes: those it asked a Plan for, nearest date first, and those whose turn failed. */

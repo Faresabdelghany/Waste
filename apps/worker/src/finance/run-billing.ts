@@ -84,7 +84,6 @@ async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: s
   return found
 }
 
-/** One project's run: the day on its clock, the month before, the schedule's earlier run over it if any, else `runBilling` a batch at a time under the company's fence; what it came to either way. */
 async function runOne(context: JobContext, found: ProjectToday, on: string | null): Promise<ProjectRun> {
   const where = { companyId: found.companyId, projectId: found.projectId }
   try {
@@ -114,7 +113,6 @@ export const runScheduledBilling = defineJob<RunBillingData>({
     const runs: ProjectRun[] = []
     for (const job of jobs) {
       const { projectId, on } = job.data
-      // The one cross-tenant read, on the worker role's pool.
       for (const found of await projectsWithToday(context.worker, context.now(), projectId)) {
         const outcome = await runOne(context, found, on)
         runs.push(outcome)

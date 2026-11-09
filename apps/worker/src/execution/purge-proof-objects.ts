@@ -37,11 +37,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export type ProofRetention = { proofStorage: ProofStorage | undefined; proofRetentionDays: number | undefined }
 
 export type PurgeProofObjectsData = {
-  /** Where the purge came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
-/** One object the purge removes, with the company it is whose. */
 export type ExpiredObject = { companyId: string; objectKey: string }
 
 /**
@@ -74,7 +72,6 @@ export async function expiredProofObjects(worker: JobContext["worker"], at: Date
   return rows.map((row) => ({ companyId: row.company_id, objectKey: row.object_key }))
 }
 
-/** What a night came to: the objects Storage removed, or why none could be. */
 export type PurgeOutcome = { removed: number } | { skipped: "no-storage" | "no-retention" }
 
 export async function purgeProofObjects(context: Pick<JobContext, "worker" | "now" | "log"> & ProofRetention): Promise<PurgeOutcome> {

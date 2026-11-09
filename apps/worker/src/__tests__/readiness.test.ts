@@ -3,7 +3,6 @@ import { describe, test } from "node:test"
 
 import { checkBoss, type BossProbe } from "../readiness"
 
-/** A boss whose getQueues answers as told. */
 const bossOf = (getQueues: BossProbe["boss"]["getQueues"], started = true): BossProbe => ({ boss: { getQueues }, queues: ["a.one", "b.two"], isStarted: () => started })
 
 describe("checkBoss", () => {

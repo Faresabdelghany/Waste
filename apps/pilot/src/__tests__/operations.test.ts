@@ -15,7 +15,6 @@ const workflow = readFileSync(new URL(`../../../../${WORKFLOW}`, import.meta.url
 
 type Step = { text: string; run?: string; uses?: string; env: Map<string, string>; with: Map<string, string> }
 
-/** The steps of each job, by job key, in order. */
 function jobs(text: string): Map<string, Step[]> {
   const found = new Map<string, Step[]>()
   const lines = text.slice(text.indexOf("\njobs:\n")).split("\n")

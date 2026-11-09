@@ -298,7 +298,6 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     })
     return { fake, engine }
   }
-  /** The context a job runs with: the API role's pool for the writes, the worker role's for the sweeps, pg-boss's own send and complete. */
   const contextOf = (engine: QuotaEngine = engineOf().engine, overrides: Partial<WorkerContext> = {}) =>
     jobContext({
       api,
@@ -347,15 +346,12 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
   const stopsOf = async (planId: string) => (await owner.db.select({ pickupId: planStop.pickupId }).from(planStop).where(eq(planStop.planId, planId)).orderBy(asc(planStop.position))).map((row) => row.pickupId)
   const pickupsOf = (routeId: string) => owner.db.select().from(pickup).where(eq(pickup.routeId, routeId)).orderBy(asc(pickup.position), asc(pickup.id))
   const pickupOf = async (routeId: string, containerId: string) => (await owner.db.select().from(pickup).where(and(eq(pickup.routeId, routeId), eq(pickup.containerId, containerId))))[0]
-  /** The jobs pg-boss holds under these Plans' keys, oldest first. */
   const jobsOf = (planIds: readonly string[]) => owner.sql.unsafe<JobRow[]>(`select id, name, state, data, priority, singleton_key from ${PGBOSS_SCHEMA}.job where singleton_key = any($1::text[]) order by created_on, id`, [[...planIds]])
-  /** Every job either routing queue ever held, or one queue's. */
   const jobCount = async (queue?: string) => {
     const [{ count }] = await owner.sql.unsafe<{ count: number }[]>(`select count(*)::int as count from ${PGBOSS_SCHEMA}.job where name = any($1::text[])`, [queue === undefined ? [ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE] : [queue]])
     return count
   }
 
-  /** A run of one of A's schemes over the window, its row written as a sender writes it, run to its end as the job runs it. */
   const generate = async (schemeId: string, window = TWO_WEEKS, context = contextOf()) => {
     const [row] = await owner.db.insert(generationRun).values({ companyId: a.company, projectId: a.project, routeSchemeId: schemeId, trigger: "on-demand", windowFrom: window.from, windowTo: window.to }).returning({ id: generationRun.id })
     const outcome = await runGeneration({ generationRunId: row.id, companyId: a.company }, null, context)

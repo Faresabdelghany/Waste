@@ -36,14 +36,12 @@ export const COLLECTION_REMINDERS_QUEUE = "messaging.collection-reminders"
 export const REMINDER_CHUNK = 50
 
 export type CollectionRemindersData = {
-  /** Where the run came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
 /** A project that sends the reminder, with its template and its clock now. */
 export type RemindingProject = { companyId: string; projectId: string; templateId: string; channel: MessageChannel; today: string; hour: number }
 
-/** The projects whose rule names an active reminder template, across companies, as the worker role, with the day and the hour on each one's clock. */
 export async function remindingProjects(worker: JobContext["worker"], at: Date): Promise<RemindingProject[]> {
   const rows = await worker.db.execute<{ company_id: string; project_id: string; template_id: string; channel: MessageChannel; timezone: string }>(sql`
     select r.company_id, r.project_id, r.template_id, t.channel, p.timezone
@@ -56,7 +54,6 @@ export async function remindingProjects(worker: JobContext["worker"], at: Date):
   return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, templateId: row.template_id, channel: row.channel, today: dayInTimezone(at, row.timezone), hour: wallClockIn(at, row.timezone).hour }))
 }
 
-/** What one project's run came to. */
 export type ProjectReminded = { companyId: string; projectId: string; day: string; queued: number; refused: number; beyondCap: number }
 
 /** One project's due reminders of `day`, at most `batch` of the day's first `cap`, queued in fenced transactions of `REMINDER_CHUNK` customers. */
@@ -92,7 +89,6 @@ export async function remindProject(
   return outcome
 }
 
-/** One run: every reminding project past its hour, its next day's reminders, project by project. */
 export async function runCollectionReminders(context: Pick<JobContext, "api" | "worker" | "send" | "log" | "now">): Promise<ProjectReminded[]> {
   const outcomes: ProjectReminded[] = []
   for (const project of await remindingProjects(context.worker, context.now())) {

@@ -64,7 +64,6 @@ function adoptRows(engine: QuotaEngine, rows: readonly QuotaRow[]): void {
   for (const { family, updatedAt, ...standing } of rows) engine.adopt(family, { ...standing, observedAt: updatedAt })
 }
 
-/** When the engine last learned something of the family: compared before and after a job to tell whether the row is owed a write. */
 const learnedAt = (engine: QuotaEngine, family: QuotaFamily): number | null => engine.state(family).observedAt?.getTime() ?? null
 
 /**
@@ -84,10 +83,8 @@ async function recordLearned(context: Pick<RoutingContext, "api" | "log" | "rout
   }
 }
 
-/** The Plan a write holds under its row lock, still waiting on this job. */
 export type LockedPlan = { projectId: string; routeId: string }
 
-/** Locks the Plan and answers it while it still waits on this job — `calculating`, and there — or logs that it moved and answers undefined. */
 async function lockCalculating(tx: Tx, planId: string, log: (message: string) => void, queue: string): Promise<LockedPlan | undefined> {
   const [locked] = await tx.select({ status: plan.status, projectId: plan.projectId, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId)).for("update")
   if (locked?.status === "calculating") return { projectId: locked.projectId, routeId: locked.routeId }
@@ -150,7 +147,6 @@ export type PlanWrite<Ask, Answer, Solved> = {
   log: (message: string) => void
 }
 
-/** One routing job: its queue, and the read, the call and the write around the provider. */
 export type PlanJob<Ask, Answer, Solved> = {
   queue: string
   description: string
@@ -220,7 +216,6 @@ async function runPlanJob<Ask, Answer, Solved>(spec: PlanJob<Ask, Answer, Solved
   })
 }
 
-/** A routing job as a registry entry: the routing queues' options, settled per job, each job of the batch run through the read, the call and the write. */
 export function definePlanJob<Ask, Answer, Solved>(spec: PlanJob<Ask, Answer, Solved>): JobDefinition<RoutingJobData, RoutingContext> {
   return defineJob<RoutingJobData, RoutingContext>({
     queue: spec.queue,

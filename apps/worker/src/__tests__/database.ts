@@ -95,7 +95,6 @@ export function rolesUnderTest(env: Readonly<Record<string, string | undefined>>
   return { skip: found.skip, adminUrl, apiUrl, workerUrl }
 }
 
-/** The same server and credentials, another database. */
 export function withDatabaseName(url: string, name: string): string {
   const parsed = new URL(url)
   parsed.pathname = `/${name}`

@@ -38,10 +38,8 @@ import type { MessagingDoor } from "./provider"
 /** The tries a message gets: the first and pg-boss's two retries. */
 export const MAX_ATTEMPTS = 3
 
-/** Why a service message to a customer who allows none is withheld. */
 export const NO_CONSENT = "The customer allows no service messages"
 
-/** What the provider was asked to do with one message, and how it went. */
 export type SendOutcome = "sent" | "withheld" | "failed" | "retry" | "settled"
 
 /** A failed attempt as the log's reason says it: the error's sentence, never a statement's parameters, bounded. */
@@ -59,7 +57,6 @@ export async function sendMessage(data: SendMessageData, context: Pick<JobContex
   const provider = context.messaging
   const fence = () => and(eq(message.companyId, data.companyId), eq(message.id, data.messageId), eq(message.status, "queued"))
 
-  // The consent and the attempt, in one short transaction under the message's lock.
   const begun = await withCompany(context.api.db, data.companyId, async (tx) => {
     const [row] = await tx
       .select({ customerId: message.customerId, channel: message.channel, purpose: message.purpose, recipient: message.recipient, subject: message.subject, body: message.body, attempts: message.attempts })

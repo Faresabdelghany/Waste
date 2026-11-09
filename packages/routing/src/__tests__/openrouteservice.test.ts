@@ -15,7 +15,6 @@ const KEY = "eyJvcmciOiJ0ZXN0LW5vdC1hLWtleSJ9.test-only-not-a-key"
 
 type Recorded = { url: string; method: string; headers: Headers; body: unknown }
 
-/** A fetch that records each request and answers the next canned response, or throws the next error. */
 function recording(...responses: (Response | Error)[]) {
   const requests: Recorded[] = []
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {

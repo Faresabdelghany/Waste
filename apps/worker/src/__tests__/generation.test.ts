@@ -156,14 +156,12 @@ const WEEK = { from: "2026-10-05", to: "2026-10-11" }
 /** The instant the tests run at: a Saturday evening in Copenhagen, so `today` there is the 3rd and the sweep's window begins on the 4th. */
 const NOW = new Date("2026-10-03T18:00:00Z")
 
-/** The same server and credentials, another database. */
 const withDatabaseName = (url: string, name: string): string => {
   const parsed = new URL(url)
   parsed.pathname = `/${name}`
   return parsed.toString()
 }
 
-/** A company as the owner: the project, the catalogue, the customer and its four properties, the agreement and the subscriptions, five placed containers, the area with its boundary, the calendar with one holiday, and the two schemes. */
 async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   const own = ids(n)
   const tenant = { companyId: own.company }
@@ -244,7 +242,6 @@ describe("generation against a migrated database", { skip }, () => {
   const lines: string[] = []
   const sent: Array<{ queue: string; data: object | null; singletonKey: string | undefined; inTransaction: boolean }> = []
 
-  /** The context a job runs with: the API role's pool for the writes, the worker role's for the sweep, a pinned clock, a recording log, and a `send` that records and, where pg-boss runs, sends. */
   const context = () =>
     jobContext({
       api,
@@ -258,7 +255,6 @@ describe("generation against a migrated database", { skip }, () => {
       },
     })
 
-  /** A run row of company a's scheme over the window, written as the owner, answering its id. */
   const runFor = async (schemeId: string, companyId: string, projectId: string, window: { from: string; to: string }): Promise<string> => {
     const [row] = await ownerPool.db.insert(generationRun).values({ companyId, projectId, routeSchemeId: schemeId, trigger: "on-demand", windowFrom: window.from, windowTo: window.to }).returning({ id: generationRun.id })
     return row.id

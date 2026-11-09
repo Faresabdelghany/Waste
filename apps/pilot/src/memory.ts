@@ -13,11 +13,9 @@ import { readdirSync, readFileSync } from "node:fs"
 
 import type { ChildPids } from "./supervise"
 
-/** The two reads the line makes; the real procfs by default, a scripted one in a test. */
 export type ProcFs = {
   /** A file's text, or undefined where there is none. */
   readText: (path: string) => string | undefined
-  /** The entries of /proc. */
   listProc: () => string[]
 }
 
@@ -45,7 +43,6 @@ const statField = (stat: string, name: string) => Number(stat.match(new RegExp(`
 
 type Cgroup = { version: 1 | 2; current: number; peak: number; max: number; anon: number; file: number }
 
-/** The container's cgroup accounting, v2 where its files exist, v1 otherwise. */
 function cgroupMemory(fs: ProcFs): Cgroup {
   const current = fs.readText("/sys/fs/cgroup/memory.current")
   if (current !== undefined) {
@@ -65,7 +62,6 @@ function cgroupMemory(fs: ProcFs): Cgroup {
   return { version: 1, current: v1("memory.usage_in_bytes"), peak: v1("memory.max_usage_in_bytes"), max: v1("memory.limit_in_bytes"), anon: statField(stat, "rss"), file: statField(stat, "cache") }
 }
 
-/** The container's byte counters, every interface but loopback. */
 function netBytes(fs: ProcFs): { tx: number; rx: number } {
   let tx = 0
   let rx = 0
@@ -82,7 +78,6 @@ function netBytes(fs: ProcFs): { tx: number; rx: number } {
 type Row = { ppid: number; rss: number; hwm: number }
 
 export type MemoryLineOptions = {
-  /** The supervisor's own pid. */
   pid?: number
   /** The children's pids as the supervisor last reported them; a child without one is down. */
   children: ChildPids

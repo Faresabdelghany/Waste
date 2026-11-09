@@ -38,10 +38,6 @@ export function isDatabaseRequired(env: Readonly<Record<string, string | undefin
 
 const spell = (names: readonly string[]) => `${names.join(" and ")} ${names.length === 1 ? "is" : "are"} not`
 
-/**
- * Reads the named variables. All set: run. Some unset: skip with a reason
- * naming them and the hint, or throw naming them when the database is required.
- */
 export function databaseUnderTest<Name extends string>(
   names: readonly Name[],
   { hint, env = process.env }: DatabaseUnderTestOptions,

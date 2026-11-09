@@ -41,7 +41,6 @@ import { runScheduledBilling } from "../finance/run-billing"
 import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, routesOf, UNCONSUMED_RETENTION_SECONDS } from "../runtime/outbox"
 import { jobContext } from "./context"
 
-/** Where the registry's relay sends each kind. */
 const ROUTES = routesOf(CONSUMERS)
 
 /** Resolution's and Finance's queues of their kinds, as the fan-out spells them (#339). */

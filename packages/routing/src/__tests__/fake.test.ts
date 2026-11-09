@@ -18,7 +18,6 @@ const stops: Position2D[] = [
 const station: Position2D = [12.55, 55.72]
 const RESET = "2026-10-01T03:00:00.000Z"
 
-/** The result of an answered call; a refusal here is the test's failure, named. */
 function answered<T>(answer: ProviderAnswer<T>): T {
   assert.equal(answer.kind, "answered", `expected an answer, got ${JSON.stringify(answer)}`)
   return (answer as Extract<ProviderAnswer<T>, { kind: "answered" }>).result

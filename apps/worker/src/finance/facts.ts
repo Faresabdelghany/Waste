@@ -362,7 +362,6 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
   }
 }
 
-/** A ticket as the consumer read it: its project and kind, what it ended in, when it closed, the agreement and pickup it names, and the product its completion named. */
 export type TicketRow = {
   projectId: string
   kind: TicketKind

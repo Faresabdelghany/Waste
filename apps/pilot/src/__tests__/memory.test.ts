@@ -11,7 +11,6 @@ const MIB = 1024 * 1024
 
 const status = (pid: number, ppid: number, rssKiB: number, hwmKiB: number) => `Name:\tnode\nPid:\t${pid}\nPPid:\t${ppid}\nVmHWM:\t    ${hwmKiB} kB\nVmRSS:\t    ${rssKiB} kB\n`
 
-/** A procfs of files by path and a /proc listing; anything unlisted reads as absent. */
 const procfs = (files: Record<string, string>, entries: string[]): ProcFs => ({
   readText: (path) => files[path],
   listProc: () => entries,

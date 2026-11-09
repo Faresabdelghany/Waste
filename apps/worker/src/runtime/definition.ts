@@ -115,9 +115,7 @@ export type JobDefinition<Data extends object = object, Context extends JobConte
   queueOptions?: JobQueueOptions
   /** Polling and concurrency of this process's worker on the queue; pg-boss's defaults otherwise (one job at a time, polled every two seconds). */
   workOptions?: WorkOptions
-  /** A cron expression; the job recurs on it. */
   schedule?: string
-  /** The payload every scheduled occurrence carries. */
   scheduleData?: Data
   /** `tz`, `key`, `missed` and the send options of a scheduled occurrence. */
   scheduleOptions?: ScheduleOptions
@@ -146,7 +144,6 @@ export type JobDefinition<Data extends object = object, Context extends JobConte
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy` and the `deadLetter`. `partition` is not offered: the role may not create a partition. */
 export type JobQueueOptions = QueueOptions & Pick<Queue, "policy" | "deadLetter">
 
-/** A queue a job sends to without working it: its name and, like a job's own, the options it is created with and brought to. */
 export type PublishedQueue = {
   queue: string
   queueOptions?: JobQueueOptions

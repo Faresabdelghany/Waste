@@ -16,7 +16,6 @@ export type CheckOptions = {
   timeoutMs?: number
 }
 
-/** Races a probe against the bound: its value, or `failed` where it rejected or the bound passed first. */
 export async function bounded<T>(probe: Promise<T>, failed: T, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const bound = new Promise<T>((resolve) => {

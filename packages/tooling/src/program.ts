@@ -8,7 +8,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import ts from "typescript"
 
-/** The package's shipping modules by their path under src/ without the extension (`route-schemes`, `geo/rings`), each read as a namespace. */
+/** The package's shipping modules by their path under src/ without the extension (`route-schemes`, `finance/money`), each read as a namespace. */
 export async function importShippingModules(packageDir: string): Promise<Record<string, Record<string, unknown>>> {
   const read = ts.readConfigFile(path.join(packageDir, "tsconfig.json"), ts.sys.readFile)
   if (read.error) throw new Error(`tsconfig.json: ${ts.flattenDiagnosticMessageText(read.error.messageText, " ")}`)

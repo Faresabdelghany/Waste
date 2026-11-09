@@ -79,7 +79,6 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     }
   })
 
-  /** Runs the handler over one job, as pg-boss would hand it in, and answers the project runs it made. */
   const handle = async (data: RunBillingData, now = FIRST_OF_OCTOBER): Promise<ProjectRun[]> => {
     const job: Job<RunBillingData> = { id: testId(), name: runScheduledBilling.queue, data, expireInSeconds: 900, heartbeatSeconds: null, signal: new AbortController().signal }
     const output = (await runScheduledBilling.handler([job], context(now))) as { runs: ProjectRun[] }
@@ -102,7 +101,6 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     return await withCompany(api.db, tenant.companyId, async (tx) => (await recordBillableEvent(tx, { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, draft, overrideReason: "Agreed by phone", note: null, createdBy: tenant.users.olivia.id, sourceEventId: null, newId })).answered.id)
   }
 
-  /** The tenant's runs, oldest first, and its invoices. */
   const runs = () => withCompany(api.db, tenant.companyId, (tx) => tx.select(runColumns).from(billingRun).where(eq(billingRun.companyId, tenant.companyId)).orderBy(asc(billingRun.id)))
   const invoices = () => withCompany(api.db, tenant.companyId, (tx) => tx.select(invoiceColumns).from(invoice).where(eq(invoice.companyId, tenant.companyId)).orderBy(asc(invoice.id)))
   const statusOf = (id: string) => withCompany(api.db, tenant.companyId, async (tx) => eventOf((await eventsFrom(tx, tenant.companyId).query.where(and(eq(billableEvent.companyId, tenant.companyId), eq(billableEvent.id, id))))[0]).status)

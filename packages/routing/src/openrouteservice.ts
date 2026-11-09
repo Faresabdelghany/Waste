@@ -122,7 +122,6 @@ function provenanceOf(body: Record<string, unknown>): Provenance {
   return { engineVersion: typeof engine.version === "string" ? engine.version : null, graphDate }
 }
 
-/** One directions answer as legs over the points asked for. */
 function directionsResult(body: unknown, points: readonly Position2D[]): MeasureResult {
   if (!isRecord(body) || !Array.isArray(body.features) || !isRecord(body.features[0])) throw unreadable("the directions answer holds no route")
   const feature = body.features[0]

@@ -170,7 +170,6 @@ function judge(
   return { rule: "bare-import", detail: `imports "${specifier}"; shipping code may import ${allowed}` }
 }
 
-/** Whether a specifier is a pattern's: the pattern itself, or a subpath under its `/*`. */
 export function matches(pattern: string, specifier: string): boolean {
   return pattern.endsWith("/*") ? specifier.startsWith(pattern.slice(0, -1)) : pattern === specifier
 }
@@ -185,7 +184,6 @@ export function isTestFile(file: string): boolean {
   return file.split("/").includes("__tests__")
 }
 
-/** The `__tests__` directories the given source paths live in, relative posix, sorted, unique. */
 export function testDirectoriesOf(files: readonly string[]): string[] {
   const dirs = new Set<string>()
   for (const file of files) {

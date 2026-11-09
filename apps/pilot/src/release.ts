@@ -83,7 +83,6 @@ export function judgeObservation(observation: Observation, { commit, previousTim
   return { ok: true, time: body.time }
 }
 
-/** Asks one probe as a release does: past every cache, bounded, no redirects followed. */
 export async function askProbe(apiUrl: string, path: "/healthz" | "/readyz"): Promise<ProbeAnswer> {
   const response = await fetch(new URL(path, apiUrl), {
     headers: { "cache-control": "no-cache", pragma: "no-cache" },
@@ -108,7 +107,6 @@ export type ObserveOptions = {
   log?: (line: string) => void
 }
 
-/** Observes until three consecutive observations pass, or throws after ten minutes with the last thing it saw. */
 export async function observeRelease({
   apiUrl,
   commit,
@@ -207,7 +205,6 @@ export async function releaseToDeployBranch({ branch, sha, ...github }: DeployBr
     return tree
   }
 
-  // Where the branch is.
   const current = await call(`/git/ref/heads/${branch}`)
   let head: string | null = null
   if (current.status !== 404) {
@@ -349,7 +346,6 @@ export type ReleaseOrderOptions = RepositoryOptions & {
   sha: string
 }
 
-/** Reads the facts `judgeOrder` needs from GitHub — main against the commit, the deploy branch's release file, the released commit against the commit — and judges them. */
 export async function resolveReleaseOrder({ branch, sha, ...github }: ReleaseOrderOptions): Promise<OrderVerdict & { released: string | null }> {
   if (!BRANCH.test(branch)) throw new Error(`PILOT_DEPLOY_BRANCH is not a plain branch name: ${branch}`)
   if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)

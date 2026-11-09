@@ -12,5 +12,4 @@ import type { QuotaEngine } from "@waste/routing/quota"
  */
 export type RoutingEngine = { routing: QuotaEngine }
 
-/** The context of a routing job. */
 export type RoutingContext = JobContext & RoutingEngine
