@@ -235,7 +235,6 @@ async function lockedReading(tx: Tx, companyId: string, subject: ContainerRef): 
   return { movementId: row.movementId, toKind, warehouseId: row.toWarehouseId, placementId: row.placementId, occurredAt: row.occurredAt, status }
 }
 
-/** Where the reading says the container stands: the place its latest movement arrived at. */
 const placeOf = (reading: Reading): Place => ({ kind: reading.toKind, warehouseId: reading.warehouseId })
 
 /** The name of the warehouse a refusal names, so "already in stock" says where; the id when the row is somehow gone. */
@@ -370,7 +369,6 @@ async function endPlacement(tx: Tx, companyId: string, subject: ContainerRef, va
   return current.id
 }
 
-/** The movement an adjustment says it corrects: one of this container's, or invalid at the input. */
 async function requireMovementOf(tx: Tx, companyId: string, subject: ContainerRef, id: string | undefined): Promise<void> {
   if (id === undefined) return
   if (!(await present(tx, stockMovement, and(eq(stockMovement.companyId, companyId), eq(stockMovement.containerId, subject.id), eq(stockMovement.id, id))))) {
@@ -442,7 +440,6 @@ async function arrival(tx: Tx, companyId: string, subject: ContainerRef, from: P
 /** The input an intent carries its destination in, where a refused shape is answered; the intent as a whole where the command fixed it. */
 const toKindPath = (kind: StockMovementKind): string => (kind === "return" || kind === "transfer" || kind === "adjustment" ? "toKind" : "")
 
-/** The kind of place the intent arrives at, known from the intent alone: the issue's is service, the decommission's scrap, the rest name theirs. */
 const destinationKind = (intent: Intent): StockPlaceKind => (intent.kind === "issue" ? "service" : intent.kind === "decommission" ? "scrap" : intent.to.kind)
 
 /**

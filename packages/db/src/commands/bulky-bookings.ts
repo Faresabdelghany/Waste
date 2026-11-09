@@ -43,13 +43,9 @@ export type BulkyPlace = { propertyId: string | null; sharedCollectionPointId: s
 /** One day a place may be booked on, with the schedule and the area its slots are counted under. */
 export type BulkyPlaceDay = { day: string; slots: number; booked: number; left: number; planningAreaId: string; scheduleId: string }
 
-/** What an agreement that is not signed is told. */
 export const agreementNotSigned = (number: string, status: string): string => `Agreement ${number} is ${status}; a bulky collection is charged to a signed one`
-/** What an agreement out of force on the day is told. */
 export const agreementNotInForce = (number: string, day: string): string => `Agreement ${number} is not in force on ${day}`
-/** What an agreement of another customer is told. */
 export const NOT_THE_CUSTOMERS = "The agreement is not this customer's"
-/** What a place the agreement serves nothing at is told. */
 export const notServedUnder = (number: string, day: string): string => `Agreement ${number} serves nothing at this place on ${day}`
 
 /** The place's point, as the boundary is asked about it; null where the place has none. */
@@ -91,7 +87,6 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
 async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from: string; to: string }, today: string): Promise<PlaceDay[]> {
   const location = await locationOf(tx, scope, place)
   if (location === null) throw Refused.conflict(NO_LOCATION)
-  // The schedules in force over the window, each with the periods its area's boundary held the place.
   const reaching = await tx
     .select({
       schedule: {
@@ -127,7 +122,6 @@ async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from
     .orderBy(asc(planningArea.code), asc(bulkySchedule.id))
   if (reaching.length === 0) throw Refused.conflict(NO_BULKY_SCHEDULE)
 
-  // In area-code order: the first schedule in force holding the place on a day governs it.
   const scheduleIds = [...new Set(reaching.map((row) => row.schedule.id))]
   const governs = (id: string, day: string): boolean =>
     reaching.some(
@@ -244,7 +238,6 @@ export async function takeBulkySlot(tx: Tx, scope: Scope, place: BulkyPlace, day
   return { scheduleId: found.scheduleId, planningAreaId: found.planningAreaId, productId: found.productId }
 }
 
-/** The booking made: the agreement judged, the slot taken, the row and its items written. Answers its id. */
 export async function bookBulky(tx: Tx, scope: Scope, id: string, input: BulkyBookingInput, today: string): Promise<string> {
   await requireChargeableAgreement(tx, scope, input)
   const slot = await takeBulkySlot(tx, scope, input.place, input.day, today)
@@ -265,7 +258,6 @@ export async function bookBulky(tx: Tx, scope: Scope, id: string, input: BulkyBo
   return id
 }
 
-/** A booking's items replaced whole, in the order listed. */
 export async function replaceBulkyItems(tx: Tx, scope: Scope, bookingId: string, items: readonly { description: string; quantity: number }[]): Promise<void> {
   await tx.delete(bulkyBookingItem).where(and(eq(bulkyBookingItem.companyId, scope.companyId), eq(bulkyBookingItem.bookingId, bookingId)))
   if (items.length > 0) await tx.insert(bulkyBookingItem).values(items.map((item, index) => ({ ...scope, bookingId, position: index + 1, description: item.description, quantity: item.quantity })))

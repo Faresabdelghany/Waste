@@ -4,8 +4,7 @@
 // directory are the ones both processes run — the API inside a request's
 // transaction, the worker inside a job's — and a statement is a function over
 // `tx` that takes no Principal and no Context, so either process may run it.
-// What it needs of the request layer is exactly this file, and the three
-// things the API's routes/shared.ts spelled for its routes alone:
+// What it needs of the request layer is exactly this file:
 //
 //   a row lock   — a rule the caller holds rather than the database is only
 //                  held per transaction, and two transactions that read the
@@ -66,7 +65,6 @@ export type Actor = { companyId: string; userAccountId: string }
 /** A table a row can be looked up in the way every table of this system can be: by its own id, inside a company. */
 export type TenantTable = PgTable & { id: PgColumn; companyId: PgColumn }
 
-/** Runs a write, and refuses with the caller's own refusal for a constraint it named; anything else is thrown as it came. */
 async function refusing<T, Said>(constraintNamed: (error: unknown) => string | undefined, sentences: Readonly<Record<string, Said>>, refusal: (said: Said) => Refused, write: () => Promise<T>): Promise<T> {
   try {
     return await write()
@@ -252,7 +250,6 @@ export async function nextNumbers(tx: Tx, companyId: string, series: Series, cou
   return row.next - count
 }
 
-/** The next number of a company's series: a block of one. */
 export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
   return await nextNumbers(tx, companyId, series, 1)
 }

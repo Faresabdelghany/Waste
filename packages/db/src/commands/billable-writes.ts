@@ -1,9 +1,8 @@
-// The billable-event statements, once (Issue #112 §3; lifted here from
-// `apps/api/src/routes/billable-writes.ts` with part B, the first job that
-// needs them — #109 §7.24's question answered: `packages/db/src/commands/`
-// is where the shared write statements live): the one function that writes
-// a `billable_event` row, the reads that gather what the resolver needs and
-// run it, and the consumer's correction over a pickup's live event.
+// The billable-event statements, once (Issue #112 §3; #109 §7.24's question
+// answered: `packages/db/src/commands/` is where the shared write statements
+// live): the one function that writes a `billable_event` row, the reads that
+// gather what the resolver needs and run it, and the consumer's correction
+// over a pickup's live event.
 //
 // `recordBillableEvent` is what `POST /billable-events` runs with the
 // caller's account, and what the worker's consumer runs with `null` and the
@@ -23,10 +22,10 @@
 // `priceOccurrence`): the agreement with its customer's kind — a draft is
 // `agreement-draft` and nothing more is read — then the list it is priced
 // under in force on the service date, the agreement's own when it names one
-// and the project's default otherwise (`priceListIdFor` as a `where`), none
-// being `no-price-list`; then the list's rows for the product valid on the
-// day, and the product's VAT rate, handed to the domain, which answers the
-// price frozen on the event or `no-price-row` or `no-vat-rate`. The manual
+// and the project's default otherwise, none being `no-price-list`; then the
+// list's rows for the product valid on the day, and the product's VAT rate,
+// handed to the domain, which answers the price frozen on the event or
+// `no-price-row` or `no-vat-rate`. The manual
 // create, `reprice` and the consumer all price through it, so an event is
 // priced one way whichever door recorded it.
 //
@@ -104,7 +103,7 @@ export async function productFacts(tx: Tx, scope: Scope, productId: string): Pro
   return row
 }
 
-/** The list an agreement is priced under, in force on the day: its own when it names one, the project's default otherwise (`priceListIdFor` as a `where`); undefined when neither is in force. */
+/** The list an agreement is priced under, in force on the day: its own when it names one, the project's default otherwise; undefined when neither is in force. */
 export async function listInForce(tx: Tx, scope: Scope, agreementsList: string | null, day: string): Promise<{ id: string; currency: string } | undefined> {
   const [row] = await tx
     .select({ id: priceList.id, currency: priceList.currency })

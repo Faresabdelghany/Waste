@@ -79,7 +79,6 @@ type Action = { id: string; kind: TicketActionKind; vehicleProjectId: string | n
 /** What an action did: its line, and whether it wrote its own history row carrying the line, as a move and an assignment do. */
 type Done = { said: string; recorded: boolean }
 
-/** An internal comment of the system's, the ticket as it stands. */
 const commentOf = (row: TicketRow, body: string) => ({
   kind: "comment" as const,
   status: row.status,
@@ -153,7 +152,6 @@ export async function runTicketAutomation(tx: Tx, run: AutomationRun, ticketId: 
     }
   }
 
-  /** One action on the ticket as it now stands. */
   async function perform(tx: Tx, run: AutomationRun, depth: number, action: Action, line: (said: string) => string): Promise<Done> {
     const row = await currentTicket(tx, run.companyId, ticketId)
     switch (action.kind) {
@@ -240,7 +238,6 @@ export async function moveTicket(tx: Tx, run: AutomationRun, current: TicketRow,
   return await currentTicket(tx, run.companyId, row.id)
 }
 
-/** Hands the ticket to an active team of the company. */
 async function assignTeam(tx: Tx, run: AutomationRun, row: TicketRow, teamId: string): Promise<Done> {
   const [found] = await tx
     .select({ name: team.name, status: team.status })
@@ -280,7 +277,6 @@ async function setPriority(tx: Tx, run: AutomationRun, row: TicketRow, priority:
     .update(ticket)
     .set({ priority, dueAt })
     .where(and(eq(ticket.companyId, run.companyId), eq(ticket.id, row.id)))
-  // The due date is told only where it moved.
   if (dueAt?.getTime() === row.dueAt?.getTime()) return { said: `priority set to ${words}.`, recorded: false }
   if (hours === null || hours === undefined) return { said: `priority set to ${words}; the SLA sets no target at ${words}, so it has no due date.`, recorded: false }
   return { said: `priority set to ${words}, due within the SLA's ${hours} ${hours === 1 ? "hour" : "hours"}.`, recorded: false }
@@ -322,7 +318,6 @@ async function recipientOf(tx: Tx, run: AutomationRun, row: TicketRow, recipient
   return party.customerId
 }
 
-/** Queues the ticket's project's active template of the name to the recipient, with the ticket's number to fill. */
 async function sendMessage(tx: Tx, run: AutomationRun, row: TicketRow, name: string, recipient: TicketMessageRecipient): Promise<Done> {
   const [template] = await tx
     .select({ id: messageTemplate.id })
@@ -385,7 +380,6 @@ async function openFollowUp(tx: Tx, run: AutomationRun, depth: number, row: Tick
   return { said: `follow-up ${labelOf(opened)} (${type.name}) opened.`, recorded: false }
 }
 
-/** A service as a line names it, with its article. */
 const serviceWords = (service: OfficeStopService): string => `${/^[aeiou]/.test(SERVICE_NOUNS[service]) ? "an" : "a"} ${SERVICE_NOUNS[service]}`
 
 /**

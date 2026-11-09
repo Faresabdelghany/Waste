@@ -1,8 +1,7 @@
-// The billing run, once (Issue #112 §3; lifted here from
-// `apps/api/src/routes/billing-runs.ts` with the commands the worker runs,
-// part B): "a controlled batch that converts eligible billable events into
-// invoices" (CONTEXT.md). `POST /billing-runs` runs it synchronously in the
-// request's transaction with the caller's account; the worker's scheduled run
+// The billing run, once (Issue #112 §3): "a controlled batch that converts
+// eligible billable events into invoices" (CONTEXT.md). `POST /billing-runs`
+// runs it synchronously in the request's transaction with the caller's
+// account; the worker's scheduled run
 // (`finance.run-billing`) runs the same function on its cadence with `null`
 // for the person, so a run is one thing whichever process asks for it.
 //
@@ -184,7 +183,6 @@ function exclusionsOf(passedOver: ReadonlyMap<string, PassedOver>, invoiced: Rea
     .map(([customerId, { blocked, held }]) => ({ customerId, eventCount: blocked + held, reason: held === 0 ? "all-events-blocked" : blocked === 0 ? "all-events-held" : "all-events-blocked-or-held" }))
 }
 
-/** One more blocked or held event of a payer. */
 function passOver(passedOver: Map<string, PassedOver>, customerId: string, as: keyof PassedOver, events = 1): void {
   const counts = passedOver.get(customerId) ?? { blocked: 0, held: 0 }
   counts[as] += events
@@ -298,7 +296,6 @@ async function passedOverIn(tx: Tx, scope: Scope, period: BillingPeriod): Promis
     .where(and(inPeriod(scope, period), isNotNull(billableEvent.blockReason)))
     .groupBy(agreement.payerCustomerId)
     .orderBy(asc(agreement.payerCustomerId))
-  // The events held for review (M14 of #293): passed over as the blocked are, so a payer with nothing else is excluded with them.
   const held = await tx
     .select({ customerId: agreement.payerCustomerId, events: count() })
     .from(billableEvent)
@@ -344,7 +341,6 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   const behind = await (Number.isFinite(room) ? behindQuery.limit(Math.max(room, 1)) : behindQuery)
   const catchUpIds = behind.slice(0, room).map((row) => row.id)
   const catchingUp = new Set(catchUpIds)
-  // The agreement and the product every ready event names, joined for the grouping and the line's text.
   const event = alias(billableEvent, "event")
   // The reading is stated again over the locked row beside the ids: a cancellation or a hold that commits while the run waits on an event's lock is judged on the row it wrote (Postgres re-reads the `where` of a locked row that changed), where the ids alone would still name it.
   const caughtUp = catchUpIds.length === 0 ? undefined : and(ready(tx, scope, period, event, { reach: "catch-up", payers }), inArray(event.id, catchUpIds))
@@ -752,7 +748,6 @@ export async function runBilling(transact: Transact, input: RunBillingInput): Pr
   const at = input.now()
   const runId = await transact((tx) => startRun(tx, input, scope, at))
   while (await transact((tx) => runBatch(tx, input, scope, runId, at))) {
-    // Each batch did something: a payer invoiced or excluded, so the loop ends once none is left.
   }
   return await transact((tx) => finishRun(tx, scope, input, runId, input.newId, at))
 }

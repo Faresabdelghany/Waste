@@ -41,7 +41,7 @@ import { routeTiming } from "./stop-timing"
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
 export const ROUTING_MEASURE_QUEUE = "routing.measure"
 
-/** The queue an `optimiser` Plan is sent to; its worker arrives with #171 (S3), and a job waits until it does. */
+/** The queue an `optimiser` Plan is sent to. */
 export const ROUTING_OPTIMISE_QUEUE = "routing.optimise"
 
 /** The queue a Plan of this solver is worked on: the optimiser's own, or the measurement's for a known sequence. */
@@ -132,7 +132,6 @@ export async function createPlan(tx: Tx, input: NewPlan): Promise<string> {
 // (`activatePlan`); an optimiser's answer only those asked for before it
 // (`activateSolved`), since an answer supersedes no request made after it.
 
-/** The route's optimisations still waiting, of those `which` names, failed as superseded. */
 async function supersedeWaiting(tx: Tx, keys: { companyId: string; routeId: string; planId: string }, which: "every other" | "older"): Promise<void> {
   await tx
     .update(plan)
