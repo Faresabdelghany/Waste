@@ -13,6 +13,7 @@ import { Address, AddressSearch } from "@waste/contracts/addresses"
 import { Property } from "@waste/contracts/customers"
 import type { Point } from "@waste/contracts/geojson"
 import { createDb, type Database } from "@waste/db/client"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 
 import { FAKE_ADDRESSES, FakeAddressRegister } from "../address-register/fake"
 import { createApp } from "../app"
@@ -91,6 +92,12 @@ describe("the address lookup and a property found in the register", { skip: data
       assert.deepEqual(answer.items, [{ id: PARKVEJ_18.id, designation: "Parkvej 18, 2100 København Ø" }])
       assert.match(answer.attribution, /Klimadatastyrelsen/)
       assert.deepEqual(AddressSearch.parse(await (await olivia("/addresses?q=Ingenvej")).json()).items, [])
+    })
+
+    test("answer a reason that does not decode as they answer none: a lookup writes nothing the audit keeps", async () => {
+      for (const path of ["/addresses?q=park%2018", `/addresses/${PARKVEJ_18.id}`]) {
+        assert.equal((await editor(path, { headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })).status, 200, path)
+      }
     })
 
     test("read one address whole: its parts, its BFE number and its point", async () => {

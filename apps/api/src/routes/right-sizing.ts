@@ -18,23 +18,21 @@
 // (#411, decision c). Dismiss says why. A decided proposal is decided.
 import { Page } from "@waste/contracts/pagination"
 import { RightSizingApprove, RightSizingDismiss, RightSizingListQuery, RightSizingProposal, RightSizingRun, type RightSizingStatus } from "@waste/contracts/right-sizing"
-import type { Action } from "@waste/domain/access/modules"
 import type { Tx } from "@waste/db/client"
 import { proposeRightSizing } from "@waste/db/commands/right-sizing"
 import { subscription } from "@waste/db/schema/agreements"
 import { rightSizingProposal } from "@waste/db/schema/inspections"
 import { changesTheProduct } from "@waste/domain/inspections/right-sizing"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { changeSubscription } from "./agreements"
 import { describeJson, IdParam } from "./shared"
 
@@ -117,29 +115,23 @@ async function openProposal(tx: Tx, principal: Principal, id: string): Promise<R
   return current
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { now: () => Date }) {
-  return new Hono<AuthEnv>()
+export function rightSizingRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/right-sizing-proposals",
-      describeRoute({
+      {
         operationId: "listRightSizingProposals",
         summary: "The right-sizing proposals",
         description: "One page of the right-sizing proposals of the projects the caller works in, oldest first. `projectId`, `subscriptionId` and `status` narrow it. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: RightSizingListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of proposals.", ProposalPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          ...problems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", RightSizingListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, subscriptionId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -166,19 +158,17 @@ export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { 
     )
     .post(
       "/right-sizing-proposals/run",
-      describeRoute({
+      {
         operationId: "runRightSizing",
         summary: "Propose right-sizing now",
         description:
           "Runs what the worker runs nightly, over the projects the caller works in: each subscription in force on its project's day, with no open proposal and with estimates newer than its last proposal's, is judged on its containers' latest fill estimates, and proposed a size down or up — the product of the same project, kind, fraction and frequency the next size in the direction — or fewer or more collections where none is sold. Answers how many were proposed; nothing is changed but proposals.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
         responses: {
           200: describeJson("How many proposals the run made.", RightSizingRun),
-          ...problems("create"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
+      },
       async (c) => {
         const principal = c.get("principal")
         const { proposed } = await proposeRightSizing(c.get("tx"), principal.companyId, now(), projectIdsOf(principal))
@@ -187,21 +177,18 @@ export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { 
     )
     .get(
       "/right-sizing-proposals/:id",
-      describeRoute({
+      {
         operationId: "getRightSizingProposal",
         summary: "One right-sizing proposal",
         description: "One proposal of a project the caller works in. A proposal of another company, or of a project this account does not work in, is one that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The proposal.", RightSizingProposal),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
           404: describeProblem("No proposal with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findProposal(c.get("tx"), c.get("principal"), id)
@@ -211,25 +198,23 @@ export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { 
     )
     .post(
       "/right-sizing-proposals/:id/approve",
-      describeRoute({
+      {
         operationId: "approveRightSizingProposal",
         summary: "Approve a right-sizing proposal",
         description: `Approves one open proposal, under its lock, in one transaction. A size (\`smaller\`, \`bigger\`) is applied as the subscription's change from \`on\` (400 at \`on\` without it) — \`POST /subscriptions/{id}/change\`'s rules and refusals throughout — with the suggested product, or \`productId\` where the office picks another; the proposal records the day and the subscription replacing it. A frequency (\`less-frequent\`, \`more-frequent\`) is recorded alone and takes neither field (400): the office moves the container between collection groups itself. Refused (409) on a decided proposal, and on a subscription changed since the proposal read it: ${STALE_EVIDENCE.toLowerCase()}. Asks \`edit\` on \`${AGREEMENTS}\` besides the module's, since a size changes what the customer pays.`,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        also: [AGREEMENTS, "edit"],
+        params: IdParam,
+        body: RightSizingApprove,
+        invalid: ["a size's approve names no day or a day outside the subscription", "a product that is not the project's", "a frequency's names either"],
         responses: {
           200: describeJson("The proposal as it now stands.", RightSizingProposal),
-          400: describeProblem("The path does not hold an id, a size's approve names no day or a day outside the subscription, a product that is not the project's, or a frequency's names either."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\` and on \`${AGREEMENTS}\`.`),
           404: describeProblem("No proposal with that id in the projects this account works in."),
           409: describeProblem(`The proposal is decided; ${STALE_EVIDENCE}; or the subscription's change refuses (a placement beginning later, a product not offered, the product already subscribed there).`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      requireGrant(AGREEMENTS, "edit"),
-      validate("param", IdParam),
-      validate("json", RightSizingApprove),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -257,23 +242,21 @@ export function rightSizingRoutes(guard: MiddlewareHandler<AuthEnv>, { now }: { 
     )
     .post(
       "/right-sizing-proposals/:id/dismiss",
-      describeRoute({
+      {
         operationId: "dismissRightSizingProposal",
         summary: "Dismiss a right-sizing proposal",
         description: "Dismisses one open proposal with why, under its lock; nothing else changes. The subscription is proposed again only on newer estimates (409 on a decided proposal).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RightSizingDismiss,
+        invalid: ["the body says no why"],
         responses: {
           200: describeJson("The proposal as it now stands.", RightSizingProposal),
-          400: describeProblem("The path does not hold an id, or the body says no why."),
-          ...problems("edit"),
           404: describeProblem("No proposal with that id in the projects this account works in."),
           409: describeProblem("The proposal is decided."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RightSizingDismiss),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")

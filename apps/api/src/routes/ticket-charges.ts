@@ -18,21 +18,17 @@ import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { ticketKindProduct } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
-import type { Action } from "@waste/domain/access/modules"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, eq, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest } from "../problem"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { describeJson } from "./shared"
 import { requireSetTypes } from "./ticket-type-rules"
@@ -76,30 +72,23 @@ async function chargesOf(tx: Tx, scope: Scope): Promise<TicketCharges> {
   return { projectId: scope.projectId, charges }
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function ticketChargeRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function ticketChargeRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/ticket-charges",
-      describeRoute({
+      {
         operationId: "getTicketCharges",
         summary: "A project's ticket charges",
         description:
           "The product each ticket kind's work is charged at when a completion names none (#291 C3), a kind at most once, in the kinds' order: what the Finance consumer prices a completed ticket's event at, `recollected` or `serviced`, while the product is offered. A kind not listed is charged at nothing, and its tickets' events wait `no-product` for the office's product. `projectId` is a project the caller works in (400 on the query otherwise).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: TicketChargesQuery,
+        invalid: ["`projectId` is missing, malformed, or not a project this account works in"],
         responses: {
           200: describeJson("The project's charges.", TicketCharges),
-          400: describeProblem("`projectId` is missing, malformed, or not a project this account works in."),
-          ...problems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", TicketChargesQuery),
+      },
       async (c) => {
         const { projectId } = c.req.valid("query")
         const principal = c.get("principal")
@@ -109,22 +98,20 @@ export function ticketChargeRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/ticket-charges",
-      describeRoute({
+      {
         operationId: "putTicketCharges",
         summary: "Replace a project's ticket charges",
         description:
           "Replaces the project's whole set of charges with the body's: a kind the body leaves out is charged at nothing afterwards, a ticket type at its kind's (#548 of #544), and an empty list charges nothing. Each charge names a kind or a type, exactly one (400 at `charges.N`), each once (400 on `charges`); a type is one of this company's (400 at `charges.N.ticketTypeId`) and, where the set names it afresh, active (409); each product a product of the project (400 at `charges.N.productId`, `Not a product of this project`), never one sold by the month — a recurring charge, not a ticket's work (400, `A product sold by the month is a recurring charge; a ticket's work is charged per job or per pickup`) — and offered (409, `The product is inactive; …`) on a charge that is new or names another product than it did; a charge restated as it stands is no new reference and is not gated. Under the project's row lock, so two replacements take turns. Events already recorded keep their product. Every row written is audited under the request's principal, a set of its project.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        body: TicketChargesSet,
+        invalid: ["the body names a member the command does not take, a kind twice, a project this account does not work in, a product that is not the project's, or a product sold by the month"],
         responses: {
           200: describeJson("The project's charges as they now stand.", TicketCharges),
-          400: describeProblem("The body names a member the command does not take, a kind twice, a project this account does not work in, a product that is not the project's, or a product sold by the month."),
-          ...problems("edit"),
           409: describeProblem("A new or changed charge names a product that is not offered, or a ticket type the set names afresh is retired."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", TicketChargesSet),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")

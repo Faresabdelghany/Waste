@@ -37,18 +37,17 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { alreadyAbsent, alreadyUnavailable } from "@waste/domain/resources/availability"
 import { and, asc, eq, gt, isNull, lte, or, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { awayOver, driverName, vehicleName } from "./availability-rules"
 import { periodAfter, periodOf, requireOrdered } from "./periods"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -75,9 +74,8 @@ function touching(validFrom: PgColumn, validTo: PgColumn, from: string | undefin
   return and(to === undefined ? undefined : lte(validFrom, to), from === undefined ? undefined : or(isNull(validTo), gt(validTo, from)))
 }
 
-const page = { 400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, or `projectId` is not a project this account works in."), 401: describeProblem("No usable token (see WWW-Authenticate).") }
-const unauthenticated = { 401: describeProblem("No usable token (see WWW-Authenticate).") }
-const forbidden = (action: string, module: string) => ({ 403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${module}\`.`) })
+/** What a list refuses beside the page rule. */
+const LIST_INVALID = ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in"]
 
 // ---------------------------------------------------------------------------
 // A driver's absences
@@ -176,21 +174,21 @@ const PERIOD_RULES =
 const NEVER_REFUSED_FOR_WORK =
   " Never refused for the work already planned on its days: the commands that name the driver or the vehicle afresh — an allocation, a collection group's crew, a route's assign, create and reschedule, and a dispatch to its planned driver — refuse there instead."
 
-export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function availabilityRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/driver-absences",
-      describeRoute({
+      {
         operationId: "listDriverAbsences",
         summary: "The absences of the drivers of the caller's projects",
         description:
           "One page of driver absences, oldest first (ids are time-ordered), from the projects the caller works in. `projectId` narrows it to one of those projects, `driverId` to one driver, and `from` and `to` (both inclusive, `to` on or after `from`) to the absences touching that window of days. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("One page of absences.", DriverAbsencePage), ...page, ...forbidden("view", DRIVERS) },
-      }),
-      guard,
-      requireGrant(DRIVERS, "view"),
-      validate("query", DriverAbsenceListQuery),
+        module: DRIVERS,
+        action: "view",
+        query: DriverAbsenceListQuery,
+        invalid: LIST_INVALID,
+        responses: { 200: describeJson("One page of absences.", DriverAbsencePage) },
+      },
       async (c) => {
         const { limit, cursor, projectId, driverId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -217,22 +215,19 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/driver-absences",
-      describeRoute({
+      {
         operationId: "createDriverAbsence",
         summary: "Record a driver's absence",
         description: `Records that a driver of a project the caller works in is away over a period, with why (\`holiday\`, \`sick\`, \`training\`, \`leave\`, \`other\`) and a note; the absence lives in the driver's project. A driver of another project is refused (400 at \`driverId\`). ${PERIOD_RULES}${NEVER_REFUSED_FOR_WORK} The server mints the id.`,
-        security: BEARER_SECURITY,
+        module: DRIVERS,
+        action: "create",
+        body: DriverAbsenceCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a driver of no project this account works in, or ends on or before the day it starts"],
         responses: {
           201: describeCreated("The absence as recorded.", DriverAbsence),
-          400: describeProblem("The body is missing a field, names a member the server owns, names a driver of no project this account works in, or ends on or before the day it starts."),
-          ...unauthenticated,
-          ...forbidden("create", DRIVERS),
           409: describeProblem("The driver is already absent on one of those days; the detail names that absence."),
         },
-      }),
-      guard,
-      requireGrant(DRIVERS, "create"),
-      validate("json", DriverAbsenceCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -252,16 +247,15 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/driver-absences/:id",
-      describeRoute({
+      {
         operationId: "getDriverAbsence",
         summary: "One driver absence",
         description: "One absence of a driver of a project the caller works in. One of another company, or of a project this account does not work in, is one that does not exist here.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("The absence.", DriverAbsence), 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("view", DRIVERS), 404: describeProblem("No driver absence with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(DRIVERS, "view"),
-      validate("param", IdParam),
+        module: DRIVERS,
+        action: "view",
+        params: IdParam,
+        responses: { 200: describeJson("The absence.", DriverAbsence), 404: describeProblem("No driver absence with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findAbsence(c.get("tx"), c.get("principal"), id)
@@ -271,24 +265,21 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/driver-absences/:id",
-      describeRoute({
+      {
         operationId: "patchDriverAbsence",
         summary: "Move a driver's absence",
         description: `Moves the period, the reason or the note of an absence; never whose it is. ${PERIOD_RULES} The period the patch leaves behind — the body's bounds over the stored ones — is what is judged. Under the absence's row lock.`,
-        security: BEARER_SECURITY,
+        module: DRIVERS,
+        action: "edit",
+        params: IdParam,
+        body: DriverAbsencePatch,
+        invalid: ["the body changes nothing, names a member it does not take, or leaves a period ending on or before the day it starts"],
         responses: {
           200: describeJson("The absence as it now stands.", DriverAbsence),
-          400: describeProblem("The path does not hold an id, or the body changes nothing, names a member it does not take, or leaves a period ending on or before the day it starts."),
-          ...unauthenticated,
-          ...forbidden("edit", DRIVERS),
           404: describeProblem("No driver absence with that id in the projects this account works in."),
           409: describeProblem("The driver is already absent on one of the days the period now covers; the detail names that absence."),
         },
-      }),
-      guard,
-      requireGrant(DRIVERS, "edit"),
-      validate("param", IdParam),
-      validate("json", DriverAbsencePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -315,17 +306,16 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .delete(
       "/driver-absences/:id",
-      describeRoute({
+      {
         operationId: "deleteDriverAbsence",
         summary: "Remove a driver's absence",
         description:
           "Removes an absence recorded wrongly — nothing references a period, and the audit trail keeps what it was, under the driver's history. The driver is there again on its days; the next generation run puts a group's driver back on its planned, unheld routes. Answers 204 with no body.",
-        security: BEARER_SECURITY,
-        responses: { 204: { description: "The absence is removed." }, 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("delete", DRIVERS), 404: describeProblem("No driver absence with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(DRIVERS, "delete"),
-      validate("param", IdParam),
+        module: DRIVERS,
+        action: "delete",
+        params: IdParam,
+        responses: { 204: { description: "The absence is removed." }, 404: describeProblem("No driver absence with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -336,17 +326,17 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/vehicle-unavailability",
-      describeRoute({
+      {
         operationId: "listVehicleUnavailability",
         summary: "When the vehicles of the caller's projects are out of use",
         description:
           "One page of vehicle unavailability — a powered vehicle's or a trailer's — oldest first, from the projects the caller works in. `projectId` narrows it to one of those projects, `vehicleId` to one vehicle, and `from` and `to` (both inclusive) to the periods touching that window of days. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("One page of unavailability.", VehicleUnavailabilityPage), ...page, ...forbidden("view", VEHICLES) },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("query", VehicleUnavailabilityListQuery),
+        module: VEHICLES,
+        action: "view",
+        query: VehicleUnavailabilityListQuery,
+        invalid: LIST_INVALID,
+        responses: { 200: describeJson("One page of unavailability.", VehicleUnavailabilityPage) },
+      },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -373,22 +363,19 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/vehicle-unavailability",
-      describeRoute({
+      {
         operationId: "createVehicleUnavailability",
         summary: "Record when a vehicle is out of use",
         description: `Records that a vehicle or a trailer of a project the caller works in is out of use over a period, with why (\`maintenance\`, \`repair\`, \`inspection\`, \`breakdown\`, \`other\`) and a note; the period lives in the vehicle's project. A vehicle of another project is refused (400 at \`vehicleId\`). ${PERIOD_RULES}${NEVER_REFUSED_FOR_WORK} The server mints the id.`,
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "create",
+        body: VehicleUnavailabilityCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a vehicle of no project this account works in, or ends on or before the day it starts"],
         responses: {
           201: describeCreated("The period as recorded.", VehicleUnavailability),
-          400: describeProblem("The body is missing a field, names a member the server owns, names a vehicle of no project this account works in, or ends on or before the day it starts."),
-          ...unauthenticated,
-          ...forbidden("create", VEHICLES),
           409: describeProblem("The vehicle is already unavailable on one of those days; the detail names that period."),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "create"),
-      validate("json", VehicleUnavailabilityCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -408,16 +395,15 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/vehicle-unavailability/:id",
-      describeRoute({
+      {
         operationId: "getVehicleUnavailability",
         summary: "One period a vehicle is out of use",
         description: "One period of unavailability of a vehicle of a project the caller works in. One of another company, or of a project this account does not work in, is one that does not exist here.",
-        security: BEARER_SECURITY,
-        responses: { 200: describeJson("The period.", VehicleUnavailability), 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("view", VEHICLES), 404: describeProblem("No vehicle unavailability with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "view"),
-      validate("param", IdParam),
+        module: VEHICLES,
+        action: "view",
+        params: IdParam,
+        responses: { 200: describeJson("The period.", VehicleUnavailability), 404: describeProblem("No vehicle unavailability with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findUnavailability(c.get("tx"), c.get("principal"), id)
@@ -427,24 +413,21 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/vehicle-unavailability/:id",
-      describeRoute({
+      {
         operationId: "patchVehicleUnavailability",
         summary: "Move when a vehicle is out of use",
         description: `Moves the period, the reason or the note; never whose it is. ${PERIOD_RULES} The period the patch leaves behind is what is judged. Under the row's lock.`,
-        security: BEARER_SECURITY,
+        module: VEHICLES,
+        action: "edit",
+        params: IdParam,
+        body: VehicleUnavailabilityPatch,
+        invalid: ["the body changes nothing, names a member it does not take, or leaves a period ending on or before the day it starts"],
         responses: {
           200: describeJson("The period as it now stands.", VehicleUnavailability),
-          400: describeProblem("The path does not hold an id, or the body changes nothing, names a member it does not take, or leaves a period ending on or before the day it starts."),
-          ...unauthenticated,
-          ...forbidden("edit", VEHICLES),
           404: describeProblem("No vehicle unavailability with that id in the projects this account works in."),
           409: describeProblem("The vehicle is already unavailable on one of the days the period now covers; the detail names that period."),
         },
-      }),
-      guard,
-      requireGrant(VEHICLES, "edit"),
-      validate("param", IdParam),
-      validate("json", VehicleUnavailabilityPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -471,17 +454,16 @@ export function availabilityRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .delete(
       "/vehicle-unavailability/:id",
-      describeRoute({
+      {
         operationId: "deleteVehicleUnavailability",
         summary: "Remove a period a vehicle was out of use",
         description:
           "Removes a period recorded wrongly — nothing references it, and the audit trail keeps what it was, under the vehicle's history. The vehicle is there again on its days; the next generation run puts a group's vehicle back on its planned, unheld routes. Answers 204 with no body.",
-        security: BEARER_SECURITY,
-        responses: { 204: { description: "The period is removed." }, 400: describeProblem("The path does not hold an id."), ...unauthenticated, ...forbidden("delete", VEHICLES), 404: describeProblem("No vehicle unavailability with that id in the projects this account works in.") },
-      }),
-      guard,
-      requireGrant(VEHICLES, "delete"),
-      validate("param", IdParam),
+        module: VEHICLES,
+        action: "delete",
+        params: IdParam,
+        responses: { 204: { description: "The period is removed." }, 404: describeProblem("No vehicle unavailability with that id in the projects this account works in.") },
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")

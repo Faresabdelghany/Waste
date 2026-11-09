@@ -79,14 +79,13 @@ import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, count, countDistinct, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, lte, sql, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
-import { Hono, type Context, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
+import type { Context } from "hono"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, validate } from "../problem"
-import type { ClockOptions } from "./scheme-groups"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem } from "../problem"
 import { describeJson } from "./shared"
 
 const PERFORMANCE = "improve.performance"
@@ -101,8 +100,6 @@ const PERIOD_REFUSED = `a parameter is one the report does not read (\`interval\
 
 /** What a report's window and filters say in every description. */
 const WINDOW_SENTENCE = `\`from\` and \`to\` are the window's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`interval\` (\`day\` when absent) cuts it into the series — days, ISO weeks from Monday, calendar months, the first and last clipped to the window. \`projectId\` narrows the report to one of the caller's projects, and absent it spans every project the caller works in; an account that works in none reads zeros. The query is strict: a parameter this report does not read is refused by name.`
-
-const DESCRIBE_401 = describeProblem("No usable token (see WWW-Authenticate).")
 const describe403 = (improve: ModuleKey, rows: ModuleKey) => describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${improve}\` and \`view\` on \`${rows}\`, the rows this report counts.`)
 
 type WindowQuery = { projectId?: string; from: string; to: string; interval: Interval }
@@ -644,132 +641,121 @@ function answer<Query extends { projectId?: string }, Report>(read: (tx: Tx, pri
   return async (c: Context<AuthEnv>, query: Query) => c.json(await readFor(c, query))
 }
 
-export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function reportRoutes(deps: RouteDeps) {
+  const { now } = deps
   const service = answer(serviceReport)
   const tickets = answer((tx, principal, query: TicketReportQuery) => ticketReport(tx, principal, query, now()))
   const revenue = answer(revenueReport)
   const tonnage = answer(tonnageReport)
   const wasteData = answer(wasteDataReport)
   const wasteDataFor = reading(wasteDataReport)
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/reports/service",
-      describeRoute({
+      {
         operationId: "getServiceReport",
         summary: "How the routes ran and their pickups were served",
         description: `The routes operating in the window — a regeneration's cancellations left out, since the occurrence they stood for is gone — by status, how many went out, and whether they went out on time: started no later than the planned start on the project's clock on the operating date plus ${ON_TIME_GRACE_MINUTES} minutes, a route with no planned start counted apart as unjudged. And their pickups by standing: completed, missed (skipped or failed, with the reasons), open (still planned) and withdrawn (taken off by a regeneration or removed by the dispatcher, counted in nothing else); \`due\` is completed, missed and open. The collection and missed rates are over the pickups with an outcome, the on-time rate over the routes judged; each is null where there was nothing to divide by. The same counts per interval of the series, every interval present, and per Route Scheme with a route in the window, the office's ad-hoc routes (no scheme) in a row of their own per project with \`routeSchemeId\` and \`name\` null. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows the pickups to one fraction and the routes to the ones holding a pickup of it; \`routeSchemeId\` to one scheme's routes.`,
-        security: BEARER_SECURITY,
+        module: PERFORMANCE,
+        action: "view",
+        also: ["route-studio.routes", "view"],
+        query: ServiceReportQuery,
+        invalid: [`the query does not parse: ${WINDOW_REFUSED}, or a filter is not an id`],
         responses: {
           200: describeJson("The service report.", ServiceReport),
-          400: describeProblem(`The query does not parse: ${WINDOW_REFUSED}, or a filter is not an id.`),
-          401: DESCRIBE_401,
           403: describe403(PERFORMANCE, "route-studio.routes"),
         },
-      }),
-      guard,
-      requireGrant(PERFORMANCE, "view"),
-      requireGrant("route-studio.routes", "view"),
-      validate("query", ServiceReportQuery),
+      },
       (c) => service(c, c.req.valid("query")),
     )
     .get(
       "/reports/tickets",
-      describeRoute({
+      {
         operationId: "getTicketReport",
         summary: "How the tickets were opened and closed",
         description: `The tickets opened over the window — made on one of its days, on the project's clock; the ticket list's own window reads \`occurredAt\` instead, when the issue happened — and closed over it, completed or rejected, with how many of the closed had a due time and how many were closed by it; and, whatever the window, the tickets open now (open, in progress, pending or on hold) with how many are past their due time and how many routes they name. \`asOf\` is the instant "now" was read at. By kind, the kinds with any, and per interval of the series, every interval present. ${WINDOW_SENTENCE}`,
-        security: BEARER_SECURITY,
+        module: PERFORMANCE,
+        action: "view",
+        also: ["operate.tickets", "view"],
+        query: TicketReportQuery,
+        invalid: [`the query does not parse: ${WINDOW_REFUSED}`],
         responses: {
           200: describeJson("The ticket report.", TicketReport),
-          400: describeProblem(`The query does not parse: ${WINDOW_REFUSED}.`),
-          401: DESCRIBE_401,
           403: describe403(PERFORMANCE, "operate.tickets"),
         },
-      }),
-      guard,
-      requireGrant(PERFORMANCE, "view"),
-      requireGrant("operate.tickets", "view"),
-      validate("query", TicketReportQuery),
+      },
       (c) => tickets(c, c.req.valid("query")),
     )
     .get(
       "/reports/revenue",
-      describeRoute({
+      {
         operationId: "getRevenueReport",
         summary: "What was invoiced",
         description: `The documents issued over the window — invoices and credit notes, by \`issuedOn\` — by currency, never summed across two: how many of each and their net, VAT and gross in minor units, a credit note's negative. The same per interval of the series and currency, an interval without a document absent, and per product and currency: the quantity, a line that takes the service back (a credit note's, a reversal's) counted against it, and the net, largest first. ${WINDOW_SENTENCE}`,
-        security: BEARER_SECURITY,
+        module: ANALYTICS,
+        action: "view",
+        also: ["commercial.invoices", "view"],
+        query: RevenueReportQuery,
+        invalid: [`the query does not parse: ${WINDOW_REFUSED}`],
         responses: {
           200: describeJson("The revenue report.", RevenueReport),
-          400: describeProblem(`The query does not parse: ${WINDOW_REFUSED}.`),
-          401: DESCRIBE_401,
           403: describe403(ANALYTICS, "commercial.invoices"),
         },
-      }),
-      guard,
-      requireGrant(ANALYTICS, "view"),
-      requireGrant("commercial.invoices", "view"),
-      validate("query", RevenueReportQuery),
+      },
       (c) => revenue(c, c.req.valid("query")),
     )
     .get(
       "/reports/tonnage",
-      describeRoute({
+      {
         operationId: "getTonnageReport",
         summary: "What was unloaded and weighed",
         description: `The unloads of the window — recorded at a station on one of its days, on the project's clock — by project, fraction, station and interval of the series, a combination without an unload absent: their net weight in whole kilograms by weight review, \`approvedKg\` and \`capturedKg\` (nobody has reviewed it yet) making up \`netKg\`, and a rejected unload's weight beside them and in no total; a corrected unload is not counted, its correction is. And the weights recorded at the pickups (the \`weight\` proof, a lifter's or a hand scale's reading, each pickup's latest) of the pickups collected on the window's routes, by project, fraction and the route's operating day's interval. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows both to one fraction, \`unloadingStationId\` the unloads to one station.`,
-        security: BEARER_SECURITY,
+        module: ANALYTICS,
+        action: "view",
+        also: ["route-studio.weights", "view"],
+        query: TonnageReportQuery,
+        invalid: [`the query does not parse: ${WINDOW_REFUSED}, or a filter is not an id`],
         responses: {
           200: describeJson("The tonnage report.", TonnageReport),
-          400: describeProblem(`The query does not parse: ${WINDOW_REFUSED}, or a filter is not an id.`),
-          401: DESCRIBE_401,
           403: describe403(ANALYTICS, "route-studio.weights"),
         },
-      }),
-      guard,
-      requireGrant(ANALYTICS, "view"),
-      requireGrant("route-studio.weights", "view"),
-      validate("query", TonnageReportQuery),
+      },
       (c) => tonnage(c, c.req.valid("query")),
     )
     .get(
       "/reports/waste-data",
-      describeRoute({
+      {
         operationId: "getWasteDataReport",
         summary: "The waste-data report for the national system",
         description: `The unloads of the period whose latest weight review approved them — recorded at a station on one of its days, on the project's clock — as net kilograms per municipality (the project they were collected for), unloading station and waste fraction, each fraction with its waste code; a combination without an approved unload is absent, and there is no series. Beside the rows, the warnings of what they file — a fraction without a waste code (its rows carry the code null) and a project whose kind is not \`Municipality\` (its rows carry its name as the municipality) — then the unloads nobody has reviewed, per municipality, station and fraction, which no row counts. A rejected unload is counted nowhere, a corrected one through its correction once that is approved. \`from\` and \`to\` are the period's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`projectId\` narrows it to one of the caller's projects, and absent it spans every project the caller works in. \`GET /reports/waste-data.csv\` is the same report as a file.`,
-        security: BEARER_SECURITY,
+        module: COMPLIANCE,
+        action: "view",
+        also: ["route-studio.weights", "view"],
+        query: WasteDataReportQuery,
+        invalid: [`the query does not parse: ${PERIOD_REFUSED}`],
         responses: {
           200: describeJson("The waste-data report.", WasteDataReport),
-          400: describeProblem(`The query does not parse: ${PERIOD_REFUSED}.`),
-          401: DESCRIBE_401,
           403: describe403(COMPLIANCE, "route-studio.weights"),
         },
-      }),
-      guard,
-      requireGrant(COMPLIANCE, "view"),
-      requireGrant("route-studio.weights", "view"),
-      validate("query", WasteDataReportQuery),
+      },
       (c) => wasteData(c, c.req.valid("query")),
     )
     .get(
       "/reports/waste-data.csv",
-      describeRoute({
+      {
         operationId: "getWasteDataFile",
         summary: "The waste-data report as a file",
         description: `The waste-data report as a plain CSV of our own, for the office to file with the national waste-data system by hand: UTF-8 behind a byte-order mark, CRLF records, the columns \`period_from\`, \`period_to\`, \`municipality\`, \`unloading_station\`, \`fraction\`, \`waste_code\` (blank where the fraction has none), \`kg\` and \`warning\`; a data row per municipality, station and fraction, then a warning row each, its sentence in \`warning\` and \`kg\` blank. It is not the national system's own import layout. \`separator=semicolon\` writes it for a spreadsheet under a Danish locale. The query is the report's.`,
-        security: BEARER_SECURITY,
+        module: COMPLIANCE,
+        action: "view",
+        also: ["route-studio.weights", "view"],
+        query: WasteDataFileQuery,
+        invalid: [`the query does not parse: ${PERIOD_REFUSED}, or \`separator\` is neither \`comma\` nor \`semicolon\``],
         responses: {
           200: { description: "The file, as an attachment.", content: { "text/csv": { schema: { type: "string" as const } } } },
-          400: describeProblem(`The query does not parse: ${PERIOD_REFUSED}, or \`separator\` is neither \`comma\` nor \`semicolon\`.`),
-          401: DESCRIBE_401,
           403: describe403(COMPLIANCE, "route-studio.weights"),
         },
-      }),
-      guard,
-      requireGrant(COMPLIANCE, "view"),
-      requireGrant("route-studio.weights", "view"),
-      validate("query", WasteDataFileQuery),
+      },
       async (c) => {
         const { separator, ...query } = c.req.valid("query")
         const report = await wasteDataFor(c, query)

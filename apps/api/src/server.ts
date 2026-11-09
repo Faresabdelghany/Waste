@@ -20,18 +20,16 @@ import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
 import { probePoolOptions } from "@waste/db/probe"
 import { supabaseStorage } from "@waste/db/storage"
 import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
-import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
 import { listen } from "@waste/server/listen"
 import type { Context } from "hono"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
-import { Allowance, PUBLIC_REQUESTS_PER_MINUTE } from "./auth/public-door"
 import { addressRegisterFrom } from "./address-register/select"
-import { PREVIEW_CALLS_PER_MINUTE } from "./routes/routing-preview"
 import { createVerifier, supabaseAuth } from "./auth/verify"
 import { readBuildInfo } from "./build-info"
+import { previewEngine } from "./deps"
 import { parseEnv } from "./env"
 import { ensureProofBucket } from "./proof-bucket"
 
@@ -43,13 +41,9 @@ const pool = createDb(env.DATABASE_URL, { max: env.DATABASE_POOL_MAX })
 const auth = supabaseAuth(env.SUPABASE_URL)
 const verifier = createVerifier({ keySet: createRemoteJWKSet(auth.jwks), issuer: auth.issuer })
 // The provider the preview calls (#173), with the key where it is OpenRouteService's; its name keys every Plan fingerprint too.
-const routingEngine = new QuotaEngine(providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }), {
-  ...quotaKnobs({ callsPerMinute: env.ROUTING_PREVIEW_CALLS_PER_MINUTE ?? PREVIEW_CALLS_PER_MINUTE }),
-  waits: false,
-})
+const routingEngine = previewEngine(providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }), env.ROUTING_PREVIEW_CALLS_PER_MINUTE)
 // The public door's client where no trusted proxy names one: the socket's peer (auth/public-door.ts).
 const peer = (c: Context): string | undefined => getConnInfo(c).remote.address
-const publicAllowance = new Allowance(env.PUBLIC_REQUESTS_PER_MINUTE ?? PUBLIC_REQUESTS_PER_MINUTE, () => new Date())
 
 // The proofs' Storage (O1 of #290), where the deployment holds Supabase's service-role key; none, and the photo routes answer 503.
 const storage = env.SUPABASE_SERVICE_ROLE_KEY === undefined ? null : supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY })
@@ -65,9 +59,8 @@ const listening = await listen(
     verifier,
     databaseTimeoutMs: CHECK_TIMEOUT_MS,
     build,
-    routing: { name: routingEngine.name },
     routingEngine,
-    publicAllowance,
+    publicRequestsPerMinute: env.PUBLIC_REQUESTS_PER_MINUTE,
     peer,
     trustedProxies: env.PUBLIC_TRUSTED_PROXIES ?? 0,
     storage,

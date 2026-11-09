@@ -55,25 +55,22 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
-import type { Action } from "@waste/domain/access/modules"
 import { ALERT_DOES_NOT_CHANGE, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { linkAlert } from "@waste/db/commands/alert-links"
 import { alertColumns, alertOf, type AlertRow } from "@waste/db/shapes/alerts"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
 import { alertScope, noSuchAlert } from "./resolution-shapes"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 
 /** The grant every route here runs under: the exceptions board's. */
@@ -122,32 +119,28 @@ async function moved(tx: Tx, principal: Principal, id: string, values: Partial<t
   return row
 }
 
-const commandProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
+const commandProblems = {
   404: describeProblem("No alert with that id in the projects this account works in."),
-})
+}
 
-export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function alertRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/alerts",
-      describeRoute({
+      {
         operationId: "listAlerts",
         summary: "The alerts of the caller's projects",
         description:
           "One page of alerts, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status`, `severity` and `kind` narrow the board, and `rule` to what one of the worker's rules raised (O4 of #290); `routeId`, `vehicleId`, `driverId` and `containerId` answer what was raised about one route, vehicle, driver or container; `ticketId` answers the alerts a ticket answers, and `outboundLoadId` the alerts the disposal-site reconciliation raised about one outbound load (M17 of #293). Whether an alert is linked to a ticket is `ticketId` not null and no status. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: AlertListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of alerts.", AlertPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", AlertListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, rule, severity, kind, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -182,24 +175,19 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/alerts",
-      describeRoute({
+      {
         operationId: "raiseAlert",
         summary: "Raise an alert by hand",
         description:
           "Raises an alert about something of one project the caller works in: `source` is `manual`, `status` is `new`, `raisedBy` is the caller's account, and `detectedAt` is the body's or the request's clock when absent. An alert names what it is about — at least one of `routeId`, `vehicleId`, `driverId` and `containerId` (400 at `routeId` otherwise: an alert about nothing is nothing) — and each one named is held to that project (400 at its field): the route one of its routes, the vehicle one of its vehicles of any kind, a trailer included, the driver one of its drivers, the container one of its containers; `ticketId`, where given, is a ticket of that project and links the alert to it from the start. There is no status gate on any of them: a defect on a retired container and a route that has ended are what an alert is about. `detectedAt` may run at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and has no lower bound, since the office records a condition seen yesterday; the clock is judged before the links, since it costs no statement. The raise writes `alert-raised` to the outbox with the alert as answered, from which the worker e-mails the staff who asked to hear of an alert that severe (O16 of #290). The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: AlertCreate,
+        invalid: ["the body is missing a field, names a member the server owns (`source`, `status`, `raisedBy`, the stamps), names a project this account does not work in, names none of the four subjects, sets `detectedAt` more than five minutes ahead of the clock, or names a route, vehicle, driver, container or ticket that is not that project's — each at the field that is wrong"],
         responses: {
           201: describeCreated("The alert as it was written.", Alert),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns (`source`, `status`, `raisedBy`, the stamps), names a project this account does not work in, names none of the four subjects, sets `detectedAt` more than five minutes ahead of the clock, or names a route, vehicle, driver, container or ticket that is not that project's — each at the field that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", AlertCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -240,21 +228,19 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .get(
       "/alerts/:id",
-      describeRoute({
+      {
         operationId: "getAlert",
         summary: "One alert",
         description:
           "One alert of a project the caller works in, as it now stands: its subject, its status with the acknowledgement and resolution stamps the status carries, and the ticket it is linked to or null. An alert of another company, or of a project this account does not work in, is an alert that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The alert.", Alert),
-          400: describeProblem("The path does not hold an id."),
-          ...commandProblems("view"),
+          ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findAlert(c.get("tx"), c.get("principal"), id)
@@ -264,23 +250,22 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/alerts/:id/acknowledge",
-      describeRoute({
+      {
         operationId: "acknowledgeAlert",
         summary: "Acknowledge an alert",
         description:
           "The `acknowledge` command: `new` becomes `acknowledged`, stamped with the caller's account and the request's clock. The body is empty; a member in it is refused. An alert already acknowledged answers 200 as it stands, without a write; a resolved one is refused (409, `This alert is resolved and does not change`). Runs under the alert's row lock, so two commands on one alert take turns.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: AlertAcknowledge,
+        invalid: ["the body carries a member"],
         responses: {
           200: describeJson("The alert, acknowledged.", Alert),
-          400: describeProblem("The path does not hold an id, or the body carries a member."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The alert is resolved; a resolved alert does not change."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", AlertAcknowledge),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -293,22 +278,21 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/alerts/:id/resolve",
-      describeRoute({
+      {
         operationId: "resolveAlert",
         summary: "Resolve an alert",
         description:
           "The `resolve` command: `new` or `acknowledged` becomes `resolved`, stamped with the caller's account, the request's clock and the body's note where it has one. An alert is resolved without being acknowledged first — a resolved alert may never have been acknowledged, and the acknowledgement stamps then stay null. An alert already resolved answers 200 as it stands, without a write and with the note it already carries: the body's note is not taken. Runs under the alert's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: AlertResolve,
+        invalid: ["the body carries a member the command does not take or a note that is blank"],
         responses: {
           200: describeJson("The alert, resolved.", Alert),
-          400: describeProblem("The path does not hold an id, or the body carries a member the command does not take or a note that is blank."),
-          ...commandProblems("edit"),
+          ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", AlertResolve),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")
@@ -322,23 +306,22 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/alerts/:id/link-ticket",
-      describeRoute({
+      {
         operationId: "linkAlertTicket",
         summary: "Link an alert to a ticket",
         description:
           "Sets the one ticket the alert is linked to. The alert's own state is judged first, whatever the body names: a resolved alert is refused (409, `This alert is resolved and does not change`). Then `ticketId` is held to a ticket of the alert's project (400 at `ticketId` otherwise). Then the link: an alert links to one ticket — the same ticket again answers 200 as it stands, without a write, and another is refused (409, `This alert is linked to ticket T-8831; an alert links to one ticket`, naming the ticket it already names). The status does not move: `linked to ticket` is `ticketId` not null and no status. The same rule `POST /tickets` runs when a ticket is opened from an alert. Runs under the alert's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: AlertLinkTicket,
+        invalid: ["the body has no `ticketId`, carries a member the command does not take, or names a ticket that is not the alert's project's"],
         responses: {
           200: describeJson("The alert, linked.", Alert),
-          400: describeProblem("The path does not hold an id, or the body has no `ticketId`, carries a member the command does not take, or names a ticket that is not the alert's project's."),
-          ...commandProblems("edit"),
+          ...commandProblems,
           409: describeProblem("The alert is resolved, or is already linked to another ticket; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", AlertLinkTicket),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { ticketId } = c.req.valid("json")

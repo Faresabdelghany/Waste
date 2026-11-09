@@ -11,36 +11,30 @@
 // read under (#124 §5).
 import { RoutingQuota } from "@waste/contracts/routing-quota"
 import { quotaRows } from "@waste/db/commands/routing-quota"
-import type { RoutingIdentity } from "@waste/routing/provider"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { describeJson } from "./shared"
 
 const MODULE = "route-studio.routes"
 
 const instant = (value: Date | null): string | null => (value === null ? null : value.toISOString())
 
-export function routingQuotaRoutes(guard: MiddlewareHandler<AuthEnv>, { routing }: { routing: RoutingIdentity }) {
-  return new Hono<AuthEnv>().get(
+export function routingQuotaRoutes(deps: RouteDeps) {
+  const { routing } = deps
+  return routes(deps).get(
     "/routing/quota",
-    describeRoute({
+    {
       operationId: "getRoutingQuota",
       summary: "The routing provider's quota, as the worker last read it",
       description:
         "The provider this deployment routes with and, per request family (`directions`, `optimisation`), what its quota engine last knew: the provider's own reading — `remaining` and `limit` off `x-ratelimit-*`, `resetAt` when the daily window resets — and since when the family is exhausted (`exhaustedAt`: its jobs wait for `resetAt`) or the key refused (`keyRefusedAt`: \"Routing unavailable: key refused\"). A family appears once the provider has been asked of it; the fake reports no limit, so its counts are null. Written by the worker after every job that asked the provider; a route's own waiting is its active Plan's `deferredUntil`.",
-      security: BEARER_SECURITY,
+      module: MODULE,
+      action: "view",
       responses: {
         200: describeJson("The provider and a reading per family asked of it.", RoutingQuota),
-        401: describeProblem("No usable token (see WWW-Authenticate)."),
-        403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
       },
-    }),
-    guard,
-    requireGrant(MODULE, "view"),
+    },
     async (c) => {
       const rows = await quotaRows(c.get("tx"), { companyId: c.get("principal").companyId, provider: routing.name })
       const answer: RoutingQuota = {

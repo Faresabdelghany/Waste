@@ -14,7 +14,10 @@ import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import type { MiddlewareHandler } from "hono"
 
 import { problem } from "../problem"
-import type { IdentifiedEnv, Principal } from "./principal"
+import type { Principal } from "./principal"
+
+/** What a grant reads: the Principal either guard set. */
+type PrincipalEnv = { Variables: { principal: Principal } }
 
 /** Whether a normalised grant set lists the action for the module. */
 export function allows(grants: readonly Grant[], moduleKey: ModuleKey, action: Action): boolean {
@@ -27,7 +30,7 @@ export function requireAllowed(grants: readonly Grant[], moduleKey: ModuleKey, a
 }
 
 /** The guard after `authenticate` or `identify`: passes when the caller's role grants the action on the module, else 403. */
-export function requireGrant(moduleKey: ModuleKey, action: Action): MiddlewareHandler<IdentifiedEnv> {
+export function requireGrant(moduleKey: ModuleKey, action: Action): MiddlewareHandler<PrincipalEnv> {
   return async (c, next) => {
     requireAllowed(c.get("principal").grants, moduleKey, action)
     await next()
@@ -41,7 +44,7 @@ export function requireGrant(moduleKey: ModuleKey, action: Action): MiddlewareHa
  * — so a provider's manager administers its team without the company's
  * access settings, and each answer is fenced by the account in the handler.
  */
-export function requireGrantOf(moduleOf: (principal: Principal) => ModuleKey, action: Action): MiddlewareHandler<IdentifiedEnv> {
+export function requireGrantOf(moduleOf: (principal: Principal) => ModuleKey, action: Action): MiddlewareHandler<PrincipalEnv> {
   return async (c, next) => {
     const principal = c.get("principal")
     requireAllowed(principal.grants, moduleOf(principal), action)

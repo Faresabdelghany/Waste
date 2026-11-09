@@ -32,23 +32,22 @@ import { Page } from "@waste/contracts/pagination"
 import { Team, TeamCreate, TeamListQuery, TeamMembersSet, TeamPatch, TicketTeamDefaults, TicketTeamDefaultsSet } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { team, teamMember, ticketTeamDefault } from "@waste/db/schema/resolution"
-import type { Action } from "@waste/domain/access/modules"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import { ACTIVE_TEAM_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { retiredTeam } from "@waste/domain/resolution/teams"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock, refuseDuplicate } from "@waste/db/commands/shared"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
-import { allows, requireGrant, requireGrantOf } from "../auth/require"
+import { allows } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
 import { NOT_A_TEAM, requireUserAccount } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -127,32 +126,27 @@ const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind
     .map((row) => ({ kind: row.kind as TicketKind | null, ticketTypeId: row.ticketTypeId, teamId: row.teamId })),
 })
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(
-    action === "view" ? `No active account here, or the caller's role allows \`view\` on neither \`${TICKETS}\` nor \`${MODULE}\`.` : `No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`,
-  ),
-})
+/** A read's 403: the grant is the account's choice of two modules (`readModuleOf`). */
+const READ_FORBIDDEN = describeProblem(`No active account here, or the caller's role allows \`view\` on neither \`${TICKETS}\` nor \`${MODULE}\`.`)
 
-export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function ticketTeamRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/teams",
-      describeRoute({
+      {
         operationId: "listTeams",
         summary: "The company's ticket teams",
         description:
           "One page of the teams the company's tickets wait with, oldest first (ids are time-ordered), each with its members by id. `status` narrows the page to the active or the retired. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: readModuleOf,
+        action: "view",
+        query: TeamListQuery,
+        invalid: ["the status is not one of the two"],
         responses: {
           200: describeJson("One page of teams, each with its members.", TeamPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or the status is not one of the two."),
-          ...commonProblems("view"),
+          403: READ_FORBIDDEN,
         },
-      }),
-      guard,
-      requireGrantOf(readModuleOf, "view"),
-      validate("query", TeamListQuery),
+      },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -171,22 +165,20 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/teams",
-      describeRoute({
+      {
         operationId: "createTeam",
         summary: "Add a ticket team",
         description:
           "Adds a team to the company. `name` is unique inside the company; `status` is `active` unless said. `memberUserAccountIds` is the set the team starts with, each an account of this company that is not deactivated (400 at `memberUserAccountIds.N`) and named once, and none when absent. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: TeamCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names an account twice, or names one that is not an active account of this company"],
         responses: {
           201: describeCreated("The team as it was written, with its members.", Team),
-          400: describeProblem("The body is missing a field, names a member the server owns, names an account twice, or names one that is not an active account of this company."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a team with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", TeamCreate),
+      },
       async (c) => {
         const { memberUserAccountIds, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -204,21 +196,19 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/teams/:id",
-      describeRoute({
+      {
         operationId: "getTeam",
         summary: "One ticket team",
         description: "One team of the caller's company, with its members. Another company's team is a team that does not exist here.",
-        security: BEARER_SECURITY,
+        module: readModuleOf,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The team, with its members.", Team),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
+          403: READ_FORBIDDEN,
           404: describeProblem("No team with that id in this company."),
         },
-      }),
-      guard,
-      requireGrantOf(readModuleOf, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -230,24 +220,22 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/teams/:id",
-      describeRoute({
+      {
         operationId: "patchTeam",
         summary: "Rename or retire a ticket team",
         description:
           "Changes the name, or the status: `inactive` retires the team, so no new ticket and no project's default names it, while every ticket it holds keeps it; `active` offers it again. A project's default naming a retired team gives a new ticket no team. The members are a set, so they are `PUT /teams/{id}/members`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TeamPatch,
+        invalid: ["the patch is empty or names a field the caller does not own, the members included"],
         responses: {
           200: describeJson("The team as it now stands, with its members.", Team),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own, the members included."),
-          ...commonProblems("edit"),
           404: describeProblem("No team with that id in this company."),
           409: describeProblem("The company already has another team with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TeamPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -267,23 +255,21 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/teams/:id/members",
-      describeRoute({
+      {
         operationId: "putTeamMembers",
         summary: "Replace a ticket team's members",
         description:
           "Replaces the whole set of members with the one in the body: an account the body leaves out is not in the team afterwards, and an empty list is a team of nobody, whose queue anyone with the tickets grant still works. Every id is an account of this company that is not deactivated (400 at `memberUserAccountIds.N`), each named once (400 on `memberUserAccountIds`). The team's `updatedAt` moves, since the set is part of the team on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TeamMembersSet,
+        invalid: ["the body is missing `memberUserAccountIds`, names a member it does not own, names an account twice, or names one that is not an active account of this company"],
         responses: {
           200: describeJson("The team with the members it now has.", Team),
-          400: describeProblem("The path does not hold an id, or the body is missing `memberUserAccountIds`, names a member it does not own, names an account twice, or names one that is not an active account of this company."),
-          ...commonProblems("edit"),
           404: describeProblem("No team with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TeamMembersSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { memberUserAccountIds } = c.req.valid("json")
@@ -302,22 +288,20 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/projects/:id/ticket-team-defaults",
-      describeRoute({
+      {
         operationId: "getTicketTeamDefaults",
         summary: "A project's default ticket teams",
         description:
           "The team a ticket of the project goes to when its opener names none, one per kind and, since #548 of #544, one per ticket type, whose own wins over its kind's: the kinds in the vocabulary's order, then the types. A ticket whose type and kind the project names no team for opens with none, and so does one whose defaults' teams are retired.",
-        security: BEARER_SECURITY,
+        module: readModuleOf,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The project's defaults.", TicketTeamDefaults),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
+          403: READ_FORBIDDEN,
           404: describeProblem("No project with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrantOf(readModuleOf, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -327,24 +311,22 @@ export function ticketTeamRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/projects/:id/ticket-team-defaults",
-      describeRoute({
+      {
         operationId: "putTicketTeamDefaults",
         summary: "Replace a project's default ticket teams",
         description:
           "Replaces the whole set with the one in the body: a kind the body leaves out goes to no team, a ticket type to its kind's, and an empty list gives none a team. Each entry names a kind or a ticket type, exactly one (400 at `defaults.N`), each once (400 on `defaults`); each team is one of this company's (400 at `defaults.N.teamId`) and, where the entry names it afresh, active (409) — a team the entry already names stands whatever its status — and each type one of this company's (400 at `defaults.N.ticketTypeId`) that, where the set names it afresh, is active (409). A kind the body keeps keeps its id and moves only its team, and one whose team did not change is not written, so the audit log reads one row's history per kind. A ticket already open keeps its team: the default names one as a ticket opens.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TicketTeamDefaultsSet,
+        invalid: ["the body is missing `defaults`, names a member it does not own, names a kind twice or one the vocabulary does not hold, or names a team that is not this company's"],
         responses: {
           200: describeJson("The project's defaults as they now stand.", TicketTeamDefaults),
-          400: describeProblem("The path does not hold an id, or the body is missing `defaults`, names a member it does not own, names a kind twice or one the vocabulary does not hold, or names a team that is not this company's."),
-          ...commonProblems("edit"),
           404: describeProblem("No project with that id in the projects this account works in."),
           409: describeProblem("A team named is retired, or a ticket type the set names afresh is."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TicketTeamDefaultsSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { defaults } = c.req.valid("json")

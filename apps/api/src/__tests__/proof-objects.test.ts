@@ -13,6 +13,7 @@ import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
 import { createJobSender } from "@waste/db/jobs"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
+import { CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { NO_PROOF_STORAGE, objectKeyOf } from "@waste/domain/storage-objects"
 import { notActive } from "@waste/domain/execution/transitions"
@@ -20,7 +21,7 @@ import { Hono } from "hono"
 
 import type { createApp } from "../app"
 import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
-import { authenticate, identify } from "../auth/principal"
+import { routeDeps } from "../deps"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
 import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "../routes/proof-objects"
@@ -88,8 +89,9 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
   const mounted = (storage: ProofStorage | null) => {
     const app = new Hono()
     app.onError(errorHandler())
-    app.route("/", proofObjectRoutes(identify({ pool, verifier: keys.verifier }), { pool, storage, now: () => NOW, log: (entry) => logged.push(entry) }))
-    app.route("/", driverDoorRoutes(authenticate({ pool, verifier: keys.verifier }), { now: () => NOW, log: () => {}, jobs: createJobSender(pool) }))
+    const deps = { probe: pool, pool, verifier: keys.verifier, now: () => NOW, storage }
+    app.route("/", proofObjectRoutes(routeDeps({ ...deps, log: (entry) => logged.push(entry) })).app)
+    app.route("/", driverDoorRoutes(routeDeps({ ...deps, log: () => {}, jobs: createJobSender(pool) })).app)
     return app as unknown as ReturnType<typeof createApp>
   }
 
@@ -148,6 +150,12 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       const objectKey = objectKeyOf({ companyId: a.companyId, routeId: route.id, commandId }, "jpg")
       assert.deepEqual(answer, { state: "upload", objectKey, uploadUrl: `https://storage.test/upload/${objectKey}?token=t`, expiresAt: new Date(NOW.getTime() + 7_200_000).toISOString() })
       assert.equal(fake.asked.at(-1), `upload ${objectKey}`)
+    })
+
+    test("a reason that does not decode is answered as none: signing writes nothing the audit keeps", async () => {
+      const route = await activeRoute()
+      const response = await mads("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" }, headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     })
 
     test("a key the bucket holds already is uploaded: a retry after a lost answer puts nothing again", async () => {
@@ -250,6 +258,12 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
         { proofId: signature, objectKey: signatureKey, url: null, expiresAt },
       ])
       assert.equal(fake.asked.at(-1), `read ${photoKey},${signatureKey} for ${READ_URL_TTL_SECONDS}s`, "one call for the stop's keys")
+    })
+
+    test("a reason that does not decode is answered as none: a read writes nothing the audit keeps", async () => {
+      const { stop } = await stopWithObjects()
+      const response = await olivia(`/pickups/${stop}/proof-objects`, { headers: { [CHANGE_REASON_HEADER]: "%E0%A4%A" } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     })
 
     test("a stop with no object asks Storage for nothing", async () => {

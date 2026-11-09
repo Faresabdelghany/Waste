@@ -30,12 +30,14 @@
 //
 // The handler runs inside that same transaction and receives it as `tx`:
 // no handler opens a transaction of its own, so a request's reads and writes
-// are one atomic, fenced unit. One route is the exception, the guided
-// setup's preview (#173), which calls the routing provider: no transaction
-// may be held across that call (#124 §4), so its guard, `identify`, makes
-// the same checks through the same function and ends the transaction before
-// the handler runs. Hono answers a thrown error at the handler
-// (its compose catches the throw and calls the app's error handler there), so
+// are one atomic, fenced unit. A route that calls another service is the
+// exception, declared `transaction: false` (operation.ts): no transaction may
+// be held across that call (#124 §4), so its guard, `identify`, makes the
+// same checks through the same function and ends the transaction before the
+// handler runs, which opens short ones of its own, each fenced: `transact`
+// for rows the audit keeps, written by the Principal as the request's own
+// would be, and `fenced` for the rest. Hono answers a thrown error at the
+// handler (its compose catches the throw and calls the app's error handler there), so
 // the throw never reaches this middleware; what does is `c.error`, set on the
 // context when that happened. The transaction is therefore rolled back when
 // the context carries an error or the response is an error status, and
@@ -79,8 +81,18 @@ export type Principal = {
 /** The context variables an authenticated route reads: `c.get("principal")` and `c.get("tx")`, on a `Hono<AuthEnv>`. */
 export type AuthEnv = { Variables: { principal: Principal; tx: Tx } }
 
-/** What a route behind `identify` reads: the principal alone, since its transaction ended before the handler (#173). */
-export type IdentifiedEnv = { Variables: { principal: Principal } }
+/** Opens one short transaction under the Principal's company fence. */
+export type Transact = <T>(work: (tx: Tx) => Promise<T>) => Promise<T>
+
+/**
+ * What a route behind `identify` reads: the principal, and its short
+ * transactions, since the guard's ended before the handler (#173) — `transact`
+ * for rows the audit keeps, written by the Principal with the request's reason
+ * (read as each opens, so a reason that will not do is refused there), and
+ * `fenced` for the rest, the reads and the routing quota, which names no
+ * writer and reads no reason.
+ */
+export type IdentifiedEnv = { Variables: { principal: Principal; transact: Transact; fenced: Transact } }
 
 /** Who a shared statement of `@waste/db/commands` acts for when the principal asks: its company, and its account recording the rows. */
 export const actorOf = (principal: Principal): Actor => ({ companyId: principal.companyId, userAccountId: principal.user.id })
@@ -270,12 +282,12 @@ export function authenticate(options: AuthenticateOptions): MiddlewareHandler<Au
 }
 
 /**
- * The guard of the one route that calls the routing provider, the guided
- * setup's preview (#173): the same checks, the Principal resolved in a
- * transaction that ends before the handler runs, so no transaction is held
- * open across the provider's call (#124 §4) and no pooled connection sits
- * idle through it. The handler reads `principal` and no `tx`, and opens the
- * short transactions it needs itself, none of them across the call.
+ * The guard of a route that calls another service (`transaction: false`):
+ * the same checks, the Principal resolved in a transaction that ends before
+ * the handler runs, so no transaction is held open across the call (#124 §4)
+ * and no pooled connection sits idle through it. The handler reads
+ * `principal` and no `tx`, and opens the short transactions it needs through
+ * `transact` or `fenced`, none of them across the call.
  */
 export function identify(options: AuthenticateOptions): MiddlewareHandler<IdentifiedEnv> {
   return async (c, next) => {
@@ -284,7 +296,15 @@ export function identify(options: AuthenticateOptions): MiddlewareHandler<Identi
       resolved = principal
     })
     if (resolved === undefined) throw new Error("identify: the guard answered without a principal")
-    c.set("principal", resolved)
+    const principal = resolved
+    c.set("principal", principal)
+    c.set("transact", (work) =>
+      withCompany(options.pool.db, principal.companyId, async (tx) => {
+        await writtenBy(tx, principal, c.req.header(CHANGE_REASON_HEADER))
+        return await work(tx)
+      }),
+    )
+    c.set("fenced", (work) => withCompany(options.pool.db, principal.companyId, work))
     await next()
   }
 }

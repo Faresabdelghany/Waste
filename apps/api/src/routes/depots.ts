@@ -45,17 +45,16 @@ import { Depot, DepotCreate, DepotListQuery, DepotPatch } from "@waste/contracts
 import type { Tx } from "@waste/db/client"
 import { depot } from "@waste/db/schema/places"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -130,26 +129,23 @@ async function findDepot(tx: Tx, principal: Principal, id: string): Promise<Row 
   return row
 }
 
-export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function depotRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/depots",
-      describeRoute({
+      {
         operationId: "listDepots",
         summary: "The depots of the caller's projects",
         description:
           "One page of depots, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` narrows it to the depots in that state. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DepotListQuery,
+        invalid: ["`status` is not one of the four", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of depots.", DepotPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the four, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.depots`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DepotListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -174,25 +170,20 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/depots",
-      describeRoute({
+      {
         operationId: "createDepot",
         summary: "Register a depot",
         description:
           "Registers a depot in one project, which must be a project the caller works in. The code is the stable reference a person quotes (`DEP-NORD`) and is set once; the code and the name are each unique inside the project. The location is required — a route departs from a point — and one off the globe is refused before the database sees it. The ownership defaults to `company`, and the owning service provider is named with `service-provider` ownership and with nothing else, this company's (400 on `serviceProviderId`). The opening hours are two times on the project's clock, both or neither (400 on `closesAt`); an overnight window, 22:00 to 05:00, is allowed. `vehicleCapacity`, where given, is a whole number above zero. The status defaults to `active`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: DepotCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, names a provider with company ownership or none with service-provider ownership, gives one opening time without the other, gives a capacity of nothing, or names a service provider that is not this company's"],
         responses: {
           201: describeCreated("The depot as it was written.", Depot),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, names a provider with company ownership or none with service-provider ownership, gives one opening time without the other, gives a capacity of nothing, or names a service provider that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.depots`."),
           409: describeProblem("The project already has a depot with that code, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", DepotCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -212,23 +203,19 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/depots/:id",
-      describeRoute({
+      {
         operationId: "getDepot",
         summary: "One depot",
         description:
           "One depot of a project the caller works in. A depot of another company, or of a project this account does not work in, is a depot that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The depot.", Depot),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.depots`."),
           404: describeProblem("No depot with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findDepot(c.get("tx"), c.get("principal"), id)
@@ -238,27 +225,22 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/depots/:id",
-      describeRoute({
+      {
         operationId: "patchDepot",
         summary: "Change a depot",
         description:
           "Changes one depot of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since a route departs from a point; a null clears the provider, the hours, the capacity or the notes. The patch is held against the stored row, so a change that would leave the depot naming a provider with company ownership, or none with service-provider ownership, or with one opening time and not the other, is refused in the same words as on a create — and a provider that is not this company's beside them, every refusal listed in the one 400. The code does not change: it is the reference the schemes and the vehicles quote, and a depot that needs another code is another depot. The project is not patchable, since a record does not move between projects.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: DepotPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the code and the project included), holds a point off the globe, would leave the ownership and the provider disagreeing or one opening time without the other, or names a service provider that is not this company's"],
         responses: {
           200: describeJson("The depot as it now stands.", Depot),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the code and the project included), holds a point off the globe, would leave the ownership and the provider disagreeing or one opening time without the other, or names a service provider that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.depots`."),
           404: describeProblem("No depot with that id in the projects this account works in."),
           409: describeProblem("The project already has another depot with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", DepotPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

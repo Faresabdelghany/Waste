@@ -34,14 +34,13 @@ import { ACTIVE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, eq, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.templates"
@@ -139,27 +138,23 @@ async function requireTemplates(tx: Tx, companyId: string, projectId: string, ru
   }
 }
 
-export function notificationRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function notificationRuleRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/projects/:id/notification-rules",
-      describeRoute({
+      {
         operationId: "getNotificationRules",
         summary: "A project's customer notices",
         description:
           "Which customer notices the project sends and from which of its message templates: a Bulky Booking booked, cancelled, collected (its stop completed) or not collected (its stop failed); the collection reminder the afternoon before a scheduled collection; a ticket's reply to the customer and its completion; a route cancelled or running late (not started at its planned start), to the customers it stops for, in the notification areas the rule names or the whole project when it names none. In the vocabulary's order. A notice no rule names is not sent; a project without rules answers an empty list and sends none.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The project's rules.", NotificationRules),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No project with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -170,24 +165,21 @@ export function notificationRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/projects/:id/notification-rules",
-      describeRoute({
+      {
         operationId: "putNotificationRules",
         summary: "Replace a project's customer notices",
         description: `Replaces the whole set with the one in the body: a notice the body leaves out is no longer sent, and an empty list sends none. Each notice is named once (400 at \`rules.N.event\`), from a template of the project (400 at \`rules.N.templateId\`, \`${PICK_A_PROJECT_TEMPLATE}\`) for service (400, \`${A_SERVICE_TEMPLATE}\`) naming no value its notice does not fill (400) that is active (409). Only a broadcast (\`route-cancelled\`, \`route-late\`) names \`planningAreaIds\`, each one of the project's \`notification\` areas (400 at \`rules.N.planningAreaIds\`, \`${A_NOTIFICATION_AREA}\`); none is the whole project. A rule the body keeps keeps its id and moves only its template, so the audit log reads one row's history per notice. The notices are sent from the next event on, through the deployment's messaging provider — a log-only sender until a provider is chosen — and only to a customer who allows service messages.`,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: NotificationRulesPut,
+        invalid: ["the body is missing `rules`, names a member it does not own, names a notice twice, names a template that is not the project's, not for service or with a value its notice does not fill, or names an area that is not one of the project's notification areas"],
         responses: {
           200: describeJson("The project's rules as they now stand.", NotificationRules),
-          400: describeProblem("The path does not hold an id, or the body is missing `rules`, names a member it does not own, names a notice twice, names a template that is not the project's, not for service or with a value its notice does not fill, or names an area that is not one of the project's notification areas."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No project with that id in the projects this account works in."),
           409: describeProblem("A template named is inactive."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", NotificationRulesPut),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { rules } = c.req.valid("json")

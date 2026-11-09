@@ -16,24 +16,22 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { product } from "@waste/db/schema/catalogue"
-import type { Action } from "@waste/domain/access/modules"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, isBulkyProductUnit } from "@waste/domain/execution/bulky"
 import type { UnofferedStatus } from "@waste/domain/registry/catalogue"
 import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, gte, isNull } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, requirePlanningArea, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -113,30 +111,23 @@ async function requireBulkyProduct(tx: Tx, scope: Scope, id: string, kept?: stri
   if (id !== kept) refuseUnless(found.status, OFFERED_PRODUCT_STATUSES, unofferedBulkyProduct)
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function bulkyScheduleRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/bulky-schedules",
-      describeRoute({
+      {
         operationId: "listBulkySchedules",
         summary: "The projects' bulky schedules",
         description:
           "One page of the Bulky Schedules (O11 of #290) of the projects the caller works in, oldest first (ids are time-ordered): each planning area's recurrence of bulky collection days, the slots each day has and the product a booking is charged at. `projectId` narrows it to one of those projects (naming another is refused), `planningAreaId` to one area, and `validOn` to the schedules in force on that day, `validFrom` inclusive and `validTo` exclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: BulkyScheduleListQuery,
+        invalid: ["a day is not a calendar day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of schedules.", SchedulePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a day is not a calendar day, or `projectId` is not a project this account works in."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", BulkyScheduleListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -163,22 +154,20 @@ export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/bulky-schedules",
-      describeRoute({
+      {
         operationId: "createBulkySchedule",
         summary: "Add a bulky schedule",
         description:
           "Adds a Bulky Schedule to a planning area of a project the caller works in (400 at `projectId`, or at `planningAreaId` for an area of another project): the days bulky waste is collected there — a frequency, the service days, a week rotation with every-2-weeks and with nothing else, and the holiday policy, `skip` unless given, exactly as a Route Scheme's — the slots each day has, one per booking, and the product a booking is charged at once collected: a product of the project (400) sold by the job, charged once per booking, or by the item, charged the booking's item count (#449) (400 at `productId`, `A bulky collection is charged at a product sold by the job or by the item`), and active (409). One schedule of an area is in force at a time (409). The days are `generateOccurrences`' over the recurrence: a skipped holiday is no day, a shifted one is offered on the day it moved to.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: BulkyScheduleCreate,
+        invalid: ["the body is missing a field, names a member the server owns, a week rotation without every-2-weeks or every-2-weeks without one, no service day, a period ending on or before it starts, a project this account does not work in, an area of another project, or a product of another project or one sold by neither the job nor the item"],
         responses: {
           201: describeCreated("The schedule as it was written.", BulkySchedule),
-          400: describeProblem("The body is missing a field, names a member the server owns, a week rotation without every-2-weeks or every-2-weeks without one, no service day, a period ending on or before it starts, a project this account does not work in, an area of another project, or a product of another project or one sold by neither the job nor the item."),
-          ...commonProblems("create"),
           409: describeProblem("The product is not active, or the area has a schedule in force over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", BulkyScheduleCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -198,21 +187,18 @@ export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/bulky-schedules/:id",
-      describeRoute({
+      {
         operationId: "getBulkySchedule",
         summary: "One bulky schedule",
         description: "One Bulky Schedule of a project the caller works in. A schedule of another company, or of a project this account does not work in, is a schedule that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The schedule.", BulkySchedule),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No schedule with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findSchedule(c.get("tx"), c.get("principal"), id)
@@ -222,24 +208,22 @@ export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/bulky-schedules/:id",
-      describeRoute({
+      {
         operationId: "patchBulkySchedule",
         summary: "Amend a bulky schedule",
         description:
           "Changes the slots per day, the product or the end of one Bulky Schedule of a project the caller works in; every field is optional and at least one must be given. The area, the recurrence and the start do not change: they are the schedule's key and its period, so other days are another schedule, and this one is ended on the day the other starts. Under the schedule's row lock — the one a booking takes its slot under: the end still comes after the start (400 on `validTo`), and leaves no booking not cancelled on a day on or after it (409, counting them); a new product is held as on the create, the one already charged kept whatever its status now; and the schedule still overlaps no other of its area (409). Bookings already made keep their product and their slot: fewer slots close a day to new bookings and move none.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: BulkySchedulePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the area, the recurrence and the start included), ends on or before the day the schedule starts, or names a product of another project or one sold by neither the job nor the item"],
         responses: {
           200: describeJson("The schedule as it now stands.", BulkySchedule),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the area, the recurrence and the start included), ends on or before the day the schedule starts, or names a product of another project or one sold by neither the job nor the item."),
-          ...commonProblems("edit"),
           404: describeProblem("No schedule with that id in the projects this account works in."),
           409: describeProblem("The new product is not active, the new end leaves bookings outside it, or the area has another schedule in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", BulkySchedulePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const fields = c.req.valid("json")

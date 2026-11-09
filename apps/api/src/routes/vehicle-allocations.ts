@@ -72,8 +72,6 @@ import { refuseRetiredVehicle, refuseUnavailableDriver } from "@waste/domain/res
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import { LIVE_ALLOCATION_STATUSES, type AllocationAction, type AllocationStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
@@ -81,11 +79,12 @@ import { fitsOf, vehicleLabel } from "@waste/db/commands/fleet-fit"
 import { projectTimezone } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { daysThrough, refuseCrewAway } from "./availability-rules"
 import { findDriver, findVehicle, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
@@ -426,28 +425,23 @@ async function setStatus(tx: Tx, principal: Principal, id: string, status: Alloc
 const RESERVATION_RULES =
   "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The vehicle carries what the allocation plans (O7 of #290): its waste fraction in one of its compartments (a vehicle whose compartments name none carries any), refused at `wasteFractionId` (`WH-24 has no compartment for Glass`), and its `requiredCapacityKg` within what one trip takes — of the fraction where it names one, the capacity of the compartments carrying it within the vehicle's payload — refused at `requiredCapacityKg` (`WH-24 takes 3000 kg of Glass on one trip, less than the 3500 kg required`); judged when the vehicle, the fraction or the capacity moves. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there; and then whether each is there over the window's days on the project's clock (O6 of #290) — a vehicle or a trailer out of use, or a driver absent, on any of them is refused (409) naming the period — asked of what the body names afresh, and of the whole crew where the window moves."
 
-export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function vehicleAllocationRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/vehicle-allocations",
-      describeRoute({
+      {
         operationId: "listVehicleAllocations",
         summary: "The vehicle allocations the caller's projects hold",
         description:
           "One page of vehicle allocations, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `vehicleId`, `driverId` and `trailerId` answer what one vehicle, driver or trailer is reserved for, `status` the planned, the confirmed or the released ones. `overlappingFrom` and `overlappingTo`, given together, answer the allocations whose window touches that one — both windows half-open, so a reservation ending exactly when the window starts does not touch it — which is the read a planner makes before assigning a collection group's vehicle to a day. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: VehicleAllocationListQuery,
+        invalid: ["a filter is malformed", "one end of the overlapping window is given without the other or after it", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of vehicle allocations.", AllocationPage),
-          400: describeProblem(
-            "The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, one end of the overlapping window is given without the other or after it, or `projectId` is not a project this account works in.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicle-planning`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", VehicleAllocationListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, driverId, trailerId, status, overlappingFrom, overlappingTo } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -477,27 +471,22 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/vehicle-allocations",
-      describeRoute({
+      {
         operationId: "allocateVehicle",
         summary: "Allocate a vehicle over a window",
         description:
           "The `allocate` command: reserves a vehicle, and with it a driver, a trailer and a depot where given, over a window on the clock, in one project the caller works in. " +
           RESERVATION_RULES +
           " The database holds one live reservation of a vehicle, of a driver and of a trailer at a time, so a window touching another live allocation's is refused (409) saying whose it was; a released allocation reserves nothing. `status` is `planned` unless the body says `confirmed`; `released` is a command of its own. The `allocate` event is appended in the same transaction, carrying the snapshot; an allocation names no route and no collection group. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: VehicleAllocationCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, a waste fraction that is not this company's or that the vehicle has no compartment for, or a required capacity above what the vehicle takes on one trip — each at the field that is wrong"],
         responses: {
           201: describeCreated("The allocation as it was written.", VehicleAllocation),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, a waste fraction that is not this company's or that the vehicle has no compartment for, or a required capacity above what the vehicle takes on one trip — each at the field that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.vehicle-planning`."),
           409: describeProblem("The vehicle or the trailer named is retired or out of use on a day of the window, the driver named is inactive, suspended or absent on one, or the vehicle, the driver or the trailer is already allocated over part of that window; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", VehicleAllocationCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -528,23 +517,19 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/vehicle-allocations/:id",
-      describeRoute({
+      {
         operationId: "getVehicleAllocation",
         summary: "One vehicle allocation",
         description:
           "One allocation of a project the caller works in, as it now stands. An allocation of another company, or of a project this account does not work in, is an allocation that does not exist here. Its history is `GET /vehicle-allocations/{id}/events`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The allocation.", VehicleAllocation),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findAllocation(c.get("tx"), c.get("principal"), id)
@@ -554,29 +539,24 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/vehicle-allocations/:id/change",
-      describeRoute({
+      {
         operationId: "changeVehicleAllocation",
         summary: "Change what an allocation reserves",
         description:
           "The `change` command: moves the vehicle, the driver, the trailer, the depot, the fraction, the capacity, the window or the note of one allocation, with a reason; at least one field beside the reason must be given, and a null clears a nullable one. The fields the body moves are held to the create's rules over the row the change leaves behind — the body's fields over the stored ones — and so is what depends on them: " +
           RESERVATION_RULES +
           " A status gates a new reference and never an existing one: a new vehicle, trailer or driver is held to its status (409, naming the row and its status, after every 400) and a stored one is not, so a note-only change to an allocation whose vehicle has since retired or whose driver's licence has since run out is taken as it stands; moving the vehicle or the window judges the driver's licence again, against the new vehicle or on the new last day; moving the window judges the trailer's other role again; and the window is held ordered when either bound moves. A window touching another live allocation's is refused (409) saying whose it was. A released allocation does not change (409): the window is freed, and what is wanted is a new allocation. Runs under the allocation's row lock, and appends the `change` event with the snapshot and the reason in the same transaction; the status does not move.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VehicleAllocationChange,
+        invalid: ["the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot, fraction or capacity the create would refuse at its field — each at the field that is wrong"],
         responses: {
           200: describeJson("The allocation as it now stands.", VehicleAllocation),
-          400: describeProblem(
-            "The path does not hold an id, or the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot, fraction or capacity the create would refuse at its field — each at the field that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
           409: describeProblem("The allocation is released, a vehicle or a trailer named afresh is retired, a driver named afresh is inactive or suspended, the crew is away on a day of the window as the change leaves it, or the vehicle, the driver or the trailer is already allocated over part of the new window; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VehicleAllocationChange),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason, ...body } = c.req.valid("json")
@@ -612,25 +592,22 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/vehicle-allocations/:id/confirm",
-      describeRoute({
+      {
         operationId: "confirmVehicleAllocation",
         summary: "Confirm an allocation",
         description:
           "The `confirm` command: `planned` becomes `confirmed`, which is what blocks another planner's check where a planned one only warns. The body is empty; a member in it is refused. An allocation already confirmed answers 200 as it stands, without a write and without an event; a released one is refused (409). Runs under the allocation's row lock, and appends the `confirm` event with the snapshot in the same transaction.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VehicleAllocationConfirm,
+        invalid: ["the body carries a member"],
         responses: {
           200: describeJson("The allocation, confirmed.", VehicleAllocation),
-          400: describeProblem("The path does not hold an id, or the body carries a member."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
           409: describeProblem("The allocation is released; released allocations do not change."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VehicleAllocationConfirm),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -645,24 +622,21 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/vehicle-allocations/:id/release",
-      describeRoute({
+      {
         operationId: "releaseVehicleAllocation",
         summary: "Release an allocation",
         description:
           "The `release` command: the allocation becomes `released`, with a reason, and its window is freed — the database's constraints ignore released rows, so the vehicle, the driver and the trailer may be allocated over it again. The row and its history stay; a released allocation does not change and is not confirmed. An allocation already released answers 200 as it stands, without a write and without an event. Runs under the allocation's row lock, and appends the `release` event with the snapshot and the reason in the same transaction.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VehicleAllocationRelease,
+        invalid: ["the body has no reason or carries a member the command does not take"],
         responses: {
           200: describeJson("The allocation, released.", VehicleAllocation),
-          400: describeProblem("The path does not hold an id, or the body has no reason or carries a member the command does not take."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VehicleAllocationRelease),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")
@@ -677,24 +651,20 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/vehicle-allocations/:id/events",
-      describeRoute({
+      {
         operationId: "listVehicleAllocationEvents",
         summary: "One allocation's history",
         description:
           "One page of the allocation's events, oldest first — a cursor over time-ordered ids is a cursor over recording order — each carrying the action (`allocate`, `change`, `confirm`, `release`), the status after it, the snapshot the allocation then reserved (vehicle, driver, trailer, depot, window), the reason where the command took one, and who did it. The ledger is append-only: nothing here is ever updated or removed. An allocation of another company, or of a project this account does not work in, is an allocation that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of the allocation's events, oldest first.", EventPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")

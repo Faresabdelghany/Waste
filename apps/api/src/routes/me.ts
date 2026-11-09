@@ -3,19 +3,16 @@
 // spells; no query of its own, since everything in it was looked up to let
 // the request through. The frontend reads it once after sign-in for the
 // sidebar and the permission gates, and again whenever it wants to know
-// whether a grant or a project changed under it.
-//
-// The shape a route module takes from here on: a function of the guard that
-// returns a sub-app on AuthEnv, each authenticated route spelling
-// `describeRoute(...)` with the bearer requirement, then the guard, then any
-// `requireGrant`, then the handler; app.ts mounts it at the root. The guard
-// sits on the route and never on a wildcard, so an unknown path stays a 404.
+// whether a grant or a project changed under it. It asks no grant, and says
+// more than the derived 401 and 403 (operation.ts): the 403 here is the
+// account's refusal, on which a client ends its session.
 import { Me } from "@waste/contracts/me"
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute, resolver } from "hono-openapi"
+import { resolver } from "hono-openapi"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { describeProblem } from "../problem"
 
 /** The Principal on the wire. */
@@ -33,15 +30,14 @@ export function meOf(principal: Principal): Me {
   }
 }
 
-export function meRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>().get(
+export function meRoutes(deps: RouteDeps) {
+  return routes(deps).get(
     "/me",
-    describeRoute({
+    {
       operationId: "getMe",
       summary: "Who am I here?",
       description:
         "The caller as this request resolved them: the account the token is bound to, its company, its role with the grants in force, the projects it works in, its Service Provider, if any, and the active driver profile bound to it, if any — a client lands a driver on the driver's app by that and nothing else. Nothing is cached: a changed grant shows on the next call.",
-      security: BEARER_SECURITY,
       responses: {
         200: {
           description: "The caller's account, company, role with grants, projects, Service Provider and driver profile.",
@@ -52,8 +48,7 @@ export function meRoutes(guard: MiddlewareHandler<AuthEnv>) {
           `A valid token, but no active account in its company is bound to it, or it names no company at all: the problem's type is \`${NO_ACTIVE_ACCOUNT.type}\`, the refusal of the account rather than the request, on which a client ends its session.`,
         ),
       },
-    }),
-    guard,
+    },
     (c) => c.json(meOf(c.get("principal"))),
   )
 }

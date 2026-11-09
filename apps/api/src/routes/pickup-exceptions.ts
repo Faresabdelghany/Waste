@@ -32,7 +32,6 @@ import { product } from "@waste/db/schema/catalogue"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
-import type { Action } from "@waste/domain/access/modules"
 import { judgeException, PICKUP_EXCEPTION_HISTORY_MAX, retiredCode, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
 import { addDays } from "@waste/domain/days"
 import { ACTIVE_CONTAMINANT_CODE_STATUSES } from "@waste/domain/execution/vocabulary"
@@ -40,17 +39,16 @@ import { unofferedStep } from "@waste/domain/registry/catalogue"
 import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, desc, eq, gt, gte, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
@@ -58,8 +56,6 @@ const MODULE = "commercial.price-rows"
 const STOPS = "route-studio.pickups"
 
 const RulePage = Page(PickupExceptionRule)
-
-type ClockOptions = { now?: () => Date }
 
 const columns = {
   id: pickupExceptionRule.id,
@@ -164,11 +160,6 @@ async function writeLadder(tx: Tx, rule: { companyId: string; projectId: string;
   )
 }
 
-const commonProblems = (action: Action, module = MODULE) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${module}\`.`),
-})
-
 // ---------------------------------------------------------------------------
 // The exception history
 // ---------------------------------------------------------------------------
@@ -252,25 +243,24 @@ async function defaultFrom(tx: Tx, companyId: string, projectId: string, now: ()
 const historyDescription = (place: string) =>
   `The ${place}'s Pickup Exceptions: each stop there missed for a reason the customer caused — contamination, a bin not presented, a bin not reached, or the driver's other — or collected but tagged with a contaminant code, newest service date first from \`from\` on (the 365 days before the project's today when absent), at most ${PICKUP_EXCEPTION_HISTORY_MAX} with \`truncated\` saying whether more were left out. Each names the proof that recorded its outcome — the driver's, or the office's correction — and what the project's rules in force on its service date say of it now: the rule, how many matching exceptions came before it at this ${place} in the rule's window, and the ladder's product once the free count is spent, null while free. A stop the office added, or a work order, is listed with no judgement: neither is charged. Nothing here is a charge; the charge is judged once at the stop's event (M5b) and a later correction never re-steps it.`
 
-export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function pickupExceptionRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/pickup-exception-rules",
-      describeRoute({
+      {
         operationId: "listPickupExceptionRules",
         summary: "The projects' pickup exception rules",
         description:
           "One page of the rules that may charge a Pickup Exception, oldest first (ids are time-ordered), from the projects the caller works in, each with its ladder by position. `projectId` narrows it to one of those projects; naming another is refused. `validOn` asks for the rules in force on that day, `validFrom` inclusive and `validTo` exclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PickupExceptionRuleListQuery,
+        invalid: ["`validOn` is not a calendar day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of rules.", RulePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, or `projectId` is not a project this account works in."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PickupExceptionRuleListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -301,22 +291,20 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .post(
       "/pickup-exception-rules",
-      describeRoute({
+      {
         operationId: "createPickupExceptionRule",
         summary: "Add a pickup exception rule",
         description:
           "Adds a rule to a project the caller works in (400 at `projectId` otherwise): the outcome it governs — `failed`, `skipped`, or `completed` for a collection tagged with a contaminant code — the reason it narrows to among the customer's (null for any; none on a tagged collection's rule), the code it narrows to (null for any; with contamination or any reason), how many matching exceptions in the window cost nothing, the window in days, and the ladder: the products charged by occurrence once the free count is spent, the last repeating. A code is one of the company's (400) and active (409, `The contaminant code … is retired; a rule names an active one`); a step is a product of the project that is an additional service sold per job (400 at `ladder.N`) and active (409). Two rules for the same outcome, reason and code are never in force at once (409). Nothing is charged by a rule until M5b's consumer reads it.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: PickupExceptionRuleCreate,
+        invalid: ["the body is missing a field, names a member the server owns, a reason the customer does not cause, a reason with a tagged collection, a code with another reason, a period ending on or before it starts, a project this account does not work in, a code that is not the company's, or a step that is not an additional service of the project sold per job"],
         responses: {
           201: describeCreated("The rule as it was written.", PickupExceptionRule),
-          400: describeProblem("The body is missing a field, names a member the server owns, a reason the customer does not cause, a reason with a tagged collection, a code with another reason, a period ending on or before it starts, a project this account does not work in, a code that is not the company's, or a step that is not an additional service of the project sold per job."),
-          ...commonProblems("create"),
           409: describeProblem("The code is retired, a step's product is not active, or a rule for this outcome, reason and code is in force over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PickupExceptionRuleCreate),
+      },
       async (c) => {
         const { ladder, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -344,21 +332,18 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .get(
       "/pickup-exception-rules/:id",
-      describeRoute({
+      {
         operationId: "getPickupExceptionRule",
         summary: "One pickup exception rule",
         description: "One rule of a project the caller works in, with its ladder by position. A rule of another company, or of a project this account does not work in, is a rule that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The rule.", PickupExceptionRule),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No rule with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -370,24 +355,22 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .patch(
       "/pickup-exception-rules/:id",
-      describeRoute({
+      {
         operationId: "patchPickupExceptionRule",
         summary: "Amend a pickup exception rule",
         description:
           "Changes the free count, the window, the ladder — replaced whole, by position — or the end of one rule of a project the caller works in; every field is optional and at least one must be given. The outcome, the reason, the code and the start do not change: they are the rule's key and its period, so a rule for another case or from another day is another rule, and this one is ended on the day the other starts. Under the rule's row lock: the end still comes after the start (400 on `validTo`), a step is held as on the create — a step the rule already charged keeps its product whatever its status now (a status gates a new reference) — and the rule still overlaps no other alike (409). A judgement already made is not moved by an amended rule: M5b judges each exception once, at its event.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PickupExceptionRulePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the key and the start included), ends on or before the day the rule starts, or names a step that is not an additional service of the project sold per job"],
         responses: {
           200: describeJson("The rule as it now stands.", PickupExceptionRule),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the key and the start included), ends on or before the day the rule starts, or names a step that is not an additional service of the project sold per job."),
-          ...commonProblems("edit"),
           404: describeProblem("No rule with that id in the projects this account works in."),
           409: describeProblem("A new step's product is not active, or a rule for this outcome, reason and code is in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PickupExceptionRulePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { ladder, ...fields } = c.req.valid("json")
@@ -418,24 +401,22 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .get(
       "/properties/:id/pickup-exceptions",
-      describeRoute({
+      {
         operationId: "listPropertyPickupExceptions",
         summary: "A property's Pickup Exceptions",
         description: historyDescription("property"),
-        security: BEARER_SECURITY,
+        module: "customers.properties",
+        action: "view",
+        also: [STOPS, "view"],
+        params: IdParam,
+        query: PickupExceptionHistoryQuery,
+        invalid: ["`from` is not a calendar day"],
         responses: {
           200: describeJson("The property's exception history.", PickupExceptionHistory),
-          400: describeProblem("The path does not hold an id, or `from` is not a calendar day."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`customers.properties\` and on \`${STOPS}\`.`),
           404: describeProblem("No property with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant("customers.properties", "view"),
-      requireGrant(STOPS, "view"),
-      validate("param", IdParam),
-      validate("query", PickupExceptionHistoryQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { from } = c.req.valid("query")
@@ -453,24 +434,22 @@ export function pickupExceptionRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .get(
       "/shared-collection-points/:id/pickup-exceptions",
-      describeRoute({
+      {
         operationId: "listSharedCollectionPointPickupExceptions",
         summary: "A shared collection point's Pickup Exceptions",
         description: historyDescription("shared collection point"),
-        security: BEARER_SECURITY,
+        module: "customers.shared",
+        action: "view",
+        also: [STOPS, "view"],
+        params: IdParam,
+        query: PickupExceptionHistoryQuery,
+        invalid: ["`from` is not a calendar day"],
         responses: {
           200: describeJson("The shared collection point's exception history.", PickupExceptionHistory),
-          400: describeProblem("The path does not hold an id, or `from` is not a calendar day."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`customers.shared\` and on \`${STOPS}\`.`),
           404: describeProblem("No shared collection point with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant("customers.shared", "view"),
-      requireGrant(STOPS, "view"),
-      validate("param", IdParam),
-      validate("query", PickupExceptionHistoryQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { from } = c.req.valid("query")

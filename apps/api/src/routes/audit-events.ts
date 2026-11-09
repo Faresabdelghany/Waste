@@ -18,14 +18,12 @@ import { userAccount } from "@waste/db/schema/access"
 import { auditEvent } from "@waste/db/schema/audit"
 import { AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { requireAllowed } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
+import { describeProblem } from "../problem"
 import { describeJson } from "./shared"
 
 const AuditPage = Page(AuditEvent)
@@ -78,24 +76,21 @@ const eventOf = (row: Row): AuditEvent => ({
   transactionId: String(row.transactionId),
 })
 
-export function auditEventRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>().get(
+export function auditEventRoutes(deps: RouteDeps) {
+  return routes(deps).get(
     "/audit-events",
-    describeRoute({
+    {
       operationId: "listAuditEvents",
       summary: "The audit log",
       description:
         "One page of the audit log, newest first: what the audit trail recorded of every insert, update and delete of an audited table — the columns that moved as `[before, after]`, the account that made the change (null for the worker, the seed and the access token hook), the reason its request gave in the `Waste-Change-Reason` header, and the transaction it happened in, which one request's changes share. It is one row's history, named by `table` and `rowId`, with the changes of the sets it is the parent of two levels down — a role's grants, a property's parties, a vehicle's compartments and their fractions — under `view` on the module the table belongs to. A row of a project this account does not work in is not there. Hand `nextCursor` back as `cursor` for the next page.",
-      security: BEARER_SECURITY,
+      query: AuditEventListQuery,
+      invalid: ["`table` or `rowId` is missing", "`table` is not an audited table"],
       responses: {
         200: describeJson("One page of the audit log.", AuditPage),
-        400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `table` or `rowId` is missing, or `table` is not an audited table."),
-        401: describeProblem("No usable token (see WWW-Authenticate)."),
         403: describeProblem("No active account here, or the caller's role does not allow `view` on the table's module."),
       },
-    }),
-    guard,
-    validate("query", AuditEventListQuery),
+    },
     async (c) => {
       const { table, rowId, limit, cursor } = c.req.valid("query")
       const after = afterCursor(cursor)

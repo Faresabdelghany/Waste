@@ -39,13 +39,10 @@ import {
 } from "@waste/contracts/agreements"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
-import type { JobSender } from "@waste/db/jobs"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseOverlap } from "@waste/db/commands/shared"
 import { lockedSubscription, PAUSE_OVERLAP, pauseSubscription } from "@waste/db/commands/subscription-pauses"
@@ -53,13 +50,13 @@ import { projectToday } from "@waste/db/query/project-clock"
 import { OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
-import type { ClockOptions } from "./scheme-groups"
 import { askRuns, mergedRuns, runsBringingBack, stopsLeft, type Window } from "./service-ends"
 import { describeCreated, describeJson, IdParam } from "./shared"
 
@@ -140,26 +137,24 @@ async function containersOf(tx: Tx, companyId: string, subscriptionId: string, w
 
 const windowOf = (period: Period): Window => ({ from: period.validFrom, to: period.validTo })
 
-export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
-  return new Hono<AuthEnv>()
+export function subscriptionPauseRoutes(deps: RouteDeps) {
+  const { now, jobs } = deps
+  return routes(deps)
     .get(
       "/subscription-pauses",
-      describeRoute({
+      {
         operationId: "listSubscriptionPauses",
         summary: "The pauses of the caller's projects' subscriptions",
         description:
           "One page of subscription pauses, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects, naming another being refused; `subscriptionId` to one subscription's; `validOn` to the pauses in force on that day, `validFrom` inclusive and `validTo` exclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: SubscriptionPauseListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of pauses.", PausePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.agreements`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", SubscriptionPauseListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, subscriptionId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -185,22 +180,18 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
     )
     .get(
       "/subscription-pauses/:id",
-      describeRoute({
+      {
         operationId: "getSubscriptionPause",
         summary: "One subscription pause",
         description: "One pause of a subscription of a project the caller works in. A pause of another company, or of a project this account does not work in, is a pause that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The pause.", SubscriptionPause),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.agreements`."),
           404: describeProblem("No pause with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findPause(c.get("tx"), c.get("principal"), id)
@@ -210,25 +201,22 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
     )
     .post(
       "/subscriptions/:id/pauses",
-      describeRoute({
+      {
         operationId: "pauseSubscription",
         summary: "Pause a subscription over a period",
         description:
           "Pauses the subscription the path names from `validFrom` until `validTo`, the day collections resume, or until it is resumed where `validTo` is absent or null: generation plans no stop for the containers serving it on those days. The period lies inside the subscription's (400 naming the bound) and begins today or later on the project's clock (400 on `validFrom`); the subscription may not already be paused over part of it (409). Generation's planned routes in the pause stop at its containers no more once a run has read them again: a run of each scheme whose planned routes do is asked in the same transaction — where the caller may ask one (`edit` on `route-studio.schemes`), of a validated scheme, absorbed by one already queued, and never a refusal: where no worker has made the queue yet, the next run drops them. The stops no run will take away — on a dispatched or running route, or the office's own — are answered in `stopsToRemove`, for the office to remove by hand. Answers the pause with its `Location`. Under the agreement's lock and then the subscription's.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SubscriptionPauseCreate,
+        invalid: ["the body names a member it does not own, ends on or before the day it starts, falls outside the subscription's period, or begins before today"],
         responses: {
           201: describeCreated("The pause as it was written, and the stops left to remove by hand; `Location` is the pause's own read.", SubscriptionPaused),
-          400: describeProblem("The path does not hold an id, or the body names a member it does not own, ends on or before the day it starts, falls outside the subscription's period, or begins before today."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No subscription with that id in the projects this account works in."),
           409: describeProblem("The subscription is already paused over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SubscriptionPauseCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -254,25 +242,22 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
     )
     .patch(
       "/subscription-pauses/:id",
-      describeRoute({
+      {
         operationId: "patchSubscriptionPause",
         summary: "Move or resume a subscription pause",
         description:
           "Moves one pause; at least one field must be given. A pause that has ended is history and is refused (409). Its first day moves only while it has not begun (400 on `validFrom`), and to today or later; its end — the day collections resume, today's to resume now — to today or later (400 on `validTo`), or to null, a pause until it is resumed. The period stays inside the subscription's (400 naming the bound) and off its other pauses (409). Days newly paused lose their planned stops and days given back get theirs again, through the runs `POST /subscriptions/{id}/pauses` asks — best effort, and never a refusal — and the stops no run will take away are answered in `stopsToRemove`. Under the agreement's lock and then the subscription's.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SubscriptionPausePatch,
+        invalid: ["the patch is empty, names a member it does not own, ends on or before the day it starts, falls outside the subscription's period, moves the first day of a pause that has begun, or puts a bound before today"],
         responses: {
           200: describeJson("The pause as it now stands, and the stops left to remove by hand.", SubscriptionPaused),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a member it does not own, ends on or before the day it starts, falls outside the subscription's period, moves the first day of a pause that has begun, or puts a bound before today."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No pause with that id in the projects this account works in."),
           409: describeProblem("The pause has ended, or the subscription is already paused over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SubscriptionPausePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -316,25 +301,22 @@ export function subscriptionPauseRoutes(guard: MiddlewareHandler<AuthEnv>, { now
     )
     .post(
       "/subscription-pauses/:id/cancel",
-      describeRoute({
+      {
         operationId: "cancelSubscriptionPause",
         summary: "Cancel a pause that has not begun",
         description:
           "Removes one pause that has not begun on the project's clock; one that has is ended instead, through its patch (409). Its days are given back to the subscription's containers, whose stops come back through the runs `POST /subscriptions/{id}/pauses` asks — best effort, and never a refusal. The audit log keeps that it was. Answers the pause as it stood. Takes no body. Under the agreement's lock and then the subscription's.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SubscriptionPauseCancel,
+        invalid: ["the request has a body"],
         responses: {
           200: describeJson("The pause as it stood, now removed.", SubscriptionPause),
-          400: describeProblem("The path does not hold an id, or the request has a body."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
           404: describeProblem("No pause with that id in the projects this account works in."),
           409: describeProblem("The pause has begun: give it an end instead."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SubscriptionPauseCancel),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

@@ -48,21 +48,19 @@ import { property, propertyParty } from "@waste/db/schema/customers"
 import { billableEvent } from "@waste/db/schema/finance"
 import { refuseInactiveCustomer } from "@waste/domain/registry/agreements"
 import { and, asc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { AGREEMENT_CHILDREN, carryPlacements, endSubscriptionsOn, servingOn } from "@waste/db/commands/agreement-periods"
 import { holdsPast, runsPast } from "@waste/db/commands/periods"
 import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { createAgreement, createSubscription, patchAgreement, readAgreement, readSubscription } from "./agreements"
 import { findProperty, noSuchProperty, propertyWithParties } from "./property-writes"
 import { requireCustomer } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam, stamp } from "./shared"
 
 /** What a move with subscriptions to carry and no number for the incoming agreement is told. */
@@ -201,31 +199,30 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
   }
 }
 
-export function moveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>().post(
+export function moveRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps).post(
     "/properties/:id/moves",
-    describeRoute({
+    {
       operationId: "moveProperty",
       summary: "Move a property's occupant out and another in on a day",
       description:
         "A move (#374): the property changes occupant on `on`, in one transaction. Every role the outgoing customer holds at the property on `on` ends there and the incoming customer holds the same roles from it, until the end each had — so a sale and a tenant change are one command, and another customer's roles are untouched. The outgoing customer's subscriptions at the property running past `on` end there with their placements and their pauses, and the outgoing agreement ends too where nothing of it runs past `on` elsewhere. One agreement for the incoming customer begins on `on`, `active`, numbered `agreementNumber`, under the outgoing agreement's cadence, currency, price list and service window, invoicing `payerCustomerId` or the incoming customer; it has the same products and quantities, and every container serving an ended subscription on `on` goes on under its replacement from `on` with the same fraction and frequency override — it never leaves service and no stock movement is written. Nothing is repriced: `chargesToCredit` lists the ended subscriptions' recurring charges whose period crosses or follows `on`, their status saying which are invoiced, for the office to credit or cancel. A property the outgoing customer subscribes at nowhere moves its parties alone and owes no number. `dryRun` answers what the move would do and writes nothing; the agreement and subscriptions it answers carry ids nothing keeps. Under the property's lock, then the outgoing agreement's and its subscriptions', in id order.",
-      security: BEARER_SECURITY,
+      module: "customers.properties",
+      action: "edit",
+      also: ["customers.agreements", "edit"],
+      params: IdParam,
+      body: MoveCreate,
+      invalid: ["a field will not do", "a customer named is not one of this company", "the outgoing customer subscribes at the property and the body names no `agreementNumber`"],
       responses: {
         200: describeJson("What ended, what began, the containers carried over and the charges left for the office.", MoveOutcome),
-        400: describeProblem("The path does not hold an id, a field will not do, a customer named is not one of this company, or the outgoing customer subscribes at the property and the body names no `agreementNumber`."),
-        401: describeProblem("No usable token (see WWW-Authenticate)."),
         403: describeProblem("No active account here, or the caller's role does not allow `edit` on both `customers.properties` and `customers.agreements`."),
         404: describeProblem("No property with that id in the projects this account works in."),
         409: describeProblem(
           "The outgoing customer is no party of the property on `on`, or a role, subscription, placement or pause of theirs here begins on or after it; they subscribe here under two agreements; the incoming customer or the payer is inactive, already holds one of the roles over part of the period, or the agreement number is already valid over part of it; or a product is no longer offered.",
         ),
       },
-    }),
-    guard,
-    requireGrant("customers.properties", "edit"),
-    requireGrant("customers.agreements", "edit"),
-    validate("param", IdParam),
-    validate("json", MoveCreate),
+    },
     async (c) => {
       const { id } = c.req.valid("param")
       const body = c.req.valid("json")

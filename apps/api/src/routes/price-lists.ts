@@ -97,19 +97,18 @@ import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { resolvePrice, type PriceInput, type PriceLabels } from "@waste/domain/finance/pricing"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
 import { projectCurrency } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 import { notWithin, refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, periodOf, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
 import { answerOf, batchesOf, productStatuses, refusePlan } from "./indexation"
@@ -299,26 +298,23 @@ async function labelsFor(tx: Tx, companyId: string, rows: readonly PriceListRow[
   return { planningAreaId: spell(areas), containerTypeId: spell(types), wasteFractionId: spell(fractions), customerId: spell(customers) }
 }
 
-export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function priceListRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/price-lists",
-      describeRoute({
+      {
         operationId: "listPriceLists",
         summary: "The price lists of the caller's projects",
         description:
           "One page of price lists, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page: a provider never sees a customer's prices. `projectId` narrows it to one of those projects; naming another is refused. `validOn` asks for the lists in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how Upcoming, Active and Expired are asked for; `isDefault` picks the project's default list (`true`) or the named ones (`false`). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PriceListListQuery,
+        invalid: ["`validOn` is not a calendar day", "`isDefault` is not `true` or `false`", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of price lists.", PriceListPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, `isDefault` is not `true` or `false`, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.price-rows`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PriceListListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, validOn: day, isDefault } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -344,23 +340,20 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/price-lists",
-      describeRoute({
+      {
         operationId: "createPriceList",
         summary: "Write a price list",
         description:
           "Writes a price list in one project, which must be a project the caller works in. The code is the stable reference a person quotes (`pl-cph-2026`) and is set once; one list of a code is in force at a time, so a period overlapping another list of the code is refused (409). The currency is set once too — every row's amount is quoted in it — and is the project's when absent; a default list (`isDefault: true`) is always in the project's currency, and one in another is refused (400 on `isDefault`, `A default price list is in the project's currency (DKK)`). A project has one default list whatever its period — the list an agreement without one is priced under — so a second is refused (409, `This project already has a default price list; unset it first`): a new tariff year is new rows in it, not a new default list. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the list is still running. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: PriceListCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, or makes a default list in another currency than the project's"],
         responses: {
           201: describeCreated("The price list as it was written.", PriceList),
-          400: describeProblem("The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, or makes a default list in another currency than the project's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `commercial.price-rows`."),
           409: describeProblem("A price list of this code is already in force over part of that period, or the project already has a default price list."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PriceListCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -382,23 +375,19 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/price-lists/:id",
-      describeRoute({
+      {
         operationId: "getPriceList",
         summary: "One price list",
         description:
           "One price list of a project the caller works in. A list of another company, or of a project this account does not work in, is a list that does not exist here. Its rows are `GET /price-lists/{id}/rows`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The price list.", PriceList),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findList(c.get("tx"), c.get("principal"), id)
@@ -408,25 +397,22 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/price-lists/:id",
-      describeRoute({
+      {
         operationId: "patchPriceList",
         summary: "Amend a price list",
         description:
           "Changes the name, the default flag, the notes or the period of one price list of a project the caller works in; every field is optional and at least one must be given. The code and the currency do not change — the rows are quoted in the currency, and a list that needs another is another list — and the project is not patchable, since a record does not move between projects. Moving the period is held to three rules under the list's row lock: the end still comes after the start, which a body naming one bound cannot see by itself; the new period still holds every row of the list — a shortening that would leave one outside is refused (409) counting them, and the rows have to be ended first; and the period may not overlap another list of the code (409). `isDefault: true` makes this the project's default list, refused when the list is not in the project's currency (400 on `isDefault`) or when the project already has one (409); `isDefault: false` on the default list is taken, and the agreements priced under no list of their own are then blocked with `no-price-list` until another is set.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PriceListPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the code, the currency and the project included), ends on or before the day it starts, or makes a default list in another currency than the project's"],
         responses: {
           200: describeJson("The price list as it now stands.", PriceList),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the code, the currency and the project included), ends on or before the day it starts, or makes a default list in another currency than the project's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
           409: describeProblem("Rows of the list would fall outside the new period, another list of the code is in force over part of it, or the project already has a default price list."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PriceListPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -463,24 +449,21 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/price-lists/:id/rows",
-      describeRoute({
+      {
         operationId: "listPriceListRows",
         summary: "One price list's rows",
         description:
           "One page of the list's rows, oldest first (ids are time-ordered). The path says the list, so the filters are `productId`, the rows pricing that product, and `validOn`, the rows in force on that day — `validFrom` inclusive and `validTo` exclusive — which is how the tariff on a day is read. A list of another company, or of a project this account does not work in, is a list that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PriceListRowListQuery,
+        invalid: ["`productId` is not an id", "`validOn` is not a calendar day"],
         responses: {
           200: describeJson("One page of the list's rows.", PriceListRowPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, `productId` is not an id, or `validOn` is not a calendar day."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PriceListRowListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, productId, validOn: day } = c.req.valid("query")
@@ -507,25 +490,22 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/price-lists/:id/rows",
-      describeRoute({
+      {
         operationId: "createPriceListRow",
         summary: "Add a row to a price list",
         description:
           "Adds one price to the list in the path, which must be a list of a project the caller works in: the product, the unit price in the list's currency and in minor units (a free service is a price of zero, not a missing row), and up to five conditions — a planning area of the project (the prototype's Zone, matched against the route's scheme's planning area), a customer kind (its Customer type, matched against the agreement's customer), a container type and a waste fraction of this company, and the customer a negotiated row is for alone; a row with no conditions is the default price. The product is a product of the project (400 on `productId`) and `active`, since a price is a new reference to it (409 otherwise). The period lies inside the list's (400 on the bound outside), and one row of a product with one condition set is in force at a time, so a period overlapping such a row is refused (409, `A row of this product with these conditions and this quantity tier is already in force over part of that period; end it first or schedule this one after it`): a scheduled change is a row starting when the current one ends. A row may name a quantity tier, `fromQuantity` (M16b of #293): it applies from that many of the product's unit, and runs beside the row of the same conditions with none. The server mints the id; the row is read at `/price-list-rows/{id}`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: PriceListRowCreate,
+        invalid: ["the body is missing a field, names a member the server owns, ends on or before the day it starts, puts a bound outside the list's period, or names a product, planning area, container type, waste fraction or customer that is not this project's or this company's"],
         responses: {
           201: describeCreated("The row as it was written.", PriceListRow),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, puts a bound outside the list's period, or names a product, planning area, container type, waste fraction or customer that is not this project's or this company's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
           409: describeProblem("The product is not active, or a row of this product with these conditions is already in force over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", PriceListRowCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -555,24 +535,21 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/price-lists/:id/resolve",
-      describeRoute({
+      {
         operationId: "resolvePriceListPrice",
         summary: "What a price list says for a product on a day",
         description:
           "The resolver as a read: hands every row of the list for `productId` to the resolution rule — \"The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date.\", a further tie going to the row made first — judged on the day `on` against the conditions the query names: `planningAreaId` (the route's scheme's planning area), `customerKind` (the agreement's customer's kind), `containerTypeId`, `wasteFractionId` and `customerId` (the agreement's customer, which a negotiated row is for alone). Answers every row's verdict, the winner first — eligible or not, the sentence it lost with (`Requires container type 660 L`, `Waste fraction is Glass, not Residual`, `Negotiated for Østerbro Housing Association, not this customer`, `Not effective until 2027-01-01`, `Expired on 2026-12-31`), what it matched, its score, whether it won — beside the winner's unit price (null when no row is eligible), the product's VAT rate on the day (null where the product has none, which would block an event with `no-vat-rate`) and the list's currency. The product is a product of the list's project (400 on `productId`). The read looks at no agreement: the caller names the conditions, and which list an agreement is priced under is the event's question.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PriceResolveQuery,
+        invalid: ["`productId` is missing or not a product of the list's project", "`on` is not a calendar day", "`customerKind` is not one of the two", "a condition is not an id"],
         responses: {
           200: describeJson("Every verdict, the winner, the winning price, the VAT rate and the currency.", PriceResolution),
-          400: describeProblem("The path does not hold an id, `productId` is missing or not a product of the list's project, `on` is not a calendar day, `customerKind` is not one of the two, or a condition is not an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PriceResolveQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { productId, on, ...conditions } = c.req.valid("query")
@@ -609,26 +586,23 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/price-lists/:id/index",
-      describeRoute({
+      {
         operationId: "indexPriceList",
         summary: "Apply an index to a price list",
         description:
           "Applies an index to every row of one price list of a project the caller works in, from `appliedFrom`, each as a new row and never an update: a row in force on that day that started before it is ended on it and its successor written with the same product, conditions and end, the price `round(price × (1 + basisPoints / 10 000))` in minor units, half away from zero, `indexedFromId` naming the row, the label and the basis points (negative is a deflator) — so the price on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. A row that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a row that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the list's lock and then its rows', so two indexations of a list take turns.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PriceListIndex,
+        invalid: ["the body is missing a field, names a member the server owns, or gives basis points that take a price below zero or past 2147483647 minor units"],
         responses: {
           200: describeJson("The preview: what each row would become, nothing written.", IndexResult),
           201: describeJson("What each row became, each indexed line naming its successor.", IndexResult),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, or gives basis points that take a price below zero or past 2147483647 minor units."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.price-rows`."),
           404: describeProblem("No price list with that id in the projects this account works in."),
           409: describeProblem("No row of the list runs into `appliedFrom` from an earlier day, so a write would index nothing."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PriceListIndex),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const index = c.req.valid("json")
@@ -696,23 +670,19 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/price-list-rows/:id",
-      describeRoute({
+      {
         operationId: "getPriceListRow",
         summary: "One price row",
         description:
           "One row of a price list of a project the caller works in. A row of another company, or of a project this account does not work in, is a row that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The row.", PriceListRow),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.price-rows`."),
           404: describeProblem("No price row with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findRow(c.get("tx"), c.get("principal"), id)
@@ -722,25 +692,22 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/price-list-rows/:id",
-      describeRoute({
+      {
         operationId: "patchPriceListRow",
         summary: "Amend a price row",
         description:
           "Changes the unit price, the note or the end of one row of a price list of a project the caller works in; every field is optional and at least one must be given. A condition, the product and the start do not change — they are the row's key and its period, so a price under other conditions or from another day is another row, and this one is ended on the day the other starts. Moving the end is held under the list's lock and then the row's: the end still comes after the start, the row still lies inside the list's period (400 on `validTo`), and the row still overlaps no other row of the product with these conditions (409) — a reopened or lengthened row meeting the scheduled one after it is refused there.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PriceListRowPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (a condition, the product, the start and the list included), ends on or before the day the row starts, or puts the end outside the list's period"],
         responses: {
           200: describeJson("The row as it now stands.", PriceListRow),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (a condition, the product, the start and the list included), ends on or before the day the row starts, or puts the end outside the list's period."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.price-rows`."),
           404: describeProblem("No price row with that id in the projects this account works in."),
           409: describeProblem("Another row of this product with these conditions is in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PriceListRowPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

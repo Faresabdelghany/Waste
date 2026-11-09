@@ -75,20 +75,19 @@ import { importTemplate, SEPARATOR_CHARACTERS } from "@waste/domain/imports/csv"
 import { IMPORT_KINDS } from "@waste/domain/imports/vocabulary"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, TransactionRollbackError, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { changeReasonOf } from "../auth/audit"
-import { allows, requireAllowed, requireGrant } from "../auth/require"
+import { allows, requireAllowed } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { IMPORT_MODULES, importRow, type ImportContext } from "./import-rows"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "improve.imports"
@@ -203,27 +202,25 @@ function contextFor(tx: Tx, principal: Principal, kind: ImportKind, projectId: s
 /** The reason an import's writes are recorded under when its request gives none, bounded as a reason is. */
 export const importReason = (fileName: string): string => `CSV import ${fileName}`.slice(0, PARAGRAPH_MAX)
 
-export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function importRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/imports/templates/:kind",
-      describeRoute({
+      {
         operationId: "getImportTemplate",
         summary: "A kind's CSV template",
         description:
           "The header row of one kind of import as a CSV file, UTF-8 with a byte-order mark so a spreadsheet opens it as such: the columns the import reads, in order, the required ones among them. `separator=semicolon` writes it for a spreadsheet under a Danish locale, which opens a file of commas into one column; the import reads either.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: ImportKindParam,
+        query: ImportTemplateQuery,
+        invalid: ["the path does not name a kind of import, or `separator` is neither `comma` nor `semicolon`"],
         responses: {
           200: { description: "The template, as an attachment.", content: { "text/csv": { schema: { type: "string" as const } } } },
-          400: describeProblem("The path does not name a kind of import, or `separator` is neither `comma` nor `semicolon`."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `improve.imports`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", ImportKindParam),
-      validate("query", ImportTemplateQuery),
+      },
       (c) => {
         const { kind } = c.req.valid("param")
         const { separator } = c.req.valid("query")
@@ -235,24 +232,20 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/imports/preview",
-      describeRoute({
+      {
         operationId: "previewImport",
         summary: "What an import would do",
         description:
           "A dry run of one batch of rows of one kind, at most 50: each row matched on its key and written exactly as the commit would write it — the family's own schema, references and rules — each in its own savepoint, and the whole rolled back, so nothing is stored. A row sees the batch's rows before it, as it would in the commit; a file is previewed a batch at a time, as it is committed. Each row answers `created`, `updated`, `unchanged` or `refused`, a refusal with the sentence the commit would record, the column it names first. Customers and the catalogue — waste fractions, container types and vehicle types — are the company's and name no project; every other kind names the project the file is imported into. The grants are `create` on `improve.imports` and `view` on the module the kind writes; a row the commit would refuse for the caller's `create` or `edit` there is refused here too.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ImportPreviewRequest,
+        invalid: ["the body is missing a field, names a member the server owns, gives a row number twice or holds more than 50 rows; a cell sits under a header the kind does not know; or the project is missing for a project's kind, given for one of the company's, or not one this account works in"],
         responses: {
           200: describeJson("Each row's outcome and the counts. Nothing was stored.", ImportPreview),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, gives a row number twice or holds more than 50 rows; a cell sits under a header the kind does not know; or the project is missing for a project's kind, given for one of the company's, or not one this account works in.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `improve.imports` or `view` on the module the kind writes."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ImportPreviewRequest),
+      },
       async (c) => {
         const { kind, projectId, rows } = c.req.valid("json")
         const tx = c.get("tx")
@@ -275,22 +268,20 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/imports",
-      describeRoute({
+      {
         operationId: "createImportRun",
         summary: "Start an import",
         description:
           "Makes the run a commit's batches belong to: the kind, the project for a project's kind (none for the company's: Customers and the catalogue), the file's name and how many rows it holds. It writes no row; `POST /imports/{id}/rows` does, a batch at a time. The run is complete when it has recorded as many rows as it was said to hold. The grants are `create` on `improve.imports` and `view` on the module the kind writes.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ImportRunCreate,
+        invalid: ["the body is missing a field or names a member the server owns, or the project is missing for a project's kind, given for one of the company's, or not one this account works in"],
         responses: {
           201: describeCreated("The run, with nothing recorded yet.", ImportRun),
-          400: describeProblem("The body is missing a field or names a member the server owns, or the project is missing for a project's kind, given for one of the company's, or not one this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `improve.imports` or `view` on the module the kind writes."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ImportRunCreate),
+      },
       async (c) => {
         const { kind, projectId, fileName, rowCount } = c.req.valid("json")
         const tx = c.get("tx")
@@ -306,22 +297,19 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/imports",
-      describeRoute({
+      {
         operationId: "listImportRuns",
         summary: "The imports run here",
         description:
           "One page of import runs, newest first: the runs of the company's kinds and the runs of the projects the caller works in, of the kinds whose module the caller views. `kind` narrows it to one kind, `projectId` to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ImportRunListQuery,
+        invalid: ["`kind` is not a kind of import", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of runs, newest first.", ImportRunPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `kind` is not a kind of import, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `improve.imports`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ImportRunListQuery),
+      },
       async (c) => {
         const { limit, cursor, kind, projectId } = c.req.valid("query")
         // Newest first, so the next page is the runs below the cursor.
@@ -348,22 +336,18 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/imports/:id",
-      describeRoute({
+      {
         operationId: "getImportRun",
         summary: "One import run",
         description: "One import run, with its counts so far and whether it has recorded every row it was said to hold. A run of a project this account does not work in, or of a kind whose module its role does not view, is a run that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The run.", ImportRun),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `improve.imports`."),
           404: describeProblem("No import run with that id that this account reads."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findRun(c.get("tx"), c.get("principal"), id)
@@ -373,25 +357,23 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/imports/:id/rows",
-      describeRoute({
+      {
         operationId: "importRows",
         summary: "Write one batch of an import",
         description:
           "Writes up to 50 rows of the run in one transaction, each in its own savepoint, as the preview did: each matched on its key and made, changed, left as it stands or refused, and its outcome appended to the run's ledger, `GET /imports/{id}/rows`, with the run's counts moved in the same transaction. A row the run has already recorded is answered as recorded and not written again, so a batch whose answer was lost is sent again whole. The grants are `create` on `improve.imports`, `view` on the module the run's kind writes, and there `create` for a row that makes a record and `edit` for one that changes it, asked per row: a row the caller may not write is refused and the rest are written. Each row is recorded in the audit log under the request's `Waste-Change-Reason`, or, without one, `CSV import <file name>`. The answer is 201 without a Location: the rows are appended to the run's ledger and read there.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: ImportBatch,
+        invalid: ["the body is missing its rows, holds more than 50, gives a row number twice, or has a cell under a header the run's kind does not know"],
         responses: {
           201: describeJson("Each row's outcome, in the batch's order, and the run as it now stands.", ImportBatchResult),
-          400: describeProblem("The path does not hold an id, or the body is missing its rows, holds more than 50, gives a row number twice, or has a cell under a header the run's kind does not know."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `improve.imports` or `view` on the module the run's kind writes."),
           404: describeProblem("No import run with that id that this account reads."),
           409: describeProblem("The batch would record more rows than the run was said to hold."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", ImportBatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { rows } = c.req.valid("json")
@@ -453,24 +435,21 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/imports/:id/rows",
-      describeRoute({
+      {
         operationId: "listImportRunRows",
         summary: "What an import did, row by row",
         description:
           "One page of the rows a run recorded, in the order they were written: each row's outcome, what it was matched on, the record it made or matched — for an agreements run, the agreement — and a refusal's sentence. `outcome` narrows it to one outcome, such as the refusals: a refused row is fixed in the file and the file imported again as a new run, the rows this one wrote coming back unchanged. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: ImportRunRowListQuery,
+        invalid: ["`outcome` is not an outcome"],
         responses: {
           200: describeJson("One page of the run's rows.", ImportRunRowPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or `outcome` is not an outcome."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `improve.imports`."),
           404: describeProblem("No import run with that id that this account reads."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", ImportRunRowListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, outcome } = c.req.valid("query")

@@ -62,18 +62,17 @@ import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "@waste
 import { Page } from "@waste/contracts/pagination"
 import { GENERATE_ROUTES_QUEUE, startGenerationRun } from "@waste/db/commands/generation"
 import type { Tx } from "@waste/db/client"
-import { jobHeld, QueueMissing, type JobSender, type Send } from "@waste/db/jobs"
+import { jobHeld, QueueMissing, type Send } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate, WORKER_QUEUE_MISSING } from "../problem"
+import { describeProblem, problem, WORKER_QUEUE_MISSING } from "../problem"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
 
@@ -86,11 +85,6 @@ export const DRAFT_GENERATES_NOTHING = "A draft scheme generates nothing; valida
 export const GENERATION_ALREADY_QUEUED = "A generation of this scheme is already queued or running; ask again in a moment"
 
 const noSuchRun = (id: string) => problem(404, { detail: `No generation run ${id} in the projects this account works in` })
-
-export type GenerationOptions = {
-  /** pg-boss's `send` for this process (app.ts builds one over the probe pool); the trigger sends through it inside the request's transaction. */
-  jobs: JobSender
-}
 
 /** The columns a run is read with: everything but the tenant and pg-boss's job id, which is the worker's bookkeeping. */
 const runColumns = {
@@ -176,33 +170,31 @@ export async function askGenerationBestEffort(tx: Tx, principal: Principal, send
   }
 }
 
-export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: GenerationOptions) {
-  return new Hono<AuthEnv>()
+export function generationRoutes(deps: RouteDeps) {
+  const { jobs } = deps
+  return routes(deps)
     .post(
       "/route-schemes/:id/generate",
-      describeRoute({
+      {
         operationId: "generateRouteScheme",
         summary: "Start a generation run of a route scheme",
         description:
           "Starts a generation run over the window and answers at once, before generation has begun: the scheme's run is written `queued` and `on-demand` and the worker's job for it is queued in the same transaction, and the 202 carries the run. Generation happens on the worker, never on the request; read `GET /generation-runs/{id}` to watch the run move from `queued` to `succeeded`, with its counts and warnings, or `failed`, with its error. One run of a scheme is queued or in flight at a time: while one is, nothing new is started and that run is answered instead, 200, whatever window it covers — so two clicks are one run. A draft scheme generates nothing (409). A validated scheme plans the collections of its period inside the window, and a window beyond the period plans nothing there and cancels the planned routes an earlier run left in it, which is how a shortened scheme's routes go. `from` and `to` are both inclusive, `to` on or after `from`, the window at most 366 days — the job's walk cap.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: GenerationRequest,
+        invalid: ["`from` or `to` is not a calendar day", "`to` comes before `from`", "the window spans more than 366 days", "the body carries a member the server decides"],
         responses: {
           200: describeJson("A run of this scheme was already queued or in flight: that run, which this request did not start.", GenerationRun),
           202: describeJson("The run this request started, queued for the worker; nothing is generated yet.", GenerationRun),
-          400: describeProblem("The path does not hold an id, `from` or `to` is not a calendar day, `to` comes before `from`, the window spans more than 366 days, or the body carries a member the server decides."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
           409: describeProblem(
             `The scheme is a draft (${JSON.stringify(DRAFT_GENERATES_NOTHING)}), or the worker's queue holds a job of this scheme that no run this request can see is held by (${JSON.stringify(GENERATION_ALREADY_QUEUED)}).`,
           ),
           503: describeProblem(`No worker has started on this database yet, so the generation queue is not there to send to (${JSON.stringify(WORKER_QUEUE_MISSING)}); nothing was written.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", GenerationRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const window = c.req.valid("json")
@@ -220,24 +212,21 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
     )
     .get(
       "/route-schemes/:id/generation-runs",
-      describeRoute({
+      {
         operationId: "listRouteSchemeGenerationRuns",
         summary: "One route scheme's generation runs, newest first",
         description:
           "One page of the scheme's generation runs, newest first — the office's button's and the nightly plan-ahead's alike (`trigger`) — each with its window, where it stands, its counts, its warnings and, when it failed, its error. `status` answers the runs in one status. A scheme of another company, or of a project this account does not work in, is a scheme that does not exist here. Hand `nextCursor` back as `cursor` for the next, older page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: GenerationRunListQuery,
+        invalid: ["`status` is not a run's status"],
         responses: {
           200: describeJson("One page of the scheme's generation runs, newest first.", GenerationRunPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or `status` is not a run's status."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", GenerationRunListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, status } = c.req.valid("query")
@@ -265,23 +254,19 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
     )
     .get(
       "/generation-runs/:id",
-      describeRoute({
+      {
         operationId: "getGenerationRun",
         summary: "One generation run",
         description:
           "One generation run, as the worker has left it: `queued` until the worker has finished it, then `succeeded` with what it did — routes created, refreshed and cancelled, pickups written, holidays skipped, containers it could not place — and the warnings it wants read beside its counts, or `failed` with its error. This is what the office polls after `POST /route-schemes/{id}/generate`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The generation run.", GenerationRun),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No generation run with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
