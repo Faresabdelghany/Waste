@@ -3,7 +3,7 @@
 // does under the office's six commands, and what an Alert does under its two.
 // The API reads a row under its lock, asks here, and either writes the next
 // status and appends the history row or answers the sentence as its 409
-// (#109 §3); the shape is Execution's `Transition` (execution/transitions.ts),
+// (#109 §3); the shape is `Transition` (../machine), as Execution's (execution/transitions.ts) is,
 // so a reader of one machine reads the other.
 //
 // A transition answers one of three things. `move` is the next status; `stay`
@@ -12,7 +12,7 @@
 // API answers 200 without a write, the rule `confirm` set for allocations
 // (#101); `refuse` carries the sentence and nothing else, since the ticket is
 // named in it and the caller has nothing to add. A ticket is named by its
-// label (`T-8831`, the contracts' `ticketLabel`) as a route is by `RC-1042`.
+// label (`T-8831`, `ticketLabel` in ../numbering) as a route is by `RC-1042`.
 //
 // The ticket machine (#109 §3): `open | pending | on-hold → in-progress` by
 // `start`, `open | in-progress | on-hold → pending` by `wait` (waiting for the

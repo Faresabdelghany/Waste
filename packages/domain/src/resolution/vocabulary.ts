@@ -92,7 +92,6 @@ export const TICKET_EVENT_KINDS = ["created", "assigned", "status-changed", "com
 export const TICKET_VISIBILITIES = ["internal", "customer", "service-provider"] as const
 /** What an Alert is about: the prototype's six condition types, verbatim as tokens. */
 export const ALERT_KINDS = ["route-exception", "resource", "service-risk", "asset", "weight", "other"] as const
-/** How severe an Alert is. */
 export const ALERT_SEVERITIES = ["critical", "high", "medium", "low"] as const
 /** Who raised an Alert: the office (`manual`), the worker's rules (`rule`, `execution` for a condition of the work itself, and `telemetry` for what a device reports: a driver's position, a container's fill level). */
 export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as const

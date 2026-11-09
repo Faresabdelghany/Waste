@@ -158,13 +158,11 @@ const bounded = (text: string, max: number): string => {
   return `${space > max / 2 ? head.slice(0, space) : head}…`
 }
 
-/** A subject cut to `LABEL_MAX`. */
 export const boundedSubject = (subject: string): string => bounded(subject, LABEL_MAX)
 
 /** A description cut to `PARAGRAPH_MAX` the same way: a 5000-character note from a device is a note cut short, not a ticket the API's create refuses. */
 export const boundedDescription = (description: string): string => bounded(description, PARAGRAPH_MAX)
 
-/** A work order as its subject names it. */
 const WORK_ORDER_NAMES: Readonly<Record<Exclude<PickupService, "empty">, string>> = { deliver: "Delivery", remove: "Removal", swap: "Swap", repair: "Repair", wash: "Wash", bulky: "Bulky collection" }
 
 /** "Wash not done: BIN-82014 at Parkvej 18": a work order the stop did not get done, with whichever of the two the worker found. */
@@ -200,7 +198,6 @@ export const rejectedCommandSubject = (detail: string): string => boundedSubject
 export const describe = (sentence: string, reason: string | null, note: string | null): string =>
   boundedDescription([`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" "))
 
-/** The stop's links, with the driver given: the stop's container and place, and the customer and agreement it served under. */
 const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => ({
   routeId: facts.routeId,
   pickupId: facts.pickupId,
@@ -224,7 +221,6 @@ const routeLinks = (routeId: string | null, driverId: string | null, pickupId: s
   agreementId: null,
 })
 
-/** A problem the driver reported, on a stop or on the route: medium, the device's, with the problem's reason and note. */
 const reportedProblem = (problem: { reason: PickupReason | null; note: string | null }, subject: string, links: TicketDraftLinks): TicketDraft => ({
   kind: "reported-problem",
   priority: "medium",

@@ -4,7 +4,6 @@ import { describe, test } from "node:test"
 import { TICKET_EVENT_SHAPES, ticketEventShape, ticketEventShapeIssue, type TicketEventRow } from "../event-shapes"
 import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind } from "../vocabulary"
 
-/** A row with every column given, on a completed ticket. */
 const full: TicketEventRow = { status: "completed", body: "Re-collected on Friday", objectKey: "c/t/e.jpg", visibility: "customer", resolution: "recollected" }
 
 /** The one row of each kind that carries exactly what the kind requires and nothing it forbids, on an open ticket. */
