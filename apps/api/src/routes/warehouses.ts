@@ -36,17 +36,16 @@ import { Warehouse, WarehouseCreate, WarehouseListQuery, WarehousePatch } from "
 import type { Tx } from "@waste/db/client"
 import { warehouse } from "@waste/db/schema/places"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { pointInvalid } from "./place-rules"
 import { requireDepot } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -110,26 +109,23 @@ async function findWarehouse(tx: Tx, principal: Principal, id: string): Promise<
   return row
 }
 
-export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function warehouseRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/warehouses",
-      describeRoute({
+      {
         operationId: "listWarehouses",
         summary: "The warehouses of the caller's projects",
         description:
           "One page of warehouses, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` narrows it to the warehouses in that state. What stands in a warehouse is the ledger's reading, `GET /containers?warehouseId=`. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: WarehouseListQuery,
+        invalid: ["`status` is not one of the four", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of warehouses.", WarehousePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the four, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.warehouses`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", WarehouseListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -154,25 +150,20 @@ export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/warehouses",
-      describeRoute({
+      {
         operationId: "createWarehouse",
         summary: "Register a warehouse",
         description:
           "Registers a warehouse in one project, which must be a project the caller works in. The code is the stable reference a person quotes (`WH-WEST`) and is set once; the code and the name are each unique inside the project. The location is null until the warehouse is geocoded, and a point off the globe is refused before the database sees it. `depotId`, where given, is the depot the warehouse shares a yard with and must be a depot of the same project: colocation is one pointer, not two that can disagree. The status defaults to `active`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: WarehouseCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, or names a depot that is not of this project"],
         responses: {
           201: describeCreated("The warehouse as it was written.", Warehouse),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point off the globe, or names a depot that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.warehouses`."),
           409: describeProblem("The project already has a warehouse with that code, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", WarehouseCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -192,23 +183,19 @@ export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/warehouses/:id",
-      describeRoute({
+      {
         operationId: "getWarehouse",
         summary: "One warehouse",
         description:
           "One warehouse of a project the caller works in. A warehouse of another company, or of a project this account does not work in, is a warehouse that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The warehouse.", Warehouse),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.warehouses`."),
           404: describeProblem("No warehouse with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findWarehouse(c.get("tx"), c.get("principal"), id)
@@ -218,27 +205,22 @@ export function warehouseRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/warehouses/:id",
-      describeRoute({
+      {
         operationId: "patchWarehouse",
         summary: "Change a warehouse",
         description:
           "Changes one warehouse of a project the caller works in; every field is optional and at least one must be given. A null clears the location, the colocated depot or the notes; a depot named must be one of the warehouse's own project. The code does not change: it is the reference the ledger and a report quote, and a warehouse that needs another code is another warehouse. The project is not patchable, since a record does not move between projects.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WarehousePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the code and the project included), holds a point off the globe, or names a depot that is not of this project"],
         responses: {
           200: describeJson("The warehouse as it now stands.", Warehouse),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the code and the project included), holds a point off the globe, or names a depot that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.warehouses`."),
           404: describeProblem("No warehouse with that id in the projects this account works in."),
           409: describeProblem("The project already has another warehouse with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WarehousePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

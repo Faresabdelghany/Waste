@@ -92,8 +92,6 @@ import { addDays } from "@waste/domain/days"
 import type { SchemeRecurrence } from "@waste/domain/planning/recurrence"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
 import { releaseHolds, releasePolicyHolds, schemeReleases } from "@waste/db/commands/route-holds"
@@ -101,41 +99,18 @@ import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { timeOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireAllowed, requireGrant } from "../auth/require"
+import { requireAllowed } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
-import {
-  findScheme,
-  fleetOf,
-  groupsOf,
-  MODULE,
-  mergeReferences,
-  noSuchScheme,
-  pickOf,
-  referencesOf,
-  requireFleetInService,
-  requireFleetThere,
-  CREW_THERE,
-  requireGroupDriver,
-  requireGroupReferences,
-  requireNotArchived,
-  requireNotPickedTwice,
-  requireStructure,
-  SCHEME_NAME_IN_FORCE,
-  SCHEME_NAME_IN_FORCE_SENTENCE,
-  schemeColumns,
-  schemeScope,
-  schemesOf,
-  schemeWithGroups,
-  writeGroupSets,
-  type ClockOptions,
-} from "./scheme-groups"
+import { findScheme, fleetOf, groupsOf, MODULE, mergeReferences, noSuchScheme, pickOf, referencesOf, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, SCHEME_NAME_IN_FORCE, SCHEME_NAME_IN_FORCE_SENTENCE, schemeColumns, schemeScope, schemesOf, schemeWithGroups, writeGroupSets } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
@@ -233,26 +208,24 @@ export async function writeScheme(tx: Tx, principal: Principal, body: RouteSchem
   return schemeWithGroups(tx, principal.companyId, row, now)
 }
 
-export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function routeSchemeRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/route-schemes",
-      describeRoute({
+      {
         operationId: "listRouteSchemes",
         summary: "The route schemes the caller's projects hold",
         description:
           "One page of route schemes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its collection groups by position, their stop matching rule or their picked containers in stop order. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` answers the schemes matching inside one area, `status` the drafts or the validated ones, `planAhead` the ones the nightly job keeps planned or the ones it leaves alone, `archived` the archived ones or the ones still planning (O21 of #290; absent, both, `archivedAt` saying which). `validOn` asks for the schemes in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how \"effective\" and \"expired\" are asked for; scheduled and Attention are the client's readings of each scheme's `generation`: when its latest succeeded run finished, and each rule group's two latest match stamps. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: RouteSchemeListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of route schemes, each with its collection groups.", RouteSchemePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", RouteSchemeListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, status, planAhead, validOn: day, archived } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -283,7 +256,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/route-schemes",
-      describeRoute({
+      {
         operationId: "createRouteScheme",
         summary: "Write a route scheme with its collection groups",
         description:
@@ -292,41 +265,32 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           ". The planning area, where given, is one of that project's; so is the depot the routes depart from, and the unloading station they empty at is one of this company's. Every group finds its stops one way: a rule group carries a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and picks no containers; a manual group picks one or more containers of this project in stop order and carries no rule. A group's service provider is this company's. A group's vehicle, where given, is a powered vehicle of that project, and its driver one of that project's drivers; named afresh, the vehicle is not retired and the driver is active — a retired vehicle, an inactive or a suspended driver is refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one; a group naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at the group's `driverId` with the reason. " +
           CREW_THERE +
           " A group's days lie within the scheme's service days, and no container is picked by two groups that run on a shared day — the entry is refused naming the group and the day. Groups take positions 1..n in the body's order where a position is absent. The period is half-open, `validFrom` the first day in force and `validTo` the first day out of it, absent meaning the scheme runs on; one scheme of a name is in force at a time in a project, so a new version of a name starts when the old ends and an overlapping one is refused. The week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday. `seasons`, none when absent, are stretches of every year — `startsOn` the first day, `endsOn` the first day out, both `mm-dd` and never 02-29, over the new year where the end comes first — in which the scheme serves its service days at the season's own cadence (any but daily, the rotation with every-2-weeks alone); they share no day and no name, and a daily scheme has none. `status` defaults to `draft`, which accepts partial configuration; a scheme created `validated` is held to the structural rules — every service day has a collection group, a rule group names a waste fraction, a manual group picks a container, a rule group has a planning area to match inside, no vehicle or driver is on two collection groups that run on a shared day, and a rule group's vehicle is of the vehicle type its stop rule asks for (O7 of #290) — and refused with every sentence that fails. The server mints every id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: RouteSchemeCreate,
+        invalid: [`the body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, gives a daily scheme seasons or gives seasons that overlap, share a name or name a day not every year has, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong`],
         responses: {
           201: describeCreated("The route scheme as it was written, with its collection groups.", RouteScheme),
-          400: describeProblem(
-            `The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, gives a daily scheme seasons or gives seasons that overlap, share a name or name a day not every year has, carries no group or more than ${GROUPS_MAX}, names a group twice, runs a group on a day the scheme does not serve, gives a group both a rule and containers or neither, picks a container two groups run on the same day, names a group's driver who may not take the group's vehicle, or names a planning area, depot, unloading station, waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.`,
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
           409: describeProblem("A group's vehicle is retired or out of use on the day the crew is judged, or its driver is inactive, suspended or absent on it, a route scheme of this name is already in force over part of that period, or the scheme is created `validated` and does not hold together: the detail lists every structural sentence that fails."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", RouteSchemeCreate),
+      },
       async (c) => created(c, "/route-schemes", await writeScheme(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/route-schemes/:id",
-      describeRoute({
+      {
         operationId: "getRouteScheme",
         summary: "One route scheme",
         description:
           "One route scheme of a project the caller works in, with its collection groups by position, each with its stop matching rule or its picked containers in stop order. A scheme of another company, or of a project this account does not work in, is a scheme that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The route scheme, with its collection groups.", RouteScheme),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -338,29 +302,27 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .patch(
       "/route-schemes/:id",
-      describeRoute({
+      {
         operationId: "patchRouteScheme",
         summary: "Amend a route scheme",
         description:
           "Amends one route scheme of a project the caller works in; every field is optional and at least one must be given. The project is not patchable: a record does not move between projects. A group is `PATCH /collection-groups/{id}` or the routes under it, or, where an edit moves the scheme and its groups together, `collectionGroups` here: the scheme's groups as the edit leaves them, held with the scheme once and written in one transaction, so that an edit is one request: a service day added to a validated scheme with the group that runs on it, which no order of single requests can make, or a group split in two that share a vehicle and two manual groups trading containers, which single requests make only in a careful order, through states the edit never meant. An entry with an `id` restates that group of this scheme whole, as a create spells a group — a member it leaves unsaid is null, and a restated group given no position keeps its own — and keeps how the group finds its stops; an entry without one adds a group, after the last where it gives no position; a group the list leaves out is parked (`days: []`) and keeps its name, since there is no delete. Every entry's days lie within the service days the scheme is left with, every id an entry names is held to the scope its key allows as a create holds it, and no container is picked by two entries that run on a shared day, each refused at the entry that is wrong; a vehicle or driver an entry names afresh — a new group's, one a group changes to, and the stored fleet of a group the edit un-parks — is not retired, inactive or suspended (409), and an entry that moves its crew is judged on the licence at its `driverId` and on whether that crew is there (409, O6 of #290: a vehicle out of use or a driver absent on the day a crew is judged); a group the list leaves out keeps its name while parked, so no entry may take it (409): to run a parked group again, restate it by its `id`. The answer carries every group with its id, a new one's minted. The patch takes the scheme's row lock and holds the row it leaves behind to the recurrence rules in the contracts' words: the end still comes after the start, the week rotation is given with `every-2-weeks` and with nothing else, and a daily scheme serves every weekday and has no seasons. `seasons` replaces the scheme's seasons whole, `[]` clearing them; like a change of frequency it moves the dates the scheme collects on and releases no hold. New service days must still cover every collection group's days — without `collectionGroups`, a narrowing under a group that runs on a dropped day is refused (409) counting the groups, which have to be moved first or moved in the same request. A later `validFrom` moves the day a group's driver is judged on — the day the scheme starts or today, whichever is later — so every group naming both a vehicle and a driver is judged again on the new start, and a driver who may not take the vehicle then is refused at `validFrom` with the licence sentence — at the entry's `driverId` where the edit moves that crew too; an earlier start, or an end, moves nothing a licence is judged on. A planning area and a depot are one of the scheme's project's, an unloading station one of this company's; a null clears the depot or the station. The structural rules are re-run when the scheme is or becomes `validated`, over the groups as the edit leaves them — no vehicle or driver on two groups a shared day among them, and each rule group's vehicle of the type its stop rule asks for — and every sentence that fails is listed (409), nothing written; a scheme going back to `draft` is held to none of them. A period that overlaps another scheme of the same name is refused; shortening the period is free, since the next generation run cancels the planned routes it leaves outside. A route the office moved by hand (`heldAt`, set by `assign` and `reschedule`) keeps its day, start and Planned Assignment through generation until the edit moves what it keeps: a patch that changes the scheme's `plannedStartTime`, `depotId` or `unloadingStationId` releases the hold on every held route of the scheme, and one whose `collectionGroups` changes a group's `vehicleId`, `driverId` or `serviceProviderId` — or parks a running group — releases the holds on that group's routes alone; a change of `serviceDays`, or of a group's `days`, releases only the held routes whose own service day it takes away, and one that only adds a day releases nothing; a new `holidayPolicy` releases the held routes of the scheme it re-decides — one standing where the old policy put its holiday's collection, and one the office moved to a holiday the new policy moves collections off. All in the patch's transaction, so the next generation run brings them back to the scheme; a held route is a planned one, so nothing dispatched is touched, and a patch that moves none of those (a rename, the period) releases nothing.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteSchemePatch,
+        invalid: [
+          "the patch is empty, names a field the caller does not own (the project included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, leaves a daily scheme with seasons, gives seasons that overlap, share a name or name a day not every year has, moves the start to a day a collection group's driver may not take its vehicle on, or names a planning area or a depot that is not this project's or an unloading station that is not this company's; or an entry of `collectionGroups` names a group that is not this scheme's, turns a group to find its stops the other way, gives a group both a rule and containers or neither, runs on a day the scheme is left not serving, picks a container another entry runs on the same day, names a driver who may not take the entry's vehicle, or names a waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong; or the list is empty, longer than " +
+            GROUPS_MAX +
+            ", or names a group or a name twice",
+        ],
         responses: {
           200: describeJson("The route scheme as it now stands, with its collection groups.", RouteScheme),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), ends on or before the day it starts, gives the week rotation with the wrong cadence, leaves a weekday out of a daily scheme, leaves a daily scheme with seasons, gives seasons that overlap, share a name or name a day not every year has, moves the start to a day a collection group's driver may not take its vehicle on, or names a planning area or a depot that is not this project's or an unloading station that is not this company's; or an entry of `collectionGroups` names a group that is not this scheme's, turns a group to find its stops the other way, gives a group both a rule and containers or neither, runs on a day the scheme is left not serving, picks a container another entry runs on the same day, names a driver who may not take the entry's vehicle, or names a waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong; or the list is empty, longer than " +
-              GROUPS_MAX +
-              ", or names a group or a name twice.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes` — nor `create`, where an entry of `collectionGroups` adds a group."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
           409: describeProblem("Collection groups run on days the scheme would no longer serve, a vehicle an entry names afresh is retired or out of use on the day the crew is judged, or a driver so named is inactive, suspended or absent on it, the scheme is or becomes `validated` and does not hold together (the detail lists every sentence), an entry takes the name a parked group keeps, or another scheme of that name is already in force over part of the period, or an added group is given no position and the last stands at the last position a group can take."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteSchemePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { collectionGroups: entries, seasons, ...patch } = c.req.valid("json")
@@ -437,24 +399,21 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/route-schemes/:id/occurrences",
-      describeRoute({
+      {
         operationId: "listRouteSchemeOccurrences",
         summary: "The dates a route scheme would plan",
         description:
           "The collections the scheme makes between `from` and `to`, both inclusive and at most a year apart, in date order and numbered, as the generation job will plan them: one row per recurrence date inside the scheme's period, at the cadence of the season the date falls in (named on the row as `season`) or the scheme's own outside every season, with the holiday policy applied to the dates on the project's holiday list. A shifted row keeps the recurrence date as `plannedDate` — the route's identity — and moves `date` to the nearest working day in the policy's direction, a working day being one neither on the project's weekend nor on its list; a skipped row keeps its date, carries no number and is not a collection; a `holiday` row is collected as planned. The holidays are those of the project's collection calendars when the project has a `holidayList`, named as the calendar names them or, where it does not, as the list's own lookup does; a project without a list rests on its weekend only, whatever calendars it has. Pure: nothing is written, and no generation run is started.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: OccurrenceQuery,
+        invalid: ["`from` or `to` is not a calendar day", "`to` comes before `from`", "the window spans more than a year"],
         responses: {
           200: describeJson("The occurrences in the window, in date order.", Occurrences),
-          400: describeProblem("The path does not hold an id, `from` or `to` is not a calendar day, `to` comes before `from`, or the window spans more than a year."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", OccurrenceQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const window = c.req.valid("query")

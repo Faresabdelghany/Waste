@@ -18,7 +18,7 @@
 // the stop, and tells the office they stand when it uncompletes one
 // (`ledgerMovedThenCorrected`).
 import { SERVICE_NOUNS } from "./services"
-import type { PickupService, PickupStatus } from "./vocabulary"
+import type { MissedPickupStatus, PickupService, PickupStatus } from "./vocabulary"
 
 /** The services that move a container through the ledger as their stop completes. */
 export const LEDGER_SERVICES = ["deliver", "remove", "swap"] as const satisfies readonly PickupService[]
@@ -85,7 +85,7 @@ export function ledgerNotRecorded(facts: Work & { by: "driver" | "office"; compl
 }
 
 /** The ticket a completed work order corrected to skipped or failed opens: the ledger's movements stand, for the office to put back if the work did not happen. */
-export function ledgerMovedThenCorrected(facts: Work & { outcome: "skipped" | "failed"; correctedAt: string }): LedgerTask {
+export function ledgerMovedThenCorrected(facts: Work & { outcome: MissedPickupStatus; correctedAt: string }): LedgerTask {
   const noun = SERVICE_NOUNS[facts.service]
   return {
     kind: "internal-task",

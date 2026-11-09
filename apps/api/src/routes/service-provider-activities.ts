@@ -51,8 +51,6 @@ import { collectionGroup, collectionGroupContainer, collectionGroupFraction, rou
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
-import type { JobSender } from "@waste/db/jobs"
-import type { Action } from "@waste/domain/access/modules"
 import { NOT_A_FRACTION, NOT_A_POWERED_VEHICLE } from "@waste/domain/execution/commands"
 import { firstEndingDay } from "@waste/domain/planning/lifecycle"
 import type { ServiceDay } from "@waste/domain/planning/vocabulary"
@@ -75,19 +73,19 @@ import {
   type ActivitySide,
 } from "@waste/domain/service-providers/activities"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, servesScheme } from "../auth/provider"
-import { requireAllowed, requireGrant } from "../auth/require"
+import { requireAllowed } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { operation, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
 import { NOT_A_DRIVER, requireServiceProvider } from "./references"
 import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
@@ -493,14 +491,8 @@ function amendmentOf(proposal: Proposal) {
   }
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export type ActivityRouteOptions = { now?: () => Date; jobs: JobSender }
-
-export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ActivityRouteOptions) {
+export function serviceProviderActivityRoutes(deps: RouteDeps) {
+  const { now, jobs } = deps
   /**
    * A command's route: the row locked and read through the caller's reach,
    * the move judged by the domain (the kind, the status, then the side), and
@@ -548,15 +540,17 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
   }
 
   const command = (name: ActivityCommand, summary: string, description: string, conflict: string) =>
-    describeRoute({
+    operation({
       operationId: `${name}ServiceProviderActivity`,
       summary,
       description,
-      security: BEARER_SECURITY,
+      module: MODULE,
+      action: "edit",
+      params: IdParam,
+      body: ActivityClose,
+      invalid: [name === "reject" ? "the body gives no reason or names a member it does not have" : "the body names a member it does not have"],
       responses: {
         200: describeJson("The activity as it now stands.", ServiceProviderActivity),
-        400: describeProblem(name === "reject" ? "The path does not hold an id, or the body gives no reason or names a member it does not have." : "The path does not hold an id, or the body names a member it does not have."),
-        401: describeProblem("No usable token (see WWW-Authenticate)."),
         403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or the caller's side does not give this command: the office decides a proposal and closes its follow-ups.`),
         404: describeProblem("No activity with that id this account reaches."),
         409: describeProblem(conflict),
@@ -564,32 +558,24 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     })
 
   const closing = (name: Exclude<ActivityCommand, "approve" | "reject">, summary: string, description: string) =>
-    [
-      command(name, summary, description, "The activity is not of a kind the command takes, or is not where the command takes it from, in the domain's sentence."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ActivityClose),
-    ] as const
+    command(name, summary, description, "The activity is not of a kind the command takes, or is not where the command takes it from, in the domain's sentence.")
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/service-provider-activities",
-      describeRoute({
+      {
         operationId: "listServiceProviderActivities",
         summary: "The service provider activities",
         description:
           "One page of the Activities the caller reaches, oldest first (ids are time-ordered): an office account's are those of the projects it works in, a provider's account's those of its own provider, in whatever project. `projectId` narrows it to one project — for an office account one it works in, naming another is refused — and `serviceProviderId`, `kind` and `status` narrow it further. Overdue is a reading of an open follow-up's `dueOn`, never a status. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ServiceProviderActivityListQuery,
+        invalid: ["a filter is not of the vocabulary", "`projectId` is not a project this office account works in"],
         responses: {
           200: describeJson("One page of activities.", ActivityPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is not of the vocabulary, or `projectId` is not a project this office account works in."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ServiceProviderActivityListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, serviceProviderId, kind, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -617,25 +603,21 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     )
     .post(
       "/service-provider-activities",
-      describeRoute({
+      {
         operationId: "createServiceProviderActivity",
         summary: "Open a service provider activity",
         description:
           "Opens an Activity of its kind, shaped by it: a `route-day-change` — a proposal, `pending-approval` — names a scheme of the project, one of its collection groups, the days the group should run on and the first day they apply from (`effectiveFrom`, tomorrow on the project's clock at the earliest and inside the scheme's period); a `vehicle-change` — a proposal too — the same group, the powered vehicle of the project it should run with, optionally a driver of the project, and the first day, the vehicle or the driver moved, and from a provider's account both of its own fleet; a `stop-set-change` — a proposal too — the same of a group that picks its stops (a rule group's are its rule's), the containers of the project it should run on in stop order, each once, and the first day, the list or its order moved; a `waste-fraction-change` — a proposal too — the same of a group that finds its stops by a rule, the company's fractions its rule should collect, each once, and the first day, a fraction moved; a `compliance-follow-up`, `open`, its due day; a `coordination-note`, `open`, nothing more. Every kind names its project, its provider, a subject and optionally a body and the Service Area it is about, one the provider is or was assigned in the project. A provider's account opens a proposal or a note for its own provider alone, in a project where its provider holds an award in force today; a compliance follow-up is the office's to raise (403). The office opens any kind for a provider that is or was assigned a Service Area in the project. A proposal's provider serves the scheme on `effectiveFrom` — a Service Area assigned to it then holds the scheme's planning area — whichever side opens it (409 otherwise), the scheme is not archived and the group runs on some day (409). The server numbers it, the company's next, and mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ServiceProviderActivityCreate,
+        invalid: ["the body is missing a field its kind needs, names a member the server owns or its kind does not carry, a value outside the vocabulary, a project the caller may not name, a provider not the caller's own (a provider's account) or never assigned in the project (the office), a Service Area not the provider's in the project, a scheme not the project's, a group not the scheme's, the days the group runs on already, or a first day before tomorrow or outside the scheme's period"],
         responses: {
           201: describeCreated("The activity as it was opened.", ServiceProviderActivity),
-          400: describeProblem(
-            "The body is missing a field its kind needs, names a member the server owns or its kind does not carry, a value outside the vocabulary, a project the caller may not name, a provider not the caller's own (a provider's account) or never assigned in the project (the office), a Service Area not the provider's in the project, a scheme not the project's, a group not the scheme's, the days the group runs on already, or a first day before tomorrow or outside the scheme's period.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, the caller's role does not allow \`create\` on \`${MODULE}\`, or a provider's account opens a compliance follow-up.`),
           409: describeProblem("The proposal's scheme is archived, its group is parked, or its provider does not serve the scheme on the day it would apply from."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ServiceProviderActivityCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -683,21 +665,18 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     )
     .get(
       "/service-provider-activities/:id",
-      describeRoute({
+      {
         operationId: "getServiceProviderActivity",
         summary: "One service provider activity",
         description: "One Activity the caller reaches: of a project it works in for an office account, of its own provider for a provider's account. Any other is one that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The activity.", ServiceProviderActivity),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No activity with that id this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findActivity(c.get("tx"), c.get("principal"), id)
@@ -707,25 +686,23 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     )
     .patch(
       "/service-provider-activities/:id",
-      describeRoute({
+      {
         operationId: "patchServiceProviderActivity",
         summary: "Correct a service provider activity",
         description:
           "Corrects an Activity while it is open — a proposal pending approval, any other kind open — in its subject, body or Service Area, a follow-up's due day, or a proposal's days, crew, containers or fractions — each set replaced whole — and first day; at least one must be given, and a member its kind does not carry is refused at its field. The kind, the provider, the project and a proposal's scheme and group are its own: another group's change is another proposal. The side that may open the kind corrects it: a follow-up is the office's. A proposal is judged again as it would stand, as an open judges it. A closed Activity is not corrected (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceProviderActivityPatch,
+        invalid: ["the patch is empty", "names a member the caller does not own or the kind does not carry", "a Service Area not the provider's in the project", "the days the group runs on already", "a first day before tomorrow or outside the scheme's period"],
         responses: {
           200: describeJson("The activity as it now stands.", ServiceProviderActivity),
-          400: describeProblem("The path does not hold an id, the patch is empty, names a member the caller does not own or the kind does not carry, a Service Area not the provider's in the project, the days the group runs on already, or a first day before tomorrow or outside the scheme's period."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or a provider's account corrects the office's follow-up.`),
           404: describeProblem("No activity with that id this account reaches."),
           409: describeProblem("The activity is closed, or the proposal as it would stand is about an archived scheme or a parked group, or a scheme its provider does not serve on the day."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceProviderActivityPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -778,16 +755,12 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     )
     .post(
       "/service-provider-activities/:id/approve",
-      command(
+      { ...command(
         "approve",
         "Approve a proposal, and apply it",
         "Approves a proposal pending approval — the office's alone (403 from a provider's account) — and applies it in the same transaction, which takes `create` on `route-studio.schemes` beside the decision's `edit` (403 otherwise). A `route-day-change` writes the scheme's next version from the proposal's `effectiveFrom`, as `POST /route-schemes/{id}/successor` writes one, with the proposal's group running on its proposed days and the scheme serving the days its groups then run on — or, for a `vehicle-change`, the group running with the proposed vehicle, and the proposed driver where one is named, or, for a `stop-set-change`, the group picking the proposed containers in their order, or, for a `waste-fraction-change`, the group's rule collecting the proposed fractions, its container types and vehicle type kept: the version is held to every rule a create is held to, the predecessor's period is cut at the day and its routes from it ended as a successor ends them, and a validated version is planned. The proposal is judged again first against the scheme as it stands. Whatever refuses — a day now past, the scheme archived, its provider no longer serving it, a route of it dispatched on or after the day, or a rule of the new version — refuses the approval (409, the sentence saying why) and leaves the proposal pending. The approved activity names the version it wrote, `successorSchemeId`, and who approved it; `reason` is kept as the approval's note.",
         "The activity is not a proposal or not pending approval, or its change cannot be applied: the sentence says why, and the proposal stays pending.",
-      ),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ActivityClose),
+      ) },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -797,26 +770,22 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
     )
     .post(
       "/service-provider-activities/:id/reject",
-      command("reject", "Reject a proposal", "Rejects a proposal pending approval — the office's alone (403 from a provider's account) — with the reason its provider reads, which is required. Nothing is applied.", "The activity is not a proposal or not pending approval."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ActivityReject),
+      { ...command("reject", "Reject a proposal", "Rejects a proposal pending approval — the office's alone (403 from a provider's account) — with the reason its provider reads, which is required. Nothing is applied.", "The activity is not a proposal or not pending approval."), body: ActivityReject },
       async (c) => c.json(await answer(c.get("tx"), c.get("principal").companyId, await close(c.get("tx"), c.get("principal"), c.req.valid("param").id, "reject", c.req.valid("json").reason))),
     )
     .post(
       "/service-provider-activities/:id/withdraw",
-      ...closing("withdraw", "Withdraw a proposal", "Withdraws a proposal pending approval: its provider's account, or the office on its behalf. Nothing is applied; `reason` is kept where given."),
+      closing("withdraw", "Withdraw a proposal", "Withdraws a proposal pending approval: its provider's account, or the office on its behalf. Nothing is applied; `reason` is kept where given."),
       async (c) => c.json(await answer(c.get("tx"), c.get("principal").companyId, await close(c.get("tx"), c.get("principal"), c.req.valid("param").id, "withdraw", c.req.valid("json").reason ?? null))),
     )
     .post(
       "/service-provider-activities/:id/complete",
-      ...closing("complete", "Complete an activity", "Completes an open compliance follow-up — the office's alone (403 from a provider's account) — or an open coordination note, which either side completes. `reason` is kept where given."),
+      closing("complete", "Complete an activity", "Completes an open compliance follow-up — the office's alone (403 from a provider's account) — or an open coordination note, which either side completes. `reason` is kept where given."),
       async (c) => c.json(await answer(c.get("tx"), c.get("principal").companyId, await close(c.get("tx"), c.get("principal"), c.req.valid("param").id, "complete", c.req.valid("json").reason ?? null))),
     )
     .post(
       "/service-provider-activities/:id/cancel",
-      ...closing("cancel", "Cancel a compliance follow-up", "Cancels an open compliance follow-up — the office's alone (403 from a provider's account). `reason` is kept where given."),
+      closing("cancel", "Cancel a compliance follow-up", "Cancels an open compliance follow-up — the office's alone (403 from a provider's account). `reason` is kept where given."),
       async (c) => c.json(await answer(c.get("tx"), c.get("principal").companyId, await close(c.get("tx"), c.get("principal"), c.req.valid("param").id, "cancel", c.req.valid("json").reason ?? null))),
     )
 }

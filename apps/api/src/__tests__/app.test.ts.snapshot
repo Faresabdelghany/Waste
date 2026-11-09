@@ -1,0 +1,501 @@
+exports[`GET /openapi.json > documents the operations the snapshot lists, each with its security and its answers, and no other 1`] = `
+GET /access-credentials listAccessCredentials bearer 200 400 401 403
+POST /access-credentials createAccessCredential bearer 201+Location 400 401 403 409
+GET /access-credentials/{id} getAccessCredential bearer 200 400 401 403 404
+PATCH /access-credentials/{id} patchAccessCredential bearer 200 400 401 403 404 409
+POST /access-credentials/{id}/block blockAccessCredential bearer 200 400 401 403 404 409
+POST /access-credentials/{id}/unblock unblockAccessCredential bearer 200 400 401 403 404 409
+GET /addresses searchAddresses bearer 200 400 401 403 502 503
+GET /addresses/{id} getAddress bearer 200 400 401 403 404 502 503
+GET /agreements listAgreements bearer 200 400 401 403
+POST /agreements createAgreement bearer 201+Location 400 401 403 409
+GET /agreements/{id} getAgreement bearer 200 400 401 403 404
+PATCH /agreements/{id} patchAgreement bearer 200 400 401 403 404 409
+GET /agreements/{id}/subscriptions listAgreementSubscriptions bearer 200 400 401 403 404
+POST /agreements/{id}/subscriptions createSubscription bearer 201+Location 400 401 403 404 409
+POST /agreements/{id}/terminate terminateAgreement bearer 200 400 401 403 404 409
+GET /alerts listAlerts bearer 200 400 401 403
+POST /alerts raiseAlert bearer 201+Location 400 401 403
+GET /alerts/{id} getAlert bearer 200 400 401 403 404
+POST /alerts/{id}/acknowledge acknowledgeAlert bearer 200 400 401 403 404 409
+POST /alerts/{id}/link-ticket linkAlertTicket bearer 200 400 401 403 404 409
+POST /alerts/{id}/resolve resolveAlert bearer 200 400 401 403 404
+GET /applications listApplications bearer 200 400 401 403
+POST /applications createApplication bearer 201+Location 400 401 403
+GET /applications/{id} getApplication bearer 200 400 401 403 404
+PATCH /applications/{id} patchApplication bearer 200 400 401 403 404 409
+POST /applications/{id}/decide decideApplication bearer 200 400 401 403 404 409
+GET /applications/{id}/decisions listApplicationDecisions bearer 200 400 401 403 404
+POST /applications/{id}/reopen reopenApplication bearer 200 400 401 403 404 409
+POST /applications/{id}/review reviewApplication bearer 200 400 401 403 404 409
+POST /applications/{id}/withdraw withdrawApplication bearer 200 400 401 403 404 409
+GET /audit-events listAuditEvents bearer 200 400 401 403
+GET /billable-events listBillableEvents bearer 200 400 401 403
+POST /billable-events createBillableEvent bearer 201+Location 400 401 403 409
+GET /billable-events/{id} getBillableEvent bearer 200 400 401 403 404
+POST /billable-events/{id}/cancel cancelBillableEvent bearer 200 400 401 403 404 409
+POST /billable-events/{id}/hold holdBillableEvent bearer 200 400 401 403 404 409
+POST /billable-events/{id}/release releaseBillableEvent bearer 200 400 401 403 404 409
+POST /billable-events/{id}/reprice repriceBillableEvent bearer 200 400 401 403 404 409
+GET /billing-runs listBillingRuns bearer 200 400 401 403
+POST /billing-runs createBillingRun bearer 201+Location 400 401 403 409
+POST /billing-runs/preview previewBillingRun bearer 200 400 401 403
+GET /billing-runs/{id} getBillingRun bearer 200 400 401 403 404
+GET /bulky-bookings listBulkyBookings bearer 200 400 401 403
+POST /bulky-bookings createBulkyBooking bearer 201+Location 400 401 403 409
+GET /bulky-bookings/availability getBulkyAvailability bearer 200 400 401 403 409
+GET /bulky-bookings/{id} getBulkyBooking bearer 200 400 401 403 404
+PATCH /bulky-bookings/{id} patchBulkyBooking bearer 200 400 401 403 404 409
+POST /bulky-bookings/{id}/cancel cancelBulkyBooking bearer 200 400 401 403 404 409
+GET /bulky-schedules listBulkySchedules bearer 200 400 401 403
+POST /bulky-schedules createBulkySchedule bearer 201+Location 400 401 403 409
+GET /bulky-schedules/{id} getBulkySchedule bearer 200 400 401 403 404
+PATCH /bulky-schedules/{id} patchBulkySchedule bearer 200 400 401 403 404 409
+GET /collection-calendars listCollectionCalendars bearer 200 400 401 403
+POST /collection-calendars createCollectionCalendar bearer 201+Location 400 401 403 409
+GET /collection-calendars/{id} getCollectionCalendar bearer 200 400 401 403 404
+PATCH /collection-calendars/{id} patchCollectionCalendar bearer 200 400 401 403 404 409
+GET /collection-groups/{id} getCollectionGroup bearer 200 400 401 403 404
+PATCH /collection-groups/{id} patchCollectionGroup bearer 200 400 401 403 404 409
+PUT /collection-groups/{id}/containers putCollectionGroupContainers bearer 200 400 401 403 404 409
+PUT /collection-groups/{id}/stop-matching-rule putCollectionGroupStopMatchingRule bearer 200 400 401 403 404 409
+GET /company getCompany bearer 200 401 403 404
+PATCH /company patchCompany bearer 200 400 401 403 404 409
+GET /container-types listContainerTypes bearer 200 400 401 403
+POST /container-types createContainerType bearer 201+Location 400 401 403 409
+GET /container-types/{id} getContainerType bearer 200 400 401 403 404
+PATCH /container-types/{id} patchContainerType bearer 200 400 401 403 404 409
+GET /containers listContainers bearer 200 400 401 403
+POST /containers createContainer bearer 201+Location 400 401 403 409
+GET /containers/{id} getContainer bearer 200 400 401 403 404
+PATCH /containers/{id} patchContainer bearer 200 400 401 403 404 409
+POST /containers/{id}/adjust adjustContainer bearer 201 400 401 403 404 409
+POST /containers/{id}/decommission decommissionContainer bearer 201 400 401 403 404 409
+GET /containers/{id}/movements listContainerMovements bearer 200 400 401 403 404
+POST /containers/{id}/placements createPlacement bearer 201+Location 400 401 403 404 409
+POST /containers/{id}/receive receiveContainer bearer 201 400 401 403 404 409
+POST /containers/{id}/return returnContainer bearer 201 400 401 403 404 409
+POST /containers/{id}/transfer transferContainer bearer 201 400 401 403 404 409
+GET /contaminant-codes listContaminantCodes bearer 200 400 401 403
+POST /contaminant-codes createContaminantCode bearer 201+Location 400 401 403 409
+GET /contaminant-codes/{id} getContaminantCode bearer 200 400 401 403 404
+PATCH /contaminant-codes/{id} patchContaminantCode bearer 200 400 401 403 404 409
+PUT /contaminant-codes/{id}/fractions putContaminantCodeFractions bearer 200 400 401 403 404
+GET /counting-rules listCountingRules bearer 200 400 401 403
+POST /counting-rules createCountingRule bearer 201+Location 400 401 403 409
+POST /counting-rules/simulation simulateCountingRule bearer 200 400 401 403
+GET /counting-rules/{id} getCountingRule bearer 200 400 401 403 404
+PATCH /counting-rules/{id} patchCountingRule bearer 200 400 401 403 404 409
+DELETE /counting-rules/{id} deleteCountingRule bearer 204 400 401 403 404 409
+GET /customer-contacts/{id} getCustomerContact bearer 200 400 401 403 404
+PATCH /customer-contacts/{id} patchCustomerContact bearer 200 400 401 403 404 409
+GET /customers listCustomers bearer 200 400 401 403
+POST /customers createCustomer bearer 201+Location 400 401 403 409
+GET /customers/{id} getCustomer bearer 200 400 401 403 404
+PATCH /customers/{id} patchCustomer bearer 200 400 401 403 404 409
+GET /customers/{id}/contacts listCustomerContacts bearer 200 400 401 403 404
+POST /customers/{id}/contacts createCustomerContact bearer 201+Location 400 401 403 404 409
+GET /customers/{id}/statement getCustomerStatement bearer 200 400 401 403 404
+GET /decommission-reasons listDecommissionReasons bearer 200 400 401 403
+POST /decommission-reasons createDecommissionReason bearer 201+Location 400 401 403 409
+GET /decommission-reasons/{id} getDecommissionReason bearer 200 400 401 403 404
+PATCH /decommission-reasons/{id} patchDecommissionReason bearer 200 400 401 403 404 409
+GET /depots listDepots bearer 200 400 401 403
+POST /depots createDepot bearer 201+Location 400 401 403 409
+GET /depots/{id} getDepot bearer 200 400 401 403 404
+PATCH /depots/{id} patchDepot bearer 200 400 401 403 404 409
+GET /driver-absences listDriverAbsences bearer 200 400 401 403
+POST /driver-absences createDriverAbsence bearer 201+Location 400 401 403 409
+GET /driver-absences/{id} getDriverAbsence bearer 200 400 401 403 404
+PATCH /driver-absences/{id} patchDriverAbsence bearer 200 400 401 403 404 409
+DELETE /driver-absences/{id} deleteDriverAbsence bearer 204 400 401 403 404
+GET /driver/commands listDriverCommands bearer 200 400 401 403
+POST /driver/commands applyDriverCommands bearer 200 400 401 403
+GET /driver/me getDriverMe bearer 200 401 403
+GET /driver/routes listDriverRoutes bearer 200 400 401 403
+GET /driver/routes/{id} getDriverRoute bearer 200 400 401 403 404
+GET /driver/routes/{id}/identify identifyOnDriverRoute bearer 200 400 401 403 404
+GET /driver/routes/{id}/messages listDriverRouteMessages bearer 200 400 401 403 404
+POST /driver/routes/{id}/messages sendDriverRouteMessage bearer 200 201 400 401 403 404 409
+POST /driver/uploads signProofUpload bearer 200 400 401 403 404 409 502 503
+GET /drivers listDrivers bearer 200 400 401 403
+POST /drivers createDriver bearer 201+Location 400 401 403 409
+GET /drivers/{id} getDriver bearer 200 400 401 403 404
+PATCH /drivers/{id} patchDriver bearer 200 400 401 403 404 409
+GET /drop-off-points listDropOffPoints bearer 200 400 401 403
+POST /drop-off-points createDropOffPoint bearer 201+Location 400 401 403 409
+GET /drop-off-points/{id} getDropOffPoint bearer 200 400 401 403 404
+PATCH /drop-off-points/{id} patchDropOffPoint bearer 200 400 401 403 404 409
+PUT /drop-off-points/{id}/exceptions putDropOffPointExceptions bearer 200 400 401 403 404
+PUT /drop-off-points/{id}/fractions putDropOffPointFractions bearer 200 400 401 403 404
+PUT /drop-off-points/{id}/hours putDropOffPointHours bearer 200 400 401 403 404
+GET /field-inspections listFieldInspections bearer 200 400 401 403
+POST /field-inspections createFieldInspection bearer 201+Location 400 401 403
+GET /field-inspections/{id} getFieldInspection bearer 200 400 401 403 404
+PATCH /field-inspections/{id} patchFieldInspection bearer 200 400 401 403 404 409
+POST /field-inspections/{id}/close closeFieldInspection bearer 200 400 401 403 404 409
+GET /field-inspections/{id}/photo-objects getFieldInspectionPhotoObjects bearer 200 400 401 403 404 502 503
+POST /field-inspections/{id}/photos appendFieldInspectionPhoto bearer 201 400 401 403 404 409
+POST /field-inspections/{id}/uploads signFieldInspectionUpload bearer 200 400 401 403 404 409 502 503
+GET /generation-runs/{id} getGenerationRun bearer 200 400 401 403 404
+GET /healthz getHealth open 200
+GET /holiday-lists listHolidayLists bearer 200 400 401 403
+POST /holiday-lists createHolidayList bearer 201+Location 400 401 403 409
+GET /holiday-lists/{id} getHolidayList bearer 200 400 401 403 404
+PATCH /holiday-lists/{id} patchHolidayList bearer 200 400 401 403 404 409
+DELETE /holiday-lists/{id} deleteHolidayList bearer 204 400 401 403 404 409
+PUT /holiday-lists/{id}/holidays putHolidayListHolidays bearer 200 400 401 403 404
+GET /imports listImportRuns bearer 200 400 401 403
+POST /imports createImportRun bearer 201+Location 400 401 403
+POST /imports/preview previewImport bearer 200 400 401 403
+GET /imports/templates/{kind} getImportTemplate bearer 200 400 401 403
+GET /imports/{id} getImportRun bearer 200 400 401 403 404
+GET /imports/{id}/rows listImportRunRows bearer 200 400 401 403 404
+POST /imports/{id}/rows importRows bearer 201 400 401 403 404 409
+GET /integrations getIntegrations bearer 200 401 403
+GET /invoices listInvoices bearer 200 400 401 403
+GET /invoices/{id} getInvoice bearer 200 400 401 403 404
+POST /invoices/{id}/credit-notes createCreditNote bearer 201+Location 400 401 403 404 409
+GET /invoices/{id}/document getInvoiceDocument bearer 200 304 400 401 403 404
+GET /maintenance-orders listMaintenanceOrders bearer 200 400 401 403
+POST /maintenance-orders createMaintenanceOrder bearer 201+Location 400 401 403
+GET /maintenance-orders/{id} getMaintenanceOrder bearer 200 400 401 403 404
+POST /maintenance-orders/{id}/cancel cancelMaintenanceOrder bearer 200 400 401 403 404 409
+POST /maintenance-orders/{id}/complete completeMaintenanceOrder bearer 200 400 401 403 404 409
+GET /maintenance-plans listMaintenancePlans bearer 200 400 401 403
+POST /maintenance-plans createMaintenancePlan bearer 201+Location 400 401 403
+GET /maintenance-plans/{id} getMaintenancePlan bearer 200 400 401 403 404
+PATCH /maintenance-plans/{id} patchMaintenancePlan bearer 200 400 401 403 404
+GET /me getMe bearer 200 401 403
+GET /me/notices listMyNotices bearer 200 400 401 403
+GET /me/notification-preferences getNotificationPreferences bearer 200 401 403
+PUT /me/notification-preferences putNotificationPreferences bearer 200 400 401 403
+GET /message-templates listMessageTemplates bearer 200 400 401 403
+POST /message-templates createMessageTemplate bearer 201+Location 400 401 403 409
+GET /message-templates/{id} getMessageTemplate bearer 200 400 401 403 404
+PATCH /message-templates/{id} patchMessageTemplate bearer 200 400 401 403 404 409
+GET /messages listMessages bearer 200 400 401 403
+POST /messages createMessage bearer 201+Location 400 401 403 409 503
+GET /messages/{id} getMessage bearer 200 400 401 403 404
+GET /outbound-loads listOutboundLoads bearer 200 400 401 403
+POST /outbound-loads createOutboundLoad bearer 201+Location 400 401 403 409
+GET /outbound-loads/{id} getOutboundLoad bearer 200 400 401 403 404
+PATCH /outbound-loads/{id} patchOutboundLoad bearer 200 400 401 403 404 409
+POST /outbound-loads/{id}/cancel cancelOutboundLoad bearer 200 400 401 403 404 409
+POST /outbound-loads/{id}/dispute disputeOutboundLoad bearer 200 400 401 403 404 409
+POST /outbound-loads/{id}/receive receiveOutboundLoad bearer 200 400 401 403 404 409
+POST /outbound-loads/{id}/reconcile reconcileOutboundLoad bearer 200 400 401 403 404 409
+POST /payment-allocations/{id}/reverse reversePaymentAllocation bearer 201 400 401 403 404 409
+GET /payments listPayments bearer 200 400 401 403
+POST /payments createPayment bearer 201+Location 400 401 403
+POST /payments/bank-lines importBankLines bearer 200 201 400 401 403 409
+GET /payments/{id} getPayment bearer 200 400 401 403 404
+POST /payments/{id}/allocations allocatePayment bearer 201 400 401 403 404 409
+GET /pickup-exception-rules listPickupExceptionRules bearer 200 400 401 403
+POST /pickup-exception-rules createPickupExceptionRule bearer 201+Location 400 401 403 409
+GET /pickup-exception-rules/{id} getPickupExceptionRule bearer 200 400 401 403 404
+PATCH /pickup-exception-rules/{id} patchPickupExceptionRule bearer 200 400 401 403 404 409
+GET /pickups listPickups bearer 200 400 401 403
+GET /pickups/{id} getPickup bearer 200 400 401 403 404
+POST /pickups/{id}/correct-outcome correctPickupOutcome bearer 200 400 401 403 404 409
+GET /pickups/{id}/proof-objects getPickupProofObjects bearer 200 400 401 403 404 502 503
+POST /pickups/{id}/remove removePickup bearer 200 400 401 403 404 409
+GET /placements listPlacements bearer 200 400 401 403
+GET /placements/{id} getPlacement bearer 200 400 401 403 404
+PATCH /placements/{id} patchPlacement bearer 200 400 401 403 404 409
+GET /planning-area-boundaries listPlanningAreaBoundariesAcrossAreas bearer 200 400 401 403
+GET /planning-area-boundaries/{id} getPlanningAreaBoundary bearer 200 400 401 403 404
+PATCH /planning-area-boundaries/{id} patchPlanningAreaBoundary bearer 200 400 401 403 404 409
+GET /planning-areas listPlanningAreas bearer 200 400 401 403
+POST /planning-areas createPlanningArea bearer 201+Location 400 401 403 409
+GET /planning-areas/containing listPlanningAreasContaining bearer 200 400 401 403
+GET /planning-areas/{id} getPlanningArea bearer 200 400 401 403 404
+PATCH /planning-areas/{id} patchPlanningArea bearer 200 400 401 403 404 409
+GET /planning-areas/{id}/boundaries listPlanningAreaBoundaries bearer 200 400 401 403 404
+POST /planning-areas/{id}/boundaries createPlanningAreaBoundary bearer 201+Location 400 401 403 404 409
+GET /plans/{id} getPlan bearer 200 400 401 403 404
+GET /price-list-rows/{id} getPriceListRow bearer 200 400 401 403 404
+PATCH /price-list-rows/{id} patchPriceListRow bearer 200 400 401 403 404 409
+GET /price-lists listPriceLists bearer 200 400 401 403
+POST /price-lists createPriceList bearer 201+Location 400 401 403 409
+GET /price-lists/{id} getPriceList bearer 200 400 401 403 404
+PATCH /price-lists/{id} patchPriceList bearer 200 400 401 403 404 409
+POST /price-lists/{id}/index indexPriceList bearer 200 201 400 401 403 404 409
+GET /price-lists/{id}/resolve resolvePriceListPrice bearer 200 400 401 403 404
+GET /price-lists/{id}/rows listPriceListRows bearer 200 400 401 403 404
+POST /price-lists/{id}/rows createPriceListRow bearer 201+Location 400 401 403 404 409
+GET /products listProducts bearer 200 400 401 403
+POST /products createProduct bearer 201+Location 400 401 403 409
+GET /products/{id} getProduct bearer 200 400 401 403 404
+PATCH /products/{id} patchProduct bearer 200 400 401 403 404 409
+GET /projects listProjects bearer 200 400 401 403
+POST /projects createProject bearer 201+Location 400 401 403 409
+GET /projects/{id} getProject bearer 200 400 401 403 404
+PATCH /projects/{id} patchProject bearer 200 400 401 403 404 409
+PUT /projects/{id}/branding replaceProjectBranding bearer 200 400 401 403 404
+GET /projects/{id}/notification-rules getNotificationRules bearer 200 400 401 403 404
+PUT /projects/{id}/notification-rules putNotificationRules bearer 200 400 401 403 404 409
+GET /projects/{id}/ticket-sla getTicketSla bearer 200 400 401 403 404
+PUT /projects/{id}/ticket-sla putTicketSla bearer 200 400 401 403 404 409
+GET /projects/{id}/ticket-team-defaults getTicketTeamDefaults bearer 200 400 401 403 404
+PUT /projects/{id}/ticket-team-defaults putTicketTeamDefaults bearer 200 400 401 403 404 409
+GET /properties listProperties bearer 200 400 401 403
+POST /properties createProperty bearer 201+Location 400 401 403 409 502 503
+GET /properties/{id} getProperty bearer 200 400 401 403 404
+PATCH /properties/{id} patchProperty bearer 200 400 401 403 404 409 502 503
+POST /properties/{id}/moves moveProperty bearer 200 400 401 403 404 409
+PUT /properties/{id}/parties putPropertyParties bearer 200 400 401 403 404 409
+GET /properties/{id}/pickup-exceptions listPropertyPickupExceptions bearer 200 400 401 403 404
+GET /properties/{id}/zones listPropertyZones bearer 200 400 401 403 404
+GET /property-groups listPropertyGroups bearer 200 400 401 403
+POST /property-groups createPropertyGroup bearer 201+Location 400 401 403 409
+GET /property-groups/{id} getPropertyGroup bearer 200 400 401 403 404
+PATCH /property-groups/{id} patchPropertyGroup bearer 200 400 401 403 404 409
+PUT /property-groups/{id}/members putPropertyGroupMembers bearer 200 400 401 403 404
+GET /public/{slug} getPublishedProject open 200 404 429
+GET /public/{slug}/addresses searchPublicAddresses open 200 400 404 429
+GET /public/{slug}/addresses/{id}/collection-days getPublicCollectionDays open 200 400 404 429
+GET /public/{slug}/addresses/{id}/collection-days.ics getPublicCollectionDaysCalendar open 200 400 404 429
+GET /public/{slug}/drop-off-points getPublicDropOffPoints open 200 400 404 429
+GET /readyz getReadiness open 200 503
+GET /reports/revenue getRevenueReport bearer 200 400 401 403
+GET /reports/service getServiceReport bearer 200 400 401 403
+GET /reports/tickets getTicketReport bearer 200 400 401 403
+GET /reports/tonnage getTonnageReport bearer 200 400 401 403
+GET /reports/waste-data getWasteDataReport bearer 200 400 401 403
+GET /reports/waste-data.csv getWasteDataFile bearer 200 400 401 403
+GET /right-sizing-proposals listRightSizingProposals bearer 200 400 401 403
+POST /right-sizing-proposals/run runRightSizing bearer 200 401 403
+GET /right-sizing-proposals/{id} getRightSizingProposal bearer 200 400 401 403 404
+POST /right-sizing-proposals/{id}/approve approveRightSizingProposal bearer 200 400 401 403 404 409
+POST /right-sizing-proposals/{id}/dismiss dismissRightSizingProposal bearer 200 400 401 403 404 409
+GET /roles listRoles bearer 200 400 401 403
+POST /roles createRole bearer 201+Location 400 401 403 409
+GET /roles/{id} getRole bearer 200 400 401 403 404
+PATCH /roles/{id} patchRole bearer 200 400 401 403 404 409
+PUT /roles/{id}/grants putRoleGrants bearer 200 400 401 403 404 409
+GET /route-schemes listRouteSchemes bearer 200 400 401 403
+POST /route-schemes createRouteScheme bearer 201+Location 400 401 403 409
+GET /route-schemes/{id} getRouteScheme bearer 200 400 401 403 404
+PATCH /route-schemes/{id} patchRouteScheme bearer 200 400 401 403 404 409
+POST /route-schemes/{id}/archive archiveRouteScheme bearer 200 400 401 403 404 409
+GET /route-schemes/{id}/collection-groups listRouteSchemeCollectionGroups bearer 200 400 401 403 404
+POST /route-schemes/{id}/collection-groups createCollectionGroup bearer 201+Location 400 401 403 404 409
+POST /route-schemes/{id}/generate generateRouteScheme bearer 200 202 400 401 403 404 409 503
+GET /route-schemes/{id}/generation-runs listRouteSchemeGenerationRuns bearer 200 400 401 403 404
+GET /route-schemes/{id}/occurrences listRouteSchemeOccurrences bearer 200 400 401 403 404
+POST /route-schemes/{id}/successor createRouteSchemeSuccessor bearer 201+Location 400 401 403 404 409
+GET /routes listRoutes bearer 200 400 401 403
+POST /routes createRoute bearer 201+Location 400 401 403 409
+POST /routes/balance applyRouteBalance bearer 200 400 401 403 409 503
+POST /routes/balance-preview previewRouteBalance bearer 200 400 401 403
+POST /routes/dispatch dispatchRoutes bearer 200 400 401 403
+GET /routes/live listLiveRoutes bearer 200 400 401 403
+GET /routes/{id} getRoute bearer 200 400 401 403 404
+POST /routes/{id}/assign assignRoute bearer 200 400 401 403 404 409
+POST /routes/{id}/cancel cancelRoute bearer 200 400 401 403 404 409
+GET /routes/{id}/commands listRouteCommands bearer 200 400 401 403 404
+POST /routes/{id}/dispatch dispatchRoute bearer 200 400 401 403 404 409
+GET /routes/{id}/eta getRouteEta bearer 200 400 401 403 404
+POST /routes/{id}/merge mergeRoutes bearer 200 400 401 403 404 409
+GET /routes/{id}/messages listRouteMessages bearer 200 400 401 403 404
+POST /routes/{id}/messages sendRouteMessage bearer 201 400 401 403 404
+POST /routes/{id}/move-stops moveRouteStops bearer 200 400 401 403 404 409
+POST /routes/{id}/optimise optimiseRoute bearer 200 202 400 401 403 404 409 503
+PUT /routes/{id}/pickup-order putRoutePickupOrder bearer 200 400 401 403 404 409 503
+POST /routes/{id}/pickups addRoutePickup bearer 201+Location 400 401 403 404 409
+GET /routes/{id}/plans listRoutePlans bearer 200 400 401 403 404
+GET /routes/{id}/positions getRouteTrack bearer 200 400 401 403 404
+POST /routes/{id}/release-hold releaseRouteHold bearer 200 400 401 403 404 409
+POST /routes/{id}/reschedule rescheduleRoute bearer 200 400 401 403 404 409
+POST /routes/{id}/split splitRoute bearer 201+Location 400 401 403 404 409
+POST /routes/{id}/unloads recordRouteUnload bearer 201+Location 400 401 403 404 409
+POST /routing/preview previewRoute bearer 200 400 401 403 502
+GET /routing/quota getRoutingQuota bearer 200 401 403
+GET /scale-tickets listScaleTickets bearer 200 400 401 403
+POST /scale-tickets createScaleTicket bearer 201+Location 400 401 403
+GET /scale-tickets/{id} getScaleTicket bearer 200 400 401 403 404
+PATCH /scale-tickets/{id} patchScaleTicket bearer 200 400 401 403 404 409
+GET /scale-tickets/{id}/amount-due getScaleTicketAmountDue bearer 200 400 401 403 404 409
+POST /scale-tickets/{id}/complete completeScaleTicket bearer 200 400 401 403 404 409
+POST /scale-tickets/{id}/void voidScaleTicket bearer 200 400 401 403 404 409
+GET /sensor-pairings/{id} getSensorPairing bearer 200 400 401 403 404
+PATCH /sensor-pairings/{id} patchSensorPairing bearer 200 400 401 403 404 409
+POST /sensor-readings recordSensorReadings bearer 200 400 401 403 413 429
+GET /sensors listSensors bearer 200 400 401 403
+POST /sensors createSensor bearer 201+Location 400 401 403 409
+GET /sensors/{id} getSensor bearer 200 400 401 403 404
+PATCH /sensors/{id} patchSensor bearer 200 400 401 403 404 409
+GET /sensors/{id}/pairings listSensorPairings bearer 200 400 401 403 404
+POST /sensors/{id}/pairings createSensorPairing bearer 201+Location 400 401 403 404 409
+GET /sensors/{id}/readings listSensorReadings bearer 200 400 401 403 404
+GET /service-area-assignments listServiceAreaAssignments bearer 200 400 401 403
+GET /service-area-assignments/{id} getServiceAreaAssignment bearer 200 400 401 403 404
+PATCH /service-area-assignments/{id} patchServiceAreaAssignment bearer 200 400 401 403 404 409
+GET /service-areas listServiceAreas bearer 200 400 401 403
+POST /service-areas createServiceArea bearer 201+Location 400 401 403 409
+GET /service-areas/{id} getServiceArea bearer 200 400 401 403 404
+PATCH /service-areas/{id} patchServiceArea bearer 200 400 401 403 404 409
+GET /service-areas/{id}/assignments listServiceAreaAssignmentsOfArea bearer 200 400 401 403 404
+POST /service-areas/{id}/assignments createServiceAreaAssignment bearer 201+Location 400 401 403 404 409
+PUT /service-areas/{id}/planning-areas putServiceAreaPlanningAreas bearer 200 400 401 403 404 409
+PUT /service-areas/{id}/waste-fractions putServiceAreaWasteFractions bearer 200 400 401 403 404
+GET /service-frequencies listServiceFrequencies bearer 200 400 401 403
+POST /service-frequencies createServiceFrequency bearer 201+Location 400 401 403 409
+GET /service-frequencies/{id} getServiceFrequency bearer 200 400 401 403 404
+PATCH /service-frequencies/{id} patchServiceFrequency bearer 200 400 401 403 404 409
+GET /service-provider-activities listServiceProviderActivities bearer 200 400 401 403
+POST /service-provider-activities createServiceProviderActivity bearer 201+Location 400 401 403 409
+GET /service-provider-activities/{id} getServiceProviderActivity bearer 200 400 401 403 404
+PATCH /service-provider-activities/{id} patchServiceProviderActivity bearer 200 400 401 403 404 409
+POST /service-provider-activities/{id}/approve approveServiceProviderActivity bearer 200 400 401 403 404 409
+POST /service-provider-activities/{id}/cancel cancelServiceProviderActivity bearer 200 400 401 403 404 409
+POST /service-provider-activities/{id}/complete completeServiceProviderActivity bearer 200 400 401 403 404 409
+POST /service-provider-activities/{id}/reject rejectServiceProviderActivity bearer 200 400 401 403 404 409
+POST /service-provider-activities/{id}/withdraw withdrawServiceProviderActivity bearer 200 400 401 403 404 409
+GET /service-provider-prices listServiceProviderPrices bearer 200 400 401 403
+POST /service-provider-prices createServiceProviderPrice bearer 201+Location 400 401 403 409
+POST /service-provider-prices/index indexServiceProviderPrices bearer 200 201 400 401 403 409
+GET /service-provider-prices/{id} getServiceProviderPrice bearer 200 400 401 403 404
+PATCH /service-provider-prices/{id} patchServiceProviderPrice bearer 200 400 401 403 404 409
+POST /service-provider-prices/{id}/index indexServiceProviderPrice bearer 201+Location 400 401 403 404 409
+GET /service-providers listServiceProviders bearer 200 400 401 403
+POST /service-providers createServiceProvider bearer 201+Location 400 401 403 409
+GET /service-providers/{id} getServiceProvider bearer 200 400 401 403 404
+PATCH /service-providers/{id} patchServiceProvider bearer 200 400 401 403 404 409
+GET /sessions listSessions bearer 200 400 401 403
+GET /sessions/{id} getSession bearer 200 400 401 403 404
+GET /settlements listSettlements bearer 200 400 401 403
+POST /settlements createSettlement bearer 201+Location 400 401 403 409
+GET /settlements/{id} getSettlement bearer 200 400 401 403 404
+POST /settlements/{id}/calculate calculateSettlement bearer 200 400 401 403 404 409
+POST /settlements/{id}/close closeSettlement bearer 200 400 401 403 404 409
+GET /settlements/{id}/events listSettlementEvents bearer 200 400 401 403 404
+POST /settlements/{id}/reopen reopenSettlement bearer 200 400 401 403 404
+GET /shared-collection-points listSharedCollectionPoints bearer 200 400 401 403
+POST /shared-collection-points createSharedCollectionPoint bearer 201+Location 400 401 403 409
+GET /shared-collection-points/{id} getSharedCollectionPoint bearer 200 400 401 403 404
+PATCH /shared-collection-points/{id} patchSharedCollectionPoint bearer 200 400 401 403 404 409
+PUT /shared-collection-points/{id}/members putSharedCollectionPointMembers bearer 200 400 401 403 404
+GET /shared-collection-points/{id}/pickup-exceptions listSharedCollectionPointPickupExceptions bearer 200 400 401 403 404
+GET /site-visits listSiteVisits bearer 200 400 401 403
+POST /site-visits checkInSiteVisit bearer 201+Location 400 401 403 409
+GET /site-visits/addresses searchVisitAddresses bearer 200 400 401 403
+GET /site-visits/frequent listFrequentVisitors bearer 200 400 401 403
+GET /site-visits/sites listVisitSites bearer 200 400 401 403
+GET /site-visits/{id} getSiteVisit bearer 200 400 401 403 404
+POST /site-visits/{id}/void voidSiteVisit bearer 200 400 401 403 404 409
+GET /stock-balances listStockBalances bearer 200 400 401 403
+GET /stock-movements listStockMovements bearer 200 400 401 403
+GET /subscription-pauses listSubscriptionPauses bearer 200 400 401 403
+GET /subscription-pauses/{id} getSubscriptionPause bearer 200 400 401 403 404
+PATCH /subscription-pauses/{id} patchSubscriptionPause bearer 200 400 401 403 404 409
+POST /subscription-pauses/{id}/cancel cancelSubscriptionPause bearer 200 400 401 403 404 409
+GET /subscriptions listSubscriptions bearer 200 400 401 403
+GET /subscriptions/{id} getSubscription bearer 200 400 401 403 404
+PATCH /subscriptions/{id} patchSubscription bearer 200 400 401 403 404 409
+POST /subscriptions/{id}/change changeSubscription bearer 201+Location 400 401 403 404 409
+POST /subscriptions/{id}/pauses pauseSubscription bearer 201+Location 400 401 403 404 409
+GET /tank-installations listTankInstallations bearer 200 400 401 403
+POST /tank-installations createTankInstallation bearer 201+Location 400 401 403 409
+GET /tank-installations/{id} getTankInstallation bearer 200 400 401 403 404
+PATCH /tank-installations/{id} patchTankInstallation bearer 200 400 401 403 404 409
+GET /tank-installations/{id}/inspections listTankInspections bearer 200 400 401 403 404
+POST /tank-installations/{id}/inspections recordTankInspection bearer 201 400 401 403 404
+GET /teams listTeams bearer 200 400 401 403
+POST /teams createTeam bearer 201+Location 400 401 403 409
+GET /teams/{id} getTeam bearer 200 400 401 403 404
+PATCH /teams/{id} patchTeam bearer 200 400 401 403 404 409
+PUT /teams/{id}/members putTeamMembers bearer 200 400 401 403 404
+GET /ticket-charges getTicketCharges bearer 200 400 401 403
+PUT /ticket-charges putTicketCharges bearer 200 400 401 403 409
+GET /ticket-types listTicketTypes bearer 200 400 401 403
+POST /ticket-types createTicketType bearer 201+Location 400 401 403 409
+GET /ticket-types/{id} getTicketType bearer 200 400 401 403 404
+PATCH /ticket-types/{id} patchTicketType bearer 200 400 401 403 404 409
+PUT /ticket-types/{id}/actions putTicketTypeActions bearer 200 400 401 403 404
+PUT /ticket-types/{id}/fields putTicketTypeFields bearer 200 400 401 403 404
+PUT /ticket-types/{id}/permissions putTicketTypePermissions bearer 200 400 401 403 404
+GET /tickets listTickets bearer 200 400 401 403
+POST /tickets createTicket bearer 201+Location 400 401 403 409
+GET /tickets/{id} getTicket bearer 200 400 401 403 404
+PATCH /tickets/{id} patchTicket bearer 200 400 401 403 404 409
+POST /tickets/{id}/assign assignTicket bearer 200 400 401 403 404 409
+POST /tickets/{id}/comments commentTicket bearer 201 400 401 403 404
+POST /tickets/{id}/complete completeTicket bearer 200 400 401 403 404 409
+GET /tickets/{id}/events listTicketEvents bearer 200 400 401 403 404
+GET /tickets/{id}/evidence getTicketEvidence bearer 200 400 401 403 404
+POST /tickets/{id}/hold holdTicket bearer 200 400 401 403 404 409
+POST /tickets/{id}/reject rejectTicket bearer 200 400 401 403 404 409
+POST /tickets/{id}/reopen reopenTicket bearer 200 400 401 403 404
+POST /tickets/{id}/reply-with-evidence replyToTicketWithEvidence bearer 201 400 401 403 404 409
+POST /tickets/{id}/start startTicket bearer 200 400 401 403 404 409
+POST /tickets/{id}/wait waitTicket bearer 200 400 401 403 404 409
+GET /unloading-stations listUnloadingStations bearer 200 400 401 403
+POST /unloading-stations createUnloadingStation bearer 201+Location 400 401 403 409
+GET /unloading-stations/{id} getUnloadingStation bearer 200 400 401 403 404
+PATCH /unloading-stations/{id} patchUnloadingStation bearer 200 400 401 403 404 409
+GET /unloading-stations/{id}/adjustments listMaterialAdjustments bearer 200 400 401 403 404
+POST /unloading-stations/{id}/adjustments createMaterialAdjustment bearer 201 400 401 403 404 409
+PUT /unloading-stations/{id}/fractions putUnloadingStationFractions bearer 200 400 401 403 404
+GET /unloading-stations/{id}/stock getUnloadingStationStock bearer 200 400 401 403 404
+GET /unloads listUnloads bearer 200 400 401 403
+GET /unloads/{id} getUnload bearer 200 400 401 403 404
+POST /unloads/{id}/approve approveUnloadWeight bearer 200 201 400 401 403 404 409
+POST /unloads/{id}/correct correctUnloadWeight bearer 201 400 401 403 404 409
+POST /unloads/{id}/reject rejectUnloadWeight bearer 200 201 400 401 403 404 409
+GET /unloads/{id}/reviews listUnloadWeightReviews bearer 200 400 401 403 404
+GET /unloads/{id}/transfer-note getUnloadTransferNote bearer 200 304 400 401 403 404 409
+GET /users listUsers bearer 200 400 401 403
+POST /users inviteUser bearer 201+Location 400 401 403 409
+GET /users/{id} getUser bearer 200 400 401 403 404
+PATCH /users/{id} patchUser bearer 200 400 401 403 404 409
+POST /users/{id}/deactivate deactivateUser bearer 200 400 401 403 404 409
+POST /users/{id}/make-primary-administrator makePrimaryAdministrator bearer 200 400 401 403 404 409
+POST /users/{id}/reactivate reactivateUser bearer 200 400 401 403 404
+GET /vehicle-allocations listVehicleAllocations bearer 200 400 401 403
+POST /vehicle-allocations allocateVehicle bearer 201+Location 400 401 403 409
+GET /vehicle-allocations/{id} getVehicleAllocation bearer 200 400 401 403 404
+POST /vehicle-allocations/{id}/change changeVehicleAllocation bearer 200 400 401 403 404 409
+POST /vehicle-allocations/{id}/confirm confirmVehicleAllocation bearer 200 400 401 403 404 409
+GET /vehicle-allocations/{id}/events listVehicleAllocationEvents bearer 200 400 401 403 404
+POST /vehicle-allocations/{id}/release releaseVehicleAllocation bearer 200 400 401 403 404
+GET /vehicle-tares listVehicleTares bearer 200 400 401 403
+POST /vehicle-tares createVehicleTare bearer 201+Location 400 401 403 409
+GET /vehicle-tares/{id} getVehicleTare bearer 200 400 401 403 404
+PATCH /vehicle-tares/{id} patchVehicleTare bearer 200 400 401 403 404 409
+GET /vehicle-types listVehicleTypes bearer 200 400 401 403
+POST /vehicle-types createVehicleType bearer 201+Location 400 401 403 409
+GET /vehicle-types/{id} getVehicleType bearer 200 400 401 403 404
+PATCH /vehicle-types/{id} patchVehicleType bearer 200 400 401 403 404 409
+PUT /vehicle-types/{id}/container-types putVehicleTypeContainerTypes bearer 200 400 401 403 404
+GET /vehicle-unavailability listVehicleUnavailability bearer 200 400 401 403
+POST /vehicle-unavailability createVehicleUnavailability bearer 201+Location 400 401 403 409
+GET /vehicle-unavailability/{id} getVehicleUnavailability bearer 200 400 401 403 404
+PATCH /vehicle-unavailability/{id} patchVehicleUnavailability bearer 200 400 401 403 404 409
+DELETE /vehicle-unavailability/{id} deleteVehicleUnavailability bearer 204 400 401 403 404
+GET /vehicles listVehicles bearer 200 400 401 403
+POST /vehicles createVehicle bearer 201+Location 400 401 403 409
+GET /vehicles/{id} getVehicle bearer 200 400 401 403 404
+PATCH /vehicles/{id} patchVehicle bearer 200 400 401 403 404 409
+PUT /vehicles/{id}/compartments putVehicleCompartments bearer 200 400 401 403 404
+GET /visit-rules listVisitRules bearer 200 400 401 403
+POST /visit-rules createVisitRule bearer 201+Location 400 401 403 409
+GET /visit-rules/{id} getVisitRule bearer 200 400 401 403 404
+PATCH /visit-rules/{id} patchVisitRule bearer 200 400 401 403 404 409
+GET /warehouses listWarehouses bearer 200 400 401 403
+POST /warehouses createWarehouse bearer 201+Location 400 401 403 409
+GET /warehouses/{id} getWarehouse bearer 200 400 401 403 404
+PATCH /warehouses/{id} patchWarehouse bearer 200 400 401 403 404 409
+GET /warehouses/{id}/stock-minimums getWarehouseStockMinimums bearer 200 400 401 403 404
+PUT /warehouses/{id}/stock-minimums putWarehouseStockMinimums bearer 200 400 401 403 404
+GET /waste-fractions listWasteFractions bearer 200 400 401 403
+POST /waste-fractions createWasteFraction bearer 201+Location 400 401 403 409
+GET /waste-fractions/{id} getWasteFraction bearer 200 400 401 403 404
+PATCH /waste-fractions/{id} patchWasteFraction bearer 200 400 401 403 404 409
+GET /weighbridge-tickets listWeighbridgeTickets bearer 200 400 401 403
+POST /weighbridge-tickets ingestWeighbridgeTickets bearer 200 400 401 403 413 429
+GET /weighbridge-tickets/{id} getWeighbridgeTicket bearer 200 400 401 403 404
+POST /weighbridge-tickets/{id}/dismiss dismissWeighbridgeTicket bearer 200 400 401 403 404 409
+POST /weighbridge-tickets/{id}/match matchWeighbridgeTicket bearer 200 400 401 403 404 409
+`;

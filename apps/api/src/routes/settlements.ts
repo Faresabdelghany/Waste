@@ -97,8 +97,6 @@ import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { count } from "@waste/domain/text"
 import { and, asc, eq, gt, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
@@ -106,14 +104,14 @@ import { labelOf, lastDayOf, linesBySettlement, lineOf, linesOf, periodEnd, sett
 import { projectCurrency, projectToday } from "@waste/db/query/project-clock"
 import { refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { reachesThroughAssignments } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { requireServiceAreaAssignment } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.settlements"
@@ -339,36 +337,32 @@ async function calculate(tx: Tx, principal: Principal, current: SettlementRow, a
 }
 
 const commandProblems = {
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
   404: describeProblem("No settlement with that id among those this account reaches."),
 }
 
 const REACH = "An office account reaches the settlements of the projects it works in; a service provider's account reaches the settlements of its own assignments and nothing else, so a settlement of another provider is one that does not exist here."
 const LABEL = "A settlement is named by its provider and its period, the last day inside it: `Settlement NordRen ApS · 2026-07-01–2026-07-31`."
 
-export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function settlementRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/settlements",
-      describeRoute({
+      {
         operationId: "listSettlements",
         summary: "The settlements the caller reaches",
         description:
           "One page of settlements with their lines, oldest first (ids are time-ordered). " +
           REACH +
           " `projectId` narrows the page to one project the caller works in, naming another being refused (400 on the query, and always for a provider's account, which works in none); `serviceAreaAssignmentId` to one assignment's, `serviceProviderId` to every assignment naming that provider, `status` to open, calculated or closed, and `validOn` to the settlements whose period covers that day. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: SettlementListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of settlements, each with its lines.", SettlementPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", SettlementListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaAssignmentId, serviceProviderId, status, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -400,23 +394,20 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .post(
       "/settlements",
-      describeRoute({
+      {
         operationId: "createSettlement",
         summary: "Open a settlement",
         description:
           "Opens a settlement for a service area assignment over a period: `serviceAreaAssignmentId` an assignment of a project this account works in (400, `Not an assignment of this project`; a provider's account works in none and opens nothing), `validFrom` the first day of the period and `validTo` the first day after it, both given — a settlement settles a period, so its end is required (400 at `validTo`) and comes after its start. The settlement is the assignment's project's, in that project's currency, `open`, with no lines and no history yet; `calculate` writes both. The database holds one settlement of an assignment at a time, so a period touching another settlement of the same assignment is refused (409, `This assignment already has a settlement over part of that period`). The period is not held inside the assignment's: a correction that lands in the month after an award ended is settled then. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: SettlementCreate,
+        invalid: ["the body is missing a field, names a member the server owns, has no end or an end on or before its start, or names an assignment that is not one of a project this account works in"],
         responses: {
           201: describeCreated("The settlement as it was opened, with no lines.", SettlementDetail),
-          400: describeProblem("The body is missing a field, names a member the server owns, has no end or an end on or before its start, or names an assignment that is not one of a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("This assignment already has a settlement over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", SettlementCreate),
+      },
       async (c) => {
         const { serviceAreaAssignmentId, validFrom, validTo } = c.req.valid("json")
         const tx = c.get("tx")
@@ -445,24 +436,20 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/settlements/:id",
-      describeRoute({
+      {
         operationId: "getSettlement",
         summary: "One settlement with its lines",
         description:
           "One settlement the caller reaches, with its calculation: the lines by event, each the billable event settled, the provider price that priced it — null with the unit price and the net where none of the assignment's prices covered the product on the event's service date, which blocks `close` — the quantity and the net, negative on a reversal. " +
           REACH,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The settlement with its lines.", SettlementDetail),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: commandProblems[404],
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -474,24 +461,23 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .post(
       "/settlements/:id/calculate",
-      describeRoute({
+      {
         operationId: "calculateSettlement",
         summary: "Calculate a settlement's lines",
         description:
           "The `calculate` command, on an open or a calculated settlement: replaces the lines whole. Selects every billable event of the project whose service date lies in the period, priced and not cancelled — reversals included, at their negative amounts — whose route's scheme's planning area is one of the assignment's service area's, and whose service date the assignment and the area were both valid on; prices each with the assignment's provider price for the event's product valid on that service date, or leaves it unpriced when none covers it — a weight charge (O28 of #290) at that price per tonne over its kilograms, a reversal over those of the charge it undoes; writes one line per event, the settlement's `lineCount`, `netMinor` (the priced lines summed) and `calculatedAt`, and appends a `calculated` event with the snapshot. A recalculation is a move like the first: the lines change and the history gets its row; one asked before the period has ended is a partial one. The body is empty; a member in it is refused. A closed settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 is closed; reopen it first`), and so is one whose period has not begun on the project's day (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not begun; calculate it from its first day`). Runs under the settlement's row lock. " +
           LABEL,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SettlementCalculate,
+        invalid: ["the body carries a member"],
         responses: {
           200: describeJson("The settlement, calculated, with its lines.", SettlementDetail),
-          400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
           409: describeProblem("The settlement is closed, or its period has not begun, or a line comes to more than 2147483647 minor units; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SettlementCalculate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -506,24 +492,23 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .post(
       "/settlements/:id/close",
-      describeRoute({
+      {
         operationId: "closeSettlement",
         summary: "Close a settlement",
         description:
           "The `close` command, on a calculated settlement whose period has ended on the project's day (409 while its last day is today or ahead, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not ended; close it after its last day`): refused while any line has no provider price (409, `3 lines have no service provider price for their product; add the prices and calculate again`), while any event of the period served under the assignment is on no line — one recorded after the last calculation (409, `2 events of the period are not in this calculation; calculate again`) — and while any line names an event no longer served in the period — one cancelled since the last calculation, which would otherwise be paid (409, `1 line names an event no longer served in the period; calculate again`); then `closedAt` and `closedBy` are stamped, a `closed` event appended with the snapshot, and `settlement-closed` written to the outbox in the same transaction, carrying the settlement with its lines as answered. The lines stand still from here: nothing writes them on a closed settlement, and its totals are what the provider is told. An open settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first`); a closed one answers 200 as it stands, without a write, an event or an outbox row. The body is empty; a member in it is refused. Runs under the settlement's row lock. " +
           LABEL,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SettlementClose,
+        invalid: ["the body carries a member"],
         responses: {
           200: describeJson("The settlement, closed, with its lines.", SettlementDetail),
-          400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
           409: describeProblem("The settlement has not been calculated, its period has not ended, a line has no provider price, an event of the period is not in the calculation, or a line names an event no longer served; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SettlementClose),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -550,23 +535,22 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .post(
       "/settlements/:id/reopen",
-      describeRoute({
+      {
         operationId: "reopenSettlement",
         summary: "Reopen a closed settlement",
         description:
           "The `reopen` command, with a reason: a closed settlement becomes `open`, both stamps cleared, its lines kept until the next calculation, and a `reopened` event appended carrying the reason — reopening requires permission, a reason and an audit history, and a later correction to a period the provider was told is this and then a recalculation. An open or a calculated settlement answers 200 as it stands, without a write or an event. Runs under the settlement's row lock. " +
           LABEL,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SettlementReopen,
+        invalid: ["the body has no reason or carries a member the command does not take"],
         responses: {
           200: describeJson("The settlement, open, with the lines it kept.", SettlementDetail),
-          400: describeProblem("The path does not hold an id, or the body has no reason or carries a member the command does not take."),
           ...commandProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SettlementReopen),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")
@@ -582,26 +566,23 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/settlements/:id/events",
-      describeRoute({
+      {
         operationId: "listSettlementEvents",
         summary: "One settlement's history",
         description:
           "One page of the settlement's events, oldest first — a cursor over time-ordered ids is a cursor over recording order — each carrying what was done (`calculated`, `closed`, `reopened`), the status and the totals after it, the reason of a reopening, and who did it; `kind` narrows the page to one. The ledger is append-only: nothing here is ever updated or removed. " +
           REACH +
           " Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: SettlementEventListQuery,
+        invalid: ["`kind` is not one of the three"],
         responses: {
           200: describeJson("One page of the settlement's events, oldest first.", EventPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or `kind` is not one of the three."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: commandProblems[404],
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", SettlementEventListQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, kind } = c.req.valid("query")

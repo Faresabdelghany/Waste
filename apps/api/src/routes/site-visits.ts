@@ -27,28 +27,24 @@ import { wasteFraction } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { siteVisit } from "@waste/db/schema/site-visits"
-import type { Action } from "@waste/domain/access/modules"
 import { VISIT_ADDRESS_MAX } from "@waste/domain/visits/charges"
 import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { fractionsOf, siteVisitOf, visitById, visitColumns } from "@waste/db/shapes/site-visits"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 
 const MODULE = "operate.site-visits"
 
 const VisitPage = Page(SiteVisit)
-
-type ClockOptions = { now?: () => Date }
 
 /** What a void of a voided visit is told. */
 export const ALREADY_VOIDED = "The visit is already voided"
@@ -79,31 +75,25 @@ async function readingOf(tx: Tx, scope: { companyId: string; projectId: string }
   }
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function siteVisitRoutes(deps: RouteDeps) {
+  const { now } = deps
   return (
-    new Hono<AuthEnv>()
+    routes(deps)
       .get(
         "/site-visits",
-        describeRoute({
+        {
           operationId: "listSiteVisits",
           summary: "The recycling centres' visit ledger",
           description:
             "One page of the Site Visits of the projects the caller works in, newest first (ids are time-ordered), admitted and refused alike, voided ones included with their stamps. `projectId`, `siteId`, `propertyId`, `customerId`, `source` and `outcome` narrow it; `from` and `to` are a window of the visits' days, both inclusive. Hand `nextCursor` back as `cursor` for the next page.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: SiteVisitListQuery,
+          invalid: ["a filter is malformed", "the window ends before it starts", "`projectId` is not a project this account works in"],
           responses: {
             200: describeJson("One page of visits.", VisitPage),
-            400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window ends before it starts, or `projectId` is not a project this account works in."),
-            ...problems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", SiteVisitListQuery),
+        },
         async (c) => {
           const { limit, cursor, projectId, siteId, from, to, propertyId, customerId, source, outcome } = c.req.valid("query")
           const after = afterCursor(cursor)
@@ -140,22 +130,20 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       )
       .post(
         "/site-visits",
-        describeRoute({
+        {
           operationId: "checkInSiteVisit",
           summary: "Check a visitor in at a recycling centre",
           description:
             "The attendant's check-in: the site, a recycling centre of a project the caller works in (400 at `siteId`) and active (409); what identified the visitor — a plate or a card as read, or the Property found by its address (400 at `identifier.propertyId` where it is not the project's); the fractions brought, each one the site takes (400 at `wasteFractionIds.N`); a note; and the instant, the request's own when absent, which may run ahead of the clock by the skew alone. The visit is identified in order — the credential in force on the day, else `unknown-identifier`; a blocked one `credential-blocked`; a household admitted where it pays for collection, else `not-fee-paying` — and recorded admitted or refused. The answer carries, for an admitted visit, what the project's Visit Rule says it costs: the basis, the household's n-th counted visit this calendar year, the product and its price under the visit's Agreement, as the Finance consumer will charge it. Emits `site-visit-recorded`.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "create",
+          body: SiteVisitCheckIn,
+          invalid: ["the body is missing a field, names a member the server owns, a site that is no recycling centre of a project this account works in, a fraction the site does not take or one twice, a Property not of the site's project, or an instant past the clock's skew"],
           responses: {
             201: describeCreated("The visit as recorded, and what it costs.", SiteVisitCheckInAnswer),
-            400: describeProblem("The body is missing a field, names a member the server owns, a site that is no recycling centre of a project this account works in, a fraction the site does not take or one twice, a Property not of the site's project, or an instant past the clock's skew."),
-            ...problems("create"),
             409: describeProblem("The recycling centre is not active."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "create"),
-        validate("json", SiteVisitCheckIn),
+        },
         async (c) => {
           const body = c.req.valid("json")
           const tx = c.get("tx")
@@ -184,21 +172,19 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       // The attendant's two lookups and the likely trades before `/:id`, whose validator would refuse their names as ids.
       .get(
         "/site-visits/sites",
-        describeRoute({
+        {
           operationId: "listVisitSites",
           summary: "The recycling centres a visitor is checked in at",
           description:
             "One project's active recycling centres, by name, each with the fractions it takes by name: what the check-in's site picker and its fraction chips are drawn from, under `operate.site-visits` so the Site attendant needs no grant on the Drop-off Points or the master data themselves. Nothing of the office's — no notes, hours or exceptions. `projectId` is a project the caller works in (400 on the query otherwise).",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: VisitSitesQuery,
+          invalid: ["`projectId` is missing, malformed or not a project this account works in"],
           responses: {
             200: describeJson("The project's active recycling centres.", VisitSites),
-            400: describeProblem("`projectId` is missing, malformed or not a project this account works in."),
-            ...problems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", VisitSitesQuery),
+        },
         async (c) => {
           const { projectId } = c.req.valid("query")
           const tx = c.get("tx")
@@ -224,20 +210,18 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       )
       .get(
         "/site-visits/addresses",
-        describeRoute({
+        {
           operationId: "searchVisitAddresses",
           summary: "Find a household by its address for a check-in",
           description: `One project's Properties whose name or address holds \`q\` (at least two characters, case-insensitive), at most ${VISIT_ADDRESS_MAX} by name: what a check-in by address names, under \`operate.site-visits\` so the Site attendant needs no grant on the Properties themselves. Each answers its id, its name and its address and nothing else — no parties, notes or subscriptions: whether it pays for collection is the check-in's to judge. \`projectId\` is a project the caller works in (400 on the query otherwise).`,
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: VisitAddressQuery,
+          invalid: ["`projectId` is missing, malformed or not a project this account works in, or `q` is shorter than two characters or longer than a hundred"],
           responses: {
             200: describeJson("The Properties that match, at most twenty.", VisitAddresses),
-            400: describeProblem("`projectId` is missing, malformed or not a project this account works in, or `q` is shorter than two characters or longer than a hundred."),
-            ...problems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", VisitAddressQuery),
+        },
         async (c) => {
           const { projectId, q } = c.req.valid("query")
           const tx = c.get("tx")
@@ -257,21 +241,19 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       )
       .get(
         "/site-visits/frequent",
-        describeRoute({
+        {
           operationId: "listFrequentVisitors",
           summary: "The likely trades",
           description:
             "The Properties of one project the caller works in whose counted visits — admitted, not voided, bringing something other than free fractions — reach the threshold of the Visit Rule in force on `on` within its window of days up to and including `on` (the project's today when absent), most visits first. A reading, never stored; empty where no rule is in force or the rule flags none.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          query: FrequentVisitorsQuery,
+          invalid: ["`projectId` is missing, malformed or not a project this account works in, or `on` is not a calendar day"],
           responses: {
             200: describeJson("The likely trades on the day.", FrequentVisitors),
-            400: describeProblem("`projectId` is missing, malformed or not a project this account works in, or `on` is not a calendar day."),
-            ...problems("view"),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("query", FrequentVisitorsQuery),
+        },
         async (c) => {
           const { projectId, on } = c.req.valid("query")
           const tx = c.get("tx")
@@ -286,21 +268,18 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       )
       .get(
         "/site-visits/:id",
-        describeRoute({
+        {
           operationId: "getSiteVisit",
           summary: "One site visit",
           description: "One visit of a project the caller works in, with the fractions it brought. A visit of another company, or of a project this account does not work in, is one that does not exist here.",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "view",
+          params: IdParam,
           responses: {
             200: describeJson("The visit.", SiteVisit),
-            400: describeProblem("The path does not hold an id."),
-            ...problems("view"),
             404: describeProblem("No visit with that id in the projects this account works in."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "view"),
-        validate("param", IdParam),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const principal = c.get("principal")
@@ -311,24 +290,22 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       )
       .post(
         "/site-visits/:id/void",
-        describeRoute({
+        {
           operationId: "voidSiteVisit",
           summary: "Void a site visit",
           description:
             "Voids one visit recorded by mistake, with the reason, under its row lock: the visit stays in the ledger with the person and the instant, as the bookkeeping evidence its charge was, and is never deleted. Emits `site-visit-voided`, on which the Finance consumer cancels the visit's charge, or reverses it once a line names it. A later visit keeps the step it was charged at. A voided visit is voided once (409).",
-          security: BEARER_SECURITY,
+          module: MODULE,
+          action: "edit",
+          params: IdParam,
+          body: SiteVisitVoid,
+          invalid: ["the body gives no reason"],
           responses: {
             200: describeJson("The visit as it now stands.", SiteVisit),
-            400: describeProblem("The path does not hold an id, or the body gives no reason."),
-            ...problems("edit"),
             404: describeProblem("No visit with that id in the projects this account works in."),
             409: describeProblem("The visit is already voided."),
           },
-        }),
-        guard,
-        requireGrant(MODULE, "edit"),
-        validate("param", IdParam),
-        validate("json", SiteVisitVoid),
+        },
         async (c) => {
           const { id } = c.req.valid("param")
           const { reason } = c.req.valid("json")

@@ -58,7 +58,6 @@ import {
   type FillReadingOutcome,
 } from "@waste/contracts/sensors"
 import type { Tx } from "@waste/db/client"
-import type { Action } from "@waste/domain/access/modules"
 import { dayInTimezone } from "@waste/domain/clock"
 import { aheadOfClock } from "@waste/domain/execution/commands"
 import { projectTimezones, projectToday, projectTodays } from "@waste/db/query/project-clock"
@@ -67,18 +66,18 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizz
 import { inForceOn } from "@waste/domain/periods"
 import { ACTIVE_SENSOR_STATUSES, type SensorStatus } from "@waste/domain/resources/vocabulary"
 import { refuseUnless, takesReference } from "@waste/domain/status-gates"
-import { Hono, type MiddlewareHandler } from "hono"
+import type { MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
 import { Allowance } from "../auth/public-door"
@@ -337,14 +336,9 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
   return outcomes
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export type SensorRouteOptions = { now?: () => Date; ingestAllowance?: Allowance }
-
-export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), ingestAllowance = new Allowance(SENSOR_BATCHES_PER_MINUTE, now) }: SensorRouteOptions = {}) {
+export function sensorRoutes(deps: RouteDeps) {
+  const { now } = deps
+  const ingestAllowance = deps.sensorIngestAllowance ?? new Allowance(SENSOR_BATCHES_PER_MINUTE, now)
   /** The company's batch counted against its allowance, after the guard has said whose it is. */
   const withinAllowance: MiddlewareHandler<AuthEnv> = async (c, next) => {
     const taken = ingestAllowance.take(c.get("principal").companyId)
@@ -356,24 +350,29 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     }
     await next()
   }
-  return new Hono<AuthEnv>()
+  /** The batch's size, before the token is read. */
+  const bounded = bodyLimit({
+    maxSize: SENSOR_READINGS_MAX_BYTES,
+    onError: () => {
+      throw problem(413, { detail: `A batch of readings is at most ${SENSOR_READINGS_MAX_BYTES / 1024} KiB` })
+    },
+  })
+  return routes(deps)
     .get(
       "/sensors",
-      describeRoute({
+      {
         operationId: "listSensors",
         summary: "The fill-level sensors",
         description:
           "One page of the sensors in the projects the caller works in, oldest first (ids are time-ordered), each with the pairing in force today on its project's clock and its newest reading. `projectId` and `status` narrow the page. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: SensorListQuery,
+        invalid: ["the project is not one the caller works in", "the status is not one of the two"],
         responses: {
           200: describeJson("One page of sensors.", SensorPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, the project is not one the caller works in, or the status is not one of the two."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", SensorListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
         const principal = c.get("principal")
@@ -399,22 +398,20 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/sensors",
-      describeRoute({
+      {
         operationId: "createSensor",
         summary: "Register a sensor",
         description:
           "Registers a fill-level sensor in a project the caller works in, by its network identifier — unique across the company, the key its readings are posted under — and its network. A sensor starts active. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: SensorCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, or names a project the caller does not work in"],
         responses: {
           201: describeCreated("The sensor as it was written, on no container yet.", Sensor),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names a member the server owns, or names a project the caller does not work in."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a sensor with that identifier."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", SensorCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const principal = c.get("principal")
@@ -432,21 +429,18 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/sensors/:id",
-      describeRoute({
+      {
         operationId: "getSensor",
         summary: "One sensor",
         description: "One sensor of the projects the caller works in, with the pairing in force today on its project's clock and its newest reading.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The sensor.", Sensor),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No sensor with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -459,24 +453,22 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .patch(
       "/sensors/:id",
-      describeRoute({
+      {
         operationId: "patchSensor",
         summary: "Correct or retire a sensor",
         description:
           "Corrects the identifier, the network or the note, or changes the status: `retired` refuses the sensor's readings and pairs it with no new container, and is taken only once no pairing of it is open on or after today on the project's clock; `active` takes it back. A sensor does not move between projects.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SensorPatch,
+        invalid: ["the patch is empty or names a field the caller does not own"],
         responses: {
           200: describeJson("The sensor as it now stands.", Sensor),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own."),
-          ...commonProblems("edit"),
           404: describeProblem("No sensor with that id in the projects the caller works in."),
           409: describeProblem("The company already has another sensor with that identifier, or a retirement would leave a pairing open."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SensorPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -503,22 +495,19 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/sensors/:id/pairings",
-      describeRoute({
+      {
         operationId: "listSensorPairings",
         summary: "A sensor's pairings",
         description: "One page of the containers the sensor has measured, measures and will measure, oldest first. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: SensorListQuery.pick({ limit: true, cursor: true }),
         responses: {
           200: describeJson("One page of the sensor's pairings.", PairingPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          ...commonProblems("view"),
           404: describeProblem("No sensor with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", SensorListQuery.pick({ limit: true, cursor: true })),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
@@ -538,24 +527,22 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/sensors/:id/pairings",
-      describeRoute({
+      {
         operationId: "createSensorPairing",
         summary: "Pair a sensor with a container",
         description:
           "Has the sensor measure a container of its project over a half-open period, at a full threshold in whole percent (85 unless said), the fill at which the worker's `fill-threshold` rule raises an alert. With `booksEmptying` the alert also books the office's emptying of the container on the next route of its round ahead of its next scheduled emptying, where one runs and its vehicle takes the bin; the alert says what it came to. One sensor measures one container at a time and one container is measured by one sensor at a time. A retired sensor is paired with nothing new.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: SensorPairingCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, runs its period backwards, or names a container outside the sensor's project"],
         responses: {
           201: describeCreated("The pairing as it was written, read at `/sensor-pairings/{id}`.", SensorPairing),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, holds a value of the wrong shape, names a member the server owns, runs its period backwards, or names a container outside the sensor's project."),
-          ...commonProblems("create"),
           404: describeProblem("No sensor with that id in the projects the caller works in."),
           409: describeProblem("The sensor is retired, or the sensor or the container is already paired over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", SensorPairingCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -580,21 +567,18 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/sensor-pairings/:id",
-      describeRoute({
+      {
         operationId: "getSensorPairing",
         summary: "One sensor pairing",
         description: "One pairing of a sensor with a container, in the projects the caller works in.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The pairing.", SensorPairing),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No sensor pairing with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findPairing(c.get("tx"), c.get("principal"), id)
@@ -604,24 +588,22 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .patch(
       "/sensor-pairings/:id",
-      describeRoute({
+      {
         operationId: "patchSensorPairing",
         summary: "Move a pairing's threshold, its booking or its end",
         description:
           "Moves the full threshold, whether a filling books an emptying, or the first day the sensor no longer measures the container (`validTo`; null leaves the pairing open). A pairing that starts on another day or measures another container is another pairing. An end taken later is held to the same rule as a create: the sensor and the container each paired once at a time.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: SensorPairingPatch,
+        invalid: ["the patch is empty or names a field the caller does not own", "the end comes on or before the start"],
         responses: {
           200: describeJson("The pairing as it now stands.", SensorPairing),
-          400: describeProblem("The path does not hold an id, the patch is empty or names a field the caller does not own, or the end comes on or before the start."),
-          ...commonProblems("edit"),
           404: describeProblem("No sensor pairing with that id in the projects the caller works in."),
           409: describeProblem("The end taken later overlaps another pairing of the sensor or of the container."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", SensorPairingPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -644,23 +626,20 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .get(
       "/sensors/:id/readings",
-      describeRoute({
+      {
         operationId: "listSensorReadings",
         summary: "What a sensor read",
         description:
           "One page of the sensor's readings, newest recorded first, each with the pairing in force on its day and that pairing's container. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: SensorListQuery.pick({ limit: true, cursor: true }),
         responses: {
           200: describeJson("One page of the sensor's readings.", ReadingPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          ...commonProblems("view"),
           404: describeProblem("No sensor with that id in the projects the caller works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", SensorListQuery.pick({ limit: true, cursor: true })),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
@@ -678,30 +657,23 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
     )
     .post(
       "/sensor-readings",
-      describeRoute({
+      {
         operationId: "recordSensorReadings",
         summary: "Record a batch of fill readings",
         description:
           "The vendor-neutral ingest, under a token with `create` on `resources.sensors`, at most 256 KiB and 120 batches a minute per company: up to 500 readings by each sensor's identifier, the fill a whole percent the vendor computed, the battery and the signal strength where it reports them. Each reading is judged alone and answered in the body's order: `recorded` with the ledger row's id; `replayed` with the row's id when the sensor's reading at that instant is already recorded, so a batch sent twice records nothing twice; or `refused` with why — `unknown-sensor` (no sensor of that identifier in the caller's projects), `retired-sensor`, or `ahead-of-clock` (measured more than five minutes after the server's clock). A reading is tied to the pairing in force on its day on the project's clock, and to none where the sensor measured nothing that day.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        before: [bounded],
+        use: [withinAllowance],
+        body: FillReadingBatch,
+        invalid: ["the body is not a batch of one to 500 readings of the right shape"],
         responses: {
           200: describeJson("One outcome per reading, in the body's order.", FillReadingResults),
-          400: describeProblem("The body is not a batch of one to 500 readings of the right shape."),
-          ...commonProblems("create"),
           413: describeProblem("The body is larger than 256 KiB."),
           429: describeProblem("The company has sent more batches this minute than the ingest takes; Retry-After says when to send again."),
         },
-      }),
-      bodyLimit({
-        maxSize: SENSOR_READINGS_MAX_BYTES,
-        onError: () => {
-          throw problem(413, { detail: `A batch of readings is at most ${SENSOR_READINGS_MAX_BYTES / 1024} KiB` })
-        },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      withinAllowance,
-      validate("json", FillReadingBatch),
+      },
       async (c) => {
         const batch = c.req.valid("json")
         const results = await ingest(c.get("tx"), c.get("principal"), batch, now())

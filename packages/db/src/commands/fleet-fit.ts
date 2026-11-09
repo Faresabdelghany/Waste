@@ -29,9 +29,10 @@ import { loadsWaste, stopLoadKg } from "@waste/domain/execution/workload"
 import { firstMisfit, misfitSentence, type FitStop, type FitVehicle, type Misfit } from "@waste/domain/resources/fleet-fit"
 import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
+import { vehicleLabel } from "../shapes/vehicles"
 
-/** The name a vehicle is shown by: its callsign, else its registration. */
-export const vehicleLabel = (row: { registration: string; callsign: string | null }): string => row.callsign ?? row.registration
+// The API's routes still read the label here; its home is shapes/vehicles.ts.
+export { vehicleLabel } from "../shapes/vehicles"
 
 /** A vehicle as the fleet rules read it, with the label a sentence names it by and its type. */
 export type FitRow = FitVehicle & { id: string; label: string; vehicleTypeId: string }

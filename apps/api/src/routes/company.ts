@@ -16,14 +16,11 @@
 import { Company, CompanyPatch } from "@waste/contracts/organisation"
 import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, ne } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { describeJson } from "./shared"
 
 const MODULE = "configure.organization"
@@ -76,24 +73,21 @@ const GONE = "This company no longer exists"
 /** What clearing the creditor number is told while a project references its invoices by a FI card, which names it (#291 C4). */
 export const fikStillReferenced = (project: string): string => `Project ${project} references its invoices by a FI card, which names the creditor number; set its scheme to none first`
 
-export function companyRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function companyRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/company",
-      describeRoute({
+      {
         operationId: "getCompany",
         summary: "The caller's company",
         description: "The company the request's token names. There is no other company to ask for: a request is one company's, and this is it.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
         responses: {
           200: describeJson("The company.", Company),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.organization`."),
           404: describeProblem("The company was removed between the token being resolved and this statement."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
+      },
       async (c) => {
         const [row] = await c.get("tx").select(columns).from(company).where(eq(company.id, c.get("principal").companyId)).limit(1)
         if (row === undefined) throw problem(404, { detail: GONE })
@@ -102,24 +96,21 @@ export function companyRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/company",
-      describeRoute({
+      {
         operationId: "patchCompany",
         summary: "Change the caller's company",
         description:
           "Changes the names, the registration number or the country of the caller's own company, or its invoice identity (#291 C4): the VAT registration, the IBAN and the BIC, and the FIK creditor number a FI card names — each by its shape, null clearing it — and its postal address, the seller's address an invoice prints (#291 C5). Every field is optional and at least one must be given. The creditor number is not cleared while a project references its invoices by a FI card (409, `Project Copenhagen Central references its invoices by a FI card, which names the creditor number; set its scheme to none first`), under the company's row lock, which a project's patch to a FI card's scheme takes too. The status is not here: onboarding to active is an operator's act.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        body: CompanyPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The company as it now stands.", Company),
-          400: describeProblem("The patch is empty, names a field the caller does not own, or holds a value of the wrong shape."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.organization`."),
           404: describeProblem("The company was removed between the token being resolved and this statement."),
           409: describeProblem("Another company is already registered with that registration number in that country, or the creditor number is cleared while a project references its invoices by a FI card."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", CompanyPatch),
+      },
       async (c) => {
         const patch = c.req.valid("json")
         const companyId = c.get("principal").companyId

@@ -18,8 +18,11 @@
 // database and the contracts read them too; the day arithmetic is ../days.
 
 import { addDays, daysBetween, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../days"
-import { RECURRENCE_FREQUENCIES, type WEEK_ROTATIONS } from "./vocabulary"
+import { RECURRENCE_FREQUENCIES, type RecurrenceFrequency, type WeekRotation } from "./vocabulary"
 import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
+
+// The web's forms still read the two types here.
+export type { RecurrenceFrequency, WeekRotation } from "./vocabulary"
 
 /**
  * daily (2026-09-16): every date in the effective window — the scheme serves
@@ -31,8 +34,6 @@ import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
  * below. every-4-weeks is kept for stored records; the forms offer the
  * other five. The tuple is the vocabulary's `RECURRENCE_FREQUENCIES`.
  */
-export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number]
-
 export const RECURRENCE_FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
   daily: "Daily",
   weekly: "Every week",
@@ -83,8 +84,6 @@ export function occurrencesPerWeek(frequency: RecurrenceFrequency, days: readonl
   const perDay = frequency === "daily" ? 1 : RECURRENCE_WEEKLY_RATES[frequency]
   return new Set(days).size * perDay
 }
-
-export type WeekRotation = (typeof WEEK_ROTATIONS)[number]
 
 export type SchemeRecurrence = {
   frequency: RecurrenceFrequency

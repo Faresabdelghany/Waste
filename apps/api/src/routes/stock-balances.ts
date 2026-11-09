@@ -26,15 +26,14 @@ import { warehouse } from "@waste/db/schema/places"
 import { stockMinimum } from "@waste/db/schema/stock"
 import { stockBalances } from "@waste/domain/resources/stock-balance"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
-import { describeProblem, problem, validate } from "../problem"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, problem } from "../problem"
 import { requireContainerType, requireWarehouse } from "./references"
 import { eachPresent } from "./sets"
 import { describeJson, IdParam } from "./shared"
@@ -64,26 +63,23 @@ async function minimumsOf(tx: Tx, companyId: string, warehouseId: string): Promi
   return { warehouseId, minimums: rows }
 }
 
-export function stockBalanceRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function stockBalanceRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/stock-balances",
-      describeRoute({
+      {
         operationId: "listStockBalances",
         summary: "What stands in the warehouses, by container type, against the minimums",
         description:
           "For every warehouse and container type of the projects the caller works in that holds a container or has a Stock Minimum: the containers there by the ledger's projection — in stock, and in maintenance there — the minimum or null, and whether the stock is below it. A container in maintenance is not stock the office can issue, so it does not count towards the minimum. `projectId` narrows it to one of those projects, `warehouseId` to one warehouse; naming another is refused. Ordered by warehouse, then type; one answer, no page.",
-        security: BEARER_SECURITY,
+        module: INVENTORY,
+        action: "view",
+        query: StockBalanceQuery,
+        invalid: ["the query names a member it does not carry, `projectId` is not a project this account works in, or `warehouseId` is not a warehouse of one"],
         responses: {
           200: describeJson("The balances.", StockBalances),
-          400: describeProblem("The query names a member it does not carry, `projectId` is not a project this account works in, or `warehouseId` is not a warehouse of one."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.inventory`."),
         },
-      }),
-      guard,
-      requireGrant(INVENTORY, "view"),
-      validate("query", StockBalanceQuery),
+      },
       async (c) => {
         const { projectId, warehouseId } = c.req.valid("query")
         const tx = c.get("tx")
@@ -130,22 +126,18 @@ export function stockBalanceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/warehouses/:id/stock-minimums",
-      describeRoute({
+      {
         operationId: "getWarehouseStockMinimums",
         summary: "A warehouse's stock minimums",
         description: "The fewest containers of each type the office wants the warehouse to hold in stock, in the order they were written. A type with no minimum is not listed.",
-        security: BEARER_SECURITY,
+        module: WAREHOUSES,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The warehouse's minimums.", StockMinimums),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.warehouses`."),
           404: describeProblem("No warehouse with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(WAREHOUSES, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -156,24 +148,21 @@ export function stockBalanceRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/warehouses/:id/stock-minimums",
-      describeRoute({
+      {
         operationId: "putWarehouseStockMinimums",
         summary: "Replace a warehouse's stock minimums",
         description:
           "Replaces the whole set of minimums with the one in the body: a type the body leaves out has no minimum afterwards, and an empty list clears them all. Each entry names a container type of this company (400 at `minimums.N.containerTypeId` otherwise), once (400 on `minimums`), with a positive count; no minimum is no entry, never a zero. Nothing is alerted or ordered from it: `GET /stock-balances` reads the stock against it.",
-        security: BEARER_SECURITY,
+        module: WAREHOUSES,
+        action: "edit",
+        params: IdParam,
+        body: StockMinimumsSet,
+        invalid: ["the body is missing `minimums`, names a member it does not own, names a type twice or one that is not this company's, or gives a count that is not a positive whole number"],
         responses: {
           200: describeJson("The warehouse's minimums as they now stand.", StockMinimums),
-          400: describeProblem("The path does not hold an id, or the body is missing `minimums`, names a member it does not own, names a type twice or one that is not this company's, or gives a count that is not a positive whole number."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.warehouses`."),
           404: describeProblem("No warehouse with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(WAREHOUSES, "edit"),
-      validate("param", IdParam),
-      validate("json", StockMinimumsSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { minimums } = c.req.valid("json")

@@ -40,20 +40,18 @@ import { property } from "@waste/db/schema/customers"
 import { tankInspection, tankInstallation } from "@waste/db/schema/tanks"
 import { tankDueOn } from "@waste/domain/planning/due-from-last"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
@@ -155,26 +153,24 @@ const inspectionOf = (row: Pick<typeof tankInspection.$inferSelect, keyof typeof
   recordedBy: row.recordedBy,
 })
 
-export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function tankRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/tank-installations",
-      describeRoute({
+      {
         operationId: "listTankInstallations",
         summary: "The tank installations of the caller's projects",
         description:
           "One page of tank installations, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects, naming another being refused; `propertyId` to one Property's tanks; `containerId` to the tanks one container has stood for; `validOn` to those in force on that day, `validFrom` inclusive and `validTo` exclusive. Each carries its last emptying — its container's latest completed stop, with the litres recorded there — and `dueOn`, the day the next falls due: the last emptying, or before there is one the register's `lastEmptiedOn`, plus `emptyingIntervalMonths`; null for a tank never emptied, which is due now. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: TankInstallationListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of tank installations.", TankPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", TankInstallationListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, propertyId, containerId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -202,23 +198,20 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .post(
       "/tank-installations",
-      describeRoute({
+      {
         operationId: "createTankInstallation",
         summary: "Register a tank at a Property",
         description:
           "Registers a tank at a Property of a project the caller works in (400 at `propertyId` otherwise): what it is, what it holds in whole litres, where it lets its water out, the months between emptyings, and, for a tank emptied before the platform knew it, `lastEmptiedOn`. `containerId` is the Container that stands for it in the plan, of the Property's project (400 at `containerId` otherwise), whose placement on `validFrom` serves the Property — its subscription is the Property's (409 naming the day otherwise) — so the tank is planned, stopped at and billed as any container is. A container stands for one tank at a time (409). Answers the tank with its `Location`. Under the Property's lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        body: TankInstallationCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names one the server owns, ends on or before the day it starts, or names a Property or a Container this account cannot use"],
         responses: {
           201: describeCreated("The tank as it was written, with its last emptying and the day the next is due.", TankInstallation),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names one the server owns, ends on or before the day it starts, or names a Property or a Container this account cannot use."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           409: describeProblem("The container is not placed at the Property on the tank's first day, or stands for another tank over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", TankInstallationCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -255,22 +248,18 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .get(
       "/tank-installations/:id",
-      describeRoute({
+      {
         operationId: "getTankInstallation",
         summary: "One tank installation",
         description: "One tank installation of a project the caller works in, with its last emptying and the day the next is due.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The tank installation.", TankInstallation),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
           404: describeProblem("No tank installation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -283,25 +272,22 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .patch(
       "/tank-installations/:id",
-      describeRoute({
+      {
         operationId: "patchTankInstallation",
         summary: "Change a tank installation",
         description:
           "Changes one tank installation; every field is optional and at least one must be given. Its Property, its Container and its first day are set once. `validTo` ends it — a tank taken out of use — after its first day (400 at `validTo`), or null runs it on; a container stands for one tank at a time (409). A changed interval or `lastEmptiedOn` moves the day the next emptying is due, which the next generation run plans from. Under the Property's lock and then the tank's.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TankInstallationPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, holds a value of the wrong shape, or ends the tank on or before its first day"],
         responses: {
           200: describeJson("The tank installation as it now stands.", TankInstallation),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, holds a value of the wrong shape, or ends the tank on or before its first day."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No tank installation with that id in the projects this account works in."),
           409: describeProblem("The container stands for another tank over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TankInstallationPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -325,23 +311,19 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .get(
       "/tank-installations/:id/inspections",
-      describeRoute({
+      {
         operationId: "listTankInspections",
         summary: "A tank's inspections",
         description: "One page of a tank installation's inspections, oldest first (ids are time-ordered). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of inspections.", InspectionPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
           404: describeProblem("No tank installation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
@@ -361,24 +343,21 @@ export function tankRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .post(
       "/tank-installations/:id/inspections",
-      describeRoute({
+      {
         operationId: "recordTankInspection",
         summary: "Record a tank's inspection",
         description:
           "Appends what an inspection of the tank found: the day it was made, on the project's clock today or before (400 at `inspectedOn`), the outcome — `approved`, `remarks`, `defects` or `failed` — the findings, and when the tank is next to be inspected, after the day (400 at `nextInspectionOn`). Recorded by the caller; never rewritten. Under the Property's lock and then the tank's.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: TankInspectionCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names one the server owns, is dated after today, or names its next inspection on or before it"],
         responses: {
           201: describeJson("The inspection as it was appended.", TankInspection),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, holds a value of the wrong shape, names one the server owns, is dated after today, or names its next inspection on or before it."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No tank installation with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", TankInspectionCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")

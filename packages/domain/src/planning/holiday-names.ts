@@ -100,9 +100,6 @@ const KNOWN_HOLIDAY_LISTS: readonly KnownHolidayList[] = [
   { name: "Egyptian public holidays", country: "EG", names: egyptianHolidayName },
 ]
 
-/** The list names this module can name dates for — what the Holiday lists pane offers first. */
-export const KNOWN_HOLIDAY_LIST_NAMES: readonly string[] = KNOWN_HOLIDAY_LISTS.map((list) => list.name)
-
 /** The country a known list's name is of (`Danish public holidays` → `DK`), or undefined for a name this module does not know. */
 export function knownHolidayListCountry(listName: string): string | undefined {
   return KNOWN_HOLIDAY_LISTS.find((list) => list.name === listName)?.country

@@ -108,20 +108,19 @@ import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { and, asc, eq, gt, or, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { ALREADY_PLACED, alreadyPlaced, issueContainer, OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { actorOf, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { namedByCode } from "./container-identity"
 import { containerOf, containersFrom, createContainer, findContainer, patchContainer } from "./container-writes"
-import { containerScope, noSuchContainer, type LifecycleOptions } from "./lifecycle"
+import { containerScope, noSuchContainer } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireServiceFrequency, requireWarehouse, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -241,26 +240,24 @@ async function findPlacement(tx: Tx, principal: Principal, id: string) {
   return row
 }
 
-export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: LifecycleOptions = {}) {
-  return new Hono<AuthEnv>()
+export function containerRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/containers",
-      describeRoute({
+      {
         operationId: "listContainers",
         summary: "The containers the caller's projects hold",
         description:
           "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance, and `identifier` to the containers a code read off a bin names — one whose label, barcode, RFID tag or serial number spells it, spaces either side and case ignored — which is how a scanned or typed code is looked up; a warehouse outside the project named, or the projects this account works in, is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ContainerListQuery,
+        invalid: ["`projectId` is not a project this account works in", "`warehouseId` is not a warehouse of one"],
         responses: {
           200: describeJson("One page of containers, each with the ledger's reading.", ContainerPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `projectId` is not a project this account works in, or `warehouseId` is not a warehouse of one."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ContainerListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, containerTypeId, assetStatus: status, warehouseId, identifier } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -290,46 +287,37 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
     )
     .post(
       "/containers",
-      describeRoute({
+      {
         operationId: "createContainer",
         summary: "Register a container",
         description:
           "Registers a container in one project, which must be a project the caller works in. The label is the visible Container ID a person reads off the bin and is unique across the company, not inside a project. The container type is this company's. The ownership defaults to `company`. There is no status and no location of its own: `assetState` is the ledger's reading and is null until a movement is recorded, and where it serves is `POST /containers/{id}/placements`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ContainerCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, or names a container type that is not this company's"],
         responses: {
           201: describeCreated("The container as it was written, with no asset state yet.", Container),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, or names a container type that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.containers`."),
           409: describeProblem("The company already has a container with that label."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ContainerCreate),
+      },
       async (c) => created(c, "/containers", await createContainer(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/containers/:id",
-      describeRoute({
+      {
         operationId: "getContainer",
         summary: "One container",
         description:
           "One container of a project the caller works in, with `assetState`, the ledger's reading: where its latest Stock Movement left it, null with no movement yet. A container of another company, or of a project this account does not work in, is a container that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The container, with the ledger's reading.", Container),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
           404: describeProblem("No container with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findContainer(c.get("tx"), c.get("principal"), id)
@@ -339,52 +327,42 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
     )
     .patch(
       "/containers/:id",
-      describeRoute({
+      {
         operationId: "patchContainer",
         summary: "Correct a container",
         description:
           "Corrects one container of a project the caller works in; every field is optional and at least one must be given. A null clears the barcode, the RFID, the serial number or the note. The project is not patchable, since a record does not move between projects, and where the container stands is a placement and not a field.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ContainerPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project included), or names a container type that is not this company's"],
         responses: {
           200: describeJson("The container as it now stands.", Container),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), or names a container type that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.containers`."),
           404: describeProblem("No container with that id in the projects this account works in."),
           409: describeProblem("The company already has another container with that label."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ContainerPatch),
+      },
       async (c) => c.json(await patchContainer(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .post(
       "/containers/:id/placements",
-      describeRoute({
+      {
         operationId: "createPlacement",
         summary: "Issue a container into service",
         description:
           "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves — or, a public placement (M12 of #293), at one of the project's Shared Collection Points with no subscription: a litter or dog bin the project's contract pays for, named by `sharedCollectionPointId` in place of `subscriptionId`, exactly one of the two (400 at `subscriptionId`), with no subscription's period to start inside and no payer, so its collections are charged to nobody. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The placement starts inside the subscription's period (400 on `validFrom`) and carries no end: a placement ends only through `POST /containers/{id}/return` or `/decommission`, which end it on the day they say and append the movement together, so `validTo` on this body is refused by name. The container may not already be placed over part of the period: one container serves in one place at a time. This is the `issue` command of the Stock Movement ledger and the only door into service: the container must be in a warehouse or in maintenance — one with no stock record (receive it first), one in service at another placement (return it first) or one retired is refused (409 naming the state), though a body that names nothing real is a 400 whatever the state — and the placement and the `issue` movement from the warehouse it stood in are written in one transaction, both or neither. `occurredAt` is when it was issued, the request's clock when absent and at most five minutes ahead of it (400), and `reference` the paper it quotes; both are the movement's, read through `GET /containers/{id}/movements`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: ContainerServicePlacementCreate,
+        invalid: ["the body is missing a field, names a member the server owns (`validTo` included: a placement ends through the ledger's commands), starts outside the subscription's period, names both or neither of a subscription and a point, names a subscription, shared collection point, waste fraction or service frequency outside the scope its key allows, or dates the issue more than five minutes after the request"],
         responses: {
           201: describeCreated("The placement as it was written, open, with the cadence in force; the issue movement is on the container's ledger.", ContainerServicePlacement),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns (`validTo` included: a placement ends through the ledger's commands), starts outside the subscription's period, names both or neither of a subscription and a point, names a subscription, shared collection point, waste fraction or service frequency outside the scope its key allows, or dates the issue more than five minutes after the request.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.containers`."),
           404: describeProblem("No container with that id in the projects this account works in."),
           409: describeProblem("The container is not in stock — no record, in service at another placement, or retired — is already placed over part of that period, or the subscription's place, or the public placement's point, no longer serves: a property not active, or a point not open or restricted."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", ContainerServicePlacementCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { occurredAt, reference, ...values } = c.req.valid("json")
@@ -403,22 +381,19 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
     )
     .get(
       "/placements",
-      describeRoute({
+      {
         operationId: "listPlacements",
         summary: "Where containers are in service",
         description:
           "One page of container service placements, oldest first (ids are time-ordered), from the projects the caller works in. `containerId` answers one container's service history and `subscriptionId` one subscription's containers. `propertyId` and `sharedCollectionPointId` answer what stands at a place, which is reached through the subscription — or, for a public placement, is the placement's own point — and is only answerable for a day, so either takes `validOn` with it. `validOn` on its own answers the placements in force that day, `validFrom` inclusive and `validTo` exclusive — a container between two placements is in neither. Every item carries `effectiveServiceFrequencyId`, the placement's cadence where it overrides and the product's otherwise. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PlacementListQuery,
+        invalid: ["a place was asked for without a day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of placements, each with the cadence in force.", PlacementPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a place was asked for without a day, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PlacementListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, containerId, subscriptionId, propertyId, sharedCollectionPointId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -446,23 +421,19 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
     )
     .get(
       "/placements/:id",
-      describeRoute({
+      {
         operationId: "getPlacement",
         summary: "One placement",
         description:
           "One container service placement of a project the caller works in, with `effectiveServiceFrequencyId`: the placement's cadence where it overrides, the product's otherwise, read on every request and never stored. A placement of another company, or of a project this account does not work in, is a placement that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The placement, with the cadence in force.", ContainerServicePlacement),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.containers`."),
           404: describeProblem("No placement with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findPlacement(c.get("tx"), c.get("principal"), id)
@@ -472,27 +443,22 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
     )
     .patch(
       "/placements/:id",
-      describeRoute({
+      {
         operationId: "patchPlacement",
         summary: "Correct a placement",
         description:
           "Corrects the fraction a placement takes, changes the cadence override (a null takes the override off again), or corrects the end of a placement that already has one. `validFrom` and the subscription do not change: a placement that starts on another day or serves another subscription is another placement. Nor does the patch end an open placement or reopen an ended one: the container leaves service through `POST /containers/{id}/return` or `/decommission`, which end the placement and append the movement together, so a `validTo` on an open placement is refused (409), and `validTo` takes no null (400): the ledger says when the container left, and a form does not take that back. A corrected end is held to three rules — it still comes after the start, it still lies inside the subscription's period (400 naming the bound), and it may not run the placement into the next one, since a container serves in one place at a time.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ContainerServicePlacementPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (`validFrom` and the subscription included), gives `validTo` as null, ends on or before the day it starts, falls outside the subscription's period, or names a waste fraction or service frequency outside the scope its key allows"],
         responses: {
           200: describeJson("The placement as it now stands, with the cadence in force.", ContainerServicePlacement),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (`validFrom` and the subscription included), gives `validTo` as null, ends on or before the day it starts, falls outside the subscription's period, or names a waste fraction or service frequency outside the scope its key allows.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.containers`."),
           404: describeProblem("No placement with that id in the projects this account works in."),
           409: describeProblem("The patch would end an open placement, which the ledger's commands do, or the container is already placed over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ContainerServicePlacementPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

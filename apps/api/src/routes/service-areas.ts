@@ -84,20 +84,19 @@ import { wasteFraction } from "@waste/db/schema/catalogue"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { and, asc, eq, exists, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
 import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { notWithin, refuseStranded } from "@waste/db/commands/periods"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import { reachesAssignments, reachesThroughAssignments } from "../auth/provider"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet, type IdSetColumns } from "./id-sets"
 import { boundsOutside, periodAfter, periodOf, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { requirePlanningArea, requireServiceProvider, requireWasteFraction } from "./references"
@@ -385,26 +384,23 @@ async function writeAssignment(tx: Tx, area: Parent & Period, values: { serviceP
   return row
 }
 
-export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function serviceAreaRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/service-areas",
-      describeRoute({
+      {
         operationId: "listServiceAreas",
         summary: "The service areas the caller reaches",
         description:
           "One page of service areas, oldest first (ids are time-ordered), each with its planning areas and waste fractions by id. An office account reads the areas of the projects it works in; a service provider's account, which works in no project, reads the areas its own assignments name and no other. `projectId` narrows it to one of the caller's projects; naming another is refused. `validOn` asks for the areas in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how Upcoming, Active and Expired are asked for; `planningAreaId` for the areas covering that planning area; `serviceProviderId` for the areas that provider holds on `validOn`, which it requires, since a provider holds an area through an assignment valid on a day. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ServiceAreaListQuery,
+        invalid: ["`validOn` is not a calendar day", "`serviceProviderId` was given without `validOn`", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of service areas, each with its two sets.", ServiceAreaPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, `serviceProviderId` was given without `validOn`, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `service-providers.service-areas`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ServiceAreaListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, validOn: day, planningAreaId, serviceProviderId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -436,25 +432,20 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-areas",
-      describeRoute({
+      {
         operationId: "createServiceArea",
         summary: "Make a service area",
         description:
           "Makes an award in one project, which must be a project the caller works in. The code is what the contract spells (`CA-Ø-2`) and is set once; one area of a code is in force at a time, so a period overlapping another area of the code is refused (409). `boundaryText` is the contract's own boundary text, the authoritative legal boundary; `planningAreaIds` is the operational geography the award covers, each a planning area of the project (400 at `planningAreaIds.N` otherwise) and each named once, and `wasteFractionIds` its scope, each a waste fraction of this company (400 at `wasteFractionIds.N`); either may be empty, and an area covering no planning area reaches no route. A planning area is awarded once at a time: one that another area of the project names over an overlapping period is refused (409 at the entry, `Planning area OP-CEN-01 is already in service area CA-Ø-2 over part of that period`). `assignment`, when given, is the first assignment — the provider this company's (400 on `assignment.serviceProviderId`), its period the area's when absent and inside the area's otherwise (400 on `assignment.validFrom` or `assignment.validTo`) — written in the same transaction, so a refused provider takes the area with it, and answered beside the area, or null when none was made; an area may also be made first and assigned through `POST /service-areas/{id}/assignments`. The server mints the ids.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ServiceAreaCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, names the same planning area or fraction twice, names a planning area that is not the project's or a fraction that is not this company's, or gives a first assignment naming a provider that is not this company's or a period outside the area's"],
         responses: {
           201: describeCreated("The service area as it was written, its two sets by id, and the first assignment beside it — null when the body made none.", ServiceAreaCreated),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the day it starts, names the same planning area or fraction twice, names a planning area that is not the project's or a fraction that is not this company's, or gives a first assignment naming a provider that is not this company's or a period outside the area's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `service-providers.service-areas`."),
           409: describeProblem("A service area of this code is already in force over part of that period, or a planning area named is already in another service area over part of it."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ServiceAreaCreate),
+      },
       async (c) => {
         const { planningAreaIds, wasteFractionIds, assignment, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -495,23 +486,19 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-areas/:id",
-      describeRoute({
+      {
         operationId: "getServiceArea",
         summary: "One service area",
         description:
           "One service area the caller reaches, with its planning areas and waste fractions by id and its assignments, earliest first. An office account reaches the areas of the projects it works in; a service provider's account the areas its own assignments name, and reads those assignments alone. An area outside that is an area that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The service area, its two sets and its assignments.", ServiceAreaDetail),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -524,25 +511,22 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/service-areas/:id",
-      describeRoute({
+      {
         operationId: "patchServiceArea",
         summary: "Amend a service area",
         description:
           "Changes the name, the boundary text, the notes or the period of one service area of a project the caller works in; every field is optional and at least one must be given. The code does not change — it is what the contract spells — and the project is not patchable, since a record does not move between projects; the two sets are `PUT /service-areas/{id}/planning-areas` and `PUT /service-areas/{id}/waste-fractions`. Moving the period is held under the area's row lock: the end still comes after the start, which a body naming one bound cannot see by itself; the new period still holds every assignment of the area — a shortening that would leave one outside is refused (409) counting them, and the assignments have to be ended first; a widening re-runs the one-award rule over the area's planning areas (409 at the entry); and the period may not overlap another area of the code (409). A service provider's account changes nothing here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceAreaPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the code, the project and the sets included), or ends on or before the day it starts"],
         responses: {
           200: describeJson("The service area as it now stands, with its two sets.", ServiceArea),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the code, the project and the sets included), or ends on or before the day it starts."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id in the projects this account works in."),
           409: describeProblem("Assignments of the area would fall outside the new period, a planning area of the area is in another area over the widened period, or another area of the code is in force over part of it."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceAreaPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -579,25 +563,22 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/service-areas/:id/planning-areas",
-      describeRoute({
+      {
         operationId: "putServiceAreaPlanningAreas",
         summary: "Replace the planning areas a service area covers",
         description:
           "Replaces the whole set with the one in the body: a planning area the body leaves out is not covered afterwards, and an empty list is an award that reaches no route. Every id is a planning area of the area's project (400 at `ids.N` otherwise), each named once (400 on `ids`), and none is in another service area of the project over a period overlapping this area's (409 at the entry, the one-award rule, held under the planning areas' row locks so two awards claiming the same ground take turns). The area's `updatedAt` moves, since the set is part of the area on the wire. A service provider's account changes nothing here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceAreaPlanningAreasSet,
+        invalid: ["the body is missing `ids`, names a member it does not own, names the same planning area twice, or names a planning area that is not the area's project's"],
         responses: {
           200: describeJson("The service area with the planning areas it now covers.", ServiceArea),
-          400: describeProblem("The path does not hold an id, or the body is missing `ids`, names a member it does not own, names the same planning area twice, or names a planning area that is not the area's project's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id in the projects this account works in."),
           409: describeProblem("A planning area named is already in another service area over part of the area's period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceAreaPlanningAreasSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { ids } = c.req.valid("json")
@@ -628,24 +609,21 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/service-areas/:id/waste-fractions",
-      describeRoute({
+      {
         operationId: "putServiceAreaWasteFractions",
         summary: "Replace the waste fractions a service area is awarded for",
         description:
           "Replaces the whole set with the one in the body: a fraction the body leaves out is not in the award's scope afterwards, and an empty list is an award with no fraction named yet. Every id is a waste fraction of this company (400 at `ids.N` otherwise), each named once (400 on `ids`). The area's `updatedAt` moves, since the set is part of the area on the wire. A service provider's account changes nothing here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceAreaWasteFractionsSet,
+        invalid: ["the body is missing `ids`, names a member it does not own, names the same fraction twice, or names a waste fraction that is not this company's"],
         responses: {
           200: describeJson("The service area with the fractions it is now awarded for.", ServiceArea),
-          400: describeProblem("The path does not hold an id, or the body is missing `ids`, names a member it does not own, names the same fraction twice, or names a waste fraction that is not this company's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceAreaWasteFractionsSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { ids } = c.req.valid("json")
@@ -668,23 +646,19 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-areas/:id/assignments",
-      describeRoute({
+      {
         operationId: "listServiceAreaAssignmentsOfArea",
         summary: "One service area's assignments",
         description:
           "The assignments of one service area the caller reaches, earliest first: who held the area when, as a bare list, since an area has a handful. An office account reads every assignment of an area of its projects; a service provider's account reads its own on an area they name. An area outside the caller's reach is an area that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The area's assignments, earliest first.", Assignments),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -695,25 +669,22 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/service-areas/:id/assignments",
-      describeRoute({
+      {
         operationId: "createServiceAreaAssignment",
         summary: "Assign a service area to a provider",
         description:
           "Writes one assignment of the area in the path, which must be an area of a project the caller works in: the provider, this company's (400 on `serviceProviderId`), and the period it holds the area over, half-open and inside the area's (400 on the bound outside). One provider holds an area at a time, so a period overlapping the area's other assignment is refused (409, `This service area is already assigned over part of that period; end the assignment first`): a transfer is the old assignment ended on the day through its patch and the new one added from that day, which preserves the area and the earlier award. The server mints the id; the assignment is read at `/service-area-assignments/{id}`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: ServiceAreaAssignmentCreate,
+        invalid: ["the body is missing a field, names a member the server owns, ends on or before the day it starts, puts a bound outside the area's period, or names a service provider that is not this company's"],
         responses: {
           201: describeCreated("The assignment as it was written.", ServiceAreaAssignment),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, puts a bound outside the area's period, or names a service provider that is not this company's."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `service-providers.service-areas`."),
           404: describeProblem("No service area with that id in the projects this account works in."),
           409: describeProblem("The service area is already assigned over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", ServiceAreaAssignmentCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -732,22 +703,19 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-area-assignments",
-      describeRoute({
+      {
         operationId: "listServiceAreaAssignments",
         summary: "The service area assignments the caller reaches",
         description:
           "One page of assignments, oldest first (ids are time-ordered). An office account reads the assignments of the areas of the projects it works in; a service provider's account, which works in no project, reads the assignments naming its own provider and no other — the first office rows a provider's account reaches at all. `projectId` narrows it to one of the caller's projects; naming another is refused. `serviceAreaId` narrows it to one area's, `serviceProviderId` to one provider's, and `validOn` to the assignments in force on that day, `validFrom` inclusive and `validTo` exclusive. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ServiceAreaAssignmentListQuery,
+        invalid: ["`validOn` is not a calendar day", "a filter is not an id", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of assignments.", AssignmentPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, a filter is not an id, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `service-providers.service-areas`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ServiceAreaAssignmentListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaId, serviceProviderId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -774,23 +742,19 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/service-area-assignments/:id",
-      describeRoute({
+      {
         operationId: "getServiceAreaAssignment",
         summary: "One service area assignment",
         description:
           "One assignment the caller reaches: of an area of a project an office account works in, or naming a service provider account's own provider. An assignment outside that is an assignment that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The assignment.", ServiceAreaAssignment),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `service-providers.service-areas`."),
           404: describeProblem("No service area assignment with that id this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
@@ -801,25 +765,22 @@ export function serviceAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/service-area-assignments/:id",
-      describeRoute({
+      {
         operationId: "patchServiceAreaAssignment",
         summary: "Amend a service area assignment",
         description:
           "Changes the notes or the end of one assignment of an area of a project the caller works in; every field is optional and at least one must be given. The provider and the area do not change — a transfer is a new assignment, this one ended on the day — and the start does not either. Moving the end is held under the area's lock and then the assignment's: the end still comes after the start, the assignment still lies inside the area's period (400 on `validTo`), the new period still holds every service provider price under the assignment — a shortening that would leave one outside is refused (409) counting them, and the prices have to be ended first; a settlement over the assignment is not counted — and the assignment still overlaps no other of the area (409): a reopened or lengthened assignment meeting the next holder's is refused there. A service provider's account changes nothing here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ServiceAreaAssignmentPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the provider, the area, the start and the project included), ends on or before the day it starts, or puts the end outside the area's period"],
         responses: {
           200: describeJson("The assignment as it now stands.", ServiceAreaAssignment),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the provider, the area, the start and the project included), ends on or before the day it starts, or puts the end outside the area's period."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `service-providers.service-areas`."),
           404: describeProblem("No service area assignment with that id in the projects this account works in."),
           409: describeProblem("Service provider prices under the assignment would fall outside the new period, or the area's other assignment is in force over part of it."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ServiceAreaAssignmentPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

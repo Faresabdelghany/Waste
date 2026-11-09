@@ -164,7 +164,7 @@ import type { Problem } from "@waste/contracts/problem"
 import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { recordUnload, stationTakes } from "@waste/db/commands/unloads"
-import type { JobSender, Send } from "@waste/db/jobs"
+import type { Send } from "@waste/db/jobs"
 import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
@@ -178,14 +178,12 @@ import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
 import { alreadyOnRoute, assignedTo, decide, OCCURRED_AT_SKEW_MS, PROOF_COMMAND_KINDS, type Clock, type Command, type CommandDriver, type Effect, type Lookups, type PickupState, type RouteState, type SessionState, type VehicleState } from "@waste/domain/execution/commands"
 import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transitions"
-import { DISPATCHED_ROUTE_STATUSES, type DriverCommandKind } from "@waste/domain/execution/vocabulary"
+import { DISPATCHED_ROUTE_STATUSES, DRIVER_COMMAND_KINDS, type DriverCommandKind } from "@waste/domain/execution/vocabulary"
 import { isOneOf } from "@waste/domain/lists"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
 import { ACTIVE_VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, replayed } from "@waste/db/commands/shared"
@@ -200,10 +198,11 @@ import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"
-import { actorOf, BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import { actorOf, type Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problemBody, validate } from "../problem"
+import { describeProblem, invalidRequest, problemBody } from "../problem"
 import { namedByCode } from "./container-identity"
 import { driverColumns, driverOf } from "./drivers"
 import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSessions, sessionColumns, sessionOf, type SessionRow } from "./execution-shapes"
@@ -1086,36 +1085,26 @@ async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelop
 
 /** What every route here describes the same way: no usable token, no grant, no driver profile. */
 const driverProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, the caller's role does not allow \`${action}\` on \`operate.driver-app\`, or no active driver profile is bound to this login.`),
 })
 
-export type DriverDoorOptions = {
-  /** The request's clock: what the commands' instants are judged against and what `last_seen_at` moves to; the app's, so a test can pin it. */
-  now?: () => Date
-  /** Where a replay with a differing body, a rejection no receipt can hold, or a start the index held at the write (`HELD_AT_WRITE`) is noted; `console.warn` unless a test wants to look. */
-  log?: (entry: unknown) => void
-  /** The app's job sender (`createJobSender`), what a ticket's automation queues a message with. */
-  jobs: JobSender
-}
-
-export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), log = console.warn, jobs }: DriverDoorOptions) {
-  return new Hono<AuthEnv>()
+export function driverDoorRoutes(deps: RouteDeps) {
+  const { now, log, jobs } = deps
+  return routes(deps)
     .get(
       "/driver/me",
-      describeRoute({
+      {
         operationId: "getDriverMe",
         summary: "The driver's start screen",
         description:
           "The caller's own driver profile, the session they are on or null, the routes assigned to them that are `ready` or `active`, or `completed` today on their project's clock, and the three lists a start and an unload pick from: `vehicles`, the `active` powered vehicles and trailers of the driver profile's project, each with its `label` (the callsign, else the registration), `kind` and `requiredLicenceClass`; `unloadingStations`, the company's stations that are not `closed`, each with its `location`, whether it has a `weighbridge`, and the `wasteFractionIds` it accepts; and `wasteFractions`, the company's, each with its `key` and `name` — every list, and every station's fractions, by id. The caller is a driver: the account is bound to an active driver profile of the company (403 for the whole request otherwise), and the routes are the ones planned for or started by that driver — the assignment, never Project Access — so a service provider's driver, whose account works in no project, reads their assigned routes here, and picks from the same lists as any driver of their profile's project. The connected client's start screen; the offline one reads its synced buckets.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
         responses: {
           200: describeJson("The driver, the open session or null, the day's routes, and what a start and an unload pick from.", DriverMe),
           ...driverProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
+      },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -1131,21 +1120,20 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/driver/routes",
-      describeRoute({
+      {
         operationId: "listDriverRoutes",
         summary: "The driver's routes",
         description:
           "One page of the routes assigned to the caller's driver profile that are `ready` or `active`, or `completed` today on their project's clock — the same routes `GET /driver/me` answers — oldest first; `status` narrows the page to one of those statuses. Bounded by the assignment (planned for or started by this driver) and never by Project Access. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DriverRouteListQuery,
+        invalid: ["`status` is not a route status"],
         responses: {
           200: describeJson("One page of the driver's routes, each with its progress.", RoutePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `status` is not a route status."),
           ...driverProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DriverRouteListQuery),
+      },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -1160,22 +1148,20 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/driver/routes/:id",
-      describeRoute({
+      {
         operationId: "getDriverRoute",
         summary: "One of the driver's routes, with its stops and their places",
         description:
           "The route with what hangs off it: its pickups by position, each with its place joined — the `address` and `location` (a point, or null for a property not yet geocoded) of the property or the shared collection point the pickup names on the service date, the container's `label` (null on an address-only stop the office added, which names no container) and the waste fraction's `name` — the open session or null, every session oldest first, and its unloads oldest first: what a device without sync reads to run the route, and the one read that denormalises for the wire what the synced device joins from its own buckets. A route not assigned to the caller's driver profile, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`), so the device learns nothing about routes it was not given.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The route with its pickups and their places, its sessions and its unloads.", DriverRouteDetail),
-          400: describeProblem("The path does not hold an id."),
           ...driverProblems("view"),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -1192,23 +1178,22 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/driver/routes/:id/identify",
-      describeRoute({
+      {
         operationId: "identifyOnDriverRoute",
         summary: "Which stop of the driver's route a code read off a bin names",
         description:
           "A code read off a bin — scanned by the phone's camera or typed in, off the label or a hand-held RFID reader — looked up among the containers of one of the driver's routes (O19 of #290): `stops` lists each stop whose container one of whose identifiers (the label, the barcode, the RFID tag, the serial number) spells the code, spaces either side and case ignored, with the `matchedBy` identifier, and each swap whose replacement it names with `replacement` true — by position, empty when the code names no container on this route. Only the route's own containers are read, so a device learns nothing of the company's other bins. A read and never a record: the confirmation is an `arrive` that carries the code as its `identification`, which the door judges against the stop's container again. A route not assigned to the caller's driver profile, of another company, or not there at all is answered 404, as `GET /driver/routes/:id` answers it.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: DriverIdentifyQuery,
+        invalid: ["`code` is missing, blank or longer than a label"],
         responses: {
           200: describeJson("The stops of the route the code names, by position; none when it names no container here.", DriverIdentification),
-          400: describeProblem("The path does not hold an id, or `code` is missing, blank or longer than a label."),
           ...driverProblems("view"),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", DriverIdentifyQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { code } = c.req.valid("query")
@@ -1223,21 +1208,22 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .post(
       "/driver/commands",
-      describeRoute({
+      {
         operationId: "applyDriverCommands",
         summary: "Apply a device's queued commands",
         description:
-          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id this driver's devices already sent (nothing written, a command that differs in kind, route, instant, device or body logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. An id that another device's command already holds — another driver's, whatever its company — is refused (409, `That command id belongs to another device's command`) and never replayed, since a replay would hand that command's rows to a device that did not send it; it is the one rejection no receipt can hold, the receipt's key being that id, so it is logged instead. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fifteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `identification?`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`, and with an `identification` (`{ code, method }`: a code read off the bin by the `camera` or `typed`) confirms the stop's container — refused at `body.identification.code` when the code names no container of the stop (400, `WH82014 is not the container of pickup 12`) and at `body.identification` on a stop with no container (400), the receipt of an applied one being the confirmation `GET /driver/routes/:id` reads as the stop's `containerConfirmedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`), `record-volume` (`pickupId`, `volumeLitres`: the whole litres a tank was emptied of, M11 of #293) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session; `record-positions` (`points`: one to sixty fixes, each `{ at, location, accuracyM, speedKmh?, headingDeg? }`, in the order they were taken) appends where the session's vehicle was, one position per fix, and writes no event. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first` — held again at the write: two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index once the first commits, and the second is that command's rejection with this sentence naming the route that won, the rest of its batch standing), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`), and every fix of a `record-positions` the same two clock bounds and the session's start at its own field (400 at `body.points.<n>.at`), a paused session taking them all the same; a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events — a pickup's event carries the pickup with the proofs this command made, a route-level `report-problem`'s `route-problem-reported` the route with its problem proof as `proofs` the same way, so the reason and the note travel with it, and the route's other events the route alone; every command's receipt is written with the body verbatim, but a `record-positions`'s, which keeps the count of its fixes and none of their points (`{ points: <count> }`), a position being personal data the receipt would otherwise outlive — a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`, and one for a route of their project assigned to another driver names that route — which `GET /driver/routes/:id` still answers 404 for — and no session and no pickup, since nothing of a route the driver was not given is read for it. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out. `record-fill` (`pickupId`, `fill`: `empty`, `quarter`, `half`, `three-quarters`, `full` or `overflowing`, M23 of #293) sets how full the stop's container was, whatever the stop's outcome, a later estimate replacing it, and answers the stop; a stop with no container is refused at `body.pickupId` (400, `Pickup 12 names no container whose fill to estimate`).",
-        security: BEARER_SECURITY,
+          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id this driver's devices already sent (nothing written, a command that differs in kind, route, instant, device or body logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. An id that another device's command already holds — another driver's, whatever its company — is refused (409, `That command id belongs to another device's command`) and never replayed, since a replay would hand that command's rows to a device that did not send it; it is the one rejection no receipt can hold, the receipt's key being that id, so it is logged instead. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The " +
+          DRIVER_COMMAND_KINDS.length +
+          " kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `identification?`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`, and with an `identification` (`{ code, method }`: a code read off the bin by the `camera` or `typed`) confirms the stop's container — refused at `body.identification.code` when the code names no container of the stop (400, `WH82014 is not the container of pickup 12`) and at `body.identification` on a stop with no container (400), the receipt of an applied one being the confirmation `GET /driver/routes/:id` reads as the stop's `containerConfirmedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`), `record-volume` (`pickupId`, `volumeLitres`: the whole litres a tank was emptied of, M11 of #293) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session; `record-positions` (`points`: one to sixty fixes, each `{ at, location, accuracyM, speedKmh?, headingDeg? }`, in the order they were taken) appends where the session's vehicle was, one position per fix, and writes no event. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first` — held again at the write: two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index once the first commits, and the second is that command's rejection with this sentence naming the route that won, the rest of its batch standing), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`), and every fix of a `record-positions` the same two clock bounds and the session's start at its own field (400 at `body.points.<n>.at`), a paused session taking them all the same; a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events — a pickup's event carries the pickup with the proofs this command made, a route-level `report-problem`'s `route-problem-reported` the route with its problem proof as `proofs` the same way, so the reason and the note travel with it, and the route's other events the route alone; every command's receipt is written with the body verbatim, but a `record-positions`'s, which keeps the count of its fixes and none of their points (`{ points: <count> }`), a position being personal data the receipt would otherwise outlive — a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`, and one for a route of their project assigned to another driver names that route — which `GET /driver/routes/:id` still answers 404 for — and no session and no pickup, since nothing of a route the driver was not given is read for it. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out. `record-fill` (`pickupId`, `fill`: `empty`, `quarter`, `half`, `three-quarters`, `full` or `overflowing`, M23 of #293) sets how full the stop's container was, whatever the stop's outcome, a later estimate replacing it, and answers the stop; a stop with no container is refused at `body.pickupId` (400, `Pickup 12 names no container whose fill to estimate`).",
+        module: MODULE,
+        action: "edit",
+        body: DriverCommandBatch,
+        invalid: ["the batch does not parse: no commands or more than two hundred, an id named twice, or an envelope out of shape. Nothing was applied or recorded"],
         responses: {
           200: describeJson("One outcome per command, in body order.", DriverCommandBatchOutcome),
-          400: describeProblem("The batch does not parse: no commands or more than two hundred, an id named twice, or an envelope out of shape. Nothing was applied or recorded."),
           ...driverProblems("edit"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", DriverCommandBatch),
+      },
       async (c) => {
         const { commands } = c.req.valid("json")
         const tx = c.get("tx")
@@ -1253,21 +1239,20 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
     )
     .get(
       "/driver/commands",
-      describeRoute({
+      {
         operationId: "listDriverCommands",
         summary: "The driver's receipts",
         description:
           "One page of the receipts of every command this driver's devices ever sent, applied or rejected, oldest first — ids are time-ordered by the device's clock, so a cursor over them is a cursor over the order the commands were minted in — each with the body as it arrived and, on a rejection, the problem it was refused with. `routeId` names the route the command claimed when that route is of this driver's project — one assigned to another driver included, which `GET /driver/routes/:id` still answers 404 for, so a receipt may name a route the device cannot read — and is null for a route of another project, another company or none, the claimed id then kept in the body as `{ routeId, body }`. `routeId` narrows the page to one route's. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DriverReceiptListQuery,
+        invalid: ["`routeId` is not an id"],
         responses: {
           200: describeJson("One page of receipts.", ReceiptPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `routeId` is not an id."),
           ...driverProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DriverReceiptListQuery),
+      },
       async (c) => {
         const { limit, cursor, routeId } = c.req.valid("query")
         const after = afterCursor(cursor)

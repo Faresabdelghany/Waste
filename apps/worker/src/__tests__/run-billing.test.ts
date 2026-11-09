@@ -30,6 +30,7 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { subscription } from "@waste/db/schema/agreements"
 import { billableEvent, billingRun, invoice, priceListRow } from "@waste/db/schema/finance"
+import { project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { monthBefore } from "@waste/domain/finance/periods"
@@ -239,6 +240,22 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     await assert.rejects(handle({ projectId: tenant.projects.copenhagen.id, on: "not a day" }), /finance\.run-billing: 1 of 1 project runs failed/)
     assert.equal((await runs()).length, before, "a failed project leaves no run row: a run is one transaction or nothing")
     assert.match(lines.at(-1) ?? "", /→ failed: monthBefore/)
+  })
+
+  test("a clock the runtime refuses fails its own project and no other: the sweep still runs the rest, and the job's error names the one", async () => {
+    const harbor = tenant.projects.onboarding.id
+    const set = (values: Partial<typeof project.$inferInsert>) => withCompany(api.db, tenant.companyId, (tx) => tx.update(project).set(values).where(and(eq(project.companyId, tenant.companyId), eq(project.id, harbor))))
+    // A zone of the right shape that Intl does not know: the contracts check a timezone by its shape alone.
+    await set({ status: "active", timezone: "Mars/Olympus_Mons" })
+    try {
+      await assert.rejects(handle({ projectId: null, on: null }), new RegExp(`finance\\.run-billing: 1 of 2 project runs failed: ${harbor} \\(Invalid time zone`))
+      assert.ok(
+        lines.some((line) => line.startsWith(`finance.run-billing: project ${tenant.projects.copenhagen.id} `) && !line.includes("→ failed")),
+        "Copenhagen's run went on beside the refused clock",
+      )
+    } finally {
+      await set({ status: "onboarding", timezone: "Europe/Copenhagen" })
+    }
   })
 
   test("a run sent by hand for a month still running is refused as the office's is, at its last day after the project's today, and writes nothing (M14 of #293)", async () => {

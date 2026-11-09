@@ -20,24 +20,22 @@ import { validOn } from "@waste/db/query/valid-on"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { project } from "@waste/db/schema/organisation"
 import { visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
-import type { Action } from "@waste/domain/access/modules"
 import { NOT_A_FRACTION } from "@waste/domain/execution/commands"
 import { OFFERED_PRODUCT_STATUSES, type ProductUnit } from "@waste/domain/registry/vocabulary"
 import { TRADE_TOGETHER } from "@waste/domain/visits/charges"
 import { unofferedProduct, unofferedStep } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
@@ -170,30 +168,23 @@ async function writeSets(tx: Tx, rule: { companyId: string; projectId: string; i
   }
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function visitRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function visitRuleRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/visit-rules",
-      describeRoute({
+      {
         operationId: "listVisitRules",
         summary: "The projects' Visit Rules",
         description:
           "One page of the rules that charge a project's recycling-centre visits, oldest first, from the projects the caller works in, each with its ladder by position and its free fractions. `projectId` narrows it to one of those projects; `validOn` asks for the rule in force on that day. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: VisitRuleListQuery,
+        invalid: ["`validOn` is not a calendar day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of rules.", RulePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `validOn` is not a calendar day, or `projectId` is not a project this account works in."),
-          ...problems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", VisitRuleListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -224,22 +215,20 @@ export function visitRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/visit-rules",
-      describeRoute({
+      {
         operationId: "createVisitRule",
         summary: "Add a Visit Rule",
         description:
           "Adds a rule to a project the caller works in (400 at `projectId` otherwise): a household's free visits per calendar year and the ladder of per-visit products after them, the last step repeating (empty includes every visit); the free fractions, whose visits are neither counted nor charged (each the company's, 400); a business's per-visit product and its annual-access product (none charges nothing, and none gives no annual access); and the likely-trade threshold with its window, both or neither. A step and the per-visit product are products of the project sold per visit, the annual access one sold by the month (400 at the field), each active (409). One rule per project is in force at a time (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: VisitRuleCreate,
+        invalid: ["the body is missing a field, names a member the server owns, a fraction twice or one that is not the company's, a threshold without its window, a period ending on or before it starts, a project this account does not work in, or a product that is not the project's or not sold as its place asks"],
         responses: {
           201: describeCreated("The rule as it was written.", VisitRule),
-          400: describeProblem("The body is missing a field, names a member the server owns, a fraction twice or one that is not the company's, a threshold without its window, a period ending on or before it starts, a project this account does not work in, or a product that is not the project's or not sold as its place asks."),
-          ...problems("create"),
           409: describeProblem("A product is not active, or a rule of the project is in force over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", VisitRuleCreate),
+      },
       async (c) => {
         const { ladder, freeFractionIds, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -272,21 +261,18 @@ export function visitRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/visit-rules/:id",
-      describeRoute({
+      {
         operationId: "getVisitRule",
         summary: "One Visit Rule",
         description: "One rule of a project the caller works in, with its ladder by position and its free fractions. A rule of another company, or of a project this account does not work in, is one that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The rule.", VisitRule),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
           404: describeProblem("No rule with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -298,24 +284,22 @@ export function visitRuleRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/visit-rules/:id",
-      describeRoute({
+      {
         operationId: "patchVisitRule",
         summary: "Amend a Visit Rule",
         description:
           "Changes anything but the project and the start of one rule of a project the caller works in — the ladder and the free fractions replaced whole — or ends it; every field is optional and at least one must be given. Under the project's row lock and then the rule's: the end still comes after the start (400 on `validTo`), a product is held as on the create — one the rule already names at the same place keeps it whatever its status now — and the rule still overlaps no other of its project (409). A charge already made keeps its product: each visit is judged once, at its event.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: VisitRulePatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project and the start included), ends on or before the day the rule starts, names a fraction that is not the company's, or a product that is not the project's or not sold as its place asks"],
         responses: {
           200: describeJson("The rule as it now stands.", VisitRule),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the start included), ends on or before the day the rule starts, names a fraction that is not the company's, or a product that is not the project's or not sold as its place asks."),
-          ...problems("edit"),
           404: describeProblem("No rule with that id in the projects this account works in."),
           409: describeProblem("A new product is not active, or a rule of the project is in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", VisitRulePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { ladder, freeFractionIds, ...fields } = c.req.valid("json")

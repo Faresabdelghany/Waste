@@ -35,17 +35,16 @@ import { visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { project } from "@waste/db/schema/organisation"
 import { FREE_DAYS_ARE_A_HIRES } from "@waste/domain/finance/hire"
 import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -140,26 +139,23 @@ async function findProduct(tx: Tx, principal: Principal, id: string): Promise<Ro
   return row
 }
 
-export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function productRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/products",
-      describeRoute({
+      {
         operationId: "listProducts",
         summary: "The products the caller's projects offer",
         description:
           "One page of products, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ProjectScopedListQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of products.", ProductPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.products`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ProjectScopedListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -183,25 +179,20 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/products",
-      describeRoute({
+      {
         operationId: "createProduct",
         summary: "Add a product",
         description:
           "Adds a product to one project, which must be a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The container type and the waste fraction, where given, must be this company's, and the service frequency must be one of the named project's; all three are optional, since only a container collection has a container and a fraction and the cadence is a default a placement may override. The three invoicing fields are Finance's (Issue #112) and optional: `invoiceName` is what an invoice line calls the product (its name when null), `invoiceCode` the code an external ledger books it under, one product's inside the project (409, `This project already has a product with invoice code 4010`), and `vatPercent` the rate a billable event is priced at, a whole percent from 0 (exempt) to 100 — a product without one blocks its events with `no-vat-rate`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ProductCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this project's"],
         responses: {
           201: describeCreated("The product as it was written.", Product),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this project's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `commercial.products`."),
           409: describeProblem("The project already has a product with that name, or one with that invoice code."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ProductCreate),
+      },
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
@@ -219,23 +210,19 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/products/:id",
-      describeRoute({
+      {
         operationId: "getProduct",
         summary: "One product",
         description:
           "One product of a project the caller works in. A product of another company, or of a project this account does not work in, is a product that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The product.", Product),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `commercial.products`."),
           404: describeProblem("No product with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findProduct(c.get("tx"), c.get("principal"), id)
@@ -245,27 +232,22 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/products/:id",
-      describeRoute({
+      {
         operationId: "patchProduct",
         summary: "Change a product",
         description:
           "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`). Under the project's and the product's row locks.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ProductPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project included), gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this product's project's"],
         responses: {
           200: describeJson("The product as it now stands.", Product),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), gives a VAT rate outside 0..100, or points at a container type, waste fraction or service frequency that is not this company's or this product's project's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.products`."),
           404: describeProblem("No product with that id in the projects this account works in."),
           409: describeProblem("The project already has another product with that name, or another with that invoice code."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ProductPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")

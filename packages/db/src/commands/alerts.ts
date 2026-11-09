@@ -10,7 +10,7 @@ import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "@waste/do
 import { sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
-import { alert } from "../schema/resolution"
+import { alert, holdsItsRuleKey } from "../schema/resolution"
 import { emit } from "./outbox"
 import { alertColumns, alertOf, type AlertRow } from "../shapes/alerts"
 
@@ -42,7 +42,7 @@ export async function raiseAlerts(tx: Tx, companyId: string, drafts: readonly Al
   const written = await tx
     .insert(alert)
     .values(drafts.map((draft) => ({ ...draft, companyId, status: "new" as const })))
-    .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
+    .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and ${holdsItsRuleKey(alert)}` })
     .returning(alertColumns)
   for (const row of written) await emit(tx, { companyId }, { aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: row.detectedAt })
   return written

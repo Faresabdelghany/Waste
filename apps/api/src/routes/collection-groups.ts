@@ -69,44 +69,18 @@ import { alreadyPicked, containerPickedTwice, groupRuns, isParked } from "@waste
 import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/domain/planning/schemes"
 import { INT4_MAX } from "@waste/domain/requests"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { groupReleases, releaseHolds } from "@waste/db/commands/route-holds"
 import { projectToday } from "@waste/db/query/project-clock"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
-import {
-  assembleGroups,
-  findScheme,
-  requireNotArchived,
-  GROUP_NAME_TAKEN,
-  groupColumns,
-  groupNameTaken,
-  groupScope,
-  groupsOf,
-  MODULE,
-  noSuchGroup,
-  noSuchScheme,
-  pickOf,
-  referencesOf,
-  replaceGroupSet,
-  requireFleetInService,
-  requireFleetThere,
-  CREW_THERE,
-  requireGroupDriver,
-  requireGroupReferences,
-  requireNotPickedTwice,
-  requireStructure,
-  writeGroupSets,
-  type ClockOptions,
-  type GroupRow,
-} from "./scheme-groups"
+import { assembleGroups, findScheme, requireNotArchived, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, groupScope, groupsOf, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotPickedTwice, requireStructure, writeGroupSets, type GroupRow } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
@@ -179,28 +153,25 @@ async function groupWithSets(tx: Tx, companyId: string, row: GroupRow): Promise<
 /** What a group appended after one standing at the last position an `integer` holds is told: the column is an `integer`, and a position past it would fail the write (22003). */
 export const NO_POSITION_LEFT = `The last group stands at position ${INT4_MAX}, the last a group can take; give this one a position`
 
-export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function collectionGroupRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/route-schemes/:id/collection-groups",
-      describeRoute({
+      {
         operationId: "listRouteSchemeCollectionGroups",
         summary: "One route scheme's collection groups",
         description:
           "One page of the scheme's collection groups, oldest first (ids are time-ordered), each with its stop matching rule or its picked containers in stop order. The path says the scheme, so there is no filter; the groups by position are on the scheme itself, `GET /route-schemes/{id}`. A scheme of another company, or of a project this account does not work in, is a scheme that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of the scheme's collection groups.", GroupPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
@@ -220,29 +191,24 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .post(
       "/route-schemes/:id/collection-groups",
-      describeRoute({
+      {
         operationId: "createCollectionGroup",
         summary: "Add a collection group to a route scheme",
         description:
           "Adds one collection group to the scheme the path names; the scheme says the project, so the body names neither. The name is unique within the scheme. The group finds its stops one way: `stopSource: rule` with a rule naming one or more waste fractions of this company, none or more container types of this company and, optionally, a vehicle type of this company, and no containers; or `stopSource: manual` with one or more containers of the scheme's project in stop order and no rule. The service provider, where given, is this company's; the vehicle a powered vehicle of the scheme's project; the driver one of that project's drivers — a retired vehicle, an inactive or a suspended driver is refused (409) naming the row and its status, after every 400, since a status gates a new reference — and where both are given, a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. " +
           CREW_THERE +
           " The group's days lie within the scheme's service days, and no container it picks may already be picked by another group of the scheme on a day both run — the entry is refused naming that group and the day. The position is where the group stands among the scheme's, after the last when absent; it is not unique, and the first rule group wins a container on a shared day. On a `validated` scheme the structural rules are re-run as the scheme would stand with the group — a rule group needs a planning area to match inside, no vehicle or driver is on two groups that run on a shared day, and a rule group's vehicle is of the vehicle type its stop rule asks for (O7 of #290) — and every sentence that fails is listed (409). The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: CollectionGroupCreate,
+        invalid: ["the body is missing a field, names a member the server owns, gives both a rule and containers or neither, runs on a day the scheme does not serve, picks a container another group runs on the same day, names a driver who may not take the group's vehicle, or names a waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong"],
         responses: {
           201: describeCreated("The collection group as it was written.", CollectionGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives both a rule and containers or neither, runs on a day the scheme does not serve, picks a container another group runs on the same day, names a driver who may not take the group's vehicle, or names a waste fraction, container type, vehicle type, container, service provider, vehicle or driver outside the scope its key allows — each at the entry that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
           409: describeProblem("The vehicle named is retired or out of use on the day the crew is judged, or the driver named is inactive, suspended or absent on it, the scheme already has a collection group with that name, or the scheme is `validated` and does not hold together with the group: the detail lists every structural sentence that fails, or the group is given no position and the last group stands at the last position a group can take."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", CollectionGroupCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const values = c.req.valid("json")
@@ -298,23 +264,19 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .get(
       "/collection-groups/:id",
-      describeRoute({
+      {
         operationId: "getCollectionGroup",
         summary: "One collection group",
         description:
           "One collection group of a project the caller works in, with its stop matching rule or its picked containers in stop order. A group of another company, or of a project this account does not work in, is a group that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The collection group.", CollectionGroup),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `route-studio.schemes`."),
           404: describeProblem("No collection group with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -326,29 +288,24 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .patch(
       "/collection-groups/:id",
-      describeRoute({
+      {
         operationId: "patchCollectionGroup",
         summary: "Change a collection group",
         description:
           "Changes the name, the position, the days, the service provider, the vehicle or the driver of one collection group; every field is optional and at least one must be given. The source, the rule and the picked list never move through a patch: the rule is `PUT /collection-groups/{id}/stop-matching-rule`, the list `PUT /collection-groups/{id}/containers`, and a group that should find its stops the other way is another group. A null clears the provider, the vehicle or the driver. A new vehicle is a powered vehicle of the scheme's project and a new driver one of its drivers; named afresh, the vehicle is not retired and the driver is active — refused (409) naming the row and its status, after every 400, since a status gates a new reference and never an existing one, so a group whose vehicle has since retired is renamed, moved and given a new driver like any other; a group left naming both names a driver who holds the licence class the vehicle requires on the day the scheme's period starts or today, whichever is later — refused at `driverId` with the reason. " +
           CREW_THERE +
           " New days lie within the scheme's service days, and may not put one of this group's containers on a day another group already picks it — refused at `days`, naming the container, the group and the day. `days: []` is a group that no longer runs — parked, it counts for nothing toward retiring its vehicle or setting its driver inactive, so un-parking it (days from `[]` to one or more) names the vehicle and the driver it stores afresh and holds them to the same status rule: a truck that retired under the parked group is refused (409) until the group is reassigned. On a `validated` scheme a change of days, vehicle or driver re-runs the structural rules — every service day still has a group, no vehicle or driver is on two groups that run on a shared day, and a rule group's vehicle is of the type its stop rule asks for — and every sentence that fails is listed (409); the name, the position and the provider change nothing those rules read. A patch that changes the group's `vehicleId`, `driverId` or `serviceProviderId` releases the hold on each of the group's routes the office moved by hand (`heldAt`, set by `assign` and `reschedule`), and one that takes a day from its `days` releases those whose own service day it was — one that only adds a day releases nothing — in the patch's transaction, so the next generation run brings them back to the group; a held route is a planned one, so nothing dispatched is touched, and the routes of the scheme's other groups keep theirs.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CollectionGroupPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the source, the rule and the containers included), runs on a day the scheme does not serve, puts a picked container on a day another group already picks it, names a driver who may not take the group's vehicle, or names a service provider that is not this company's, a vehicle that is not a powered vehicle of this project or a driver that is not this project's"],
         responses: {
           200: describeJson("The collection group as it now stands.", CollectionGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the source, the rule and the containers included), runs on a day the scheme does not serve, puts a picked container on a day another group already picks it, names a driver who may not take the group's vehicle, or names a service provider that is not this company's, a vehicle that is not a powered vehicle of this project or a driver that is not this project's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No collection group with that id in the projects this account works in."),
           409: describeProblem("A vehicle named afresh — in the body, or stored on a group the patch un-parks — is retired or out of use on the day the crew is judged, or a driver so named is inactive, suspended or absent on it, the scheme already has another collection group with that name, or the scheme is `validated` and would not hold together: the detail lists every structural sentence that fails."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CollectionGroupPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -413,27 +370,22 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .put(
       "/collection-groups/:id/stop-matching-rule",
-      describeRoute({
+      {
         operationId: "putCollectionGroupStopMatchingRule",
         summary: "Replace a collection group's stop matching rule",
         description:
           "Replaces the whole rule of a rule group with the one in the body: the waste fractions it matches (one or more, this company's), the container types it is restricted to (none or more, this company's) and the vehicle type it asks for (one of this company's, applied by generation through the type's compatibility set), or null. A manual group has no rule to replace, and asking is refused (409) rather than turned into a rule group. The three sets are replaced together under the scheme's row lock, and the group's `updatedAt` moves, since the rule is part of the group on the wire. On a `validated` scheme the structural rules are re-run — a rule group needs a planning area to match inside — and every sentence that fails is listed (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: StopMatchingRuleSet,
+        invalid: ["the body is missing a field, names a member it does not own, names a fraction or a type twice, or names a waste fraction, container type or vehicle type that is not this company's — at the entry that is wrong"],
         responses: {
           200: describeJson("The collection group with the rule it now has.", CollectionGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member it does not own, names a fraction or a type twice, or names a waste fraction, container type or vehicle type that is not this company's — at the entry that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No collection group with that id in the projects this account works in."),
           409: describeProblem("The group picks containers and has no stop matching rule, or the scheme is `validated` and has no planning area for a rule group to match inside."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", StopMatchingRuleSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const rule = c.req.valid("json")
@@ -460,27 +412,22 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
     )
     .put(
       "/collection-groups/:id/containers",
-      describeRoute({
+      {
         operationId: "putCollectionGroupContainers",
         summary: "Replace a collection group's picked containers",
         description:
           "Replaces the whole list of a manual group with the one in the body, in stop order: a container the body leaves out is not in the group afterwards, positions are 1..n in the body's order, and a manual group picks at least one. Every container is one of the scheme's project, named once, and none may already be picked by another group of the scheme on a day both run — the entry is refused naming that group and the day. A rule group's stops are matched and not picked, and asking is refused (409) rather than turned into a manual group. The list is replaced under the scheme's row lock, and the group's `updatedAt` moves, since the list is part of the group on the wire. On a `validated` scheme the structural rules are re-run and every sentence that fails is listed (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CollectionGroupContainersSet,
+        invalid: ["the body is missing `containerIds`, names a member it does not own, is empty or over two hundred, names a container twice, picks a container another group runs on the same day, or picks a container that is not of this project — at the entry that is wrong"],
         responses: {
           200: describeJson("The collection group with the containers it now picks.", CollectionGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `containerIds`, names a member it does not own, is empty or over two hundred, names a container twice, picks a container another group runs on the same day, or picks a container that is not of this project — at the entry that is wrong.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes`."),
           404: describeProblem("No collection group with that id in the projects this account works in."),
           409: describeProblem("The group matches by rule and its containers are not picked, or the scheme is `validated` and would not hold together: the detail lists every structural sentence that fails."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CollectionGroupContainersSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { containerIds } = c.req.valid("json")

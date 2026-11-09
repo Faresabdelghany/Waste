@@ -53,26 +53,21 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { invoiceDocumentInputOf } from "@waste/db/commands/invoice-document"
 import { billingRun, invoice, invoiceLine } from "@waste/db/schema/finance"
-import type { Action } from "@waste/domain/access/modules"
 import { invoiceDocumentOf } from "@waste/domain/finance/invoice-document"
 import { vatOf } from "@waste/domain/finance/money"
 import { and, asc, eq, gt, gte, inArray, lte, sum } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { issueInvoice, type LineDraft } from "@waste/db/commands/invoice-writes"
 import { invoiceColumns, invoiceDetailOf, invoiceOf, labelOf, linesOf, standingsOf, type InvoiceRow, type LineRow } from "@waste/db/shapes/invoices"
 import { lockRow } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { findInvoice, invoiceScope, noSuchInvoice } from "./billing-shapes"
 import { requireCustomer } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.invoices"
@@ -171,38 +166,34 @@ function creditedLines(creditable: readonly Creditable[], body: CreditNoteCreate
   return drafts.sort((a, b) => a.position - b.position).map(({ draft }) => draft)
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
+const problems = {
   404: describeProblem("No invoice with that id in the projects this account works in."),
-})
+}
 
-export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function invoiceRoutes(deps: RouteDeps) {
+  const { now } = deps
   /** How each document stands on its project's day (#291 C6), the clock read once for the request. */
   const standings = (tx: Tx, companyId: string, rows: readonly InvoiceRow[]) => {
     const at = now()
     return standingsOf(tx, companyId, rows, (projectId) => projectToday(tx, { companyId, projectId }, () => at)())
   }
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/invoices",
-      describeRoute({
+      {
         operationId: "listInvoices",
         summary: "The invoices and credit notes of the caller's projects",
         description:
           "One page of documents, oldest first (ids are time-ordered, so a cursor over them is a cursor over numbering order), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `kind` is `invoice` or `credit-note`; `customerId` one payer's documents, held to a customer of this company (400 on the query); `billingRunId` the invoices one run issued; `creditsInvoiceId` the credit notes naming one invoice; `from` and `to` a window over `issuedOn`, both inclusive (`to` on or after `from`). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: InvoiceListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in", "`customerId` is not a customer of this company"],
         responses: {
           200: describeJson("One page of documents.", InvoicePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `customerId` is not a customer of this company."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", InvoiceListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, kind, customerId, billingRunId, creditsInvoiceId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -234,21 +225,19 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .get(
       "/invoices/:id",
-      describeRoute({
+      {
         operationId: "getInvoice",
         summary: "One document with its lines and the credit notes naming it",
         description:
           "One invoice or credit note of a project the caller works in, as issued and never changed: the document, its lines by position — each charging for one billable event or crediting one line of the invoice it corrects, with the frozen text and the amounts as issued — and the credit notes that credit it, in numbering order (none on a credit note). A document of another company, or of a project this account does not work in, is a document that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The document, its lines and its credit notes.", InvoiceDetail),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
+          ...problems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -261,22 +250,20 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .get(
       "/invoices/:id/document",
-      describeRoute({
+      {
         operationId: "getInvoiceDocument",
         summary: "One document as its PDF",
         description:
           "The invoice or credit note as the file its payer is sent (#291 C5): A4, the seller and the payer as they stood when it was issued, its facts, its lines, the VAT per rate, its totals, and on an invoice how to pay it — the bank account and, under a FIK scheme, the FI card's code line. In Danish for a Danish project, in English otherwise. Made of the rows as issued, so the same document answers the same bytes, whose sha256 is the ETag; `If-None-Match` with it answers 304. Inline, named by the document's label.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: { description: "The PDF.", content: { "application/pdf": { schema: { type: "string" as const, format: "binary" } } } },
           304: { description: "The ETag named is the document's: nothing has changed, since nothing can." },
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
+          ...problems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -298,23 +285,22 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
     )
     .post(
       "/invoices/:id/credit-notes",
-      describeRoute({
+      {
         operationId: "createCreditNote",
         summary: "Issue a credit note against an invoice",
         description:
           "Issues an Invoice of `kind = credit-note` against an invoice of `kind = invoice` — a credit note is not credited (409, `A credit note is not credited; issue a new one against the invoice`) — with a `reason` and a `note`. Full, `lines: \"all\"`, credits every line by what remains of it after the credit notes already issued; partial, `lines: [{ lineId, quantity }]`, credits the named lines by the named quantities, each a line of this invoice (400 at `lines.N.lineId`, `Not a line of this invoice`), each once, and each at most what remains of it (400 at `lines.N.quantity`, `Only 2 of 5 remain to credit on line 3`); every refusal is listed in one 400. A reversal's line — negative, the consumer's correction of an invoiced pickup — already gives the charge back and is not credited: `\"all\"` leaves it out and a body naming it is refused (400 at `lines.N.lineId`). An invoice with nothing left to credit is refused (409, `Invoice INV-26007188 is fully credited`). Each credit line copies the original's text, product, service date, unit price and VAT rate, its `quantity` the credited one, its `netMinor` and `vatMinor` negative, `creditsLineId` the original; the lines follow the originals' positions. The credit note takes the next number of the company's series (`CN-<n>`), `issuedOn` today on the project's clock, `dueOn` the same day, its totals the lines' sums, zero or negative; `invoice-issued` is emitted with it in the same transaction, carrying the credit note with its lines as `GET /invoices/{id}` answers it. The events behind the credited lines stay `invoiced`: a credit corrects the document, not the occurrence, and what should have been charged instead is a new event. Under the row lock of the run that issued the invoice, since an invoice is a ledger row the API role may not lock; the quantities already credited are read underneath it, so two credit notes against one invoice take turns.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: CreditNoteCreate,
+        invalid: ["the body is missing the reason or the lines, names a member the server owns, names a line twice, names a line that is not this invoice's or is a reversal's, or credits more of a line than remains — each at the field that is wrong"],
         responses: {
           201: describeCreated("The credit note as issued, with its lines; read at `/invoices/{id}`.", InvoiceDetail),
-          400: describeProblem("The path does not hold an id, or the body is missing the reason or the lines, names a member the server owns, names a line twice, names a line that is not this invoice's or is a reversal's, or credits more of a line than remains — each at the field that is wrong."),
-          ...problems("create"),
+          ...problems,
           409: describeProblem("The document is a credit note, or the invoice is fully credited; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", CreditNoteCreate),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body: CreditNoteCreate = c.req.valid("json")

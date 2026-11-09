@@ -69,20 +69,18 @@ import { validOn } from "@waste/db/query/valid-on"
 import { planningAreasAt } from "@waste/db/query/zones"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate, refuseOverlap, type CheckRefusal } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.areas"
@@ -297,26 +295,24 @@ export async function planningAreaByCode(tx: Tx, principal: Principal, projectId
   return { area: areaOf(row), boundaries: versions.map(boundaryOf) }
 }
 
-export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function planningAreaRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/planning-areas",
-      describeRoute({
+      {
         operationId: "listPlanningAreas",
         summary: "The planning areas of the caller's projects",
         description:
           "One page of planning areas, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `purpose` narrows it to the areas registered for that purpose. An area carries no status: whether it is in force on a day is whether one of its boundaries is, which `GET /planning-area-boundaries?validOn=` answers. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PlanningAreaListQuery,
+        invalid: ["`purpose` is not one of the three", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of planning areas.", PlanningAreaPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `purpose` is not one of the three, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PlanningAreaListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, purpose } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -341,45 +337,37 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/planning-areas",
-      describeRoute({
+      {
         operationId: "createPlanningArea",
         summary: "Register a planning area",
         description:
           "Registers a planning area in one project, which must be a project the caller works in. The code is the stable reference the rest of the system quotes (`OP-CEN-01`) and is set once; the code and the name are each unique inside the project. `boundary` is the first version, written in the same transaction and answered beside the area (null when none was drawn), so the form that draws an area is one request and learns both ids from it; an area may also be registered first and drawn later through `POST /planning-areas/{id}/boundaries`. Two rules hold the polygon: the ring and the globe are the contracts' — a closed ring of four or more positions with three distinct, holes allowed, no altitude, every ordinate on the globe — refused before the database sees it; whether those rings make a valid polygon is PostGIS's (`st_isvalid`: a ring that crosses itself, a hole outside its shell, rings that touch along a line), refused by the database and answered as a 400 on `boundary.boundary`, \"Not a valid polygon\". The server mints the ids.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: PlanningAreaCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid, or gives a first boundary that ends on or before the day it starts"],
         responses: {
           201: describeCreated("The planning area as it was written, with the first boundary version beside it — null when the body drew none.", PlanningAreaCreated),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid, or gives a first boundary that ends on or before the day it starts.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.areas`."),
           409: describeProblem("The project already has a planning area with that code, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PlanningAreaCreate),
+      },
       async (c) => created(c, "/planning-areas", await createPlanningArea(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/planning-areas/containing",
-      describeRoute({
+      {
         operationId: "listPlanningAreasContaining",
         summary: "The planning areas holding a point on a day",
         description:
           "The address → zone read (O29 of #290) for a point that is no property yet, such as an address picked from the register: the areas of `projectId` whose boundary in force on `on` contains the point `lng`,`lat` (WGS 84), in code order. Two areas may overlap, so a point can sit in several; an area with no boundary in force on the day holds nothing. `on` defaults to today on the project's clock and `purpose` to `notification`, the citizens' zones. A property's own zones are `GET /properties/{id}/zones`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PlanningAreasContainingQuery,
+        invalid: ["`projectId` is missing or not a project this account works in, `lng` or `lat` is missing, not a decimal number or off the globe, `on` is not a day, or `purpose` is not one of the three"],
         responses: {
           200: describeJson("The areas holding the point on the day, in code order; none when no area holds it.", PlanningAreasAt),
-          400: describeProblem("`projectId` is missing or not a project this account works in, `lng` or `lat` is missing, not a decimal number or off the globe, `on` is not a day, or `purpose` is not one of the three."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PlanningAreasContainingQuery),
+      },
       async (c) => {
         const { projectId, lng, lat, on, purpose } = c.req.valid("query")
         const principal = c.get("principal")
@@ -393,23 +381,19 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/planning-areas/:id",
-      describeRoute({
+      {
         operationId: "getPlanningArea",
         summary: "One planning area",
         description:
           "One planning area of a project the caller works in. An area of another company, or of a project this account does not work in, is an area that does not exist here. Its boundary versions are `GET /planning-areas/{id}/boundaries`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The planning area.", PlanningArea),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
           404: describeProblem("No planning area with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findArea(c.get("tx"), c.get("principal"), id)
@@ -419,47 +403,41 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .patch(
       "/planning-areas/:id",
-      describeRoute({
+      {
         operationId: "patchPlanningArea",
         summary: "Amend a planning area",
         description:
           "Changes the name or the purpose of one planning area of a project the caller works in; every field is optional and at least one must be given. The code does not change: it is the reference a scheme, a service area or a report quotes, and an area that needs another code is another area. The project is not patchable, since a record does not move between projects, and the boundaries are versions with routes of their own.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PlanningAreaPatch,
+        invalid: ["the patch is empty or names a field the caller does not own (the code, the project and the boundaries included)"],
         responses: {
           200: describeJson("The planning area as it now stands.", PlanningArea),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own (the code, the project and the boundaries included)."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.areas`."),
           404: describeProblem("No planning area with that id in the projects this account works in."),
           409: describeProblem("The project already has another planning area with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PlanningAreaPatch),
+      },
       async (c) => c.json(await patchPlanningArea(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/planning-areas/:id/boundaries",
-      describeRoute({
+      {
         operationId: "listPlanningAreaBoundaries",
         summary: "One planning area's boundary versions",
         description:
           "One page of the area's boundary versions, oldest written first (ids are time-ordered; a client wanting the timeline sorts by `validFrom`). The path says the area, so the only filter is `validOn`: the version in force on that day, `validFrom` inclusive and `validTo` exclusive — at most one, since the versions of an area never overlap, and none on a day between two versions. An area of another company, or of a project this account does not work in, is an area that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PlanningAreaBoundaryVersionsQuery,
+        invalid: ["`validOn` is not a calendar day"],
         responses: {
           200: describeJson("One page of the area's boundary versions.", PlanningAreaBoundaryPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, the cursor is not one this API wrote, or `validOn` is not a calendar day."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
           404: describeProblem("No planning area with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PlanningAreaBoundaryVersionsQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, validOn: day } = c.req.valid("query")
@@ -485,47 +463,39 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .post(
       "/planning-areas/:id/boundaries",
-      describeRoute({
+      {
         operationId: "createPlanningAreaBoundary",
         summary: "Add a boundary version to a planning area",
         description:
           "Adds one version of the area's outline, in force over a half-open period: `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the version is still running. The area says the project, so the body names neither. One boundary of an area is in force at a time, so a period overlapping another version is refused (409) and a new version begins where the earlier one ends — end the earlier one first through `PATCH /planning-area-boundaries/{id}`. Two rules hold the polygon: the ring and the globe are the contracts' — a closed ring of four or more positions with three distinct, holes allowed, no altitude, every ordinate on the globe — refused before the database sees it; whether those rings make a valid polygon is PostGIS's (`st_isvalid`: a ring that crosses itself, a hole outside its shell, rings that touch along a line), refused by the database and answered as a 400 on `boundary`, \"Not a valid polygon\". The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        params: IdParam,
+        body: PlanningAreaBoundaryCreate,
+        invalid: ["the body is missing a field, names a member the server owns, ends on or before the day it starts, or holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid"],
         responses: {
           201: describeCreated("The boundary version as it was written.", PlanningAreaBoundary),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, ends on or before the day it starts, or holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.areas`."),
           404: describeProblem("No planning area with that id in the projects this account works in."),
           409: describeProblem("The planning area already has a boundary in force over part of that period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("param", IdParam),
-      validate("json", PlanningAreaBoundaryCreate),
+      },
       async (c) => created(c, "/planning-area-boundaries", await addPlanningAreaBoundary(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/planning-area-boundaries",
-      describeRoute({
+      {
         operationId: "listPlanningAreaBoundariesAcrossAreas",
         summary: "The boundary versions across the caller's projects' planning areas",
         description:
           "One page of boundary versions across the planning areas of the projects the caller works in, oldest written first (ids are time-ordered) — the map's Layers control reads the outlines in force today here in one request. An account that works in no project reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` narrows it to one area's versions. `validOn` asks for the versions in force on that day, `validFrom` inclusive and `validTo` exclusive: at most one per area. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PlanningAreaBoundaryListQuery,
+        invalid: ["`planningAreaId` is not an id", "`validOn` is not a calendar day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of boundary versions.", PlanningAreaBoundaryPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `planningAreaId` is not an id, `validOn` is not a calendar day, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PlanningAreaBoundaryListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, validOn: day } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -551,23 +521,19 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .get(
       "/planning-area-boundaries/:id",
-      describeRoute({
+      {
         operationId: "getPlanningAreaBoundary",
         summary: "One boundary version",
         description:
           "One boundary version of a planning area in a project the caller works in. A version of another company's area, or of a project this account does not work in, is a version that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The boundary version.", PlanningAreaBoundary),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
           404: describeProblem("No planning area boundary with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findBoundary(c.get("tx"), c.get("principal"), id)
@@ -577,27 +543,22 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
     )
     .patch(
       "/planning-area-boundaries/:id",
-      describeRoute({
+      {
         operationId: "patchPlanningAreaBoundary",
         summary: "End or redraw a boundary version",
         description:
           "Changes the end or the outline of one boundary version; every field is optional and at least one must be given. `validTo` ends the version on that day or, as null, reopens it; the start does not move, since a version begins where the earlier one ended, and the area and the project are not patchable. The end still comes after the stored start, which a body naming one bound cannot see by itself, and the period may not overlap another version of the area (409) — an end moved past the next version's start, or a version reopened under one, is refused. A redrawn polygon is held to the same two rules as a new one: the ring and the globe are the contracts', and whether the rings make a valid polygon is PostGIS's, refused by the database and answered as a 400 on `boundary`, \"Not a valid polygon\".",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PlanningAreaBoundaryPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the start, the area and the project included), ends on or before the stored start, or holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid"],
         responses: {
           200: describeJson("The boundary version as it now stands.", PlanningAreaBoundary),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the start, the area and the project included), ends on or before the stored start, or holds a polygon that is not a closed ring on the globe or that PostGIS calls invalid.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.areas`."),
           404: describeProblem("No planning area boundary with that id in the projects this account works in."),
           409: describeProblem("The planning area already has another boundary in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PlanningAreaBoundaryPatch),
+      },
       async (c) => c.json(await patchPlanningAreaBoundary(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }

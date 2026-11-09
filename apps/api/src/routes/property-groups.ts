@@ -38,17 +38,16 @@ import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { propertyGroup, propertyGroupMember } from "@waste/db/schema/customers"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import {
   entriesFor,
   entriesOf,
@@ -137,26 +136,23 @@ async function findGroup(tx: Tx, principal: Principal, id: string): Promise<Row 
   return row
 }
 
-export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function propertyGroupRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/property-groups",
-      describeRoute({
+      {
         operationId: "listPropertyGroups",
         summary: "The property groups the caller's projects hold",
         description:
           "One page of property groups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its members. `projectId` narrows it to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ProjectScopedListQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of property groups.", PropertyGroupPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.groups`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ProjectScopedListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -184,25 +180,20 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/property-groups",
-      describeRoute({
+      {
         operationId: "createPropertyGroup",
         summary: "Gather a property group",
         description:
           "Gathers properties into one group inside a project the caller works in. The name is unique inside the project and the status defaults to `draft`. The customer the group answers to, where given, must be this company's, and every member must be a property of this same project. `members` is the list the group starts with, so gathering a block is one request. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: PropertyGroupCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, names the same property twice, points at a customer that is not this company's, or gathers a property that is not of this project"],
         responses: {
           201: describeCreated("The property group as it was written.", PropertyGroup),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, names the same property twice, points at a customer that is not this company's, or gathers a property that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.groups`."),
           409: describeProblem("The project already has a property group with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PropertyGroupCreate),
+      },
       async (c) => {
         const { members: asked, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -224,23 +215,19 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/property-groups/:id",
-      describeRoute({
+      {
         operationId: "getPropertyGroup",
         summary: "One property group",
         description:
           "One property group of a project the caller works in, with its members. A group of another company, or of a project this account does not work in, is a group that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The property group.", PropertyGroup),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.groups`."),
           404: describeProblem("No property group with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -252,27 +239,22 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/property-groups/:id",
-      describeRoute({
+      {
         operationId: "patchPropertyGroup",
         summary: "Change a property group",
         description:
           "Changes one property group of a project the caller works in; every field is optional and at least one must be given. A null clears the customer the group answers to. The project is not patchable, since a record does not move between projects, and the members are a set, so they are `PUT /property-groups/{id}/members`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PropertyGroupPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project and the members included), or points at a customer that is not this company's"],
         responses: {
           200: describeJson("The property group as it now stands.", PropertyGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the members included), or points at a customer that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.groups`."),
           404: describeProblem("No property group with that id in the projects this account works in."),
           409: describeProblem("The project already has another property group with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PropertyGroupPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -299,26 +281,21 @@ export function propertyGroupRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/property-groups/:id/members",
-      describeRoute({
+      {
         operationId: "putPropertyGroupMembers",
         summary: "Replace a property group's members",
         description:
           "Replaces the whole membership with the one in the body: a property the body leaves out is not in the group afterwards, and an empty list is a group nobody is in. Every member must be a property of the group's own project, and a property is named at most once, since it is a member or it is not and the role says what kind. The record's `updatedAt` moves, since the members are part of the group on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PropertyGroupMembersSet,
+        invalid: ["the body is missing `members`, names a member it does not own, names the same property twice, or gathers a property that is not of this project"],
         responses: {
           200: describeJson("The property group with the members it now has.", PropertyGroup),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `members`, names a member it does not own, names the same property twice, or gathers a property that is not of this project.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.groups`."),
           404: describeProblem("No property group with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PropertyGroupMembersSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { members: asked } = c.req.valid("json")

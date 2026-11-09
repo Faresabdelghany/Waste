@@ -96,13 +96,9 @@ import { ACTIVE_VEHICLE_STATUSES, type VehicleStatus } from "@waste/domain/resou
 import { refuseUnless } from "@waste/domain/status-gates"
 import { count } from "@waste/domain/text"
 import { refuseUnavailableDriver } from "@waste/domain/resources/fleet"
-import type { RoutingIdentity } from "@waste/routing/provider"
 import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import type { JobSender } from "@waste/db/jobs"
 import { labelOf, routeColumns, routesOf, type RouteRow } from "@waste/db/shapes/routes"
 import { lockRow, lockRows, nextNumber } from "@waste/db/commands/shared"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
@@ -112,18 +108,20 @@ import { routeFitStops, vehicleLabel } from "@waste/db/commands/fleet-fit"
 import { handBackWindow } from "@waste/db/commands/route-holds"
 import { timeOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
-import { allows, requireGrant } from "../auth/require"
+import { allows } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, refusalOf, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
 import { detailOf, findReachedRoute, findRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
 import { findDriver, findVehicle, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
 import { requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
-import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
+import { findScheme, MODULE as SCHEMES_MODULE } from "./scheme-groups"
 import { askGenerationBestEffort } from "./generation"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
@@ -458,8 +456,6 @@ const ASSIGN_RULES =
   "The vehicle is a powered vehicle of the route's project, the trailer a trailer of it, the driver one of its drivers, the service provider one of this company's, the depot one of its depots, and the unloading station one of this company's that accepts at least one of the waste fractions the route's pickups carry (a route with no pickups yet names any station) — each refused (400) at its field. Where the route ends up naming both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason. Then, after every such 400, the statuses of what the body named afresh: a vehicle or a trailer that is not active — retired, unavailable or in maintenance, the rule a route's start holds — and an inactive or a suspended driver are refused (409) naming the row and its status, while a stored one the body did not move is not asked."
 
 const commandProblems = (action: "view" | "edit" | "crew") => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action === "view" ? "view" : "edit"}\` on \`${MODULE}\`.`),
   404: describeProblem(
     action === "edit"
       ? "No route with that id in the projects this account works in: a Service Provider's account reads the routes it runs and crews them through `assign` and `dispatch` alone."
@@ -581,26 +577,24 @@ export async function cancelLockedRoute(tx: Tx, principal: Principal, current: R
   return detail
 }
 
-export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingIdentity; jobs: JobSender }) {
-  return new Hono<AuthEnv>()
+export function routeRoutes(deps: RouteDeps) {
+  const { now, routing, jobs } = deps
+  return routes(deps)
     .get(
       "/routes",
-      describeRoute({
+      {
         operationId: "listRoutes",
         summary: "The dated routes of the caller's projects",
         description:
           "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the routes its provider runs: a route whose scheme plans inside a planning area of a Service Area assigned to the provider, the assignment and the area both in force on the route's operating date; the office's ad-hoc route and a route of a scheme with no planning area are no provider's. `projectId` narrows it to one of the caller's projects; naming another, or any from a provider's account, is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated — the office's ad-hoc route (#111) carries both null, and is answered by neither — `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: RouteListQuery,
+        invalid: ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of routes.", RoutePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", RouteListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, routeSchemeId, collectionGroupId, from, to, serviceDate, status, plannedDriverId, plannedVehicleId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -637,23 +631,20 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes",
-      describeRoute({
+      {
         operationId: "createRoute",
         summary: "Make an ad-hoc route",
         description:
           "The office's ad-hoc route (#111): a route with no scheme and no group — `routeSchemeId` and `collectionGroupId` null — on one of the caller's projects, running on `operatingDate`, which is its `serviceDate` too, `planned`, numbered from the company's route counter (`RC-1100`), with the depot, the unloading station, the planned vehicle and the planned driver where the body names them and the note it gives. No generation run reads it: it is never refreshed, cancelled or held, its stops are the ones `POST /routes/{id}/pickups` adds, and from here every command of a generated route moves it, `release-hold` excepted. The vehicle is a powered vehicle of the project, the driver one of its drivers, the depot one of its depots and the station one of this company's — each refused (400) at its field — and where the body names both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason; then, after every 400, a vehicle that is not active and an inactive or a suspended driver are refused (409) naming the row and its status, as `assign` refuses them, and then a vehicle out of use or a driver absent on the operating date (O6 of #290), naming the period. Then the day beyond the route (O7 of #290): a live allocation (`planned` or `confirmed`) whose window meets the operating date on the project's clock and reserves one of the route's crew with another of it — the vehicle with another driver, the driver with another vehicle — is refused (409, `WH-24 is allocated Mon 5 Oct 06:00–14:00 with Freja Holm; plan the route with the allocation's crew, or change the allocation first`); and the crew on another of the project's routes of the day that is planned, ready or active is judged by the two routes' spans — a new route has no measured Plan, so its span is not known —, each its start and its work as the route read weighs it (`shift`): a known overlap is refused (409) whatever the body says, spans apart are taken, and a span not known — no start, or no measured Plan — is refused (409, `… confirm the same day to plan WH-24 on both`) until the body says `acceptSameDay: true`, which never takes back a known overlap; the flag alone moves nothing. The `route-reassigned` event is written in the same transaction when the body names a driver or a vehicle, carrying the route as answered here, as `assign` writes it when either moves.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: RouteCreate,
+        invalid: ["the body is missing the project or the day, names a member the command does not take, names a project this account does not work in, or names a vehicle, driver, depot or station the rules above refuse — each at the field that is wrong"],
         responses: {
           201: describeCreated("The route, planned, with no stops yet.", RouteDetail),
-          400: describeProblem("The body is missing the project or the day, names a member the command does not take, names a project this account does not work in, or names a vehicle, driver, depot or station the rules above refuse — each at the field that is wrong."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("A vehicle the body names is not active or is out of use on the day, or a driver it names is inactive, suspended or absent on the day, is allocated that day with another crew, or is on another route of the day at once or without `acceptSameDay`; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", RouteCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -666,21 +657,19 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .get(
       "/routes/:id",
-      describeRoute({
+      {
         operationId: "getRoute",
         summary: "One route with its pickups, sessions and unloads",
         description:
           "One route of a project the caller works in, or one a Service Provider's account runs (as `GET /routes` reaches it), as it now stands: the route with its `progress`, its pickups by position, the open session or null, every session oldest first, and its unloads oldest first. A route of another company, or one outside that reach, is a route that does not exist here. What the device said is `GET /routes/{id}/commands`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The route and what hangs off it.", RouteDetail),
-          400: describeProblem("The path does not hold an id."),
           ...commandProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -692,7 +681,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/:id/assign",
-      describeRoute({
+      {
         operationId: "assignRoute",
         summary: "Move a route's Planned Assignment",
         description:
@@ -703,20 +692,17 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           " " +
           HOLDS +
           " The `route-reassigned` event is written in the same transaction when the driver, the vehicle or the service provider moved, carrying the route as answered here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteAssign,
+        invalid: ["the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong"],
         responses: {
           200: describeJson("The route as it now stands.", RouteDetail),
-          400: describeProblem(
-            "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong.",
-          ),
           ...commandProblems("crew"),
           409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or is out of use on the operating date, or a driver named afresh is inactive, suspended or absent on it, the crew is allocated that day with another, a crew member named afresh is on another route of the day at once or without `acceptSameDay`, or a vehicle named afresh cannot serve the route's open stops; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteAssign),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -799,22 +785,19 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/dispatch",
-      describeRoute({
+      {
         operationId: "dispatchRoutes",
         summary: "Dispatch a day of routes, or a selection",
         description:
           "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, one whose planned crew is away on its day (O6 of #290: a driver absent, a vehicle or trailer out of use), an active, completed or cancelled one, and an id that is not a route of the caller's projects — for a Service Provider's account, a route its provider does not run, or one crewed by anyone else's fleet — are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        body: RouteDispatchMany,
+        invalid: ["the body names no route, more than fifty, one twice, or a member the command does not take"],
         responses: {
           200: describeJson("One result per route, in the body's order: dispatched with the route, or refused with the status and why.", RouteDispatchResults),
-          400: describeProblem("The body names no route, more than fifty, one twice, or a member the command does not take."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("json", RouteDispatchMany),
+      },
       async (c) => {
         const { routeIds } = c.req.valid("json")
         const tx = c.get("tx")
@@ -839,22 +822,20 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/:id/dispatch",
-      describeRoute({
+      {
         operationId: "dispatchRoute",
         summary: "Dispatch a route to its driver",
         description:
           "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A planned driver absent, or a planned vehicle or trailer out of use, on the operating date (O6 of #290) — a period recorded after the assign — is refused (409) naming the period: the route goes out with a crew that is there. A Service Provider's account dispatches a route its provider runs (as `GET /routes` reaches it) to its own crew alone: a planned driver and a planned vehicle of its provider's, and the trailer where named, or the command is refused (409, `Route RC-1042's planned driver is not NordRen ApS's; assign one of yours first`). A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
         responses: {
           200: describeJson("The route, dispatched.", RouteDetail),
-          400: describeProblem("The path does not hold an id."),
           ...commandProblems("crew"),
           409: describeProblem("The route has no planned driver, its planned driver is absent or its planned vehicle or trailer out of use on the operating date, it is already active, or it is completed or cancelled, or — from a provider's account — its planned driver, vehicle or trailer is not the provider's; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         return c.json(await dispatchRoute(c.get("tx"), c.get("principal"), id, now()))
@@ -862,25 +843,24 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/:id/reschedule",
-      describeRoute({
+      {
         operationId: "rescheduleRoute",
         summary: "Move the day a route runs, or its start",
         description:
           "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. A planned vehicle or trailer out of use, or a planned driver absent, on the new day (O6 of #290) is refused (409) naming the period, and the override below never takes that back. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. Then the day beyond the route on a new day or start (O7 of #290): a live allocation (`planned` or `confirmed`) whose window meets a new operating date on the project's clock and reserves one of the route's crew with another of it — the vehicle with another driver or trailer, the driver or the trailer with another vehicle — is refused (409, `WH-24 is allocated Mon 5 Oct 06:00–14:00 with Freja Holm; plan the route with the allocation's crew, or change the allocation first`); and the crew on another of the project's routes of the day that is planned, ready or active is judged by the two routes' spans, each its start and its work as the route read weighs it (`shift`): a known overlap is refused (409) whatever the body says, spans apart are taken, and a span not known — no start, or no measured Plan — is refused (409, `… confirm the same day to plan WH-24 on both`) until the body says `acceptSameDay: true`, which never takes back a known overlap; the flag alone moves nothing. A route carrying a planned bulky collection (O11 of #290) does not move off its day, which the customer booked (409, naming how many; take their stops off first). A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
           HOLDS +
           " Under the route's row lock.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteReschedule,
+        invalid: ["the body changes nothing, names a member the command does not take, or moves the day to one the planned driver may not take the planned vehicle on"],
         responses: {
           200: describeJson("The route as it now stands.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the command does not take, or moves the day to one the planned driver may not take the planned vehicle on."),
           ...commandProblems("edit"),
           409: describeProblem("The route is active, completed or cancelled, the crew it names is away on the new day, allocated that day with another crew, or on another route of the day at once or without `acceptSameDay`, or the body moves it onto a holiday or a weekend day it does not run on without saying so; the detail says which."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteReschedule),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -923,23 +903,22 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/:id/release-hold",
-      describeRoute({
+      {
         operationId: "releaseRouteHold",
         summary: "Hand a held route back to its scheme",
         description:
           "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment — the operating date alone kept where the route carries a planned bulky collection, booked for its day (O11 of #347). The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held, and the office's ad-hoc route, which has no scheme to hand it back to (#111). Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteReleaseHold,
+        invalid: ["the body names a member: the command takes none"],
         responses: {
           200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body names a member: the command takes none."),
           ...commandProblems("edit"),
           409: describeProblem("The route is planned and not held, is past `planned` (ready, active, completed or cancelled), where no hold stands, or is the office's ad-hoc route, which is never held."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteReleaseHold),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -963,23 +942,22 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .post(
       "/routes/:id/cancel",
-      describeRoute({
+      {
         operationId: "cancelRoute",
         summary: "Cancel a route",
         description:
           "The `cancel` command: a `planned`, `ready` or `active` route becomes `cancelled` with the body's reason code as its `cancelReasonCode` — one of the office's eight (O5 of #290; `regeneration` is a generation run's to write) — the free reason as its `note`, and `cancelledAt` stamped; every `planned` pickup of it is closed as `skipped` with the reason `route-cancelled` and its `outcomeAt`, since nobody will attempt it, and an open session is ended, since the route is no longer being driven. A pickup with an outcome already keeps it. A hold on the route (`heldAt`) is cleared, since a hold is a planned route's; generation's own cancel of a route the scheme no longer runs clears it the same way, so a route generation cancelled and later brings back returns to its scheme's day, start and Planned Assignment, not to what the office had held. A completed route does not change (409); one already cancelled answers 200 as it stands, without a write. Under the route's row lock; the `route-cancelled` event and one `pickup-skipped` per pickup closed are written in the same transaction.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: RouteCancel,
+        invalid: ["the body has no reason code of the office's, no reason, or carries a member the command does not take"],
         responses: {
           200: describeJson("The route, cancelled, with its pickups as the cancellation left them.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body has no reason code of the office's, no reason, or carries a member the command does not take."),
           ...commandProblems("edit"),
           409: describeProblem("The route is completed and does not change."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", RouteCancel),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reasonCode, reason } = c.req.valid("json")
@@ -994,24 +972,23 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .put(
       "/routes/:id/pickup-order",
-      describeRoute({
+      {
         operationId: "putRoutePickupOrder",
         summary: "Reorder a route's stops",
         description:
           "The dispatcher's order becomes a `manual` Plan (#170, decided on #124): the body names every `planned` pickup of the route exactly once, in the order they will be visited, and that sequence is written as a Plan, made the route's active one, and sent for measurement — the fake or the provider answers its legs and totals on the worker, never on this request. `pickup.position`, the generated baseline, is never rewritten (ADR-0002), so the next generation run cannot undo the dispatcher; the route's read orders by `sequence`, the active Plan's word. An identical order already measured is re-activated and consumes no provider call; one still measuring is answered as it stands. One left out, or one named that is not an open pickup of this route, is refused (400 at `pickupIds`) counting both. A route that has started is refused (409): the sequence is frozen once a session has started (ADR-0002); a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since the order is part of the route on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PickupOrderSet,
+        invalid: ["the body is missing `pickupIds`, names a member it does not own, names a pickup twice, or is not exactly the route's open pickups"],
         responses: {
           200: describeJson("The route with its pickups in the new order, the manual Plan active and measuring.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body is missing `pickupIds`, names a member it does not own, names a pickup twice, or is not exactly the route's open pickups."),
           ...commandProblems("edit"),
           409: describeProblem("The route is active, completed or cancelled."),
           503: describeProblem("No worker has started on this database yet, so the routing queue is not there to send the order's measurement to; nothing was written."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PickupOrderSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { pickupIds } = c.req.valid("json")
@@ -1043,22 +1020,20 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
     )
     .get(
       "/routes/:id/commands",
-      describeRoute({
+      {
         operationId: "listRouteCommands",
         summary: "What the device said on a route",
         description:
           "One page of the route's command receipts, oldest first — a cursor over time-ordered ids is a cursor over the order the commands were received in — each carrying the command as the device sent it, verbatim, and what became of it: `applied`, or `rejected` with the problem the server answered. The dispatcher's log of what the device said, rejections included; nothing here is ever updated or removed. A route of another company, or one outside the caller's reach — its projects, or the routes a Service Provider's account runs, as `GET /routes` reaches them — is a route that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PageRequest,
         responses: {
           200: describeJson("One page of the route's command receipts, oldest first.", ReceiptPage),
-          400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
           ...commandProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PageRequest),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")

@@ -11,12 +11,11 @@ import { driverCommand, outboxEvent, proofOfService, session as sessionTable, se
 import { withCompany } from "@waste/db/tenant"
 import { objectKeyOf } from "@waste/domain/storage-objects"
 import type { DriverCommandKind } from "@waste/domain/execution/vocabulary"
-import { FakeProvider } from "@waste/routing/fake"
 import { and, asc, count, eq, isNull } from "drizzle-orm"
 import { Hono } from "hono"
 
 import { type createApp } from "../app"
-import { authenticate } from "../auth/principal"
+import { routeDeps } from "../deps"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
 import { routeRoutes } from "../routes/routes"
@@ -118,11 +117,11 @@ export function driverDoor({ now, logged }: { now: () => Date; logged: unknown[]
     const fixtures = await seedDriverFixtures(pool, a, fleet)
     const theirFixtures = await seedDriverFixtures(pool, b, theirFleet)
     // The door under test, mounted with its own log so the two things it notes can be read, beside the office's route commands (routes/routes.ts) for the cancel that clears the yard between tests and the one a test sends mid-route; the whole app is what app.test.ts documents.
-    const guard = authenticate({ pool, verifier: keys.verifier })
+    const deps = routeDeps({ probe: pool, pool, verifier: keys.verifier, now, log: (entry) => logged.push(entry), jobs: createJobSender(pool) })
     const mounted = new Hono()
     mounted.onError(errorHandler())
-    mounted.route("/", driverDoorRoutes(guard, { now, log: (entry) => logged.push(entry), jobs: createJobSender(pool) }))
-    mounted.route("/", routeRoutes(guard, { now, routing: new FakeProvider(), jobs: createJobSender(pool) }))
+    mounted.route("/", driverDoorRoutes(deps).app)
+    mounted.route("/", routeRoutes(deps).app)
     const app = mounted as unknown as ReturnType<typeof createApp>
     held.current = {
       pool,

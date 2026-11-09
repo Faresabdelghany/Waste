@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ALERT_COMMANDS, ALERT_DOES_NOT_CHANGE, alertTransition, closedTicket, TICKET_COMMAND_TARGETS, ticketTransition, type AlertCommand } from "../transitions"
+import { ALERT_COMMANDS, ALERT_DOES_NOT_CHANGE, alertLinkRefusal, alertTransition, closedTicket, TICKET_COMMAND_TARGETS, ticketTransition, type AlertCommand } from "../transitions"
 import type { Transition } from "../../machine"
 import { ALERT_STATUSES, type AlertStatus, CLOSED_TICKET_STATUSES, OPEN_TICKET_STATUSES, TICKET_COMMANDS, TICKET_STATUSES, type TicketCommand, type TicketStatus } from "../vocabulary"
 
@@ -140,5 +140,13 @@ describe("alertTransition", () => {
     assert.deepEqual(alertTransition("acknowledged", "acknowledge"), { kind: "stay" })
     assert.deepEqual(alertTransition("resolved", "resolve"), { kind: "stay" })
     assert.deepEqual(alertTransition("resolved", "acknowledge"), { kind: "refuse", sentence: "This alert is resolved and does not change" })
+  })
+
+  test("a link is refused on exactly the statuses the machine refuses a change on, in the machine's sentence", () => {
+    for (const status of ALERT_STATUSES) {
+      const refusals = ALERT_COMMANDS.map((command) => alertTransition(status, command)).flatMap((move) => (move.kind === "refuse" ? [move.sentence] : []))
+      assert.equal(alertLinkRefusal(status), refusals[0], status)
+    }
+    assert.equal(alertLinkRefusal("resolved"), ALERT_DOES_NOT_CHANGE)
   })
 })

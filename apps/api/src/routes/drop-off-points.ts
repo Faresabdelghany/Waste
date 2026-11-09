@@ -33,17 +33,16 @@ import { wasteFraction } from "@waste/db/schema/catalogue"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf, timeOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { requireEachOf } from "./id-sets"
 import { pointInvalid } from "./place-rules"
 import { requireWasteFraction } from "./references"
@@ -248,26 +247,23 @@ const SET_ROUTES = [
   },
 ] as const
 
-export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  const routes = new Hono<AuthEnv>()
+export function dropOffPointRoutes(deps: RouteDeps) {
+  const declared = routes(deps)
     .get(
       "/drop-off-points",
-      describeRoute({
+      {
         operationId: "listDropOffPoints",
         summary: "The drop-off points of the caller's projects",
         description:
           "One page of drop-off points, oldest first (ids are time-ordered), from the projects the caller works in, each with its fractions, hours and exceptions. `projectId` narrows it to one of those projects; naming another is refused. `status` and `kind` narrow it further. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: DropOffPointListQuery,
+        invalid: ["`projectId` is not a project this account works in", "`status` or `kind` is not one of its values"],
         responses: {
           200: describeJson("One page of drop-off points with their sets.", DropOffPointPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `projectId` is not a project this account works in, or `status` or `kind` is not one of its values."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.drop-off-points`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", DropOffPointListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status, kind } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -296,25 +292,20 @@ export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/drop-off-points",
-      describeRoute({
+      {
         operationId: "createDropOffPoint",
         summary: "Register a drop-off point",
         description:
           "Registers a drop-off point in a project the caller works in. The code is the stable reference a person quotes (`GS-AMAGER`) and is set once; the code and the name are each unique inside the project. The location is required — the public map draws it — and one off the globe is refused. `kind` is `recycling-centre` or `bring-bank`. `openAlways` marks a point with no hours and `closedOnHolidays` closes it on the project's holidays; both default to false. The status defaults to `draft`: a point reaches the public map when it is made `active`. The body may carry the sets it starts with — `wasteFractionIds`, each a waste fraction of this company; `hours`; `exceptions` — judged as their own routes judge them, each empty when absent. `notes` are the office's own and never public; `publicNote` is shown on the map. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: DropOffPointCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project the caller does not work in, holds a point off the globe, names the same fraction twice or one that is not this company's, or holds hours or exceptions the rules refuse"],
         responses: {
           201: describeCreated("The drop-off point as it was written, with its sets.", DropOffPointSchema),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project the caller does not work in, holds a point off the globe, names the same fraction twice or one that is not this company's, or holds hours or exceptions the rules refuse.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.drop-off-points`."),
           409: describeProblem("The project already has a drop-off point with that code, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", DropOffPointCreate),
+      },
       async (c) => {
         const { wasteFractionIds, hours, exceptions, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -338,22 +329,18 @@ export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/drop-off-points/:id",
-      describeRoute({
+      {
         operationId: "getDropOffPoint",
         summary: "One drop-off point",
         description: "One drop-off point of the caller's projects, with its fractions, hours and exceptions.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The drop-off point with its sets.", DropOffPointSchema),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.drop-off-points`."),
           404: describeProblem("No drop-off point with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -365,25 +352,22 @@ export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/drop-off-points/:id",
-      describeRoute({
+      {
         operationId: "patchDropOffPoint",
         summary: "Change a drop-off point",
         description:
           "Changes one drop-off point of the caller's projects; every field is optional and at least one must be given. The location may move but not be cleared. Making the point `active` puts it on the public map of a published project; `closed` takes it off. The project and the code do not change, and the sets are their own routes.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: DropOffPointPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project, the code and the sets included), or holds a point off the globe"],
         responses: {
           200: describeJson("The drop-off point as it now stands, with its sets.", DropOffPointSchema),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the project, the code and the sets included), or holds a point off the globe."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.drop-off-points`."),
           404: describeProblem("No drop-off point with that id in the projects this account works in."),
           409: describeProblem("The project already has another drop-off point with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", DropOffPointPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -405,25 +389,22 @@ export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
 
   for (const set of SET_ROUTES) {
-    routes.put(
+    declared.put(
       `/drop-off-points/:id/${set.path}`,
-      describeRoute({
+      {
         operationId: set.operationId,
         summary: set.summary,
         description: set.description,
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: set.schema,
+        invalid: [`the body is missing \`${set.key}\`, names a member it does not own, or holds a set the rules refuse`],
         responses: {
           200: describeJson("The drop-off point with the set it now has.", DropOffPointSchema),
-          400: describeProblem(`The path does not hold an id, or the body is missing \`${set.key}\`, names a member it does not own, or holds a set the rules refuse.`),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.drop-off-points`."),
           404: describeProblem("No drop-off point with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", set.schema),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json") as Partial<Sets>
@@ -441,5 +422,5 @@ export function dropOffPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
       },
     )
   }
-  return routes
+  return declared
 }

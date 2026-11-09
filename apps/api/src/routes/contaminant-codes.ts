@@ -17,18 +17,14 @@ import {
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { contaminantCode, contaminantCodeFraction } from "@waste/db/schema/pickup-exceptions"
-import type { Action } from "@waste/domain/access/modules"
 import { and, asc, eq, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -78,30 +74,23 @@ async function findCode(tx: Tx, companyId: string, id: string): Promise<Row | un
   return row
 }
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function contaminantCodeRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function contaminantCodeRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/contaminant-codes",
-      describeRoute({
+      {
         operationId: "listContaminantCodes",
         summary: "The company's contaminant codes",
         description:
           "One page of the codes the company tags the wrong waste in a bin with, oldest first (ids are time-ordered), each with the fractions it applies to — none is every fraction. `status` narrows the page to the active or the retired. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ContaminantCodeListQuery,
+        invalid: ["the status is not one of the two"],
         responses: {
           200: describeJson("One page of contaminant codes.", ContaminantCodePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or the status is not one of the two."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ContaminantCodeListQuery),
+      },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -120,22 +109,20 @@ export function contaminantCodeRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/contaminant-codes",
-      describeRoute({
+      {
         operationId: "createContaminantCode",
         summary: "Add a contaminant code",
         description:
           "Adds a code to the company's own list. `code` is the stable slug reports and integrations quote, set once and lowercase; `name` is what a person reads; both are unique inside the company. `status` is `active` unless said. `wasteFractionIds` are the fractions it applies to, each a waste fraction of this company (400 at `wasteFractionIds.N`) named once; none is every fraction. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ContaminantCodeCreate,
+        invalid: ["the body is missing a field, holds a value of the wrong shape, names a member the server owns, names a fraction twice, or names a waste fraction that is not this company's"],
         responses: {
           201: describeCreated("The contaminant code as it was written.", ContaminantCode),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names a member the server owns, names a fraction twice, or names a waste fraction that is not this company's."),
-          ...commonProblems("create"),
           409: describeProblem("The company already has a contaminant code with that code, or with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ContaminantCodeCreate),
+      },
       async (c) => {
         const { wasteFractionIds, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -153,21 +140,18 @@ export function contaminantCodeRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/contaminant-codes/:id",
-      describeRoute({
+      {
         operationId: "getContaminantCode",
         summary: "One contaminant code",
         description: "One code of the caller's company, with the fractions it applies to. Another company's code is a code that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The contaminant code.", ContaminantCode),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No contaminant code with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -179,24 +163,22 @@ export function contaminantCodeRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/contaminant-codes/:id",
-      describeRoute({
+      {
         operationId: "patchContaminantCode",
         summary: "Rename or retire a contaminant code",
         description:
           "Changes the name a person reads, or the status: `inactive` retires the code from new tags while every stop tagged with it keeps it. The code is not patchable — it is the slug reports quote, and a code that needs another one is another code — and the fractions are a set, so they are `PUT /contaminant-codes/{id}/fractions`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ContaminantCodePatch,
+        invalid: ["the patch is empty or names a field the caller does not own, the code and the fractions included"],
         responses: {
           200: describeJson("The contaminant code as it now stands.", ContaminantCode),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own, the code and the fractions included."),
-          ...commonProblems("edit"),
           404: describeProblem("No contaminant code with that id in this company."),
           409: describeProblem("The company already has another contaminant code with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ContaminantCodePatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -216,23 +198,21 @@ export function contaminantCodeRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/contaminant-codes/:id/fractions",
-      describeRoute({
+      {
         operationId: "putContaminantCodeFractions",
         summary: "Replace the fractions a contaminant code applies to",
         description:
           "Replaces the whole set with the one in the body: an empty list is a code for every fraction. Every id is a waste fraction of this company (400 at `wasteFractionIds.N` otherwise), each named once (400 on `wasteFractionIds`). The code's `updatedAt` moves, since the set is part of the code on the wire. A stop already tagged keeps its tag whatever the set now says: the set gates a new tag (`POST /pickups/{id}/correct-outcome`).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ContaminantCodeFractionsSet,
+        invalid: ["the body is missing `wasteFractionIds`, names a member it does not own, names a fraction twice, or names a waste fraction that is not this company's"],
         responses: {
           200: describeJson("The contaminant code with the fractions it now applies to.", ContaminantCode),
-          400: describeProblem("The path does not hold an id, or the body is missing `wasteFractionIds`, names a member it does not own, names a fraction twice, or names a waste fraction that is not this company's."),
-          ...commonProblems("edit"),
           404: describeProblem("No contaminant code with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ContaminantCodeFractionsSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { wasteFractionIds } = c.req.valid("json")

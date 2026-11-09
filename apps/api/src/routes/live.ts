@@ -30,20 +30,16 @@ import { proofOfService, route, session } from "@waste/db/schema/execution"
 import { todayOnClock } from "@waste/db/query/project-clock"
 import { project } from "@waste/db/schema/organisation"
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { progressByRoute, progressFor, routeColumns, routeOf } from "@waste/db/shapes/routes"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
+import { describeProblem } from "../problem"
 import { noSuchSession, openSessionsByRoute, routeScope, sessionColumns, sessionOf, sessionScope } from "./execution-shapes"
 import { activePlansByRoute } from "./plan-shapes"
 import { liveEtaOf, newestPositionsBySession } from "./positions"
 import { requireRoute } from "./references"
-import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.live"
@@ -62,26 +58,24 @@ async function lastLocationsByRoute(tx: Tx, companyId: string, routeIds: readonl
   return new Map(rows.flatMap((row) => (row.location === null ? [] : [[row.routeId, row.location as FlatPoint] as const])))
 }
 
-export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function liveRoutes(deps: RouteDeps) {
+  const { now } = deps
+  return routes(deps)
     .get(
       "/routes/live",
-      describeRoute({
+      {
         operationId: "listLiveRoutes",
         summary: "The routes running or due today",
         description:
           "One page of the routes the live dashboard watches, oldest first (ids are time-ordered): every `active` route of the projects the caller works in, and every `ready` one whose operating date is today on its project's clock — the request's instant rendered in `project.timezone`, so a route due tomorrow in Copenhagen may already be due today in Cairo. `projectId` narrows it to one of those projects; naming another is refused. Each row is the route with its progress, its open `session` or null for a route due today that has not started, `paused` (whether that session is paused), `lastSeenAt` (when the device last uploaded), `lastLocation` (the latest point a proof of the route carried, or null), `lastPosition` (the open session's newest position the Driver App recorded, or null) and `eta` (the first stop still to come with its estimate and when the trip is expected to end, as `GET /routes/:id/eta` reads them; null for a route without an active Plan). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: LiveRouteQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of live routes.", LivePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", LiveRouteQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -139,22 +133,19 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .get(
       "/sessions",
-      describeRoute({
+      {
         operationId: "listSessions",
         summary: "The driver sessions of the caller's projects",
         description:
           "One page of sessions, oldest first (ids are time-ordered, minted by the device when it started the route), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's sessions, and must be a route of a project this account works in (400 on the query); `driverId` one driver's; `open=true` the sessions still running and `open=false` the ended ones, absent being both. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: SessionListQuery,
+        invalid: ["`open` is not `true` or `false`", "`projectId` is not a project this account works in", "`routeId` is not a route of one"],
         responses: {
           200: describeJson("One page of sessions.", SessionPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `open` is not `true` or `false`, `projectId` is not a project this account works in, or `routeId` is not a route of one."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", SessionListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, routeId, driverId, open } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -182,23 +173,19 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
     )
     .get(
       "/sessions/:id",
-      describeRoute({
+      {
         operationId: "getSession",
         summary: "One driver session",
         description:
           "One session of a project the caller works in, as it now stands: the route, the driver, the vehicle and trailer that went out, the device, when it started and ended, whether it is paused, and when the device was last seen. A session of another company, or of a project this account does not work in, is a session that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The session.", Session),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
           404: describeProblem("No session with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

@@ -62,17 +62,16 @@ import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { and, asc, eq, exists, gt, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, problem } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
@@ -180,26 +179,23 @@ const accepting = (companyId: string, wasteFractionId: string) =>
     sql`(select 1 from ${unloadingStationFraction} where ${unloadingStationFraction.companyId} = ${companyId} and ${unloadingStationFraction.unloadingStationId} = ${unloadingStation.id} and ${unloadingStationFraction.wasteFractionId} = ${wasteFractionId})`,
   )
 
-export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function unloadingStationRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/unloading-stations",
-      describeRoute({
+      {
         operationId: "listUnloadingStations",
         summary: "The company's unloading stations",
         description:
           "One page of the company's unloading stations, oldest first (ids are time-ordered), each with `wasteFractionIds`, what it accepts, by id. A station is the company's and serves every project, so there is no `projectId` to narrow by; an account that works in no project of the company, such as a service provider's, reads an empty page, since where the company unloads is not its to see until step 7. `status` narrows it to the stations in that state and `wasteFractionId` to the stations that accept that fraction, which must be a waste fraction of this company (400 on the query). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: UnloadingStationListQuery,
+        invalid: ["`status` is not one of the four", "`wasteFractionId` is not a waste fraction of this company"],
         responses: {
           200: describeJson("One page of unloading stations, each with its fractions.", UnloadingStationPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the four, or `wasteFractionId` is not a waste fraction of this company."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.depots`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", UnloadingStationListQuery),
+      },
       async (c) => {
         const { limit, cursor, status, wasteFractionId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -229,25 +225,21 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/unloading-stations",
-      describeRoute({
+      {
         operationId: "createUnloadingStation",
         summary: "Register an unloading station",
         description:
           "Registers an unloading station for the company — a station serves every project, so the body names none, and an account that works in no project of the company may not register one (403). The code is the stable reference a person quotes (`ARC-AMAGER`) and is set once; the code and the name are each unique inside the company. The location is required — a route empties at a point — and one off the globe is refused before the database sees it. The ownership has no default, since the plant the company delivers to (`external`) is as common as its own; the owning service provider is named with `service-provider` ownership and with nothing else, this company's (400 on `serviceProviderId`). The opening hours are two times, both or neither (400 on `closesAt`); an overnight window is allowed. `weighbridge` says whether the station weighs what is delivered and defaults to false; the tickets themselves are Execution's. `transfer` says whether it is a transfer station, which holds what is tipped there and sends it on in outbound loads (M17 of #293), and defaults to false. `wasteFractionIds` is what the station starts out accepting, each a waste fraction of this company (400 at `wasteFractionIds.N` otherwise) and each named once, none when absent. The status defaults to `active`. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: UnloadingStationCreate,
+        invalid: ["the body is missing a field, names a member the server owns, holds a point off the globe, names a provider without service-provider ownership or none with it, gives one opening time without the other, names the same fraction twice, or names a service provider or a waste fraction that is not this company's"],
         responses: {
           201: describeCreated("The unloading station as it was written, with its fractions by id.", UnloadingStation),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, holds a point off the globe, names a provider without service-provider ownership or none with it, gives one opening time without the other, names the same fraction twice, or names a service provider or a waste fraction that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, the caller's role does not allow `create` on `resources.depots`, or the account works in no project of the company and so reaches no station."),
           409: describeProblem("The company already has an unloading station with that code, or one with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", UnloadingStationCreate),
+      },
       async (c) => {
         const { wasteFractionIds, ...values } = c.req.valid("json")
         const tx = c.get("tx")
@@ -270,23 +262,19 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/unloading-stations/:id",
-      describeRoute({
+      {
         operationId: "getUnloadingStation",
         summary: "One unloading station",
         description:
           "One unloading station of the caller's company, with the fractions it accepts. Another company's station is a station that does not exist here, and so is every station to an account that works in no project of the company.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The unloading station, with its fractions by id.", UnloadingStation),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `resources.depots`."),
           404: describeProblem("No unloading station with that id in this company, or none this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -298,27 +286,22 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/unloading-stations/:id",
-      describeRoute({
+      {
         operationId: "patchUnloadingStation",
         summary: "Change an unloading station",
         description:
           "Changes one unloading station of the caller's company; every field is optional and at least one must be given. The location may move but not be cleared, since a route empties at a point; a null clears the provider, the hours or the notes. The patch is held against the stored row, so a change that would leave the station naming a provider without service-provider ownership, or none with it, or with one opening time and not the other, is refused in the same words as on a create. The code does not change: it is the reference the schemes quote, and a station that needs another code is another station. The fractions are a set, so they are `PUT /unloading-stations/{id}/fractions`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: UnloadingStationPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the code and the fractions included), holds a point off the globe, would leave the ownership and the provider disagreeing or one opening time without the other, or names a service provider that is not this company's"],
         responses: {
           200: describeJson("The unloading station as it now stands, with its fractions.", UnloadingStation),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the code and the fractions included), holds a point off the globe, would leave the ownership and the provider disagreeing or one opening time without the other, or names a service provider that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.depots`."),
           404: describeProblem("No unloading station with that id in this company, or none this account reaches."),
           409: describeProblem("The company already has another unloading station with that name."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", UnloadingStationPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -352,26 +335,21 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .put(
       "/unloading-stations/:id/fractions",
-      describeRoute({
+      {
         operationId: "putUnloadingStationFractions",
         summary: "Replace what an unloading station accepts",
         description:
           "Replaces the whole set of fractions with the one in the body: a fraction the body leaves out is not accepted afterwards, and an empty list is a station that takes nothing yet. Every id is a waste fraction of this company (400 at `wasteFractionIds.N` otherwise), each named once (400 on `wasteFractionIds`). The station's `updatedAt` moves, since the set is part of the station on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: UnloadingStationFractionsSet,
+        invalid: ["the body is missing `wasteFractionIds`, names a member it does not own, names the same fraction twice, or names a waste fraction that is not this company's"],
         responses: {
           200: describeJson("The unloading station with the fractions it now accepts.", UnloadingStation),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `wasteFractionIds`, names a member it does not own, names the same fraction twice, or names a waste fraction that is not this company's.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `resources.depots`."),
           404: describeProblem("No unloading station with that id in this company, or none this account reaches."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", UnloadingStationFractionsSet),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { wasteFractionIds } = c.req.valid("json")

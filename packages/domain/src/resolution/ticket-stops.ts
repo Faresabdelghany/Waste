@@ -16,7 +16,7 @@
 // to decide (`correctedAway`).
 import type { TicketKind } from "./vocabulary"
 import { SERVICE_NOUNS } from "../execution/services"
-import type { OfficeStopService, PickupService } from "../execution/vocabulary"
+import type { MissedPickupStatus, OfficeStopService, PickupService } from "../execution/vocabulary"
 
 /** Which services answer each ticket kind a stop answers; no other kind is answered by a stop. */
 const ANSWERED_BY = {
@@ -86,15 +86,15 @@ export const servicedBy = (stop: StopRef, stillBooked?: StopRef): string =>
 export const servedAfterClose = (stop: StopRef & { service: PickupService }): string => `The ${SERVICE_NOUNS[stop.service]} at ${stopName(stop)} was completed after this ticket closed`
 
 /** What a ticket is told when its stop is missed: what happened and why, and, while the ticket is open and waits on this stop, that another stop answers it. */
-export function stopMissed(stop: StopRef & { service: PickupService; outcome: "skipped" | "failed"; reason: string; open: boolean }): string {
+export function stopMissed(stop: StopRef & { service: PickupService; outcome: MissedPickupStatus; reason: string; open: boolean }): string {
   const happened = stop.outcome === "failed" ? "failed" : "was skipped"
   const missed = `The ${SERVICE_NOUNS[stop.service]} at ${stopName(stop)} ${happened}: ${stop.reason.replaceAll("-", " ")}.`
   return stop.open ? `${missed} Book another stop to answer this ticket.` : missed
 }
 
 /** What a ticket its stop did not service is told when the stop is corrected away from completed: the correction, in the office's words. */
-export const stopCorrected = (stop: StopRef & { outcome: "skipped" | "failed"; note: string }): string => `${capitalised(stopName(stop))} was corrected to ${stop.outcome}: ${stop.note.replace(/[.\s]+$/, "")}.`
+export const stopCorrected = (stop: StopRef & { outcome: MissedPickupStatus; note: string }): string => `${capitalised(stopName(stop))} was corrected to ${stop.outcome}: ${stop.note.replace(/[.\s]+$/, "")}.`
 
 /** What a serviced ticket is told when its stop is corrected away from completed: the office's words, the reopening the office's to decide. */
-export const correctedAway = (stop: StopRef & { service: PickupService; outcome: "skipped" | "failed"; note: string }): string =>
+export const correctedAway = (stop: StopRef & { service: PickupService; outcome: MissedPickupStatus; note: string }): string =>
   `${capitalised(stopName(stop))} was corrected to ${stop.outcome} after it serviced this ticket: ${stop.note.replace(/[.\s]+$/, "")}. Reopen the ticket if the ${SERVICE_NOUNS[stop.service]} is still owed.`

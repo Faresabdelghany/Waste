@@ -68,12 +68,7 @@
       "cache": false,
       "persistent": true,
       "env": [
-        "WASTE_API_ORIGIN",
-        "NEXT_PUBLIC_WASTE_API_URL",
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-        "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
-        "NEXT_PUBLIC_DRIVER_STOP_PHOTOS"
+        "WASTE_API_ORIGIN"
       ]
     },
     "@waste/web#build": {
@@ -85,12 +80,7 @@
         "!.next/cache/**"
       ],
       "env": [
-        "WASTE_API_ORIGIN",
-        "NEXT_PUBLIC_WASTE_API_URL",
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-        "NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA",
-        "NEXT_PUBLIC_DRIVER_STOP_PHOTOS"
+        "WASTE_API_ORIGIN"
       ]
     },
     "lint": {
@@ -159,7 +149,10 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/.github/workflows/ci.yml",
-        "$TURBO_ROOT$/.github/workflows/pilot-database.yml"
+        "$TURBO_ROOT$/.github/workflows/pilot-database.yml",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/packages/*/package.json"
       ]
     },
     "@waste/db#test": {

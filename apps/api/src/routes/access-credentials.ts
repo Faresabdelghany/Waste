@@ -26,22 +26,20 @@ import type { Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { validOn } from "@waste/db/query/valid-on"
 import { accessCredential } from "@waste/db/schema/site-visits"
-import type { Action } from "@waste/domain/access/modules"
 import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { normaliseCredentialValue } from "@waste/domain/visits/charges"
 import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { operation, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -129,45 +127,38 @@ async function customersAgreement(tx: Tx, scope: { companyId: string; projectId:
   return { status: found.status, period: { validFrom: found.validFrom, validTo: found.validTo } }
 }
 
-const problems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
-export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function accessCredentialRoutes(deps: RouteDeps) {
   const command = (path: "block" | "unblock", summary: string, description: string, conflict: string) =>
-    describeRoute({
+    operation({
       operationId: `${path}AccessCredential`,
       summary,
       description,
-      security: BEARER_SECURITY,
+      module: MODULE,
+      action: "edit",
+      params: IdParam,
       responses: {
         200: describeJson("The credential as it now stands.", AccessCredential),
-        400: describeProblem(path === "block" ? "The path does not hold an id, or the body gives no reason." : "The path does not hold an id."),
-        ...problems("edit"),
         404: describeProblem("No credential with that id in the projects this account works in."),
         409: describeProblem(conflict),
       },
     })
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/access-credentials",
-      describeRoute({
+      {
         operationId: "listAccessCredentials",
         summary: "The register of plates and cards",
         description:
           "One page of the Access Credentials a project's recycling centres admit by, oldest first, from the projects the caller works in. `projectId`, `kind`, `customerId` and `propertyId` narrow it; `value` finds a plate or a card as it is stored, spaces dropped and letters upper case; `validOn` asks for those in force on a day; `blocked` for the blocked or the unblocked. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: AccessCredentialListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of credentials.", CredentialPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          ...problems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", AccessCredentialListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, kind, value, customerId, propertyId, validOn: day, blocked } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -198,22 +189,20 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/access-credentials",
-      describeRoute({
+      {
         operationId: "createAccessCredential",
         summary: "Register a plate or a card",
         description:
           "Registers a plate or a card for a project the caller works in (400 at `projectId` otherwise), from a day and to an end or none. Its holder is a business — its Customer, and the Agreement its visits are charged to, one of the Customer's own (400 at `agreementId`) — or a household's Property of the project (400 at `propertyId`), exactly one. The value is stored upper case with no spaces; one credential of a kind and value is in force at a time (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: AccessCredentialCreate,
+        invalid: ["the body is missing a field, names a member the server owns, a value that is not a plate or a card number, no holder or two, a period ending on or before it starts, a project this account does not work in, or a customer, agreement or property that is not the project's — or an agreement that is not the customer's"],
         responses: {
           201: describeCreated("The credential as it was written.", AccessCredential),
-          400: describeProblem("The body is missing a field, names a member the server owns, a value that is not a plate or a card number, no holder or two, a period ending on or before it starts, a project this account does not work in, or a customer, agreement or property that is not the project's — or an agreement that is not the customer's."),
-          ...problems("create"),
           409: describeProblem("A credential of this kind and value is in force over part of the period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", AccessCredentialCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -254,21 +243,18 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/access-credentials/:id",
-      describeRoute({
+      {
         operationId: "getAccessCredential",
         summary: "One plate or card",
         description: "One credential of a project the caller works in. A credential of another company, or of a project this account does not work in, is one that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The credential.", AccessCredential),
-          400: describeProblem("The path does not hold an id."),
-          ...problems("view"),
           404: describeProblem("No credential with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findCredential(c.get("tx"), c.get("principal"), id)
@@ -278,24 +264,22 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/access-credentials/:id",
-      describeRoute({
+      {
         operationId: "patchAccessCredential",
         summary: "Amend or end a plate or a card",
         description:
           "Changes the label or the end of one credential, under its row lock; every field is optional and at least one must be given. The kind, the value, the holder and the start are what the credential is, so another plate, another holder or another start is another credential, and this one is ended on the day the other starts. The end still comes after the start (400 on `validTo`), and the credential still overlaps no other of its kind and value (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: AccessCredentialPatch,
+        invalid: ["the patch is empty, names a field the caller does not own, or ends on or before the day the credential starts"],
         responses: {
           200: describeJson("The credential as it now stands.", AccessCredential),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, or ends on or before the day the credential starts."),
-          ...problems("edit"),
           404: describeProblem("No credential with that id in the projects this account works in."),
           409: describeProblem("A credential of this kind and value is in force over part of the new period."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", AccessCredentialPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const fields = c.req.valid("json")
@@ -326,11 +310,7 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/access-credentials/:id/block",
-      command("block", "Block a plate or a card", "Blocks one credential with the reason the office will read: its visits are turned away as `credential-blocked` and still recorded. A blocked credential is unblocked before it is blocked for another reason (409).", "The credential is already blocked."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", AccessCredentialBlock),
+      { ...command("block", "Block a plate or a card", "Blocks one credential with the reason the office will read: its visits are turned away as `credential-blocked` and still recorded. A blocked credential is unblocked before it is blocked for another reason (409).", "The credential is already blocked."), body: AccessCredentialBlock, invalid: ["the body gives no reason"] },
       async (c) => {
         const { id } = c.req.valid("param")
         const { reason } = c.req.valid("json")
@@ -350,10 +330,7 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/access-credentials/:id/unblock",
-      command("unblock", "Unblock a plate or a card", "Lets one blocked credential's visits in again; the block's reason stays in the credential's history (409 where it is not blocked).", "The credential is not blocked."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      { ...command("unblock", "Unblock a plate or a card", "Lets one blocked credential's visits in again; the block's reason stays in the credential's history (409 where it is not blocked).", "The credential is not blocked.") },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

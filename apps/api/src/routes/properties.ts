@@ -44,16 +44,13 @@ import type { Tx } from "@waste/db/client"
 import { planningAreasAt } from "@waste/db/query/zones"
 import { property, propertyParty } from "@waste/db/schema/customers"
 import { and, asc, eq, exists, gt } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { projectToday } from "@waste/db/query/project-clock"
-
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
-import { foundAddress } from "./addresses"
+import { describeProblem } from "../problem"
+import { addressLookup, foundAddress } from "./addresses"
 import { areaOf } from "./planning-areas"
 import {
   createProperty,
@@ -68,7 +65,6 @@ import {
   noSuchProperty,
   setPropertyParties,
 } from "./property-writes"
-import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
@@ -90,27 +86,26 @@ const heldBy = (tx: Tx, companyId: string, customerId: string, now: Date) =>
       ),
   )
 
-/** `lookup` reads a body's `addressId` from the address register before the guard opens the request's transaction (routes/addresses.ts, #291 C13). */
-export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: MiddlewareHandler, { now = () => new Date() }: ClockOptions = {}) {
-  return new Hono<AuthEnv>()
+export function propertyRoutes(deps: RouteDeps) {
+  const { now } = deps
+  /** A body's `addressId` read from the address register before the guard opens the request's transaction (routes/addresses.ts, #291 C13). */
+  const lookup = addressLookup(deps)
+  return routes(deps)
     .get(
       "/properties",
-      describeRoute({
+      {
         operationId: "listProperties",
         summary: "The properties the caller's projects serve",
         description:
           "One page of properties, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its parties in force on its project's today or from a later day (#374), each with its first day and its first day out. `projectId` narrows it to one of those projects; naming another is refused. `customerId` narrows it to the properties that customer is a party to today in any role, which is the citizen portal's read model of what a person may see; a property they hold two roles on is one item, not two. The two filters combine. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: PropertyListQuery,
+        invalid: ["`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of properties.", PropertyPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, or `projectId` is not a project this account works in."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", PropertyListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, customerId } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -139,49 +134,40 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
     )
     .post(
       "/properties",
-      describeRoute({
+      {
         operationId: "createProperty",
         summary: "Register a property",
         description:
           "Registers a service address in one project, which must be a project the caller works in. The name is unique inside the project and the registry identifier, where given, inside the company. The status defaults to `active` and the location is null until the address is geocoded; a location outside the WGS 84 range is refused before the database sees it. The address is typed (`address`), or found in the address register (`addressId`, from `GET /addresses`): then the register's designation is the address, its parts are stored beside it, and its BFE number and access point are the registry identifier and the location wherever the body sets neither, so the property is geocoded as it is created. `parties` is the list the property starts with, each naming a customer of this company, so registering a property with its owner is one request. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        before: [lookup],
+        body: PropertyCreate,
+        invalid: ["the body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same customer and role twice, names a party that is not a customer of this company, gives both `address` and `addressId`, or names an `addressId` the register does not hold"],
         responses: {
           201: describeCreated("The property as it was written.", Property),
-          400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same customer and role twice, names a party that is not a customer of this company, gives both `address` and `addressId`, or names an `addressId` the register does not hold.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.properties`."),
           409: describeProblem("The project already has a property with that name, or the company one with that registry identifier."),
           502: describeProblem("The body names an `addressId` and the address register did not answer: try again, or type the address and place the point by hand."),
           503: describeProblem("The body names an `addressId` on a deployment with no address register: type the address."),
         },
-      }),
-      lookup,
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", PropertyCreate),
+      },
       async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"), now, foundAddress(c))),
     )
     .get(
       "/properties/:id",
-      describeRoute({
+      {
         operationId: "getProperty",
         summary: "One property",
         description:
           "One property of a project the caller works in, with its parties. A property of another company, or of a project this account does not work in, is a property that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The property.", Property),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -193,24 +179,21 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
     )
     .get(
       "/properties/:id/zones",
-      describeRoute({
+      {
         operationId: "listPropertyZones",
         summary: "The zones a property lies in",
         description:
           "The address → zone read (O29 of #290): the planning areas of the property's project whose boundary in force on `on` contains the property's point, in code order. Two areas may overlap, so a property can lie in several; an area with no boundary in force on the day holds nothing. `on` defaults to today on the project's clock and `purpose` to `notification`, the citizens' zones; another purpose asks the same of route-planning or service-operations areas. A property with no point yet lies in none. The property's collection days are read through its subscriptions, not its zones.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
+        query: PlanningAreasAtQuery,
+        invalid: ["`on` is not a day", "`purpose` is not one of the three"],
         responses: {
           200: describeJson("The areas the property lies in on the day, in code order; none when it has no point or no area holds it.", PlanningAreasAt),
-          400: describeProblem("The path does not hold an id, `on` is not a day, or `purpose` is not one of the three."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
-      validate("query", PlanningAreasAtQuery),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { on, purpose } = c.req.valid("query")
@@ -227,55 +210,45 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
     )
     .patch(
       "/properties/:id",
-      describeRoute({
+      {
         operationId: "patchProperty",
         summary: "Change a property",
         description:
           "Changes one property of a project the caller works in; every field is optional and at least one must be given. A null clears the registry identifier, the notes, the driver's instructions or the geocode. An `addressId` found in the address register replaces the address with the register's, its parts, and its BFE number and access point wherever the patch sets neither; a typed `address`, or `addressId: null`, lets the register's id and parts go. The project is not patchable, since a record does not move between projects, and the parties are a set, so they are `PUT /properties/{id}/parties`.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        before: [lookup],
+        params: IdParam,
+        body: PropertyPatch,
+        invalid: ["the patch is empty, names a field the caller does not own (the project and the parties included), holds a point outside the WGS 84 range, gives both `address` and `addressId`, or names an `addressId` the register does not hold"],
         responses: {
           200: describeJson("The property as it now stands.", Property),
-          400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the parties included), holds a point outside the WGS 84 range, gives both `address` and `addressId`, or names an `addressId` the register does not hold.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
           409: describeProblem("The project already has another property with that name, or the company one with that registry identifier."),
           502: describeProblem("The patch names an `addressId` and the address register did not answer: try again, or type the address and place the point by hand."),
           503: describeProblem("The patch names an `addressId` on a deployment with no address register: type the address."),
         },
-      }),
-      lookup,
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PropertyPatch),
+      },
       async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now, foundAddress(c))),
     )
     .put(
       "/properties/:id/parties",
-      describeRoute({
+      {
         operationId: "putPropertyParties",
         summary: "Replace a property's parties",
         description:
           "Replaces the list in force today, on the project's clock, with the one in the body (#374): a party the body leaves out ends today — one that began today is a same-day correction and goes — a party it adds begins today, and a party it keeps is untouched; an empty list is a property nobody is billed for from today. A party from a later day, a move booked ahead, or one that has ended is not today's list and stands as it is, and a party added today that the same customer holds in the same role from a later day is refused (409). Each entry names a customer of this company and the role they hold, and the same customer may hold several roles, so a pair is named at most once. The record's `updatedAt` moves, since the parties are part of the property on the wire.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: PropertyPartiesSet,
+        invalid: ["the body is missing `parties`, names a member it does not own, names the same customer and role twice, or names a party that is not a customer of this company"],
         responses: {
           200: describeJson("The property with the parties it now has.", Property),
-          400: describeProblem(
-            "The path does not hold an id, or the body is missing `parties`, names a member it does not own, names the same customer and role twice, or names a party that is not a customer of this company.",
-          ),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
           409: describeProblem("A customer the body adds already holds that role at this property from a later day."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", PropertyPartiesSet),
+      },
       async (c) => c.json(await setPropertyParties(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").parties, now)),
     )
 }

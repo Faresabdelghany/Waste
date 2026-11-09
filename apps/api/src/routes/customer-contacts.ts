@@ -23,15 +23,14 @@ import type { Tx } from "@waste/db/client"
 import { customer, customerContact } from "@waste/db/schema/customers"
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 import { and, asc, eq } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseCheck } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import type { Principal } from "../auth/principal"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { lockedContactHolder, noSuchCustomer, refuseContactOfAPerson } from "./customer-writes"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -89,26 +88,22 @@ export async function contactsOf(tx: Tx, companyId: string, customerId: string):
   return rows.map(contactOf)
 }
 
-export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
-  return new Hono<AuthEnv>()
+export function customerContactRoutes(deps: RouteDeps) {
+  return routes(deps)
     .get(
       "/customers/:id/contacts",
-      describeRoute({
+      {
         operationId: "listCustomerContacts",
         summary: "A customer's contact persons",
         description: "Every contact person of one customer, active and inactive alike, oldest first: an organisation has a handful, never a page's worth. A person customer has none.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The customer's contact persons.", CustomerContacts),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
           404: describeProblem("No customer with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -120,25 +115,22 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .post(
       "/customers/:id/contacts",
-      describeRoute({
+      {
         operationId: "createCustomerContact",
         summary: "Register a contact person under a customer",
         description:
           "Registers a named person who speaks for an organisation customer, with a role and an e-mail or a phone or both. The status defaults to `active`, and the e-mail is stored lowercase. A person customer is their own contact and takes none. The server mints the id.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CustomerContactCreate,
+        invalid: ["the body is missing a field, gives neither an e-mail nor a phone, holds a value of the wrong shape, or names one the server owns"],
         responses: {
           201: describeCreated("The contact person as it was written.", CustomerContact),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, gives neither an e-mail nor a phone, holds a value of the wrong shape, or names one the server owns."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.contacts`."),
           404: describeProblem("No customer with that id in this company."),
           409: describeProblem("The customer is a person, who is their own contact."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CustomerContactCreate),
+      },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -155,22 +147,18 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .get(
       "/customer-contacts/:id",
-      describeRoute({
+      {
         operationId: "getCustomerContact",
         summary: "One contact person",
         description: "One contact person of a customer of the caller's company.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The contact person.", CustomerContact),
-          400: describeProblem("The path does not hold an id."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.contacts`."),
           404: describeProblem("No contact person with that id in this company."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findContact(c.get("tx"), c.get("principal"), id)
@@ -180,25 +168,22 @@ export function customerContactRoutes(guard: MiddlewareHandler<AuthEnv>) {
     )
     .patch(
       "/customer-contacts/:id",
-      describeRoute({
+      {
         operationId: "patchCustomerContact",
         summary: "Change a contact person",
         description:
           "Changes one contact person; every field is optional and at least one must be given. A null clears a channel, so long as the other is left; `status: inactive` is how a contact who has left is retired, since none is ever deleted. A contact left under an organisation that has since become a person is not made active again (409): a person is their own contact.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: CustomerContactPatch,
+        invalid: ["the patch is empty, would leave the contact with neither an e-mail nor a phone, names a field the caller does not own, or holds a value of the wrong shape"],
         responses: {
           200: describeJson("The contact person as it now stands.", CustomerContact),
-          400: describeProblem("The path does not hold an id, or the patch is empty, would leave the contact with neither an e-mail nor a phone, names a field the caller does not own, or holds a value of the wrong shape."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.contacts`."),
           404: describeProblem("No contact person with that id in this company."),
           409: describeProblem("The patch would leave the contact active under a person customer, who is their own contact."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", CustomerContactPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")

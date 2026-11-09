@@ -14,6 +14,7 @@ import { todayOnClock } from "@waste/db/query/project-clock"
 import { route } from "@waste/db/schema/execution"
 import { plan } from "@waste/db/schema/routing"
 import { loggable } from "@waste/db/sqlstate"
+import { sweepEach } from "@waste/db/sweeps"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq, sql } from "drizzle-orm"
 
@@ -107,22 +108,22 @@ export async function sweepHorizon(context: RoutingContext, jobId: string | null
   const at = context.now()
   const routes = await horizonRoutes(context.worker, at)
   const outcome: SweepOutcome = { inWindow: routes.length, asked: [], recovered: [], failed: [] }
-  for (const candidate of routes) {
-    try {
+  const routesFailed = await sweepEach(
+    routes,
+    async (candidate) => {
       if ((await planRoute(context, candidate.companyId, candidate.routeId, horizonFrom(candidate.today), "unanswered")) === "asked") outcome.asked.push(candidate.routeId)
-    } catch (error) {
-      context.log(`${SWEEP_HORIZON_QUEUE}: company ${candidate.companyId}, route ${candidate.routeId} failed: ${JSON.stringify(loggable(error))}`)
-      outcome.failed.push(candidate.routeId)
-    }
-  }
-  for (const aged of await agedCalculatingPlans(context.worker, at)) {
-    try {
+    },
+    (candidate, error) => context.log(`${SWEEP_HORIZON_QUEUE}: company ${candidate.companyId}, route ${candidate.routeId} failed: ${JSON.stringify(loggable(error))}`),
+  )
+  outcome.failed.push(...routesFailed.map((candidate) => candidate.routeId))
+  const plansFailed = await sweepEach(
+    await agedCalculatingPlans(context.worker, at),
+    async (aged) => {
       if (await recoverPlan(context, aged)) outcome.recovered.push(aged.planId)
-    } catch (error) {
-      context.log(`${SWEEP_HORIZON_QUEUE}: company ${aged.companyId}, plan ${aged.planId} failed: ${JSON.stringify(loggable(error))}`)
-      outcome.failed.push(aged.planId)
-    }
-  }
+    },
+    (aged, error) => context.log(`${SWEEP_HORIZON_QUEUE}: company ${aged.companyId}, plan ${aged.planId} failed: ${JSON.stringify(loggable(error))}`),
+  )
+  outcome.failed.push(...plansFailed.map((aged) => aged.planId))
   context.log(
     `${SWEEP_HORIZON_QUEUE}: ${at.toISOString()} swept ${outcome.inWindow} ${outcome.inWindow === 1 ? "route" : "routes"} inside the horizon: ${outcome.asked.length} asked a Plan, ${outcome.recovered.length} lost ${outcome.recovered.length === 1 ? "job" : "jobs"} re-sent, ${outcome.failed.length} failed${jobId === null ? "" : ` (job ${jobId})`}`,
   )

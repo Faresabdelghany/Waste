@@ -51,9 +51,8 @@ import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/pla
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import { fractionNamed, matchTicket, plateKey, WEIGHBRIDGE_BATCHES_PER_MINUTE, WEIGHBRIDGE_BODY_MAX_BYTES, type FractionCandidate } from "@waste/domain/execution/weighbridge"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
+import type { MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
-import { describeRoute } from "hono-openapi"
 import { dayInTimezone } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
 import { lockRow } from "@waste/db/commands/shared"
@@ -62,28 +61,20 @@ import { aheadOfClock } from "@waste/domain/execution/commands"
 import { RAN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 
 import { Allowance } from "../auth/public-door"
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { findRoute, noSuchRoute } from "./execution-shapes"
 import { requireRoute, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
-import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.weighbridge"
 
 const TicketPage = Page(WeighbridgeTicket)
-
-/** What the ingest may be handed, the bound and its allowance a test may lower. */
-export type WeighbridgeOptions = ClockOptions & {
-  /** Each company's batches a minute; a test injects a small allowance or a pinned clock. */
-  allowance?: Allowance
-  /** The body's bytes before the token is read; a test injects a small one. */
-  maxBodyBytes?: number
-}
 
 const columns = {
   id: weighbridgeTicket.id,
@@ -278,21 +269,17 @@ async function ingestOne(tx: Tx, principal: Principal, context: BatchContext, se
   }
 }
 
-const viewProblems = {
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
-}
+/** What a command's body refuses beside the path's id. */
+const BODY_INVALID = "the body is missing a field or names one the server owns"
 
 const commandProblems = {
-  400: describeProblem("The path does not hold an id, or the body is missing a field or names one the server owns."),
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
   404: describeProblem("No weighbridge ticket with that id in the projects this account works in."),
   409: describeProblem("The ticket is matched or dismissed already."),
 }
 
-export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), allowance, maxBodyBytes = WEIGHBRIDGE_BODY_MAX_BYTES }: WeighbridgeOptions = {}) {
-  const batches = allowance ?? new Allowance(WEIGHBRIDGE_BATCHES_PER_MINUTE, now)
+export function weighbridgeRoutes(deps: RouteDeps) {
+  const { now, weighbridgeMaxBodyBytes: maxBodyBytes = WEIGHBRIDGE_BODY_MAX_BYTES } = deps
+  const batches = deps.weighbridgeAllowance ?? new Allowance(WEIGHBRIDGE_BATCHES_PER_MINUTE, now)
   /** A company's batches a minute, after the guard has named the company. */
   const allowed: MiddlewareHandler<AuthEnv> = async (c, next) => {
     const taken = batches.take(c.get("principal").companyId)
@@ -307,29 +294,26 @@ export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     },
   })
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .post(
       "/weighbridge-tickets",
-      describeRoute({
+      {
         operationId: "ingestWeighbridgeTickets",
         summary: "A weighbridge's tickets, matched to routes",
         description:
           "The ingest of a station's weighbridge (O27 of #290), vendor-neutral: one to 500 tickets, each the station's `stationCode` as registered, its own `ticketNumber`, the `vehicleRegistration` as read (spaces, dashes and case do not matter), `weighedAt`, `netKg` and, together or not at all, `grossKg` and `tareKg` (net is gross less tare), and the product as a `fractionKey` or a compact `wasteCode`. Each ticket is judged on its own, in the body's order, and answered in `outcomes`: `refused` and not kept where the station is not registered (`unknown-station`) or the instant runs more than five minutes ahead of the server's clock (`ahead-of-clock`); `replayed`, with the ticket it is, where the station's ticket number is known; else kept, and `matched` — written as its route's Unload, `source` integration, no session, the weighbridge's weights and ticket number, recorded by the caller, `unload-recorded` emitted with it — where the plate is a vehicle of a project the caller works in, the vehicle's session spans the instant (else it ran exactly one active or completed route on the instant's day on its project's clock), the product names exactly one fraction, and the station takes it; or `unmatched` with the first of `unknown-vehicle`, `no-route`, `several-routes`, `unknown-fraction` and `fraction-not-accepted` it failed on, for the office to match or dismiss. The body is at most 256 KiB (413, before the token is read) and a company sends at most 120 batches a minute (429 with `Retry-After`).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        before: [bounded],
+        use: [allowed],
+        body: WeighbridgeTicketBatch,
+        invalid: ["the body is not a batch of one to 500 tickets, a ticket's field is malformed, or its weights do not add up"],
         responses: {
           200: describeJson("One outcome per ticket, in the body's order.", WeighbridgeIngest),
-          400: describeProblem("The body is not a batch of one to 500 tickets, a ticket's field is malformed, or its weights do not add up."),
-          401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           413: describeProblem("The body is larger than 256 KiB."),
           429: describeProblem("The company has sent its batches for the minute; send again after `Retry-After` seconds."),
         },
-      }),
-      bounded,
-      guard,
-      requireGrant(MODULE, "create"),
-      allowed,
-      validate("json", WeighbridgeTicketBatch),
+      },
       async (c) => {
         const { tickets } = c.req.valid("json")
         const tx = c.get("tx")
@@ -343,21 +327,19 @@ export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/weighbridge-tickets",
-      describeRoute({
+      {
         operationId: "listWeighbridgeTickets",
         summary: "The weighbridge's tickets",
         description:
           "One page of the weighbridge's tickets, oldest first: those of the projects the caller works in, and those of a plate no vehicle in reach drives, which have no project. `status` narrows the page — `unmatched` is the office's queue — and `projectId` to one of the caller's projects (naming another is refused). Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: WeighbridgeTicketListQuery,
+        invalid: ["a filter is malformed", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
-          ...viewProblems,
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", WeighbridgeTicketListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -382,21 +364,18 @@ export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/weighbridge-tickets/:id",
-      describeRoute({
+      {
         operationId: "getWeighbridgeTicket",
         summary: "One weighbridge ticket",
         description: "One ticket: what the weighbridge said, where it stands, why it found no route, and the route and Unload it was written as once matched.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The ticket.", WeighbridgeTicket),
-          400: describeProblem("The path does not hold an id."),
-          ...viewProblems,
           404: describeProblem("No weighbridge ticket with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const row = await findTicket(c.get("tx"), c.get("principal"), id)
@@ -406,18 +385,18 @@ export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/weighbridge-tickets/:id/match",
-      describeRoute({
+      {
         operationId: "matchWeighbridgeTicket",
         summary: "Match an unmatched ticket to a route by hand",
         description:
           "The office's answer to a ticket that found no route: the `routeId` its load came off, a route of a project the caller works in — the ticket's vehicle's, where the plate was one (400 at `routeId` otherwise) — that ran (`active` or `completed`, 409 otherwise), and the `wasteFractionId` it was, one the station takes (400 at the field, in the station's sentence). The ticket is written as the route's Unload, `source` integration, the weighbridge's weights and ticket number, recorded by the caller, and `unload-recorded` is emitted with it; the ticket is `matched`, keeping the reason it waited for. Only an unmatched ticket is matched (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WeighbridgeTicketMatch,
+        invalid: [BODY_INVALID],
         responses: { 200: describeJson("The ticket as it now stands.", WeighbridgeTicket), ...commandProblems, 409: describeProblem("The ticket is matched or dismissed already, or the route has not run.") },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WeighbridgeTicketMatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { routeId, wasteFractionId } = c.req.valid("json")
@@ -446,17 +425,17 @@ export function weighbridgeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/weighbridge-tickets/:id/dismiss",
-      describeRoute({
+      {
         operationId: "dismissWeighbridgeTicket",
         summary: "Dismiss an unmatched ticket",
         description: "The office's answer to a ticket no route of ours carried — a visitor's trailer, a test weighing — with the `note` that says why. Nothing is written as an Unload. Only an unmatched ticket is dismissed (409).",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: WeighbridgeTicketDismiss,
+        invalid: [BODY_INVALID],
         responses: { 200: describeJson("The ticket as it now stands.", WeighbridgeTicket), ...commandProblems },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", WeighbridgeTicketDismiss),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const { note } = c.req.valid("json")

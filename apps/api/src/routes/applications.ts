@@ -29,28 +29,25 @@ import type { Tx } from "@waste/db/client"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { propertyParty } from "@waste/db/schema/customers"
-import type { Action } from "@waste/domain/access/modules"
 import { moveOf, moveRefusal, ONE_PLACE, type ApplicationCommand } from "@waste/domain/registry/applications"
 import { isOneOf } from "@waste/domain/lists"
 import { UNDECIDED_APPLICATION_STATUSES } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, gt, sql } from "drizzle-orm"
-import { Hono, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { applicationColumns, applicationOf, decisionColumns, decisionOf, labelOf, latestDecisions, type ApplicationRow } from "@waste/db/shapes/applications"
 
-import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import type { RouteDeps } from "../deps"
+import { operation, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem } from "../problem"
 import { partyInForce } from "./property-writes"
 import { requireCustomer, requireProperty, requireSharedCollectionPoint, requireSubscription } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
-import type { ClockOptions } from "./scheme-groups"
 
 const MODULE = "customers.applications"
 const ApplicationPage = Page(Application)
@@ -121,11 +118,6 @@ async function subjectRefusal(tx: Tx, companyId: string, subject: Subject, check
 
 const SUBJECT_SENTENCES = { party: NOT_A_PARTY, customer: NOT_THE_CUSTOMERS, place: ANOTHER_PLACE } as const
 
-const commonProblems = (action: Action) => ({
-  401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-})
-
 /** A command's route: the row locked, its move judged by the domain, and the status written; `decide` appends its Decision first. */
 async function moved(tx: Tx, principal: Principal, id: string, command: ApplicationCommand): Promise<ApplicationRow> {
   await lockRow(tx, application, { companyId: principal.companyId, id })
@@ -143,40 +135,39 @@ async function moved(tx: Tx, principal: Principal, id: string, command: Applicat
   return row
 }
 
-export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export function applicationRoutes(deps: RouteDeps) {
+  const { now } = deps
   const command = (name: "review" | "withdraw" | "reopen", summary: string, description: string) =>
-    describeRoute({
+    operation({
       operationId: `${name}Application`,
       summary,
       description,
-      security: BEARER_SECURITY,
+      module: MODULE,
+      action: "edit",
+      params: IdParam,
       responses: {
         200: describeJson("The application as it now stands, with its latest decision.", Application),
-        400: describeProblem("The path does not hold an id."),
-        ...commonProblems("edit"),
         404: describeProblem("No application with that id in the projects this account works in."),
         409: describeProblem("The application stands where the command does not take it, in the domain's sentence."),
       },
     })
 
-  return new Hono<AuthEnv>()
+  return routes(deps)
     .get(
       "/applications",
-      describeRoute({
+      {
         operationId: "listApplications",
         summary: "The applications",
         description:
           "One page of the Applications of the projects the caller works in, oldest first (ids are time-ordered), each with its latest Decision. `projectId` narrows it to one of those projects, naming another is refused; `customerId`, `kind` and `status` narrow it further; `inForceOn` keeps the Applications whose latest Decision is a grant, whole or in part, whose period holds that day, `validFrom` inclusive and `validTo` exclusive, whatever their status — a grant stands while an appeal against it is reviewed — expired being a reading of the period, never a status. Hand `nextCursor` back as `cursor` for the next page.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        query: ApplicationListQuery,
+        invalid: ["a filter is not of the vocabulary or not a day", "`projectId` is not a project this account works in"],
         responses: {
           200: describeJson("One page of applications.", ApplicationPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is not of the vocabulary or not a day, or `projectId` is not a project this account works in."),
-          ...commonProblems("view"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("query", ApplicationListQuery),
+      },
       async (c) => {
         const { limit, cursor, projectId, customerId, kind, status, inForceOn } = c.req.valid("query")
         const after = afterCursor(cursor)
@@ -212,21 +203,19 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/applications",
-      describeRoute({
+      {
         operationId: "createApplication",
         summary: "Record an application",
         description:
           "Records an Application as it reached the office, `received`: its kind, how it came (`channel`) and the day it did (`receivedOn`), the customer — one of the company's (400 at `customerId`) — and, where it names them, one place, a property or a shared collection point of the project, and a subscription of the project (400 at the field otherwise), and the customer's statement. What it names hangs together (400 at the field): the customer is a party of the property, in any role, and the subscription is under one of the customer's agreements, as its customer or its payer, serving the place named where one is; a shared point has no parties, so any customer may name one. `receivedOn` is no later than today on the project's clock. The server numbers it, the company's next, and mints the id. No status gates it: an Application about a closed place or from an inactive customer is still theirs to make.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "create",
+        body: ApplicationCreate,
+        invalid: ["the body is missing a field, names a member the server owns (the number, the status, a decision), names both a property and a shared collection point, a value outside the vocabulary, a project this account does not work in, a customer, place or subscription that is not the project's, a property the customer is not a party of, a subscription not the customer's or serving another place, or a day received after today"],
         responses: {
           201: describeCreated("The application as it was recorded.", Application),
-          400: describeProblem("The body is missing a field, names a member the server owns (the number, the status, a decision), names both a property and a shared collection point, a value outside the vocabulary, a project this account does not work in, a customer, place or subscription that is not the project's, a property the customer is not a party of, a subscription not the customer's or serving another place, or a day received after today."),
-          ...commonProblems("create"),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "create"),
-      validate("json", ApplicationCreate),
+      },
       async (c) => {
         const body = c.req.valid("json")
         const tx = c.get("tx")
@@ -256,21 +245,18 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/applications/:id",
-      describeRoute({
+      {
         operationId: "getApplication",
         summary: "One application",
         description: "One Application of the projects the caller works in, with its latest Decision. One of another project, or another company, is one that does not exist here.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The application.", Application),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No application with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
@@ -282,24 +268,22 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .patch(
       "/applications/:id",
-      describeRoute({
+      {
         operationId: "patchApplication",
         summary: "Correct an application",
         description:
           "Corrects an undecided Application — `received` or `in-review` — in its kind, channel, day received, place, subscription or statement; at least one must be given. The project and the customer are its own: another customer's request is another Application. A decided or withdrawn one is not corrected (409): reopen it on an appeal first.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ApplicationPatch,
+        invalid: ["the patch is empty, names a member the caller does not own, names both a property and a shared collection point, a place or subscription that is not the project's, a property the customer is not a party of, a subscription not the customer's or serving another place than the Application ends with, or a day received after today"],
         responses: {
           200: describeJson("The application as it now stands.", Application),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a member the caller does not own, names both a property and a shared collection point, a place or subscription that is not the project's, a property the customer is not a party of, a subscription not the customer's or serving another place than the Application ends with, or a day received after today."),
-          ...commonProblems("edit"),
           404: describeProblem("No application with that id in the projects this account works in."),
           409: describeProblem("The application is decided or withdrawn."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ApplicationPatch),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
@@ -333,10 +317,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/applications/:id/review",
-      command("review", "Take an application into review", "Moves a `received` Application into review (409 from anywhere else)."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      { ...command("review", "Take an application into review", "Moves a `received` Application into review (409 from anywhere else).") },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -345,24 +326,22 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/applications/:id/decide",
-      describeRoute({
+      {
         operationId: "decideApplication",
         summary: "Decide an application",
         description:
           "Decides an Application `received` or `in-review` (409 from anywhere else): appends a Decision — the outcome, what it holds the customer to (`conditions`), its period, and how to appeal it — made by the caller, and moves the Application to `decided`. A grant, whole or in part, names its first day in force and, where it ends, its first day out (ADR-0005); a refusal is in force for no period; anything less than a grant in full says how to appeal it (400 at the field otherwise, in the domain's sentences). Emits `application-decided` with the Application as it now stands, its new Decision on it: the seam each kind's effect is consumed from in its owner's lane, which this route does not apply.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "edit",
+        params: IdParam,
+        body: ApplicationDecide,
+        invalid: ["the body names an outcome outside the vocabulary, a grant without its first day, a refusal with a period, an end on or before the start, or less than a grant in full without its appeal text"],
         responses: {
           200: describeJson("The application as it now stands, with its new decision.", Application),
-          400: describeProblem("The path does not hold an id, or the body names an outcome outside the vocabulary, a grant without its first day, a refusal with a period, an end on or before the start, or less than a grant in full without its appeal text."),
-          ...commonProblems("edit"),
           404: describeProblem("No application with that id in the projects this account works in."),
           409: describeProblem("The application is decided or withdrawn: reopen a decided one on an appeal first."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
-      validate("json", ApplicationDecide),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const body = c.req.valid("json")
@@ -390,10 +369,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/applications/:id/withdraw",
-      command("withdraw", "Withdraw an application", "Withdraws an Application at the customer's word: one `received` or `in-review` and never decided moves to `withdrawn` and moves no more; one in review on an appeal withdraws the appeal and goes back to `decided`, its Decision standing (409 from anywhere else)."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      { ...command("withdraw", "Withdraw an application", "Withdraws an Application at the customer's word: one `received` or `in-review` and never decided moves to `withdrawn` and moves no more; one in review on an appeal withdraws the appeal and goes back to `decided`, its Decision standing (409 from anywhere else).") },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -402,10 +378,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .post(
       "/applications/:id/reopen",
-      command("reopen", "Reopen an application on an appeal", "Moves a `decided` Application back into review, on the customer's appeal (409 from anywhere else). Its Decision stands in the ledger and rides on it until the next `decide` appends another."),
-      guard,
-      requireGrant(MODULE, "edit"),
-      validate("param", IdParam),
+      { ...command("reopen", "Reopen an application on an appeal", "Moves a `decided` Application back into review, on the customer's appeal (409 from anywhere else). Its Decision stands in the ledger and rides on it until the next `decide` appends another.") },
       async (c) => {
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -414,21 +387,18 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
     )
     .get(
       "/applications/:id/decisions",
-      describeRoute({
+      {
         operationId: "listApplicationDecisions",
         summary: "An application's decisions",
         description: "Every Decision of one Application of the projects the caller works in, oldest first: the first and every one an appeal led to.",
-        security: BEARER_SECURITY,
+        module: MODULE,
+        action: "view",
+        params: IdParam,
         responses: {
           200: describeJson("The decisions, oldest first.", DecisionHistory),
-          400: describeProblem("The path does not hold an id."),
-          ...commonProblems("view"),
           404: describeProblem("No application with that id in the projects this account works in."),
         },
-      }),
-      guard,
-      requireGrant(MODULE, "view"),
-      validate("param", IdParam),
+      },
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
