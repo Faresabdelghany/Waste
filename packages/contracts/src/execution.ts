@@ -35,7 +35,6 @@ import {
 import { PROOF_KEY_PATTERN, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
-/** Where a dated Route stands. */
 export const RouteStatus = z.enum(ROUTE_STATUSES)
 export type RouteStatus = z.infer<typeof RouteStatus>
 
@@ -83,7 +82,6 @@ export type ProofKind = z.infer<typeof ProofKind>
 export const ExecutionSource = z.enum(EXECUTION_SOURCES)
 export type ExecutionSource = z.infer<typeof ExecutionSource>
 
-/** What a driver's device may say. */
 export const DriverCommandKind = z.enum(DRIVER_COMMAND_KINDS)
 export type DriverCommandKind = z.infer<typeof DriverCommandKind>
 

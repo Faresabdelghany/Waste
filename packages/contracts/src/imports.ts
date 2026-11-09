@@ -68,7 +68,6 @@ export const ImportRowValues = z.strictObject({
 })
 export type ImportRowValues = z.infer<typeof ImportRowValues>
 
-/** Each row number once in one request. */
 const rowsOnce = (rows: readonly { row: number }[]) => new Set(rows.map((row) => row.row)).size === rows.length
 const rowsOnceIssue = { message: EACH_ROW_ONCE, path: ["rows"] }
 
@@ -97,7 +96,6 @@ export const ImportRowResult = z.object({
 })
 export type ImportRowResult = z.infer<typeof ImportRowResult>
 
-/** How many rows came out each way. */
 export const ImportCounts = z.object({ created: NonNegativeInt, updated: NonNegativeInt, unchanged: NonNegativeInt, refused: NonNegativeInt })
 export type ImportCounts = z.infer<typeof ImportCounts>
 
@@ -125,7 +123,6 @@ export type ImportRunCreate = z.infer<typeof ImportRunCreate>
 export const ImportRunStatus = z.enum(IMPORT_RUN_STATUSES)
 export type ImportRunStatus = z.infer<typeof ImportRunStatus>
 
-/** One import run. */
 export const ImportRun = z.object({
   ...stamped,
   kind: ImportKind,
@@ -135,7 +132,6 @@ export const ImportRun = z.object({
   rowCount: PositiveInt,
   counts: ImportCounts,
   status: ImportRunStatus,
-  /** Who ran it. */
   requestedBy: Id,
 })
 export type ImportRun = z.infer<typeof ImportRun>
@@ -155,18 +151,15 @@ export const ImportBatchResult = z.object({
 })
 export type ImportBatchResult = z.infer<typeof ImportBatchResult>
 
-/** One row a run recorded: its outcome and when. */
 export const ImportRunRow = ImportRowResult.extend({ id: Id, recordedAt: IsoDateTime })
 export type ImportRunRow = z.infer<typeof ImportRunRow>
 
-/** A page of runs: one kind's, or one project's. */
 export const ImportRunListQuery = PageRequest.extend({
   kind: ImportKind.optional(),
   projectId: Id.optional(),
 })
 export type ImportRunListQuery = z.infer<typeof ImportRunListQuery>
 
-/** A page of one run's rows: every outcome, or one. */
 export const ImportRunRowListQuery = PageRequest.extend({
   outcome: ImportRowOutcome.optional(),
 })

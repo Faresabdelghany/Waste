@@ -46,10 +46,8 @@ const Ordinal = PositiveInt
 /** A payload or a volume: whole units, above zero. */
 const Amount = PositiveInt
 
-/** What a driver body whose employment and provider disagree is told, at the provider. */
 const providerWithProviderEmployment = { message: PROVIDER_WITH_PROVIDER_EMPLOYMENT, path: ["serviceProviderId"] }
 
-/** The fractions a compartment carries: one or more, each once. */
 const CompartmentFractionIds = z.array(Id).min(1).refine((ids) => eachOnce(ids), { message: EACH_FRACTION_ONCE })
 
 export const VehicleCompartment = z.object({
@@ -74,7 +72,6 @@ export type VehicleCompartmentCreate = z.infer<typeof VehicleCompartmentCreate>
 
 const CompartmentsBody = z.array(VehicleCompartmentCreate).max(COMPARTMENTS_MAX)
 
-/** What a powered vehicle without a compartment is told, at the list. */
 const aPoweredVehicleHasACompartment = { message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT, path: ["compartments"] }
 
 export const Vehicle = z.object({
@@ -187,7 +184,6 @@ export type DriverCreate = z.infer<typeof DriverCreate>
 export const DriverPatch = driverBodies.patch.refine((patch) => providerShape(patch.employment, patch), providerWithProviderEmployment)
 export type DriverPatch = z.infer<typeof DriverPatch>
 
-/** A page of vehicles: one project's, of one kind, one type, one status, based at one depot. */
 export const VehicleListQuery = ProjectScopedListQuery.extend({
   kind: VehicleKind.optional(),
   vehicleTypeId: Id.optional(),
@@ -196,7 +192,6 @@ export const VehicleListQuery = ProjectScopedListQuery.extend({
 })
 export type VehicleListQuery = z.infer<typeof VehicleListQuery>
 
-/** A page of drivers: one project's, of one status, holding one class, based at one depot. */
 export const DriverListQuery = ProjectScopedListQuery.extend({
   status: DriverStatus.optional(),
   licenceClass: LicenceClass.optional(),

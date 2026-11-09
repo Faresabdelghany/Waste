@@ -42,7 +42,6 @@ export const CountingRule = z.object({
   name: Label,
   status: CountingRuleStatus,
   ...terms,
-  /** The type of the ticket it opens. */
   ticketTypeId: Id,
   /** The team the ticket waits with. */
   teamId: Id,

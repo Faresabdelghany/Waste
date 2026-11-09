@@ -60,7 +60,6 @@ export const MaintenancePlan = z.object({
 })
 export type MaintenancePlan = z.infer<typeof MaintenancePlan>
 
-/** The issue `planIssue` finds, as a refine's. */
 const holdsTheRule = (body: { intervalDays?: number | null; intervalKm?: number | null; intervalHours?: number | null; lastDoneKm?: number | null; lastDoneHours?: number | null }, context: z.RefinementCtx) => {
   const issue = planIssue({ intervalDays: body.intervalDays ?? null, intervalKm: body.intervalKm ?? null, intervalHours: body.intervalHours ?? null, lastDoneKm: body.lastDoneKm ?? null, lastDoneHours: body.lastDoneHours ?? null })
   if (issue !== undefined) context.addIssue({ code: "custom", message: issue.message, path: [issue.path] })

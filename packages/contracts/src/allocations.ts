@@ -76,7 +76,6 @@ export const VehicleAllocationCreate = z
   .refine(windowOrdered, windowEndsAfterItStarts)
 export type VehicleAllocationCreate = z.infer<typeof VehicleAllocationCreate>
 
-/** A change changes something beside its reason. */
 const changesSomethingBesideTheReason = (body: object): boolean => Object.keys(body).some((key) => key !== "reason")
 
 /** `POST /vehicle-allocations/:id/change`: every field a caller may move, and the reason, which is the event's and not the row's. */
@@ -124,10 +123,8 @@ export const VehicleAllocationEvent = z.object({
 })
 export type VehicleAllocationEvent = z.infer<typeof VehicleAllocationEvent>
 
-/** What a query giving one end of the overlapping window is told, at the other. */
 const bothEndsOfTheWindow = { message: BOTH_ENDS_OF_THE_WINDOW, path: ["overlappingTo"] }
 
-/** What a query whose overlapping window runs backwards is told. */
 const overlappingWindowOrdered = { message: OVERLAPPING_WINDOW_ORDERED, path: ["overlappingTo"] }
 
 /**

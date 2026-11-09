@@ -116,7 +116,6 @@ export const ApplicationDecide = z
   .refine(validityOrdered, endsAfterItStarts)
 export type ApplicationDecide = z.infer<typeof ApplicationDecide>
 
-/** A page of Applications: one project's or every one of the caller's, one customer's, kind's or status's, or the grants in force on a day. */
 export const ApplicationListQuery = ProjectScopedListQuery.extend({
   customerId: Id.optional(),
   kind: ApplicationKind.optional(),

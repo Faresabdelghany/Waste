@@ -46,11 +46,9 @@ import { Id } from "./ids"
 import { PositiveInt, resourceBodies, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 
-/** What a Product delivers. */
 export const ProductKind = z.enum(PRODUCT_KINDS)
 export type ProductKind = z.infer<typeof ProductKind>
 
-/** Where a Product stands in the catalogue; nothing gates a subscription on it today. */
 export const ProductStatus = z.enum(PRODUCT_STATUSES)
 export type ProductStatus = z.infer<typeof ProductStatus>
 

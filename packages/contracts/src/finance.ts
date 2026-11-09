@@ -40,7 +40,6 @@ import { Id } from "./ids"
 import { Int4, NonNegativeMinor } from "./resource"
 import { Label } from "./text"
 
-/** What a Billable Event was made of: a pickup, a ticket, a person's entry, or the reversal of an invoiced event. */
 export const BillableEventKind = z.enum(BILLABLE_EVENT_KINDS)
 export type BillableEventKind = z.infer<typeof BillableEventKind>
 
@@ -56,7 +55,6 @@ export type CancelReason = z.infer<typeof CancelReason>
 export const BillableEventStatus = z.enum(BILLABLE_EVENT_STATUSES)
 export type BillableEventStatus = z.infer<typeof BillableEventStatus>
 
-/** Where a Billing Run stands. */
 export const BillingRunStatus = z.enum(BILLING_RUN_STATUSES)
 export type BillingRunStatus = z.infer<typeof BillingRunStatus>
 
@@ -68,15 +66,12 @@ export type ExclusionReason = z.infer<typeof ExclusionReason>
 export const InvoiceKind = z.enum(INVOICE_KINDS)
 export type InvoiceKind = z.infer<typeof InvoiceKind>
 
-/** Why a credit note was issued. */
 export const CreditReason = z.enum(CREDIT_REASONS)
 export type CreditReason = z.infer<typeof CreditReason>
 
-/** Where a Settlement stands. */
 export const SettlementStatus = z.enum(SETTLEMENT_STATUSES)
 export type SettlementStatus = z.infer<typeof SettlementStatus>
 
-/** What a row of a Settlement's history is. */
 export const SettlementEventKind = z.enum(SETTLEMENT_EVENT_KINDS)
 export type SettlementEventKind = z.infer<typeof SettlementEventKind>
 
