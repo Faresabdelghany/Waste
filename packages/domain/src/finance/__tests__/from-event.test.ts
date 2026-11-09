@@ -30,7 +30,6 @@ const DAY = "2026-10-05"
 
 const row = (id: string, values: Partial<PriceRow> = {}): PriceRow => ({ id, unitPriceMinor: 1_000, planningAreaId: null, customerKind: null, containerTypeId: null, wasteFractionId: null, customerId: null, validFrom: "2026-01-01", validTo: null, ...values })
 
-/** The placement valid on the day: an active agreement of an organisation, a per-pickup product at 25 %, the project's default list with a default row and a harbour row. */
 const placement = (values: Partial<PlacementFacts> = {}): PlacementFacts => ({
   subscriptionId: SUBSCRIPTION,
   agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: CUSTOMER },
@@ -39,7 +38,6 @@ const placement = (values: Partial<PlacementFacts> = {}): PlacementFacts => ({
   ...values,
 })
 
-/** A pickup's event with everything the worker could read, but for what a test overrides: a completed stop in the harbour with a placement and no live event. */
 const pickupEvent = (kind: PickupEventFacts["kind"], values: Partial<PickupEventFacts> = {}): PickupEventFacts => ({
   kind,
   routeId: ROUTE,
@@ -60,7 +58,6 @@ const pickupEvent = (kind: PickupEventFacts["kind"], values: Partial<PickupEvent
   ...values,
 })
 
-/** The pickup's live event as the worker read it: priced, on an invoice or not. */
 const live = (values: Partial<LiveEventFacts> = {}): LiveEventFacts => ({
   id: LIVE,
   agreementId: AGREEMENT,
@@ -180,7 +177,6 @@ describe("billableFor a completed work order", () => {
 
 describe("billableFor a completed bulky collection (O11 of #290)", () => {
   const JOB = "bulky-job"
-  /** The booking's product: an active per-job product at 25 %, its one item, charged to the booking's agreement on the default list's row. */
   const job = (values: Partial<JobChargeFacts> = {}): JobChargeFacts => ({
     product: { id: JOB, status: "active", unit: "job", vatPercent: 25 },
     agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: CUSTOMER },
@@ -384,7 +380,6 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
   const PROOF = "proof"
   const FEE = "contamination-fee"
   const HIGH = "contamination-fee-high"
-  /** The stop as the rules judged it: the first step of a ladder past its free count, priced from the default list, its proof the evidence. */
   const exception = (values: Partial<ExceptionFacts> = {}, productId = FEE): ExceptionFacts => ({
     judgement: { ruleId: "rule", index: 1, free: false, productId },
     evidenceProofId: PROOF,
@@ -445,7 +440,6 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
       ["record", "cancel"],
     )
     assert.deepEqual(corrected({ exception: null, liveException: liveFee({ invoiced: true }) }), [{ action: "reverse", eventId: "live-fee", draft: reversalOf(liveFee({ invoiced: true })) }])
-    // To another step: the old undone, the new recorded, in that order.
     assert.deepEqual(corrected({ exception: exception({}, HIGH), liveException: liveFee() }), [
       { action: "cancel", eventId: "live-fee", reason: "pickup-corrected" },
       { action: "record", draft: charged(HIGH) },
@@ -503,7 +497,6 @@ describe("billableFor a Site Visit (#393)", () => {
 const UNLOAD = "unload"
 const TONNE = "per-tonne"
 
-/** A stop an approved Unload carried: 2,500 kg of residual waste under a per-tonne product at 512.50 kr a tonne, 25 % VAT. */
 const weighedStop = (values: Partial<WeighedStopFacts> = {}): WeighedStopFacts => ({
   pickupId: PICKUP,
   weightKg: 2_500,

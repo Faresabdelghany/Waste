@@ -213,7 +213,6 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   outcome: PickupOutcome
   /** The placement of the container valid on the service date, or null when none was. */
   placement: PlacementFacts<Row> | null
-  /** The pickup's live event, or null when it has none. */
   liveEvent: LiveEventFacts | null
   /** The stop's service: an emptying, or a work order the office booked (O3 of #290). */
   service: PickupService
@@ -223,7 +222,6 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   job: JobChargeFacts<Row> | null
   /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
   exception: ExceptionFacts<Row> | null
-  /** The pickup's live exception charge, or null. */
   liveException: LiveEventFacts | null
 }
 
@@ -278,7 +276,6 @@ export type VisitEventFacts = {
   productId: string | null
   /** The charge's product priced under the Agreement on the day (`priceDraft`); null where nothing is charged or no Agreement is named. */
   priced: Pick<PricingOutcome, "price" | "blockReason"> | null
-  /** The visit's live `visit` event, or null. */
   liveEvent: LiveEventFacts | null
 }
 
@@ -305,7 +302,6 @@ export type WeightReviewedFacts<Row extends PriceRow = PriceRow> = {
   approved: boolean
   /** The stops the Unload carried, each with its share; empty where it carried none or reads anything but approved. */
   stops: readonly WeighedStopFacts<Row>[]
-  /** The Unload's live `weight` events. */
   liveEvents: readonly LiveEventFacts[]
 }
 
@@ -332,7 +328,6 @@ export type ScaleTicketEventFacts<Row extends PriceRow = PriceRow> = {
   /** An account's agreement with the list it is priced under; null for a walk-in's ticket, which is never an event. */
   agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string } | null
   lines: readonly ScaleTicketLineFacts<Row>[]
-  /** The ticket's live `scale-ticket` events. */
   liveEvents: readonly LiveEventFacts[]
 }
 

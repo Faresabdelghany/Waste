@@ -1,14 +1,12 @@
 // The resolver (Issue #112 §3): `RESOLUTION_RULE` as code, on the server.
 // "The row matching the most conditions wins. A negotiated row for the
 // specific customer always wins. Remaining ties go to the row with the newest
-// effective-from date." — the sentence apps/web/lib/commercial/price-model.ts
-// states and its price-resolution.ts runs over the prototype's rows; this is
+// effective-from date." — the sentence the web's pricing modules state, which
+// the prototype ran over its rows; this is
 // the same sentence over the rows of one Price List valid on one day, with
 // the third tie-break the prototype left to array order and a server cannot
 // (§7.5): a tie on the score and on `validFrom` goes to the lower `id`, a
-// lower UUIDv7 being the row made first. The web keeps its copy until the
-// adapter (#81) retires it; its test cases are ported into this module's, so
-// the two resolvers agree until then.
+// lower UUIDv7 being the row made first.
 //
 // A row is eligible when it is valid on the day and every condition it names
 // is met by the input — `planningAreaId` by the route's scheme's planning
@@ -47,7 +45,7 @@ import type { AgreementStatus, CustomerKind } from "../registry/vocabulary"
 import { fitsMinor, vatOf } from "./money"
 import type { BlockReason } from "./vocabulary"
 
-/** The one spelling of how a price is resolved (spec §4.4), verbatim from the web's price-model.ts. */
+/** The one spelling of how a price is resolved (spec §4.4). */
 export const RESOLUTION_RULE = "The row matching the most conditions wins. A negotiated row for the specific customer always wins. Remaining ties go to the row with the newest effective-from date."
 
 /** The four conditions a row may name beside a customer, in the order they are judged and spelled. */
@@ -91,7 +89,6 @@ export type PriceInput = {
 /** How an id of each kind is spelled in a sentence; an id stands where the caller gives no spelling. */
 export type PriceLabels = Partial<Record<PriceCondition | "customerId", (id: string) => string>>
 
-/** One row's verdict: eligible or not, why not, what it matched, its score, and whether it won. */
 export type RowVerdict<Row extends PriceRow = PriceRow> = {
   row: Row
   eligible: boolean
@@ -118,7 +115,6 @@ export const CONDITION_NAMES: Readonly<Record<PriceCondition, string>> = {
   wasteFractionId: "Waste fraction",
 }
 
-/** The value of a condition spelled as a person reads it: the caller's label, or the value itself. */
 const spelled = (labels: PriceLabels, condition: PriceCondition | "customerId", value: string): string => labels[condition]?.(value) ?? value
 
 /** The sentences a row loses with, spelled once. */
@@ -132,7 +128,6 @@ export const appliesFrom = (fromQuantity: number): string => `Applies from a qua
 /** The most of a product's unit a price is resolved at: past any tier a list holds, short of a number nobody typed. */
 export const RESOLVE_QUANTITY_MAX = 1_000_000
 
-/** A row's tier as the rule ranks it: none counts as the lowest. */
 const tierOf = (row: PriceRow): number => row.fromQuantity ?? 0
 
 /** The score of an eligible row: the conditions it names, plus one hundred for a negotiated row. */
@@ -165,7 +160,6 @@ function judge<Row extends PriceRow>(row: Row, input: PriceInput, labels: PriceL
       matched.push(`${CONDITION_NAMES[condition]} ${spelled(labels, condition, required)}`)
     }
   }
-  // A tier is judged last: a row of the right conditions and period that the quantity does not reach.
   if (reason === null && row.fromQuantity != null) {
     if (input.quantity == null || input.quantity < row.fromQuantity) reason = appliesFrom(row.fromQuantity)
     else matched.push(`From ${row.fromQuantity}`)
@@ -207,7 +201,6 @@ export const priceListIdFor = (agreement: { priceListId: string | null }, defaul
 /** A Price List as `priceOccurrence` reads it: its currency and the rows the caller read for the day. */
 export type PricedList<Row extends PriceRow = PriceRow> = { id: string; currency: string; rows: readonly Row[] }
 
-/** What `priceOccurrence` is handed: the agreement's standing, the list it is priced under (or none), the product's VAT rate, how many, and the conditions on the day. */
 export type Occurrence<Row extends PriceRow = PriceRow> = {
   agreement: { status: AgreementStatus }
   priceList: PricedList<Row> | null

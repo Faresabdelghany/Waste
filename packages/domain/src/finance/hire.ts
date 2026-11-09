@@ -42,7 +42,6 @@ export const FREE_DAYS_ARE_A_HIRES = "Free days are a hire product's: sell it by
 /** The calendar month a day falls in, half-open: a monthly cadence's charge period. */
 export const monthOf = (day: string): ChargePeriod => chargePeriodContaining("monthly", day)
 
-/** How many days a period holds. */
 export const daysOf = (period: ChargePeriod): number => daysBetween(period.from, period.to)
 
 /** The first month a run over `period` reaches: the one its period's day before falls in, which a run made before that month ended left undue. */

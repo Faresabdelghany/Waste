@@ -2,8 +2,7 @@
 // one day: the row matching the most conditions wins, a negotiated row for
 // the customer always wins, a tie goes to the later start and then to the
 // lower id — every tie decided, which the prototype left to array order. The
-// web's price-resolution.test.ts cases are ported here so the two resolvers
-// agree until #81 retires the web's; the ones it lacked follow, and every
+// prototype resolver's cases are ported here; the ones it lacked follow, and every
 // losing sentence is pinned. priceOccurrence beside it is the whole pricing of
 // one occurrence, answering the one block reason in the order reprice mends
 // them.
@@ -22,7 +21,6 @@ const GLASS = "018f7c34-a000-7000-8000-000000000006"
 const COWORK = "018f7c34-a000-7000-8000-000000000007"
 const OTHER_CUSTOMER = "018f7c34-a000-7000-8000-000000000008"
 
-/** A row of the list, but for what a test overrides: the default row, no conditions, from the start of 2026, ten kroner. */
 const row = (id: string, values: Partial<PriceRow> = {}): PriceRow => ({
   id,
   unitPriceMinor: 1_000,
