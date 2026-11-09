@@ -68,7 +68,7 @@ import type { Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
@@ -79,8 +79,9 @@ import { accessModuleOf, providerIdOf, providerNameOf } from "../auth/provider"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "configure.access"
 const UserPage = Page(User)
@@ -150,23 +151,18 @@ async function userWithAccess(tx: Tx, companyId: string, row: Row): Promise<User
 const EMAIL_TAKEN = "user_account_email_key"
 const emailTaken = (email: string) => `This company already has a user with the e-mail address ${JSON.stringify(email)}`
 
-const noSuchUser = (id: string) => problem(404, { detail: `No user ${id} in this company` })
+
 
 /** The accounts of this company the caller reaches: every one for the office, its own provider's for a Service Provider's account (#291 slice 23b). */
-function userScope(principal: Principal) {
-  const providerId = providerIdOf(principal)
-  return and(eq(userAccount.companyId, principal.companyId), providerId === null ? undefined : eq(userAccount.serviceProviderId, providerId))
-}
-
-/** One account of this company by id inside the caller's reach, or undefined; the read every route here starts with. */
-async function findUser(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(userAccount)
-    .where(and(userScope(principal), eq(userAccount.id, id)))
-    .limit(1)
-  return row
-}
+const { noSuch: noSuchUser, get: getUser, list: listUsers } = scoped(userAccount, {
+  noun: "user",
+  reach: (principal) => {
+    const providerId = providerIdOf(principal)
+    return providerId === null ? undefined : eq(userAccount.serviceProviderId, providerId)
+  },
+  place: "in this company",
+  columns,
+})
 
 /** What a provider's manager is told when an access names anything but its own provider. */
 export const teamReachesItsProvider = (provider: string): string => `${provider}'s team reaches ${provider} alone`
@@ -318,19 +314,13 @@ export function userRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        const rows = await tx
-          .select(columns)
-          .from(userAccount)
-          .where(and(userScope(principal), after === undefined ? undefined : gt(userAccount.id, after)))
-          .orderBy(asc(userAccount.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not
         // one of the accounts whose access is loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listUsers(tx, principal, at)
         const byUser = await projectIdsOf(tx, companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => userOf(row, byUser.get(row.id) ?? [])), nextCursor })
       },
@@ -403,8 +393,7 @@ export function userRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        const row = await findUser(tx, principal, id)
-        if (row === undefined) throw noSuchUser(id)
+        const row = await getUser(tx, principal, id)
         return c.json(await userWithAccess(tx, companyId, row))
       },
     )
@@ -444,8 +433,7 @@ export function userRoutes(deps: RouteDeps) {
         // lock `for update`.
         const shape = accessOf(patch)
         await lockRow(tx, userAccount, { companyId, id }, shape === undefined ? "no key update" : "update")
-        const current = await findUser(tx, principal, id)
-        if (current === undefined) throw noSuchUser(id)
+        const current = await getUser(tx, principal, id)
 
         if (current.primaryAdministrator) {
           if (patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: PRIMARY_ROLE })
@@ -498,8 +486,7 @@ export function userRoutes(deps: RouteDeps) {
         const { companyId } = principal
         // Locked before it is read, for the same reason as the patch above.
         await lockRow(tx, userAccount, { companyId, id })
-        const current = await findUser(tx, principal, id)
-        if (current === undefined) throw noSuchUser(id)
+        const current = await getUser(tx, principal, id)
         if (current.primaryAdministrator) throw problem(409, { detail: PRIMARY_DEACTIVATE })
         if (providerIdOf(principal) !== null && current.id === principal.user.id) throw problem(409, { detail: TEAM_SELF_DEACTIVATE })
         if (current.deactivatedAt !== null) return c.json(await userWithAccess(tx, companyId, current))
@@ -534,8 +521,7 @@ export function userRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        const current = await findUser(tx, principal, id)
-        if (current === undefined) throw noSuchUser(id)
+        const current = await getUser(tx, principal, id)
         if (current.deactivatedAt === null) return c.json(await userWithAccess(tx, companyId, current))
 
         const [row] = await tx
@@ -577,8 +563,7 @@ export function userRoutes(deps: RouteDeps) {
         // before the flag moves (both take that same lock before they read).
         await lockRow(tx, company, { companyId, id: companyId })
         await lockRow(tx, userAccount, { companyId, id })
-        const current = await findUser(tx, c.get("principal"), id)
-        if (current === undefined) throw noSuchUser(id)
+        const current = await getUser(tx, c.get("principal"), id)
         if (current.primaryAdministrator) return c.json(await userWithAccess(tx, companyId, current))
         if (current.deactivatedAt !== null) throw problem(409, { detail: TARGET_DEACTIVATED })
         if (current.authUserId === null) throw problem(409, { detail: TARGET_INVITED })
