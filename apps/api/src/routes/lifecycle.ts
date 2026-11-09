@@ -30,24 +30,21 @@ import { move, type ContainerRef } from "@waste/db/commands/stock-ledger"
 import { container } from "@waste/db/schema/containers"
 import { stockMovement } from "@waste/db/schema/stock"
 import { stockMovementColumns, stockMovementOf } from "@waste/db/shapes/stock-movements"
-import { and, asc, eq, gt, gte, lte, or } from "drizzle-orm"
+import { and, eq, gte, lte, or } from "drizzle-orm"
 
 import { actorOf, type Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
+import { containerScope, noSuchContainer } from "./container-writes"
 import { requireWarehouse } from "./references"
 
 const MODULE = "resources.containers"
 const INVENTORY = "resources.inventory"
 const MovementPage = Page(StockMovement)
-
-/** The rows of this company, in the projects the caller works in: what every container statement is bounded by, here and in containers.ts. */
-export const containerScope = (principal: Principal) => and(eq(container.companyId, principal.companyId), inProjects(container.projectId, principal))
-
-export const noSuchContainer = (id: string) => problem(404, { detail: `No container ${id} in the projects this account works in` })
 
 /** One container of this company by id, inside the caller's projects, as a command names it; undefined when it is neither. */
 async function findContainerRef(tx: Tx, principal: Principal, id: string): Promise<ContainerRef | undefined> {
@@ -60,7 +57,7 @@ async function findContainerRef(tx: Tx, principal: Principal, id: string): Promi
 }
 
 /** The rows of this company, in the projects the caller works in: what every ledger statement is bounded by. */
-const scope = (principal: Principal) => and(eq(stockMovement.companyId, principal.companyId), inProjects(stockMovement.projectId, principal))
+const { list: listMovements } = scoped(stockMovement, { noun: "stock movement", reach: "projects", columns: stockMovementColumns })
 
 /** What every command describes the same way: no usable token, no grant, no such container. */
 const commandProblems = {
@@ -238,17 +235,12 @@ export function lifecycleRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if ((await findContainerRef(tx, principal, id)) === undefined) throw noSuchContainer(id)
-        const rows = await tx
-          .select(stockMovementColumns)
-          .from(stockMovement)
-          .where(and(scope(principal), eq(stockMovement.containerId, id), after === undefined ? undefined : gt(stockMovement.id, after)))
-          .orderBy(asc(stockMovement.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(stockMovementOf), limit))
+        const page = await listMovements(tx, principal, at, eq(stockMovement.containerId, id))
+        return c.json(mapPage(page, stockMovementOf))
       },
     )
     .get(
@@ -268,7 +260,7 @@ export function lifecycleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, containerId, warehouseId, kind, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
@@ -276,24 +268,18 @@ export function lifecycleRoutes(deps: RouteDeps) {
         if (warehouseId !== undefined) {
           await requireWarehouse(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, warehouseId, "warehouseId", "query")
         }
-        const rows = await tx
-          .select(stockMovementColumns)
-          .from(stockMovement)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(stockMovement.projectId, projectId),
-              containerId === undefined ? undefined : eq(stockMovement.containerId, containerId),
-              warehouseId === undefined ? undefined : or(eq(stockMovement.fromWarehouseId, warehouseId), eq(stockMovement.toWarehouseId, warehouseId)),
-              kind === undefined ? undefined : eq(stockMovement.kind, kind),
-              from === undefined ? undefined : gte(stockMovement.occurredAt, new Date(from)),
-              to === undefined ? undefined : lte(stockMovement.occurredAt, new Date(to)),
-              after === undefined ? undefined : gt(stockMovement.id, after),
-            ),
-          )
-          .orderBy(asc(stockMovement.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(stockMovementOf), limit))
+        const page = await listMovements(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(stockMovement.projectId, projectId),
+          containerId === undefined ? undefined : eq(stockMovement.containerId, containerId),
+          warehouseId === undefined ? undefined : or(eq(stockMovement.fromWarehouseId, warehouseId), eq(stockMovement.toWarehouseId, warehouseId)),
+          kind === undefined ? undefined : eq(stockMovement.kind, kind),
+          from === undefined ? undefined : gte(stockMovement.occurredAt, new Date(from)),
+          to === undefined ? undefined : lte(stockMovement.occurredAt, new Date(to)),
+        )
+        return c.json(mapPage(page, stockMovementOf))
       },
     )
 }

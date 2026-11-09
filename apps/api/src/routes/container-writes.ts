@@ -19,7 +19,7 @@ import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { containerScope, noSuchContainer } from "./lifecycle"
+import { scoped } from "../scoped"
 import { requireContainerType } from "./references"
 
 export const containerColumns = {
@@ -100,13 +100,14 @@ export function containerOf(row: ContainerRow): Container {
 export const LABEL_TAKEN = "container_label_key"
 export const labelTaken = (label: string) => `This company already has a container labelled ${label}`
 
-/** One container of this company by id, inside the caller's projects, with the ledger's reading; undefined when it is neither. */
-export async function findContainer(tx: Tx, principal: Principal, id: string): Promise<ContainerRow | undefined> {
-  const [row] = await containersFrom(tx, principal.companyId)
-    .query.where(and(containerScope(principal), eq(container.id, id)))
-    .limit(1)
-  return row
-}
+/** The containers of this company, in the projects the caller works in: what every container statement is bounded by, here, in containers.ts and in lifecycle.ts; each read with the ledger's reading. */
+export const {
+  scope: containerScope,
+  noSuch: noSuchContainer,
+  find: findContainer,
+  get: getContainer,
+  list: listContainers,
+} = scoped(container, { noun: "container", reach: "projects", read: (tx, principal) => containersFrom(tx, principal.companyId).query })
 
 /** The row a patch just changed, read back through the one statement, so the answer carries the reading the next read will; a create needs none, since a new container has no movement. */
 async function readBack(tx: Tx, principal: Principal, id: string): Promise<ContainerRow> {
@@ -134,7 +135,7 @@ export async function createContainer(tx: Tx, principal: Principal, values: Cont
  * family, and not a 400 about a type that was never going to be written.
  */
 export async function patchContainer(tx: Tx, principal: Principal, id: string, patch: ContainerPatch): Promise<Container> {
-  if ((await findContainer(tx, principal, id)) === undefined) throw noSuchContainer(id)
+  await getContainer(tx, principal, id)
   await requireContainerType(tx, principal.companyId, patch.containerTypeId)
   const sentences: Record<string, string> = patch.label === undefined ? {} : { [LABEL_TAKEN]: labelTaken(patch.label) }
   const [row] = await refuseDuplicate(sentences, () =>

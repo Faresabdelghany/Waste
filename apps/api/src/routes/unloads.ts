@@ -57,17 +57,16 @@ import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { reviewStatus } from "@waste/db/query/weight-review"
 import { notTaken, recordOfficeUnload, stationTakes } from "@waste/db/commands/unloads"
-import { route, unload } from "@waste/db/schema/execution"
+import { unload } from "@waste/db/schema/execution"
 import { transferNoteOf } from "@waste/domain/execution/transfer-note"
-import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
-import { lockRow } from "@waste/db/commands/shared"
+import { eq, gte, lte } from "drizzle-orm"
 import { unloadAnswered, unloadsAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest } from "../problem"
-import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadScope } from "./execution-shapes"
+import { getUnload, listUnloads, lockedRoute } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import { requireNotAhead } from "./shared"
@@ -97,30 +96,28 @@ export function unloadRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, routeId, unloadingStationId, wasteFractionId, reviewStatus: status, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
-        const { review, query } = unloadsFrom(tx, principal.companyId)
-        const rows = await query
-          .where(
-            and(
-              unloadScope(principal),
-              projectId === undefined ? undefined : eq(unload.projectId, projectId),
-              routeId === undefined ? undefined : eq(unload.routeId, routeId),
-              unloadingStationId === undefined ? undefined : eq(unload.unloadingStationId, unloadingStationId),
-              wasteFractionId === undefined ? undefined : eq(unload.wasteFractionId, wasteFractionId),
-              // The fold in SQL, so the filter and the reading cannot disagree.
-              status === undefined ? undefined : eq(reviewStatus(review.decision), status),
-              from === undefined ? undefined : gte(unload.occurredAt, new Date(from)),
-              to === undefined ? undefined : lte(unload.occurredAt, new Date(to)),
-              after === undefined ? undefined : gt(unload.id, after),
-            ),
-          )
-          .orderBy(asc(unload.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(await unloadsAnswered(tx, principal.companyId, rows), limit))
+        // The review's reading, by the name the family's read gives it.
+        const { review } = unloadsFrom(tx, principal.companyId)
+        const { items, nextCursor } = await listUnloads(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(unload.projectId, projectId),
+          routeId === undefined ? undefined : eq(unload.routeId, routeId),
+          unloadingStationId === undefined ? undefined : eq(unload.unloadingStationId, unloadingStationId),
+          wasteFractionId === undefined ? undefined : eq(unload.wasteFractionId, wasteFractionId),
+          // The fold in SQL, so the filter and the reading cannot disagree.
+          status === undefined ? undefined : eq(reviewStatus(review.decision), status),
+          from === undefined ? undefined : gte(unload.occurredAt, new Date(from)),
+          to === undefined ? undefined : lte(unload.occurredAt, new Date(to)),
+        )
+        // Paged first, so the row that only proves there is a next page brings no route of its own to read.
+        return c.json({ items: await unloadsAnswered(tx, principal.companyId, items), nextCursor })
       },
     )
     .get(
@@ -142,8 +139,7 @@ export function unloadRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findUnload(tx, principal, id)
-        if (row === undefined) throw noSuchUnload(id)
+        const row = await getUnload(tx, principal, id)
         return c.json(await unloadAnswered(tx, principal.companyId, row))
       },
     )
@@ -168,8 +164,7 @@ export function unloadRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findUnload(tx, principal, id)
-        if (row === undefined) throw noSuchUnload(id)
+        const row = await getUnload(tx, principal, id)
         const refusal = noteRefusal(row)
         if (refusal !== null) throw refusal
         const model = transferNoteOf(await transferNoteInputOf(tx, principal.companyId, row))
@@ -209,9 +204,7 @@ export function unloadRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The route's lock, then the route: a cancellation and a capture on one route take turns, and the status is read under the lock.
-        await lockRow(tx, route, { companyId: principal.companyId, id })
-        const current = await findRoute(tx, principal, id)
-        if (current === undefined) throw noSuchRoute(id)
+        const current = await lockedRoute(tx, principal, id)
         // The body's 400s before the state's 409, the order every route keeps.
         await requireUnloadingStation(tx, principal.companyId, unloadingStationId)
         await requireWasteFraction(tx, principal.companyId, wasteFractionId)

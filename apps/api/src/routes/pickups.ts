@@ -100,10 +100,10 @@ import { routeLabel } from "@waste/domain/numbering"
 import { labelOf, type RouteRow } from "@waste/db/shapes/routes"
 import { pickupColumns, pickupOf, type PickupRow } from "@waste/db/shapes/pickups"
 import { proofOf, proofsOfPickup } from "@waste/db/shapes/proofs"
-import { findRoute, noSuchPickup, pickupReach, pickupScope, requireReachedRoute } from "./execution-shapes"
+import { findPickup, findRoute, getReachedPickup, lockedRoute, noSuchPickup, pickupReach, pickupScope, requireReachedRoute } from "./execution-shapes"
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
 import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
-import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
+import { ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import { bookTicket, requireBookableTicket, requireTicketForStop } from "./ticket-stops"
 import { requireTag } from "./pickup-exceptions"
 
@@ -375,26 +375,6 @@ async function refuseHeld(tx: Tx, principal: Principal, error: unknown, held: re
 export const bookedAlready = (container: string, service: OfficeStopService, route: string): string =>
   `Container ${container} has a planned ${SERVICE_NOUNS[service]} the office added to route ${route} already`
 
-/** One pickup of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
-async function findPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
-  const [row] = await tx
-    .select(pickupColumns)
-    .from(pickup)
-    .where(and(pickupScope(principal), eq(pickup.id, id)))
-    .limit(1)
-  return row
-}
-
-/** One pickup of this company by id that the caller reads (`pickupReach`); undefined when it is not one. What the read reads. */
-async function findReachedPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
-  const [row] = await tx
-    .select(pickupColumns)
-    .from(pickup)
-    .where(and(pickupReach(tx, principal), eq(pickup.id, id)))
-    .limit(1)
-  return row
-}
-
 /** The pickup with its `sequence`, as the list carries it (#219), and its proofs in recording order: what the read and both commands answer. */
 async function detailOf(tx: Tx, principal: Principal, row: PickupRow): Promise<PickupDetail> {
   const [sequences, proofs] = await Promise.all([sequencesOfRoutes(tx, principal, [row.routeId]), proofsOfPickup(tx, principal.companyId, row.id)])
@@ -470,7 +450,7 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
   // The same work was refused above; the route's planned vehicle serves the stop (O7 of #290).
   if (added.kind === "booked-already") throw new Error(`route ${parent.id} took the same work of container ${stop.at.containerId} under its lock`)
   if (added.kind === "misfit") throw problem(409, { detail: added.sentence })
-  const [row] = await tx.select(pickupColumns).from(pickup).where(and(pickupScope(principal), eq(pickup.id, added.id))).limit(1)
+  const row = await findPickup(tx, principal, added.id)
   if (row === undefined) throw new Error(`pickup ${added.id} added to route ${parent.id} and then not there`)
   if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
   return row
@@ -580,8 +560,7 @@ export function pickupRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findReachedPickup(tx, principal, id)
-        if (row === undefined) throw noSuchPickup(id)
+        const row = await getReachedPickup(tx, principal, id)
         return c.json(await detailOf(tx, principal, row))
       },
     )

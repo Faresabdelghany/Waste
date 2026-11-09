@@ -34,9 +34,9 @@ import { progressByRoute, progressFor, routeColumns, routeOf } from "@waste/db/s
 import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
 import { describeProblem } from "../problem"
-import { noSuchSession, openSessionsByRoute, routeScope, sessionColumns, sessionOf, sessionScope } from "./execution-shapes"
+import { getSession, listSessions, openSessionsByRoute, routeScope, sessionOf } from "./execution-shapes"
 import { activePlansByRoute } from "./plan-shapes"
 import { liveEtaOf, newestPositionsBySession } from "./positions"
 import { requireRoute } from "./references"
@@ -147,27 +147,21 @@ export function liveRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, routeId, driverId, open } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
-        const rows = await tx
-          .select(sessionColumns)
-          .from(session)
-          .where(
-            and(
-              sessionScope(principal),
-              projectId === undefined ? undefined : eq(session.projectId, projectId),
-              routeId === undefined ? undefined : eq(session.routeId, routeId),
-              driverId === undefined ? undefined : eq(session.driverId, driverId),
-              open === undefined ? undefined : open ? isNull(session.endedAt) : isNotNull(session.endedAt),
-              after === undefined ? undefined : gt(session.id, after),
-            ),
-          )
-          .orderBy(asc(session.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(sessionOf), limit))
+        const page = await listSessions(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(session.projectId, projectId),
+          routeId === undefined ? undefined : eq(session.routeId, routeId),
+          driverId === undefined ? undefined : eq(session.driverId, driverId),
+          open === undefined ? undefined : open ? isNull(session.endedAt) : isNotNull(session.endedAt),
+        )
+        return c.json(mapPage(page, sessionOf))
       },
     )
     .get(
@@ -189,12 +183,7 @@ export function liveRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const [row] = await tx
-          .select(sessionColumns)
-          .from(session)
-          .where(and(sessionScope(principal), eq(session.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchSession(id)
+        const row = await getSession(tx, principal, id)
         return c.json(sessionOf(row))
       },
     )

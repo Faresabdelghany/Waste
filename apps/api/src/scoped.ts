@@ -11,8 +11,10 @@
 // the projects' and keeps their sentence. One whose reads reach further than
 // its commands — a Service Provider's account reads the rows it is assigned
 // and commands none of them — names its read fence (`reads`) beside the
-// commands' and the place its 404 says ("this account reaches"). One whose
-// row is read with a join names its read (`read`) instead of its columns.
+// commands', and the place its 404 says where that is not the projects ("this
+// account reaches"); its commands read through `commanded` and `locked`. One
+// whose row is read with a join names its read (`read`) instead of its
+// columns.
 //
 // A page is the list rule of pagination.ts applied once: the rows after the
 // cursor in `id` order, one more than the page asked for to see whether there
@@ -40,6 +42,8 @@ export type Scoped<Row> = {
   find: (tx: Tx, principal: Principal, id: string) => Promise<Row | undefined>
   /** One row by id, or the family's 404. */
   get: (tx: Tx, principal: Principal, id: string) => Promise<Row>
+  /** One row by id inside what the caller commands, which is `find` unless the family's reads reach further: a command's read where its lock is held already or it takes none; undefined when it is not there. */
+  commanded: (tx: Tx, principal: Principal, id: string) => Promise<Row | undefined>
   /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`), inside what the caller commands; or the family's 404. */
   locked: (tx: Tx, principal: Principal, id: string, strength?: LockStrength) => Promise<Row>
   /** One page of what the caller reads inside the filters given, in id order from the cursor on. */
@@ -49,8 +53,8 @@ export type Scoped<Row> = {
 /** A fence of the family's own beside the tenant, in place of the project fence: a fleet a Service Provider runs, say. */
 export type Fence = (principal: Principal) => SQL | undefined
 
-/** A select over the family's table, its joins made: what the family's row is read with where its columns alone do not say it. */
-export type Read<Row> = (tx: Tx) => {
+/** A select over the family's table, its joins made (bounded by the caller's company where a join needs it): what the family's row is read with where its columns alone do not say it. */
+export type Read<Row> = (tx: Tx, principal: Principal) => {
   where(where: SQL | undefined): { limit(count: number): PromiseLike<Row[]>; orderBy(...order: SQL[]): { limit(count: number): PromiseLike<Row[]> } }
 }
 
@@ -93,8 +97,8 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
   const read: Read<Row> = readOwn ?? ((tx: Tx) => tx.select(columns as SelectedFields).from(table as PgTable) as unknown as ReturnType<Read<Row>>)
 
   /** One row by id under a fence; undefined when it is not there. */
-  async function within(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
-    const [row] = await read(tx)
+  async function within(tx: Tx, principal: Principal, where: SQL | undefined, id: string): Promise<Row | undefined> {
+    const [row] = await read(tx, principal)
       .where(and(where, eq(table.id, id)))
       .limit(1)
     return row
@@ -106,21 +110,22 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
   return {
     scope: fence,
     noSuch,
-    find: (tx, principal, id) => within(tx, readable(tx, principal), id),
+    find: (tx, principal, id) => within(tx, principal, readable(tx, principal), id),
     async get(tx, principal, id) {
-      const row = await within(tx, readable(tx, principal), id)
+      const row = await within(tx, principal, readable(tx, principal), id)
       if (row === undefined) throw noSuch(id)
       return row
     },
+    commanded: (tx, principal, id) => within(tx, principal, fence(principal), id),
     async locked(tx, principal, id, strength) {
       await lockRow(tx, table, { companyId: principal.companyId, id }, strength)
-      const row = await within(tx, fence(principal), id)
+      const row = await within(tx, principal, fence(principal), id)
       if (row === undefined) throw noSuch(id)
       return row
     },
     async list(tx, principal, { after, limit }, ...filters) {
       const from = after === undefined ? undefined : order === "asc" ? gt(table.id, after) : lt(table.id, after)
-      const rows = await read(tx)
+      const rows = await read(tx, principal)
         .where(and(readable(tx, principal), ...filters, from))
         .orderBy(order === "asc" ? asc(table.id) : desc(table.id))
         .limit(fetchLimit(limit))

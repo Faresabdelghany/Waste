@@ -36,7 +36,7 @@ import type { RouteRow } from "@waste/db/shapes/routes"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest } from "../problem"
-import { findReachedRoute, noSuchRoute } from "./execution-shapes"
+import { getReachedRoute } from "./execution-shapes"
 import { planStopsByPlan } from "./plan-shapes"
 
 const MODULE = "route-studio.live"
@@ -184,8 +184,7 @@ export function positionRoutes(deps: RouteDeps) {
         const { sessionId } = c.req.valid("query")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const routeRow = await findReachedRoute(tx, principal, id)
-        if (routeRow === undefined) throw noSuchRoute(id)
+        const routeRow = await getReachedRoute(tx, principal, id)
         const sessions = await tx
           .select({ id: session.id, endedAt: session.endedAt })
           .from(session)
@@ -217,8 +216,7 @@ export function positionRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const routeRow = await findReachedRoute(tx, principal, id)
-        if (routeRow === undefined) throw noSuchRoute(id)
+        const routeRow = await getReachedRoute(tx, principal, id)
         const at = now()
         const reading = await routeEtaOf(tx, principal.companyId, routeRow, at)
         const body: RouteEta = {

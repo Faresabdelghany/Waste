@@ -73,7 +73,7 @@ import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { findUnload, noSuchUnload } from "./execution-shapes"
+import { findUnload, getUnload, noSuchUnload } from "./execution-shapes"
 
 const MODULE = "route-studio.weights"
 
@@ -292,7 +292,7 @@ export function weightControlRoutes(deps: RouteDeps) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findUnload(tx, principal, id)) === undefined) throw noSuchUnload(id)
+        await getUnload(tx, principal, id)
         const rows = await tx
           .select(reviewColumns)
           .from(weightReview)
