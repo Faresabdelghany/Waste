@@ -24,18 +24,15 @@ import { customer, customerContact } from "@waste/db/schema/customers"
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 import { and, asc, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseCheck } from "@waste/db/commands/shared"
+import { refuseCheck } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 import { lockedContactHolder, noSuchCustomer, refuseContactOfAPerson } from "./customer-writes"
 
 const MODULE = "customers.contacts"
-
-const noSuchContact = (id: string) => problem(404, { detail: `No contact person ${id} in this company` })
 
 const columns = {
   id: customerContact.id,
@@ -68,14 +65,7 @@ const UNREACHABLE = { customer_contact_channel_shape: { input: "email", sentence
 
 const lowercased = <T extends { email?: string | null }>(values: T): T => (values.email == null ? values : { ...values, email: values.email.toLowerCase() })
 
-async function findContact(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(customerContact)
-    .where(and(eq(customerContact.companyId, principal.companyId), eq(customerContact.id, id)))
-    .limit(1)
-  return row
-}
+const { get: getContact, locked: lockedContact } = scoped(customerContact, { noun: "contact person", reach: "company", columns })
 
 /** A customer's contacts, every one, oldest first. */
 export async function contactsOf(tx: Tx, companyId: string, customerId: string): Promise<CustomerContact[]> {
@@ -160,8 +150,7 @@ export function customerContactRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findContact(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchContact(id)
+        const row = await getContact(c.get("tx"), c.get("principal"), id)
         return c.json(contactOf(row))
       },
     )
@@ -187,13 +176,10 @@ export function customerContactRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findContact(tx, principal, id)
-        if (found === undefined) throw noSuchContact(id)
+        const found = await getContact(tx, principal, id)
         // The customer's lock first, parent before child, as a create takes it.
         const holder = await lockedContactHolder(tx, principal, found.customerId)
-        await lockRow(tx, customerContact, { companyId: principal.companyId, id })
-        const current = await findContact(tx, principal, id)
-        if (current === undefined) throw noSuchContact(id)
+        const current = await lockedContact(tx, principal, id)
         const patch = lowercased(c.req.valid("json"))
         const email = patch.email === undefined ? current.email : patch.email
         const phone = patch.phone === undefined ? current.phone : patch.phone

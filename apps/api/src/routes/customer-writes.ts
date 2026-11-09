@@ -18,6 +18,7 @@ import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { problem } from "../problem"
+import { scoped } from "../scoped"
 
 export const customerColumns = {
   id: customer.id,
@@ -58,7 +59,7 @@ const REGISTRATION_TAKEN = "customer_registration_number_idx"
 const registrationTaken = (registrationNumber: string) =>
   `This company already has a customer with registration number ${registrationNumber}`
 
-export const noSuchCustomer = (id: string) => problem(404, { detail: `No customer ${id} in this company` })
+export const { noSuch: noSuchCustomer, get: getCustomer, list: listCustomers } = scoped(customer, { noun: "customer", reach: "company", columns: customerColumns })
 
 /** The one sentence a collision here can earn, and only when the body gave a number to collide on. */
 const collisions = (registrationNumber: string | null | undefined): Record<string, string> =>

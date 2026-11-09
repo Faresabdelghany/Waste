@@ -28,7 +28,7 @@ import { property } from "@waste/db/schema/customers"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { siteVisit } from "@waste/db/schema/site-visits"
 import { VISIT_ADDRESS_MAX } from "@waste/domain/visits/charges"
-import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or } from "drizzle-orm"
+import { and, asc, eq, gte, ilike, inArray, lte, or } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { fractionsOf, siteVisitOf, visitById, visitColumns } from "@waste/db/shapes/site-visits"
@@ -38,8 +38,9 @@ import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireNotAhead } from "./shared"
 
 const MODULE = "operate.site-visits"
@@ -49,9 +50,7 @@ const VisitPage = Page(SiteVisit)
 /** What a void of a voided visit is told. */
 export const ALREADY_VOIDED = "The visit is already voided"
 
-const noSuchVisit = (id: string) => problem(404, { detail: `No site visit ${id} in the projects this account works in` })
-
-const visitScope = (principal: Principal) => and(eq(siteVisit.companyId, principal.companyId), inProjects(siteVisit.projectId, principal))
+const { scope: visitScope, noSuch: noSuchVisit, list: listVisits } = scoped(siteVisit, { noun: "site visit", reach: "projects", columns: visitColumns, order: "desc" })
 
 /** The project of a recycling centre in the projects the caller works in; the 400 at `siteId` otherwise. */
 async function siteProject(tx: Tx, principal: Principal, siteId: string): Promise<string> {
@@ -96,30 +95,23 @@ export function siteVisitRoutes(deps: RouteDeps) {
         },
         async (c) => {
           const { limit, cursor, projectId, siteId, from, to, propertyId, customerId, source, outcome } = c.req.valid("query")
-          const after = afterCursor(cursor)
+          const at = pageAt({ cursor, limit })
           const tx = c.get("tx")
           const principal = c.get("principal")
           if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-          const rows = await tx
-            .select(visitColumns)
-            .from(siteVisit)
-            .where(
-              and(
-                visitScope(principal),
-                projectId === undefined ? undefined : eq(siteVisit.projectId, projectId),
-                siteId === undefined ? undefined : eq(siteVisit.siteId, siteId),
-                from === undefined ? undefined : gte(siteVisit.serviceDate, from),
-                to === undefined ? undefined : lte(siteVisit.serviceDate, to),
-                propertyId === undefined ? undefined : eq(siteVisit.propertyId, propertyId),
-                customerId === undefined ? undefined : eq(siteVisit.customerId, customerId),
-                source === undefined ? undefined : eq(siteVisit.source, source),
-                outcome === undefined ? undefined : eq(siteVisit.outcome, outcome),
-                after === undefined ? undefined : lt(siteVisit.id, after),
-              ),
-            )
-            .orderBy(desc(siteVisit.id))
-            .limit(fetchLimit(limit))
-          const page = pageOf(rows, limit)
+          const page = await listVisits(
+            tx,
+            principal,
+            at,
+            projectId === undefined ? undefined : eq(siteVisit.projectId, projectId),
+            siteId === undefined ? undefined : eq(siteVisit.siteId, siteId),
+            from === undefined ? undefined : gte(siteVisit.serviceDate, from),
+            to === undefined ? undefined : lte(siteVisit.serviceDate, to),
+            propertyId === undefined ? undefined : eq(siteVisit.propertyId, propertyId),
+            customerId === undefined ? undefined : eq(siteVisit.customerId, customerId),
+            source === undefined ? undefined : eq(siteVisit.source, source),
+            outcome === undefined ? undefined : eq(siteVisit.outcome, outcome),
+          )
           const fractions = await fractionsOf(
             tx,
             principal.companyId,
