@@ -8,7 +8,11 @@
 // this account works in", or "… in this company" for a company-wide one. A
 // family whose reach is something else — the fleet an office's projects or a
 // Service Provider's own admit (`reachesFleet`) — names its fence in place of
-// the projects' and keeps their sentence.
+// the projects' and keeps their sentence. One whose reads reach further than
+// its commands — a Service Provider's account reads the rows it is assigned
+// and commands none of them — names its read fence (`reads`) beside the
+// commands' and the place its 404 says ("this account reaches"). One whose
+// row is read with a join names its read (`read`) instead of its columns.
 //
 // A page is the list rule of pagination.ts applied once: the rows after the
 // cursor in `id` order, one more than the page asked for to see whether there
@@ -27,88 +31,97 @@ import { fetchLimit, pageOf, type PageAt, type Paged } from "./pagination"
 import { problem, type ProblemError } from "./problem"
 
 /** What a family declaration gives its routes. */
-export type Scoped<Columns extends SelectedFields> = {
-  /** What every statement of the family is bounded by. */
+export type Scoped<Row> = {
+  /** What every command of the family is bounded by. */
   scope: (principal: Principal) => SQL | undefined
   /** The 404 for a row outside the reach. */
   noSuch: (id: string) => ProblemError
-  /** One row by id, inside the reach; undefined when it is not there. */
-  find: (tx: Tx, principal: Principal, id: string) => Promise<SelectResultFields<Columns> | undefined>
+  /** One row by id, inside what the caller reads; undefined when it is not there. */
+  find: (tx: Tx, principal: Principal, id: string) => Promise<Row | undefined>
   /** One row by id, or the family's 404. */
-  get: (tx: Tx, principal: Principal, id: string) => Promise<SelectResultFields<Columns>>
-  /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`); or the family's 404. */
-  locked: (tx: Tx, principal: Principal, id: string, strength?: LockStrength) => Promise<SelectResultFields<Columns>>
-  /** One page of the family's rows inside the reach and the filters given, in id order from the cursor on. */
-  list: (tx: Tx, principal: Principal, at: PageAt, ...filters: (SQL | undefined)[]) => Promise<Paged<SelectResultFields<Columns>>>
+  get: (tx: Tx, principal: Principal, id: string) => Promise<Row>
+  /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`), inside what the caller commands; or the family's 404. */
+  locked: (tx: Tx, principal: Principal, id: string, strength?: LockStrength) => Promise<Row>
+  /** One page of what the caller reads inside the filters given, in id order from the cursor on. */
+  list: (tx: Tx, principal: Principal, at: PageAt, ...filters: (SQL | undefined)[]) => Promise<Paged<Row>>
 }
 
 /** A fence of the family's own beside the tenant, in place of the project fence: a fleet a Service Provider runs, say. */
 export type Fence = (principal: Principal) => SQL | undefined
 
-type Options<Columns extends SelectedFields> = {
+/** A select over the family's table, its joins made: what the family's row is read with where its columns alone do not say it. */
+export type Read<Row> = (tx: Tx) => {
+  where(where: SQL | undefined): { limit(count: number): PromiseLike<Row[]>; orderBy(...order: SQL[]): { limit(count: number): PromiseLike<Row[]> } }
+}
+
+type Options = {
   /** The family's name in its 404: "No <noun> <id> in the projects this account works in". */
   noun: string
-  /** What a row is read as. */
-  columns: Columns
   /** A condition every row of the family meets beside its reach: a message the office reads names a customer. */
   also?: SQL
   /** A page's order: oldest first unless the family reads newest first. */
   order?: "asc" | "desc"
+  /** What the caller reads where it is more than what it commands: a provider's account reads the rows it is assigned. */
+  reads?: (tx: Tx, principal: Principal) => SQL | undefined
+  /** Where the 404 says the row is not, where the reach is the family's own: "this account reaches". */
+  place?: string
 }
+
+/** The row: its columns, read off the table, or a read of the family's own. */
+type Source<Columns extends SelectedFields, Row> = { columns: Columns; read?: undefined } | { read: Read<Row>; columns?: undefined }
 
 type ProjectTable = TenantTable & { projectId: PgColumn }
 
 /** The rows of one family as a route reaches them: a project's, inside the projects the caller works in (a table without a project is refused at compile time), */
-export function scoped<Columns extends SelectedFields & { id: PgColumn }>(table: ProjectTable, options: Options<Columns> & { reach: "projects" }): Scoped<Columns>
+export function scoped<Columns extends SelectedFields, Row = SelectResultFields<Columns>>(table: ProjectTable, options: Options & Source<Columns, Row> & { reach: "projects" }): Scoped<Row>
 /** … the company's, … */
-export function scoped<Columns extends SelectedFields & { id: PgColumn }>(table: TenantTable, options: Options<Columns> & { reach: "company" }): Scoped<Columns>
+export function scoped<Columns extends SelectedFields, Row = SelectResultFields<Columns>>(table: TenantTable, options: Options & Source<Columns, Row> & { reach: "company" }): Scoped<Row>
 /** … or the company's inside a fence of the family's own. */
-export function scoped<Columns extends SelectedFields & { id: PgColumn }>(table: TenantTable, options: Options<Columns> & { reach: Fence }): Scoped<Columns>
-export function scoped<Columns extends SelectedFields & { id: PgColumn }>(table: TenantTable & { projectId?: PgColumn }, { noun, reach, columns, also, order = "asc" }: Options<Columns> & { reach: "projects" | "company" | Fence }): Scoped<Columns> {
-  type Row = SelectResultFields<Columns>
+export function scoped<Columns extends SelectedFields, Row = SelectResultFields<Columns>>(table: TenantTable, options: Options & Source<Columns, Row> & { reach: Fence }): Scoped<Row>
+export function scoped<Columns extends SelectedFields, Row = SelectResultFields<Columns>>(
+  table: TenantTable & { projectId?: PgColumn },
+  { noun, reach, columns, read: readOwn, also, order = "asc", reads, place: placed }: Options & Source<Columns, Row> & { reach: "projects" | "company" | Fence },
+): Scoped<Row> {
   const fence = (principal: Principal): SQL | undefined => {
     const tenant = eq(table.companyId, principal.companyId)
     if (reach === "company") return and(tenant, also)
     if (reach === "projects") return and(tenant, inProjects(table.projectId as PgColumn, principal), also)
     return and(tenant, reach(principal), also)
   }
-  const place = reach === "company" ? "in this company" : "in the projects this account works in"
-  const read = (tx: Tx) => tx.select(columns as SelectedFields).from(table as PgTable)
+  const readable = (tx: Tx, principal: Principal): SQL | undefined => (reads === undefined ? fence(principal) : reads(tx, principal))
+  const place = placed ?? (reach === "company" ? "in this company" : "in the projects this account works in")
+  const read: Read<Row> = readOwn ?? ((tx: Tx) => tx.select(columns as SelectedFields).from(table as PgTable) as unknown as ReturnType<Read<Row>>)
 
-  /** One row by id, inside the reach; undefined when it is not there. */
-  async function find(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
+  /** One row by id under a fence; undefined when it is not there. */
+  async function within(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
     const [row] = await read(tx)
-      .where(and(fence(principal), eq(table.id, id)))
+      .where(and(where, eq(table.id, id)))
       .limit(1)
-    return row as Row | undefined
+    return row
   }
 
   /** The 404 for a row outside the reach. */
   const noSuch = (id: string) => problem(404, { detail: `No ${noun} ${id} ${place}` })
 
   return {
-    /** What every statement of the family is bounded by. */
     scope: fence,
     noSuch,
-    find,
-    /** One row by id, or the family's 404. */
-    async get(tx: Tx, principal: Principal, id: string): Promise<Row> {
-      const row = await find(tx, principal, id)
+    find: (tx, principal, id) => within(tx, readable(tx, principal), id),
+    async get(tx, principal, id) {
+      const row = await within(tx, readable(tx, principal), id)
       if (row === undefined) throw noSuch(id)
       return row
     },
-    /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`); or the family's 404. */
-    async locked(tx: Tx, principal: Principal, id: string, strength?: LockStrength): Promise<Row> {
+    async locked(tx, principal, id, strength) {
       await lockRow(tx, table, { companyId: principal.companyId, id }, strength)
-      const row = await find(tx, principal, id)
+      const row = await within(tx, fence(principal), id)
       if (row === undefined) throw noSuch(id)
       return row
     },
-    /** One page of the family's rows inside the reach and the filters given, in id order from the cursor on. */
-    async list(tx: Tx, principal: Principal, { after, limit }: PageAt, ...filters: (SQL | undefined)[]): Promise<Paged<Row>> {
+    async list(tx, principal, { after, limit }, ...filters) {
       const from = after === undefined ? undefined : order === "asc" ? gt(table.id, after) : lt(table.id, after)
       const rows = await read(tx)
-        .where(and(fence(principal), ...filters, from))
+        .where(and(readable(tx, principal), ...filters, from))
         .orderBy(order === "asc" ? asc(table.id) : desc(table.id))
         .limit(fetchLimit(limit))
       return pageOf(rows as (Row & { id: string })[], limit)
