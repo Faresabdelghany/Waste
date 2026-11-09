@@ -7,7 +7,7 @@
 // any day of a half-open period — the absences and the unavailability a
 // command or a run judges its days against (O6 of #290).
 //
-//   db.select().from(agreement).where(and(eq(agreement.containerId, id), validOn(agreement, serviceDate)))
+//   db.select().from(containerServicePlacement).where(and(eq(containerServicePlacement.containerId, id), validOn(containerServicePlacement, serviceDate)))
 //
 // `valid_from` is inclusive and `valid_to` exclusive, matching the half-open
 // range the exclusion constraint guards, so exactly one row of a key answers
