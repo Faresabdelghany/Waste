@@ -118,7 +118,7 @@ export function eventOf(row: EventReading): BillableEvent {
     priceListRowId: row.priceListRowId,
     blockReason: row.blockReason,
     links: linksOf(row),
-    // The four are set together on a recurring charge and on nothing else (billable_event_charge_shape).
+    // The four are set together on a recurring charge and a hire, and on nothing else (billable_event_charge_shape).
     charge:
       row.chargePeriodFrom === null || row.chargePeriodTo === null || row.chargedDays === null || row.periodDays === null
         ? null
@@ -174,8 +174,8 @@ type Naming = Pick<ReturnType<typeof eventsFrom>, "line" | "reversing">
  * The reading as a `where`: the domain's fold with the later fact winning,
  * spelled over the two LATERAL columns and the two stamps — `reversed` is a
  * reversal naming it; `invoiced` a line and no reversal; `cancelled` the stamp
- * and neither; `blocked` the reason and none of those; `ready` none of the
- * four — so `GET /billable-events?status=` answers exactly the rows `eventOf`
+ * and neither; `blocked` the reason and none of those; `held` the hold and
+ * none of those; `ready` none of the five — so `GET /billable-events?status=` answers exactly the rows `eventOf`
  * would read as that status, and the consumer's "live event" is `blocked` or
  * `ready` spelled the same way.
  */

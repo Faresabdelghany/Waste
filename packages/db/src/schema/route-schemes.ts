@@ -14,8 +14,7 @@
 // the service days as a `text[]` held to the seven and to at least one
 // (`subsetOf`, `nonEmpty`), and the week rotation, which
 // `route_scheme_week_rotation_shape` ties to `every-2-weeks` and to nothing
-// else, spelled inline like `service_frequency_shape` because no other table
-// has the rule. The planning area is optional while the scheme is a draft;
+// else, spelled inline like `service_frequency_shape`. The planning area is optional while the scheme is a draft;
 // the API refuses a validated scheme whose rule groups have none.
 //
 // `collection_group` is one group of a scheme: its position (group order —
@@ -151,8 +150,8 @@ export const routeScheme = wms.table(
     oneOf(t.editPolicy),
     oneOf(t.status),
     // The rotation belongs to the fortnightly cadence and to no other: given
-    // exactly when the frequency is every-2-weeks. No helper spells it because
-    // no other table has it; the label names the check itself.
+    // exactly when the frequency is every-2-weeks. The label names the check
+    // itself.
     check(tableObjectName(t.id.table, "week_rotation_shape", "routeScheme"), sql`(${t.frequency} = 'every-2-weeks') = (${t.weekRotation} is not null)`),
     // The window the nightly sweep plans, the domain's bounds (@waste/domain/planning/lifecycle).
     check(tableObjectName(t.id.table, "plan_ahead_days_range", "routeScheme"), sql`${t.planAheadDays} between 1 and ${sql.raw(String(PLAN_AHEAD_DAYS_MAX))}`),

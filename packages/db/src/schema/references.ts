@@ -170,8 +170,9 @@ export function tenantIndex(columns: TenantColumns, ...own: [PgColumn, ...PgColu
 
 /**
  * `INDEX (...own)` without the tenant, named `<table>_<own>_idx`: for a lookup
- * that crosses companies, which only the access token hook makes (an account
- * by its e-mail, on first sign-in). Every statement of the API's carries
+ * that crosses companies, which the access token hook (an account by its
+ * e-mail, on first sign-in) and the worker's outbox relay and position purge
+ * make. Every statement of the API's carries
  * `company_id` and reads through `tenantIndex` or a key.
  */
 export function indexOn(...own: [PgColumn, ...PgColumn[]]): IndexBuilder {

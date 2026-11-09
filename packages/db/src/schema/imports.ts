@@ -45,7 +45,7 @@ export const importRun = wms.table(
     ...id,
     ...tenant,
     ...timestamps,
-    /** The project the records were imported into; null for the company's Customers. */
+    /** The project the records were imported into; null for the company's Customers and catalogue. */
     projectId: uuid(),
     kind: text({ enum: IMPORT_KINDS }).notNull(),
     /** The file's name as the browser read it. */
