@@ -29,6 +29,7 @@ import { accessUnknownSentence } from "@/lib/api/session"
 import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TICKET_TEAMS_MODULE, type TeamDefaultRow } from "@/lib/data/ticket-teams"
 import { TICKET_TEAM_PREFIX } from "@/lib/modules/configure"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs.
@@ -72,12 +73,10 @@ export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?:
   const emptyMessage =
     accessUnknownSentence(session) ??
     (!access.view
-      ? "The default teams are not shown to your role."
+      ? notShownSentence("default teams")
       : project === null
         ? "No project to set default teams for."
-        : setting.problem !== null
-          ? `The default teams could not be read from the API: ${problemSentence(setting.problem)}`
-          : "Reading the default teams from the API…")
+        : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: false }, "default teams") ?? ""))
 
   return (
     <AssetPanelShell

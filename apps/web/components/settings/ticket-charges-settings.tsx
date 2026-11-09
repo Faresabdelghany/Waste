@@ -26,6 +26,7 @@ import { readTicketCharges, replaceTicketCharges } from "@/lib/api/ticket-charge
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { NO_ONE } from "@/lib/data/properties"
 import { chargeRowsOf, picksOf, ticketChargesBody, ticketWorkProductOptions, typesPicked, type TicketChargePicks } from "@/lib/data/ticket-charges"
+import { readSentence } from "@/lib/api/read-state"
 
 /** The picks stand by the server's ids: what the set reads and is written in. */
 const asIs = (id: string) => id
@@ -75,11 +76,7 @@ export function TicketChargesSettings({ tabs, pick: shared }: { tabs?: ReactNode
     accessUnknownSentence(session) ??
     (project === null
       ? "No project to set charges for."
-      : setting.problem !== null
-        ? `The ticket charges could not be read from the API: ${problemSentence(setting.problem)}`
-        : base === null
-          ? "Reading the ticket charges from the API…"
-          : undefined)
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: base !== null }, "ticket charges") ?? undefined))
 
   return (
     <AssetPanelShell

@@ -30,6 +30,7 @@ import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 import {
   bulkyProductLabel,
   bulkyProductsOffered,
@@ -98,14 +99,10 @@ export function BulkySchedulesSettings() {
   }
 
   const emptyMessage = !access.view
-    ? "The bulky schedules are not shown to your role."
+    ? notShownSentence("bulky schedules")
     : project === null
       ? "No project to schedule bulky collections in."
-      : setting.problem !== null
-        ? `The schedules could not be read from the API: ${problemSentence(setting.problem)}`
-        : shown === null
-          ? "Reading the schedules from the API…"
-          : `${project.name} collects no bulky waste by booking: no area has a schedule.`
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: shown !== null }, "schedules") ?? `${project.name} collects no bulky waste by booking: no area has a schedule.`)
 
   const productOptions = (kept: string | undefined) => bulkyProductsOffered(shown?.products ?? [], kept)
 

@@ -28,6 +28,7 @@ import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 import { PICKUP_EXCEPTION_LADDER_MAX } from "@waste/domain/execution/pickup-exceptions"
 import { lastDayIn } from "@waste/domain/periods"
 import {
@@ -98,14 +99,10 @@ export function PickupExceptionChargesSettings() {
   }
 
   const emptyMessage = !access.view
-    ? "The exception charges are not shown to your role."
+    ? notShownSentence("exception charges")
     : project === null
       ? "No project to charge exceptions in."
-      : setting.problem !== null
-        ? `The rules could not be read from the API: ${problemSentence(setting.problem)}`
-        : shown === null
-          ? "Reading the rules from the API…"
-          : `${project.name} charges no exceptions: a missed or tagged collection costs the customer nothing.`
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: shown !== null }, "rules") ?? `${project.name} charges no exceptions: a missed or tagged collection costs the customer nothing.`)
 
   return (
     <AssetPanelShell

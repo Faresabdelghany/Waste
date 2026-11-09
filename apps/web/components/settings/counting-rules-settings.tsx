@@ -38,6 +38,7 @@ import { create, listAll, patch, post, remove } from "@/lib/api/client"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { unknownTypeName, type TypeChoice } from "@/lib/data/ticket-scope"
+import { readSentence } from "@/lib/api/read-state"
 import {
   COUNTING_PERIOD_OPTIONS,
   countingRuleBodyOf,
@@ -100,13 +101,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const rows = rules.report ?? []
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
-  const emptyMessage = accessUnknownSentence(session) ?? (!access.view
-    ? "The counting rules are not shown to your role."
-    : rules.problem !== null
-      ? `The counting rules could not be read from the API: ${problemSentence(rules.problem)}`
-      : rules.report === null
-        ? "Reading the counting rules from the API…"
-        : "No counting rule yet.")
+  const emptyMessage = accessUnknownSentence(session) ?? readSentence({ viewed: access.view, problem: rules.problem && problemSentence(rules.problem), answered: rules.report !== null }, "counting rules") ?? "No counting rule yet."
 
   return (
     <AssetPanelShell

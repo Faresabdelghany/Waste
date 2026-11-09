@@ -68,6 +68,7 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { isHolidayListRecord } from "@/lib/prototype/route-schemes/holiday-list-records"
 import { calendarRowSummary } from "@/lib/prototype/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const ACTOR_NAME = "Olivia Larsen"
 
@@ -198,15 +199,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
 
   // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = calendarRecords.length > 0
-  const emptyMessage = calendars.pending
-    ? "Reading the collection calendars from the API…"
-    : calendars.notGranted
-      ? "The collection calendars are not shown to your role."
-      : calendars.problem
-        ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
-        : narrowed
-          ? "No collection calendars match this search."
-          : "No collection calendars yet."
+  const emptyMessage = moduleReadSentence(calendars, "collection calendars") ?? (narrowed ? "No collection calendars match this search." : "No collection calendars yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = calendars.notGranted ? calendars.problem?.detail : undefined
 

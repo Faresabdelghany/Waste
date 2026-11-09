@@ -69,6 +69,7 @@ import {
   type MasterDataLookups,
 } from "@/lib/data/master-data"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const ACTOR_NAME = "Olivia Larsen"
 const STATUS_OPTIONS = ["Effective"] as const
@@ -207,15 +208,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   // A frequency names a project, so its create waits for the projects too; the other kinds need only their own module.
   const canCreate = master.ready && !saving && (kind !== "service-frequency" || organisation.ready)
 
-  const emptyMessage = master.pending
-    ? "Reading the master data from the API…"
-    : master.notGranted
-      ? "The master data is not shown to your role."
-      : master.problem
-        ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
-        : ofKind.length === 0
-          ? `No ${details.plural.toLowerCase()} yet.`
-          : `No ${details.plural.toLowerCase()} match this search.`
+  const emptyMessage = moduleReadSentence(master, "master data", { is: true }) ?? (ofKind.length === 0 ? `No ${details.plural.toLowerCase()} yet.` : `No ${details.plural.toLowerCase()} match this search.`)
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = master.notGranted ? master.problem?.detail : undefined
 

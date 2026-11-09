@@ -100,6 +100,7 @@ import {
 import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { cn } from "@/lib/utils"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const roleScopeOptions = [
   "Company",
@@ -444,15 +445,8 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
 
   const emptyMessage =
     accessUnknownSentence(session) ??
-    (teams.pending
-      ? "Reading the teams from the API…"
-      : teams.notGranted
-        ? "The ticket teams are not shown to your role."
-        : teams.problem
-          ? `The teams could not be read from the API: ${teams.problem.detail ?? teams.problem.title}`
-          : rows.length > 0
-            ? "No teams match your search."
-            : "No team yet.")
+    moduleReadSentence(teams, "teams", { notShown: "ticket teams" }) ??
+    (rows.length > 0 ? "No teams match your search." : "No team yet.")
 
   return (
     <>

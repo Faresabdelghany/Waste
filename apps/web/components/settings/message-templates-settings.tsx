@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 import {
   CHANNEL_LABELS,
   isTemplateRefusal,
@@ -70,14 +71,10 @@ export function MessageTemplatesSettings() {
   }
 
   const emptyMessage = !access.view
-    ? "The message templates are not shown to your role."
+    ? notShownSentence("message templates")
     : project === null
       ? "No project to write templates for."
-      : setting.problem !== null
-        ? `The templates could not be read from the API: ${problemSentence(setting.problem)}`
-        : base === null
-          ? "Reading the templates from the API…"
-          : `${project.name} has no message template yet.`
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: base !== null }, "templates") ?? `${project.name} has no message template yet.`)
 
   return (
     <AssetPanelShell

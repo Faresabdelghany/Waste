@@ -69,6 +69,7 @@ import {
   type PlanningAreaLookups,
 } from "@/lib/data/planning-areas"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 import { todayIso } from "@waste/domain/planning/recurrence"
 
 const ACTOR_NAME = "Olivia Larsen"
@@ -203,15 +204,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
 
   // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = areaRecords.length > 0
-  const emptyMessage = areas.pending
-    ? "Reading the planning areas from the API…"
-    : areas.notGranted
-      ? "The planning areas are not shown to your role."
-      : areas.problem
-        ? `The planning areas could not be read from the API: ${areas.problem.detail ?? areas.problem.title}`
-        : narrowed
-          ? "No planning areas match this search."
-          : "No planning areas yet."
+  const emptyMessage = moduleReadSentence(areas, "planning areas") ?? (narrowed ? "No planning areas match this search." : "No planning areas yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = areas.notGranted ? areas.problem?.detail : undefined
 

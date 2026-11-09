@@ -106,6 +106,7 @@ import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const ACTOR_NAME = "Olivia Larsen"
 
@@ -217,14 +218,7 @@ export function HolidayListsSettings() {
 
   // The module whose problem the pane says, the projects first.
   const blocked = organisation.problem !== null ? organisation : calendars
-  const notReadyMessage =
-    organisation.pending || calendars.pending
-      ? "Reading the holiday lists from the API…"
-      : blocked.notGranted
-        ? "The holiday lists are not shown to your role."
-        : blocked.problem
-          ? `The holiday lists could not be read from the API: ${blocked.problem.detail ?? blocked.problem.title}`
-          : null
+  const notReadyMessage = moduleReadSentence({ pending: organisation.pending || calendars.pending, notGranted: blocked.notGranted, problem: blocked.problem }, "holiday lists")
   const notReadyHint = blocked.notGranted ? blocked.problem?.detail : undefined
   const listedCountries = new Set(lists.map((record) => holidayListCountry(record) ?? ""))
 
