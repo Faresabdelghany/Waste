@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { savedRow, whenSaved, type SavedOutcome } from "@/components/waste/business-record-store"
+import { savedRow, whenSaved, type SavedOutcome } from "@/components/platform/business-record-store"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import type { WriteOutcome } from "../records/server-records"

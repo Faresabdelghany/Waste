@@ -12,9 +12,9 @@ import { Suspense, useEffect, useState, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
-import { useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
+import { useProviderWebId, useProviderWorkspace } from "@/components/platform/provider-account"
 import {
   RestrictedPersonaSidebar,
   type RestrictedPersona,
@@ -30,7 +30,7 @@ import { PROVIDER_PAGES } from "@/lib/modules/provider-pages"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 import { CITIZEN_IDENTITY, SERVICE_PROVIDER_IDENTITY } from "@/lib/data/fixture-identity"
-import { ShellIdentityProvider, type ShellIdentity } from "@/components/top-bar/shell-identity"
+import { ShellIdentityProvider, type ShellIdentity } from "@/components/platform/shell-identity"
 import { PageTopBar } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 

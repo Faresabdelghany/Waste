@@ -190,7 +190,7 @@ import { CheckRow } from "@/components/ui/check-row"
 import {
   BusinessFilterPopover,
   canonicalCalendarName,
-} from "@/components/waste/business-filter-popover"
+} from "@/components/platform/business-filter-popover"
 import {
   businessFilterChips,
   matchesBusinessFilters,
@@ -200,7 +200,7 @@ import {
   type BusinessFilters,
 } from "@/lib/prototype/business-filters"
 import { RecordHistory } from "@/components/waste/record-history"
-import { RecordSearchInput } from "@/components/waste/record-search-input"
+import { RecordSearchInput } from "@/components/platform/record-search-input"
 import {
   canonicalServiceFrequencyName,
 } from "@/lib/prototype/service-frequencies"
@@ -210,7 +210,7 @@ import {
   type BusinessGroupOption,
   type BusinessViewOptions,
   type BusinessViewType,
-} from "@/components/waste/business-view-options-popover"
+} from "@/components/platform/business-view-options-popover"
 import {
   BusinessRecordBoardView,
   BusinessRecordCardsView,
@@ -220,8 +220,8 @@ import {
   recordProgress,
   recordStatusTone,
   type RecordExtraAction,
-} from "@/components/waste/business-record-views"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+} from "@/components/platform/business-record-views"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { SchemeEditPolicyDialog } from "@/components/waste/scheme-edit-policy-dialog"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { useSchemeEditCommit } from "@/components/waste/use-scheme-edit-commit"
@@ -233,14 +233,14 @@ import {
 } from "@/components/waste/scheme-create-flow"
 import { CollectionGroupsEditorDialog } from "@/components/waste/collection-groups-editor"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
-import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
+import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryGranted, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
-import { useActiveRoutes } from "@/components/waste/active-routes-store"
+import { useActiveRoutes } from "@/components/platform/active-routes-store"
 import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
@@ -260,7 +260,7 @@ import {
 } from "@/lib/data/project-scope"
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
-import { useGrants } from "@/components/auth/use-grants"
+import { useGrants } from "@/components/platform/use-grants"
 import { mayOn } from "@/lib/api/grants"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
@@ -2084,7 +2084,7 @@ export function BusinessWorkspace({
               resolved.module.id).find(
               (candidate) =>
                 candidate.name === label ||
-                candidate.name.split(" · ")[0] === label,
+                resolved.module.picked?.named?.(candidate) === label,
             )?.id ?? ""
           )
         }
@@ -2891,8 +2891,8 @@ export function BusinessWorkspace({
       const provider = linkOnce("serviceProviderId", SERVICE_PROVIDERS, group.serviceProviderId)
       return {
         ...group,
-        // Vehicle names carry the registration plate; facts show the callsign.
-        ...(vehicle ? { vehicleName: vehicle.name.split(" · ")[0] } : {}),
+        // The name a fact gives a vehicle, its spec's (the callsign before its plate).
+        ...(vehicle ? { vehicleName: moduleSpecOf(VEHICLES)?.picked?.named?.(vehicle) ?? vehicle.name } : {}),
         ...(driver ? { driverName: driver.name } : {}),
         ...(provider ? { serviceProviderName: provider.name } : {}),
       }

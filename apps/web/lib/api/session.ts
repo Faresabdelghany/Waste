@@ -1,6 +1,6 @@
 // The API session apart from React (Issue #150): who the browser is signed in
 // as, and the one place that decides when that begins and ends. The provider
-// (components/waste/api-session-store.tsx) holds one controller, binds it to
+// (components/platform/api-session-store.tsx) holds one controller, binds it to
 // the browser's storage (`attachStorage`), tells it of other tabs' writes
 // (`storageChanged`), and ticks its refresh; everything else here is testable
 // against a scripted `fetch` and in-memory storages, which is how its tests

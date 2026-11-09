@@ -43,24 +43,25 @@ import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageActions } from "@/components/page-layout"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
-import { recordStatusTone } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/platform/business-record-views"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
 import { RouteMessagesSection } from "@/components/waste/commands/route-messages-section"
-import { useGrants } from "@/components/auth/use-grants"
+import { useGrants } from "@/components/platform/use-grants"
 import { allows, mayTake, type ModuleAction } from "@/lib/api/grants"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
-import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/platform/business-record-store"
+import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
-import { useCommandOffered } from "@/components/waste/provider-account"
-import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
+import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
+import { useCommandOffered } from "@/components/platform/provider-account"
+import { ProofObject } from "@/components/platform/proof-object"
+import { useProofObjectLinks } from "@/components/platform/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { PLAN_POLL_MS } from "@/lib/map-planning/plan-readings"
@@ -68,7 +69,7 @@ import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapt
 import { shownOn, timeOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "@/lib/api/records/live"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, REMOVE_PICKUP } from "@/lib/api/records/pickups"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { ADD_STOP, applyBalance, ASSIGN_ROUTE, balanceMoveLine, callsignOf, CANCEL_ROUTE, dayLoadLine, DISPATCH_ROUTE, dispatchRoutes, previewBalance, isHeldRoute, MERGE_ROUTE, MOVE_STOPS, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE, SPLIT_ROUTE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
@@ -78,8 +79,6 @@ import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import { BALANCE_DAY_FORM, contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
-import type { ProofObjectLink } from "@waste/contracts/proof-objects"
-import type { ProofOfService } from "@waste/contracts/proofs"
 import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
@@ -1036,22 +1035,6 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/** A proof's photo or signature beside its line: the picture from its signed URL, opening it whole, or why there is none to show. */
-export function ProofObject({ proof, links }: { proof: Pick<ProofOfService, "id" | "kind" | "objectKey">; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
-  if (proof.objectKey === null || links.rows === null) return null
-  const noun = proofObjectNoun(proof)
-  const link = links.rows.find((candidate) => candidate.proofId === proof.id)
-  if (link?.url == null) return <p className="mt-1 text-xs text-muted-foreground">The {noun} is no longer stored.</p>
-  return (
-    <a href={link.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-2 text-xs underline-offset-2 hover:underline">
-      {/* A private object's signed URL, which next/image would fetch through the server. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={link.url} alt={`The ${noun} recorded at this stop`} className="h-16 w-16 rounded border bg-white object-contain" />
-      Open {noun}
-    </a>
   )
 }
 

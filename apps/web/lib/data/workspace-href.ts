@@ -26,9 +26,10 @@ export function workspaceHref(location: ModuleLocation, recordId?: string, { pag
   const { workspaceId, moduleId } = location
   const params = moduleParams(moduleId, recordId)
   if (page !== undefined) return `${page}?${params.toString()}`
-  // The Driver App opens its own surface, which reads no `?module=` (Issue #145); every other module shown elsewhere keeps its workspace's address.
-  if (workspaceId === "operate" && moduleId === "driver-app") return "/driver"
-  const shown = moduleSpecOf(location)?.shown
+  const spec = moduleSpecOf(location)
+  // An app of its own opens itself, reading no `?module=` (the Driver App, Issue #145); a module shown elsewhere keeps its workspace's address.
+  if (spec?.shown === "app" && spec.deepLink !== undefined) return spec.deepLink
+  const shown = spec?.shown
   if (typeof shown === "object") return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
   // Configure's one module with no pane, Control Center, opens its twin.
   if (workspaceId === "configure") return workspaceHref(CONTROL_CENTER_TWIN, recordId)

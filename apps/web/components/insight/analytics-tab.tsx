@@ -41,7 +41,7 @@ import type { TabProps } from "./performance-tab"
 import { ReportCard, ReportNotice } from "./report-card"
 import { comparisonOf, StatRow, StatTile } from "./stat-tile"
 import { TonnageChart } from "./tonnage-chart"
-import { useReport } from "./use-report"
+import { useReport } from "@/components/platform/use-report"
 
 export function AnalyticsTab({ current, previous, against, viewed, projectName, fileStem }: TabProps) {
   const weightsShown = viewed.has(WEIGHTS_MODULE)

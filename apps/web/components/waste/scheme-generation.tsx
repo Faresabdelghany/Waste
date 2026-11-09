@@ -34,8 +34,8 @@ import { generateScheme, type GenerationAnswer } from "@/lib/api/records/route-s
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
-import { useApiClient, useApiSessionIdentity } from "./api-session-store"
-import { useBusinessRecordStore, useServerModuleState } from "./business-record-store"
+import { useApiClient, useApiSessionIdentity } from "@/components/platform/api-session-store"
+import { useBusinessRecordStore, useServerModuleState } from "@/components/platform/business-record-store"
 
 const TRIGGER_LABELS: Record<GenerationRun["trigger"], string> = { "on-demand": "Generate routes", cron: "Nightly plan-ahead" }
 const STATUS_LABELS: Record<GenerationRun["status"], string> = { queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed" }

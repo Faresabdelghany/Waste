@@ -19,7 +19,7 @@ import { ArrowClockwise, CloudSlash, SignOut, Truck, Warning } from "@phosphor-i
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import { SIGN_IN_PATH } from "@/lib/api/landing"
 import { unreachableBanner } from "@/lib/driver/route-view"

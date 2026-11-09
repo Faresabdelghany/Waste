@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { resolveActiveRouteSummaries } from "@/components/waste/active-routes-store"
+import { resolveActiveRouteSummaries } from "@/components/platform/active-routes-store"
 
 import type { BusinessRecord } from "../business-modules"
 import { navBadgeOf, navItemActive, navItems, type NavItem } from "../sidebar"
@@ -74,6 +74,8 @@ describe("the nav item a page is", () => {
       "/improve/imports": ["improve"],
       "/performance": ["improve"],
       "/settings": [],
+      "/driver": [],
+      "/control-center": [],
     }
     for (const [pathname, items] of Object.entries(expected)) assert.deepEqual(activeOn(pathname), items, pathname)
   })

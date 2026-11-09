@@ -35,7 +35,8 @@ export type SidebarFooterItem = {
 /**
  * The pages a workspace's item stands for: the item's own, the workspace's,
  * the other pages that show it (`alsoAt`), and the surfaces its modules are
- * shown on elsewhere (the citizen portal, a provider's own workspace).
+ * shown on elsewhere (the citizen portal, a provider's own workspace), never
+ * an app of its own (the Driver App), which no office sidebar frames.
  */
 function pathsOf(id: NavItemId, href: string): readonly string[] {
   const workspace = WORKSPACES[id]

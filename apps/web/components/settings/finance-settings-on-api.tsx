@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/platform/business-record-store"
 import { isCompanyRecord } from "@/lib/api/records/organisation"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import {

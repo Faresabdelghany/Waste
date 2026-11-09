@@ -19,8 +19,8 @@
 // the project's charge for the ticket's type, else its kind, to stand in.
 // The stop a ticket is about (M6 of #293) is one of its route's, of any
 // outcome: a missed one is what a complaint is about.
-import { useModuleRecords } from "@/components/waste/business-record-store"
-import { useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
+import { useModuleRecords } from "@/components/platform/business-record-store"
+import { useRelationPickers, type RelationPickers } from "@/components/platform/use-command-support"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"

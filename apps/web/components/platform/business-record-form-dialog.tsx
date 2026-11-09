@@ -52,7 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { AddressLookupField } from "@/components/waste/address-lookup-field"
+import { AddressLookupField } from "@/components/platform/address-lookup-field"
 import { recurrenceFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type ReviewItem = {

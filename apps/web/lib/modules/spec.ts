@@ -16,11 +16,12 @@ import type { ModuleIdOf, WorkspaceId } from "./keys"
 /**
  * Where the office shows a module: a tab of its workspace's page, under the
  * page's More, a surface of its own and not its workspace's page (the module's
- * `deepLink`: the Driver App, the citizen portal, a provider's own
- * workspace, Control Center), or a Settings pane — `default` for a module
- * whose pane is gone, which opens Settings where it opens.
+ * `deepLink`: the citizen portal, a provider's own workspace, Control Center),
+ * an app of its own, which its records open too (the Driver App's
+ * `deepLink`), or a Settings pane — `default` for a module whose pane is gone,
+ * which opens Settings where it opens.
  */
-export type ModulePlacement = "tab" | "more" | "elsewhere" | { readonly pane: SettingsPaneId | "default" }
+export type ModulePlacement = "tab" | "more" | "elsewhere" | "app" | { readonly pane: SettingsPaneId | "default" }
 
 /** A page of the service provider's own workspace (`/service-provider-workspace/<page>`). */
 export type ProviderPageId = "routes" | "fleet" | "tickets" | "activities" | "team"
@@ -124,7 +125,7 @@ export type ModuleSpec = {
   contextLabel: string
   valueLabel: string
   primaryAction: string
-  /** The surface of its own a module shown `elsewhere` opens: its workspace offers a link there. */
+  /** The surface of its own a module shown `elsewhere` or as an `app` opens: its workspace offers a link there. */
   deepLink?: string
   /** The fixture records of a module still on the browser's path; a switched module has none. */
   records?: BusinessRecord[]

@@ -1,6 +1,6 @@
 // The address picker's rules (#291 C13): what an address picked from the
 // register fills in a property's form, and what lets the pick go. The picker
-// itself (components/waste/address-lookup-field.tsx) asks the API — the
+// itself (components/platform/address-lookup-field.tsx) asks the API — the
 // register's key never reaches the browser — and the form's dialog applies
 // these. A pick fills the address with the register's designation always, and
 // the registry identifier (the BFE number) and the point only where they are

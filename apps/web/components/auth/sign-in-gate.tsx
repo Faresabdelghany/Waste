@@ -10,7 +10,7 @@
 import { usePathname, useRouter } from "next/navigation"
 import { Suspense, useEffect, type ReactNode } from "react"
 
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { gateOf, signInTarget } from "@/lib/api/landing"
 
 export function SignInGate({ children }: { children: ReactNode }) {

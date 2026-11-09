@@ -8,8 +8,8 @@
 
 import { useMemo } from "react"
 
-import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useModuleRecords as useStoreModuleRecords } from "@/components/waste/business-record-store"
+import { useApiConfigured } from "@/components/platform/api-session-store"
+import { useModuleRecords as useStoreModuleRecords } from "@/components/platform/business-record-store"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"

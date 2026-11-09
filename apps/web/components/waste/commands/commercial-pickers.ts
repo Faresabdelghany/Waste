@@ -26,8 +26,8 @@ import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { SERVICE_AREAS_MODULE, SERVICE_PROVIDERS_MODULE } from "@/lib/data/provider-money"
 import { CONTACTS_MODULE, NO_ONE } from "@/lib/data/properties"
 
-import { useModuleRecords, useServerModuleState } from "../business-record-store"
-import { useRelationPickers, type RelationPickers } from "./use-command-support"
+import { useModuleRecords, useServerModuleState } from "@/components/platform/business-record-store"
+import { useRelationPickers, type RelationPickers } from "@/components/platform/use-command-support"
 
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))

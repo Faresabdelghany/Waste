@@ -25,7 +25,7 @@ import { addDays, formatShortDay } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import type { SchemeEndingCounts } from "@waste/contracts/route-schemes"
 
-import { useBusinessRecordStore, whenSaved } from "./business-record-store"
+import { useBusinessRecordStore, whenSaved } from "@/components/platform/business-record-store"
 
 /** What ending the scheme did to its routes, in one sentence for the toast. */
 export function endingSentence(routes: SchemeEndingCounts): string {
