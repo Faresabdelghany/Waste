@@ -1,7 +1,7 @@
 // The demo company, as `pnpm db:seed` writes it (Issue #70, slice 2): the
 // tenant the prototype has always shown — Kystbyen Renovation, its three
 // projects with their working weeks (Issue #97), the two service providers it
-// works with, the eleven seeded roles with their grants, and the three
+// works with, the seeded roles with their grants, and the three
 // accounts the Pilot signs in with (Issue #140): Fares Abdelghany, the primary
 // administrator; Lars Mikkelsen, NordRen's Service Provider Manager; and Mads
 // Jensen, on the Driver role, with Project Access to Copenhagen Central alone
@@ -288,7 +288,6 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293) and the decommission reasons (O30 of #290). */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -434,7 +433,6 @@ export async function applyDemo(tx: Tx): Promise<number> {
       .returning({ id: roleGrant.id }),
   )
 
-  // The access rows the seed names, each written only where its pair is absent.
   written(
     await tx
       .insert(projectAccess)

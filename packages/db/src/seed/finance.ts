@@ -1,10 +1,8 @@
 // Finance & Contracting's demo rows (Issue #156, decided in #143 and #127):
 // the minimum approved Finance configuration, without which every consumer
 // event on the Pilot blocks `no-price-list`, copied from the web prototype's
-// fixtures (`apps/web/lib/data/business-modules.ts`, `commercial.price-rows`,
-// and the price-list registry of `components/settings/commercial-registries-
-// store.tsx`) under registry.ts's discipline. The catalogue's VAT and
-// invoice fields are the products' own, in registry.ts.
+// fixtures under registry.ts's discipline. The catalogue's VAT and invoice
+// fields are the products' own, in registry.ts.
 //
 //   Price lists. One default list per project the catalogue is in — Copenhagen
 //   Central's and Harbor Commercial's — at the codes the fixtures tag their
@@ -98,10 +96,7 @@ const LISTS: readonly ListSpec[] = [
   { key: "price-list-harbor-2026", project: "harbor", code: "PL-Harbor-2026", description: "Annual tariff for the Harbor service area.", rows: [RESIDUAL, CARDBOARD, GLASS, BULKY] },
 ]
 
-/** The day every list is in force from. */
 const LISTS_FROM = "2026-01-01"
-
-/* --------------------------------- rows ----------------------------------- */
 
 /** Every Finance id, keyed by the prototype's record id. */
 export type FinanceIds = {
@@ -115,7 +110,6 @@ type FinanceRows = {
   priceListRows: (typeof priceListRow.$inferInsert)[]
 }
 
-/** How many rows the Finance seed holds per table. */
 export type FinanceCounts = { [K in keyof FinanceRows]: number }
 
 function build(): { ids: FinanceIds; rows: FinanceRows } {
@@ -162,7 +156,6 @@ function build(): { ids: FinanceIds; rows: FinanceRows } {
 
 const built = build()
 
-/** Every Finance id the seed writes. */
 export const FINANCE_IDS: FinanceIds = built.ids
 
 const FINANCE_ROWS: Readonly<FinanceRows> = built.rows
