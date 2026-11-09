@@ -88,7 +88,7 @@ async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: s
 async function runOne(context: JobContext, found: ProjectToday, on: string | null): Promise<ProjectRun> {
   const where = { companyId: found.companyId, projectId: found.projectId }
   try {
-    const day = on ?? found.today
+    const day = on ?? found.today()
     const scope = { ...where, ...monthBefore(day) }
     const before = await withCompany(context.api.db, found.companyId, (tx) => scheduledRunOver(tx, scope))
     if (before !== undefined) return { ...scope, outcome: "already-run", runId: before.id }

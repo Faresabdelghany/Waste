@@ -56,7 +56,7 @@ import { team, ticket, ticketType, ticketTypeAction } from "../schema/resolution
 import { LOCK_NOT_AVAILABLE, sqlstate } from "../sqlstate"
 import { queueMessage, type Queued } from "./messaging"
 import { placementInForce } from "../query/placement-in-force"
-import { vehicleLabel } from "./fleet-fit"
+import { vehicleLabel } from "../shapes/vehicles"
 import { addOfficeStop } from "./office-stops"
 import { appendTicketEvent, BY_SLA, dueWithin, openTicket, slaHoursOf, ticketRefOf } from "./open-ticket"
 import { emit } from "./outbox"

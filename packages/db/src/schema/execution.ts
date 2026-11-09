@@ -136,7 +136,7 @@
 // system that crosses companies.
 import { CONTAINERLESS_SERVICES } from "@waste/domain/execution/office-stops"
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, LIVE_STOP_STATUSES, MISSED_PICKUP_STATUSES, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
@@ -393,7 +393,7 @@ export const pickup = wms.table(
     check(tableObjectName(t.id.table, "bulky_shape", "pickup"), sql`(${t.service} = 'bulky') = (${t.bulkyBookingId} is not null) and (${t.service} <> 'bulky' or ${t.containerId} is null)`),
     projectReference(t, [t.bulkyBookingId], bulkyBooking),
     // A booking has one live stop at a time: planned, or the one that collected it.
-    uniqueIndex(tableObjectName(t.id.table, "bulky_booking_id_key", "pickup")).on(t.companyId, t.bulkyBookingId).where(sql`${t.bulkyBookingId} is not null and ${t.status} in ('planned', 'completed')`),
+    uniqueIndex(tableObjectName(t.id.table, "bulky_booking_id_key", "pickup")).on(t.companyId, t.bulkyBookingId).where(sql`${t.bulkyBookingId} is not null and ${t.status} in (${sql.raw(LIVE_STOP_STATUSES.map(literal).join(", "))})`),
     // What each service books beside its container, and nothing else books it (O3b of #290, `BOOKED_WITH`).
     check(tableObjectName(t.id.table, "subscription_shape", "pickup"), sql`(${t.service} = 'deliver') = (${t.subscriptionId} is not null)`),
     check(tableObjectName(t.id.table, "warehouse_shape", "pickup"), sql`(${t.service} in ('remove', 'swap')) = (${t.warehouseId} is not null)`),
@@ -408,7 +408,7 @@ export const pickup = wms.table(
     // A stop without a container is the office's (#111): generation always plans a container.
     check(tableObjectName(t.id.table, "container_shape", "pickup"), sql`${t.containerId} is not null or ${t.origin} = 'office'`),
     check(tableObjectName(t.id.table, "outcome_shape", "pickup"), sql`(${t.status} <> 'planned') = (${t.outcomeAt} is not null)`),
-    check(tableObjectName(t.id.table, "reason_shape", "pickup"), sql`(${t.status} in ('skipped', 'failed')) = (${t.reason} is not null)`),
+    check(tableObjectName(t.id.table, "reason_shape", "pickup"), sql`(${t.status} in (${sql.raw(MISSED_PICKUP_STATUSES.map(literal).join(", "))})) = (${t.reason} is not null)`),
     tenantReference(t, [t.contaminantCodeId], contaminantCode),
     // A code tags the wrong waste: a stop missed for contamination, or one collected all the same.
     check(tableObjectName(t.id.table, "contaminant_code_shape", "pickup"), sql`${t.contaminantCodeId} is null or ${t.reason} = 'contamination' or ${t.status} = 'completed'`),

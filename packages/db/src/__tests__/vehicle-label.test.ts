@@ -4,7 +4,7 @@ import { after, before, describe, test } from "node:test"
 import { sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
-import { vehicleLabel, vehicleLabelOf } from "../commands/fleet-fit"
+import { vehicleLabel, vehicleLabelOf } from "../shapes/vehicles"
 import { databaseUnderTest } from "./database"
 
 const database = databaseUnderTest()

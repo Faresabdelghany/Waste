@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
 import { planLocalBootstrap } from "../bootstrap"
-import { API_ROLE, WORKER_ROLE } from "../roles"
+import { API_ROLE, GRANTED_ROLES, OWNER, WORKER_ROLE } from "../roles"
+import { databasePort } from "../supabase-config"
 
 const DATABASE_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 const DATABASE_URL = `postgresql://${API_ROLE}:p%40ss%2Fword@127.0.0.1:54322/postgres`
@@ -35,7 +37,7 @@ describe("planLocalBootstrap", () => {
   test("refuses an admin URL that is not the local stack", () => {
     assert.throws(
       () => planLocalBootstrap({ DATABASE_ADMIN_URL: "postgresql://postgres.ref:pw@aws-0-eu-north-1.pooler.supabase.com:5432/postgres", DATABASE_URL, WORKER_DATABASE_URL }),
-      /local stack.*aws-0-eu-north-1\.pooler\.supabase\.com.*ALTER ROLE .* WITH LOGIN PASSWORD .* for wms_api and wms_worker/,
+      /local stack.*aws-0-eu-north-1\.pooler\.supabase\.com.*logins for wms_api and wms_worker are the Pilot database workflow's grant-logins operation/,
     )
   })
 
@@ -55,4 +57,28 @@ describe("planLocalBootstrap", () => {
       })
     }
   })
+})
+
+/** A file of the repository: this one is packages/db/src/__tests__/bootstrap.test.ts. */
+const repositoryFile = (file: string): string => readFileSync(new URL(`../../../../${file}`, import.meta.url), "utf8")
+
+// The local stack's URLs are spelled where a person copies them (.env.example)
+// and where CI sets them for every job (ci.yml's workflow `env`), neither of
+// which can read roles.ts; held here to it through the plan bootstrap makes.
+describe("the local stack's URLs as the repository spells them", () => {
+  const spellings: [string, (variable: string) => RegExp][] = [
+    [".env.example", (variable) => new RegExp(`^${variable}=(\\S+)$`, "m")],
+    [".github/workflows/ci.yml", (variable) => new RegExp(`^  ${variable}: (\\S+)$`, "m")],
+  ]
+  for (const [file, spelled] of spellings) {
+    test(`${file} logs each role in as itself, with a password, on the local stack's port: a plan that gives every role its login`, () => {
+      const text = repositoryFile(file)
+      const env = Object.fromEntries([OWNER, ...GRANTED_ROLES].map((role) => [role.urls.local, spelled(role.urls.local).exec(text)?.[1]]))
+      assert.deepEqual(
+        planLocalBootstrap(env).logins.map((login) => login.role),
+        GRANTED_ROLES.map((role) => role.name),
+      )
+      for (const [variable, url] of Object.entries(env)) assert.equal(new URL(url ?? "").port, String(databasePort()), `${variable} names the local stack's port`)
+    })
+  }
 })

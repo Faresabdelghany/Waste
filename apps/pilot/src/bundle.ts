@@ -22,6 +22,9 @@ import path from "node:path"
 /** What a dependency may `require` and the image never has: pg's native binding, and the Cloudflare sockets postgres.js probes for. */
 export const EXTERNALS = ["pg-native", "cloudflare:sockets"]
 
+/** The Node the bundles are built for: the image's, the major `.nvmrc` names (image.test.ts holds the three together). */
+export const BUNDLE_TARGET = "node22"
+
 export type BundleOptions = {
   /** The entry file, absolute. */
   entry: string
@@ -44,7 +47,7 @@ export async function bundleEntry({ entry, outfile, tsconfig, resolveFrom }: Bun
     bundle: true,
     platform: "node",
     format: "esm",
-    target: "node22",
+    target: BUNDLE_TARGET,
     sourcemap: false,
     minify: false,
     metafile: true,

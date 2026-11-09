@@ -66,6 +66,9 @@ export type AlertCommand = (typeof ALERT_COMMANDS)[number]
 /** A resolved alert asked to change: the one sentence, read by acknowledge and by the link command alike. */
 export const ALERT_DOES_NOT_CHANGE = "This alert is resolved and does not change"
 
+/** What linking a ticket to an alert in this status is refused with, or undefined where it may be: a resolved alert changes no more, through the link as through the machine below. */
+export const alertLinkRefusal = (status: AlertStatus): string | undefined => (status === "resolved" ? ALERT_DOES_NOT_CHANGE : undefined)
+
 /** The alert machine: new is acknowledged or resolved, acknowledged is resolved, resolved changes no more. */
 export function alertTransition(status: AlertStatus, command: AlertCommand): Transition<AlertStatus> {
   switch (status) {

@@ -27,14 +27,12 @@ import { vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { loadsWaste, stopLoadKg } from "@waste/domain/execution/workload"
 import { firstMisfit, misfitSentence, type FitStop, type FitVehicle, type Misfit } from "@waste/domain/resources/fleet-fit"
-import { and, asc, eq, inArray, sql, type SQL, type SQLWrapper } from "drizzle-orm"
+import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
+import { vehicleLabel } from "../shapes/vehicles"
 
-/** The name a vehicle is shown by: its callsign, else its registration. */
-export const vehicleLabel = (row: { registration: string; callsign: string | null }): string => row.callsign ?? row.registration
-
-/** `vehicleLabel` in SQL, over a vehicle's two columns as the statement names them. */
-export const vehicleLabelOf = (columns: { registration: SQLWrapper; callsign: SQLWrapper }): SQL<string> => sql<string>`coalesce(${columns.callsign}, ${columns.registration})`
+// The API's routes still read the label here; its home is shapes/vehicles.ts.
+export { vehicleLabel } from "../shapes/vehicles"
 
 /** A vehicle as the fleet rules read it, with the label a sentence names it by and its type. */
 export type FitRow = FitVehicle & { id: string; label: string; vehicleTypeId: string }

@@ -8,12 +8,12 @@
 // `validOver` is the domain's `overlapsDays` in SQL, which validity.test.ts
 // holds it to.
 import type { AwayPeriod } from "@waste/domain/resources/availability"
-import { and, asc, eq, inArray, ne } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
-import { vehicleLabelOf } from "../commands/fleet-fit"
 import { driverAbsence, vehicleUnavailability } from "../schema/availability"
 import { driver, vehicle } from "../schema/fleet"
+import { vehicleLabelOf } from "../shapes/vehicles"
 import type { Scope } from "./project-clock"
 import { validOver } from "./valid-on"
 
@@ -26,9 +26,9 @@ export type AwayRow = AwayPeriod & { id: string; ownerId: string; name: string }
 /**
  * The periods of the owners touching `period` (half-open, an open end
  * reaching every later day), earliest first, in the scope's company and
- * project. `except` leaves out the row a patch moves.
+ * project.
  */
-export async function awayPeriodsOver(tx: Tx, family: AwayFamily, scope: Scope, ownerIds: readonly string[], period: { validFrom: string; validTo: string | null }, except?: string): Promise<AwayRow[]> {
+export async function awayPeriodsOver(tx: Tx, family: AwayFamily, scope: Scope, ownerIds: readonly string[], period: { validFrom: string; validTo: string | null }): Promise<AwayRow[]> {
   const owners = [...new Set(ownerIds)]
   if (owners.length === 0) return []
   if (family === "driver") {
@@ -42,7 +42,6 @@ export async function awayPeriodsOver(tx: Tx, family: AwayFamily, scope: Scope, 
           eq(driverAbsence.projectId, scope.projectId),
           inArray(driverAbsence.driverId, owners),
           validOver(driverAbsence, period),
-          except === undefined ? undefined : ne(driverAbsence.id, except),
         ),
       )
       .orderBy(asc(driverAbsence.validFrom))
@@ -57,7 +56,6 @@ export async function awayPeriodsOver(tx: Tx, family: AwayFamily, scope: Scope, 
         eq(vehicleUnavailability.projectId, scope.projectId),
         inArray(vehicleUnavailability.vehicleId, owners),
         validOver(vehicleUnavailability, period),
-        except === undefined ? undefined : ne(vehicleUnavailability.id, except),
       ),
     )
     .orderBy(asc(vehicleUnavailability.validFrom))
