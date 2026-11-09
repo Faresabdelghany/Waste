@@ -43,7 +43,7 @@ import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import type { CheckRefusal } from "@waste/db/commands/shared"
 import { timeOf } from "@waste/db/shapes/times"
-import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP, providerShape } from "@waste/domain/resources/places"
+import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 
 import { invalidRequest } from "../problem"
 import { providerShapeIssue } from "./provider-shape"
