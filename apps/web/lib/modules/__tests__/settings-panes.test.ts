@@ -1,13 +1,13 @@
-// Settings' panes as one table (lib/data/settings-panes.ts): the one pane
+// Settings' panes as one table (lib/modules/settings-panes.ts): the one pane
 // drawn without an API, the panes a page took the place of, and the
 // addresses built from it.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { workspaceHref } from "../workspace-href"
-import { migrateLegacyHref } from "../legacy-ids"
+import { workspaceHref } from "@/lib/data/workspace-href"
+import { migrateLegacyHref } from "@/lib/data/legacy-ids"
 import { DEFAULT_SETTINGS_PANE, projectShown, settingsAddressShown, settingsHref, settingsNav, settingsPaneDrawnWithoutApi, settingsPaneHeading, settingsPaneOf, SETTINGS_PANES, settingsTabsOf } from "../settings-panes"
-import { footerItems } from "../sidebar"
+import { footerItems } from "@/lib/data/sidebar"
 
 const shown = (id: string | undefined, params: Record<string, string> = {}) => settingsAddressShown(id, params)
 const paneShown = (id: string | undefined) => shown(id).pane

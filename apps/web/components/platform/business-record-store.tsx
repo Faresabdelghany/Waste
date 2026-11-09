@@ -23,7 +23,8 @@ import {
   migrateLegacyRecordBuckets,
 } from "@/lib/data/legacy-ids"
 import { problemSentence } from "@/lib/api/problem"
-import { moduleKeyOf, type CommandInput, type Resolver } from "@/lib/api/records/adapter"
+import { type CommandInput, type Resolver } from "@/lib/api/records/adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { ME_PROJECTS } from "@/lib/api/records/me-projects"
 import { serverModuleOf } from "@/lib/api/records/modules"
 import { createRecordStore, type RecordStore, type RecordStoreNotices } from "@/lib/api/records/record-store"
@@ -44,7 +45,7 @@ import {
 import { persistedStore } from "@/lib/persisted-store"
 import { BUSINESS_RECORDS_STORAGE_KEY } from "@/lib/storage-keys"
 
-import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "./api-session-store"
+import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "@/components/platform/api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in
@@ -52,7 +53,7 @@ import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } 
  * bare `contractor` field (the access form's field is `serviceProviderId`,
  * which the shared map already covers), so no browser is known to hold this
  * key. It is kept because `organizationForRecord` in
- * lib/data/users-roles.ts (the Users & roles pane's fixture rows) reads
+ * lib/api/users-roles.ts (the Users & roles pane's fixture rows) reads
  * `submittedValues.serviceProvider`, and without an explicit entry a bare
  * `contractor` key would fall through to the token rewrite and become
  * `"service-provider"`, which nothing reads.

@@ -36,14 +36,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
   useModuleRecords,
   whenSaved,
-} from "@/components/waste/business-record-store"
-import { recordStatusTone } from "@/components/waste/business-record-views"
+} from "@/components/platform/business-record-store"
+import { recordStatusTone } from "@/components/platform/business-record-views"
 import type {
   BusinessFormField,
   BusinessFormOption,

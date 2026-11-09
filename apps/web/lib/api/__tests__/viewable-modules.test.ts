@@ -8,8 +8,8 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
-import type { Grants } from "../grants"
-import { moduleKeyOf } from "../records/adapter"
+import type { Grants } from "@/lib/modules/grants"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { MODULES_WITHOUT_ME, SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
 
 const keysOf = (modules: readonly ReturnType<typeof viewableModules>[number][]) => modules.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))

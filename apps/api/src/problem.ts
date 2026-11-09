@@ -142,7 +142,7 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
 // itself it does, and the caller reads a 400 before any write; where only
 // the database can (the Planning context's `st_isvalid` on a polygon, Issue
 // #97), the route names the constraint and reads it through
-// `checkConstraintOf` to answer that same 400 on the field (routes/shared.ts,
+// `checkConstraintOf` to answer that same 400 on the field (`@waste/db/commands/shared`,
 // `refuseCheck`). It is not in CONFLICTS below: a check nobody foresaw is
 // ours to have prevented, so it stays a 500, which is the signal that a
 // sentence is missing.
@@ -345,7 +345,7 @@ const TARGET_LABELS: Readonly<Record<string, string>> = {
  * invalid", and one error per field. Exported because a schema is not the
  * only thing that can refuse a field — a cursor this API did not write
  * (pagination.ts), a project the account does not work in (auth/projects.ts)
- * and an id naming nobody's row (routes/shared.ts) all end here, so a client
+ * and an id naming nobody's row (routes/references.ts) all end here, so a client
  * reads one shape whatever noticed. `target` is hono's name for the part
  * (`json`, `param`) or the part itself (`body`, `query`).
  */

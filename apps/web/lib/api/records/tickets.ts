@@ -40,9 +40,8 @@
 import type { EvidenceProof, StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
 import { slaStateOf, type SlaState } from "@waste/domain/resolution/sla"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
-import { isBillableResolution, OFFICE_TICKET_SOURCES, OPEN_TICKET_STATUSES, TICKET_COMMANDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_VISIBILITIES, type TicketCommand, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { isBillableResolution, OFFICE_TICKET_SOURCES, TICKET_COMMANDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_VISIBILITIES, type TicketCommand, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
-import { moduleAt } from "@/lib/modules/keys"
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
@@ -50,8 +49,11 @@ import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 import { fieldValuesFromForm, TICKET_TYPE_PREFIX } from "@/lib/data/ticket-types"
 
 import { command, create, get, listAll, patch } from "../client"
-import { isLocalRefusal, ofKind, patchOf, said, statusLabel, statusToken, typed, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, projectTimezoneOf, shownOn, wallClockIn } from "./clock"
+import { patchOf, said, type Client, type CommandInput, type MappingContext, type RecordAction, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, statusLabel, statusToken, typed, type LocalRefusal } from "@/lib/records/fields"
+import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "@/lib/data/tickets"
+import { projectTimezoneOf } from "./clock"
+import { instantOn, shownOn, wallClockIn } from "@/lib/format/clock"
 import { containerAdapter } from "./containers"
 import { driverAdapter } from "./fleet"
 import { isCompanyRecord, userAdapter } from "./organisation"
@@ -65,16 +67,7 @@ import { customerAdapter } from "./registry"
 import { routeAdapter } from "./routes"
 import type { ActionOutcome, SendAction } from "./server-records"
 
-/** The workspace module the tickets are the rows of. */
-export const TICKETS_MODULE = moduleAt("operate.tickets")
-
 export const TICKET_PREFIX = "ticket"
-
-/** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
-export const TICKET_NUMBER_FACT = "Number"
-
-/** The fact a ticket record carries what its due date reads as under (O4 of #290), the list's SLA category. */
-export const TICKET_SLA_FACT = "SLA"
 
 /** What a due date reads as, in a person's words: an open case before its due date is on track. */
 export const SLA_STATE_LABELS: Readonly<Record<SlaState, string>> = { overdue: "Overdue", due: "On track", met: "Met", breached: "Breached", none: "No due date" }
@@ -88,9 +81,6 @@ export function ticketOpened(record: Pick<BusinessRecord, "name" | "facts" | "st
 
 /** The links the module's "Customer · property" column shows, in its order: whom and where a case is about. */
 const CONTEXT_LINKS: ReadonlyArray<keyof TicketLinks> = ["customerId", "propertyId", "sharedCollectionPointId"]
-
-/** The submitted value a ticket record carries its assignee's server id under, for the list's "Mine" (`/me`'s account). */
-export const ASSIGNEE_ACCOUNT_KEY = "assigneeAccountId"
 
 /** The submitted value a ticket record carries its type's fields' values under (#545 of #544): the wire's object as JSON, which an edit of the fields replaces and the patch reads the change of. */
 export const TICKET_FIELD_VALUES_KEY = "fieldValuesJson"
@@ -126,9 +116,6 @@ export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, st
 
 /** The links an office's form names, each by a picker: the stop among its route's (M6 of #293), and the parent among the project's tickets (7.10 of #290). */
 export const OFFICE_TICKET_LINKS = TICKET_LINKS
-
-/** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
-export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)
 
 /** The project a ticket is in: its web id, its name, its clock. */
 function projectOf(projectId: string, context: MappingContext): { webId: string; name?: string; timezone?: string } {

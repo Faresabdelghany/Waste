@@ -1,10 +1,10 @@
-// The project's clock (lib/api/records/clock.ts): an instant shown as a
+// The project's clock (lib/format/clock.ts): an instant shown as a
 // person in the project reads it, whatever the browser's own timezone, so
 // two screens of one flow never read two clocks (#255).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { dayAndTimeOn, dayIn, instantOn, shownOn, timeOn, wallClockIn } from "../records/clock"
+import { dayAndTimeOn, dayIn, instantOn, shownOn, timeOn, wallClockIn } from "../clock"
 
 const ASKED = "2026-10-24T02:32:07.421Z"
 

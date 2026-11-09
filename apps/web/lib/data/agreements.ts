@@ -25,7 +25,7 @@
 // chip — `product-<uuid>`, or the bare id — and `referencedId` is the one
 // reading of a chip.
 import { moduleAt } from "@/lib/modules/keys"
-import { ofKind } from "@/lib/api/records/adapter"
+import { ofKind } from "@/lib/records/fields"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormSection, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
@@ -193,8 +193,8 @@ export const subscriptionFormSchema: BusinessFormSchema = {
         // One place, its kind chosen first: the other kind's picker is hidden, and a hidden field is not submitted, so a pick is taken back by choosing the other kind.
         { id: "placeKind", label: "Delivered at", type: "select", required: true, defaultValue: "property", options: PLACE_KINDS, description: "A subscription is delivered at one place: a property or a shared collection point." },
         // The places' modules by location: lib/data/properties.ts spells them, and imports this module.
-        { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, visibleWhen: { fieldId: "placeKind", equals: "property" }, requiredWhen: { fieldId: "placeKind", equals: "property" } },
-        { id: "sharedPointId", label: "Shared collection point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" }, visibleWhen: { fieldId: "placeKind", equals: "shared-point" }, requiredWhen: { fieldId: "placeKind", equals: "shared-point" } },
+        { id: "propertyId", label: "Property", type: "select", relation: moduleAt("customers.properties"), visibleWhen: { fieldId: "placeKind", equals: "property" }, requiredWhen: { fieldId: "placeKind", equals: "property" } },
+        { id: "sharedPointId", label: "Shared collection point", type: "select", relation: moduleAt("customers.shared"), visibleWhen: { fieldId: "placeKind", equals: "shared-point" }, requiredWhen: { fieldId: "placeKind", equals: "shared-point" } },
         { id: "quantity", label: "Quantity", type: "number", min: 1, defaultValue: "1" },
         { id: "validFrom", label: "Valid from", type: "date", required: true },
         { id: "validTo", label: "Valid to", type: "date", description: "The last day in force; blank while it runs. Inside the agreement's period." },

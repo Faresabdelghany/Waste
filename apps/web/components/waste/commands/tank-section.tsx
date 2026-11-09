@@ -19,33 +19,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
-import { useServerModuleState } from "@/components/waste/business-record-store"
-import { useProjectRecords, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useServerModuleState } from "@/components/platform/business-record-store"
+import { useProjectRecords, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
-import { isLocalRefusal, typed } from "@/lib/api/records/adapter"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { dayIn } from "@/lib/api/records/clock"
+import { isLocalRefusal, typed } from "@/lib/records/fields"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
+import { dayIn } from "@/lib/format/clock"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
-import {
-  containersAtProperty,
-  dueSentence,
-  inspectionBodyOf,
-  inspectionsOf,
-  lastEmptyingSentence,
-  recordInspection,
-  registerTank,
-  TANK_INSPECTION_OUTCOME_LABELS,
-  TANK_KIND_LABELS,
-  TANK_OUTLET_LABELS,
-  tankBodyOf,
-  tanksEditable,
-  tanksOfProperty,
-  tanksReadable,
-  tankSummary,
-  type InspectionTyped,
-  type TankTyped,
-} from "@/lib/data/tanks"
+import { containersAtProperty, dueSentence, inspectionBodyOf, lastEmptyingSentence, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankBodyOf, tanksEditable, tanksReadable, tankSummary, type InspectionTyped, type TankTyped } from "@/lib/data/tanks"
+import { inspectionsOf, recordInspection, registerTank, tanksOfProperty } from "@/lib/api/property-details"
 
 export function TanksSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()

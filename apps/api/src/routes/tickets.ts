@@ -65,7 +65,7 @@ import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolut
 import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
 import { closedTicket, ticketTransition } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand } from "@waste/domain/resolution/vocabulary"
-import { OPEN_ROUTE_STATUSES, pickupMissed } from "@waste/domain/execution/vocabulary"
+import { OPEN_ROUTE_STATUSES, pickupMissed, type MissedPickupStatus } from "@waste/domain/execution/vocabulary"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
@@ -75,12 +75,13 @@ import { alertOf } from "@waste/db/shapes/alerts"
 import { eventColumns, eventOf, labelOf, linksOf, NO_TICKET_LINKS, ticketColumns, ticketOf, type TicketRow } from "@waste/db/shapes/tickets"
 import { labelOf as routeLabelOf } from "@waste/db/shapes/routes"
 import { lockRow } from "@waste/db/commands/shared"
+import type { PgColumn } from "drizzle-orm/pg-core"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { findReachedRoute } from "./execution-shapes"
@@ -102,7 +103,7 @@ import {
   type Scope,
 } from "./references"
 import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
-import { created, dayWindow, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
+import { requireNotAhead } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
 import { openingIssues, refuseRetiredType, requireFieldsToComplete, requireMayGive, rulesOfTicket, typeAfterPatch, typeToOpen, valueIssues } from "./ticket-type-rules"
@@ -155,7 +156,7 @@ async function requireProviderTicket(tx: Tx, principal: Principal, body: TicketC
 export const routeHasEnded = (label: string, status: "completed" | "cancelled"): string => `Route ${label} is ${status}; a re-collection rides on a route that has not ended`
 
 /** What a re-collection naming a stop that was missed is told: the re-collection is a stop still to be collected, or one collected. */
-export const stopWasMissed = (position: number, route: string, status: "skipped" | "failed"): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
+export const stopWasMissed = (position: number, route: string, status: MissedPickupStatus): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
 
 /** What a re-collection naming a work order is told, at `recollectionPickupId`: a repair or a wash collects nothing (O3 of #290). */
 export const NOT_AN_EMPTYING = "A re-collection names a stop that empties its container, not a repair or a wash"
@@ -242,7 +243,7 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
   if (stop !== undefined && pickupMissed(stop.status)) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
-/** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */
+/** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (`@waste/db/commands/shared`). */
 async function lockedTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow> {
   await lockRow(tx, ticket, { companyId: principal.companyId, id })
   const current = await findTicket(tx, principal, id)
@@ -289,11 +290,8 @@ const commandProblems = (action: Action) => ({
 
 const CLOSED = "A completed or rejected ticket is refused (409, `Ticket T-8831 is completed; reopen it first`)."
 
-/** A status command's problems: the grant's, and the ticket's type naming the roles that may give it (#545 of #544). */
-const statusCommandProblems = () => ({
-  ...commandProblems("edit"),
-  403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or the ticket's type names the roles that may give this command and the caller's is not one of them (\`Only Case handler may complete a ticket of type Bulky waste collection\`).`),
-})
+/** What else refuses a status command beside the grant: the ticket's type naming the roles that may give it (#545 of #544). */
+const TYPE_ROLE_REFUSED = `the ticket's type names the roles that may give this command and the caller's is not one of them (\`Only Case handler may complete a ticket of type Bulky waste collection\`)`
 
 /** What every status command says of the ticket's type (#545 of #544). */
 const TYPE_ROLES = " Where the ticket's type names the roles that may give the command (`PUT /ticket-types/{id}/permissions`), a caller of another role is refused (403, naming them), after the machine's own 409."
@@ -607,9 +605,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketStart,
         invalid: ["the body names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, in progress.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -632,9 +631,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketWait,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, pending.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -657,9 +657,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketHold,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, on hold.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -687,9 +688,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketComplete,
         invalid: ["the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, a re-collection stop without its route, a route that is not the project's or a stop that is not that route's, or a product with a resolution nothing is charged for, a product that is not the project's or one sold by the month"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, completed.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected already, leaves a field its type requires empty, the re-collection route has ended, the re-collection stop was missed, or the product is not offered; the detail says which."),
         },
       },
@@ -726,9 +728,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReject,
         invalid: ["the body has no reason or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, rejected.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected already; reopen it first."),
         },
       },
@@ -754,9 +757,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReopen,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, open again.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
         },
       },
       async (c) => {
@@ -803,9 +807,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReplyWithEvidence,
         invalid: ["the body names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           201: describeJson("The ticket with its history, the reply its last comment.", TicketDetail),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket names no stop, or, with `complete`, it is completed or rejected already or leaves a field its type requires empty."),
         },
       },
@@ -909,4 +914,27 @@ export function ticketRoutes(deps: RouteDeps) {
         return c.json(eventOf(row), 201)
       },
     )
+}
+
+/** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
+const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
+
+/** The first instant after a `YYYY-MM-DD` day on the UTC calendar: the exclusive end of a window that takes the whole of that day. */
+export const endOfDayExclusive = (day: string): Date => new Date(startOfUtcDay(day).getTime() + 86_400_000)
+
+/**
+ * The `where` fragment a list filter's `from`/`to` pair of `IsoDate` days
+ * makes over an instant column (Issue #109, at integration): both ends
+ * inclusive, on the UTC calendar day — `from` at its first instant, `to` up
+ * to but not including the midnight after it, so a row at 23:59 on the `to`
+ * day is inside the window and one at 00:00 the day after is not. Spelled
+ * once, because `lte(column, new Date(to))` reads a day as its first midnight
+ * and lists nothing of the day itself. A filter whose bounds are
+ * `IsoDateTime` instants (`GET /unloads`, `GET /stock-movements`) compares
+ * them as instants and does not come here, and one over a `date` column (a
+ * route's operating day) compares days and needs no window. Undefined when
+ * neither end was given, as `and` of nothing is.
+ */
+export function dayWindow(column: PgColumn, from: string | undefined, to: string | undefined): SQL | undefined {
+  return and(from === undefined ? undefined : gte(column, startOfUtcDay(from)), to === undefined ? undefined : lt(column, endOfDayExclusive(to)))
 }

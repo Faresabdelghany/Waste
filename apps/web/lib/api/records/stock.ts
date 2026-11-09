@@ -14,7 +14,8 @@ import { WAREHOUSES_MODULE } from "@/lib/data/containers"
 
 import { get, put } from "../client"
 import type { ActionOutcome, SendAction } from "./server-records"
-import type { CommandInput, LocalRefusal, MappingContext, RecordAction } from "./adapter"
+import type { CommandInput, MappingContext, RecordAction } from "./adapter"
+import type { LocalRefusal } from "@/lib/records/fields"
 
 /** The warehouse's action that replaces its minimums. */
 export const SET_STOCK_MINIMUMS = "set-stock-minimums"

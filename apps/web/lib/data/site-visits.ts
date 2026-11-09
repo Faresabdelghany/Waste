@@ -17,10 +17,12 @@ import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DA
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { allows, type Grants } from "@/lib/api/grants"
-import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { firstDayOut, lastDayIn, periodOn } from "@waste/domain/periods"
+import { count } from "@waste/domain/text"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
+import { statusLabel } from "@/lib/records/fields"
 
 /** Where the register is: Customers › Site access. */
 export const SITE_ACCESS_MODULE = moduleAt("customers.site-access") satisfies ModuleLocation
@@ -60,10 +62,9 @@ export const visitStatusOf = (visit: Pick<SiteVisit, "outcome" | "voidedAt">): s
 /** A credential's status on a day: blocked first, then ended, not yet started, or in force. */
 export function credentialStatusOf(credential: Pick<AccessCredential, "blockedAt" | "validFrom" | "validTo">, today: string): string {
   if (credential.blockedAt !== null) return "Blocked"
-  return CREDENTIAL_STANDING[periodOn(credential, today)]
+  // Upcoming, In force or Ended: the standing as a status reads.
+  return statusLabel(periodOn(credential, today))
 }
-
-const CREDENTIAL_STANDING: Record<PeriodStanding, string> = { upcoming: "Upcoming", "in-force": "In force", ended: "Ended" }
 
 /** "1st", "2nd", "3rd", "11th", "22nd": a visit's place in its year. */
 export function ordinal(n: number): string {
@@ -299,7 +300,7 @@ export function householdSentence(rule: Pick<VisitRule, "freeVisits" | "ladder">
 
 /** "8 visits in 30 days", or none: the likely-trade threshold. */
 export const tradeSentence = (rule: Pick<VisitRule, "tradeThreshold" | "tradeWindowDays">): string =>
-  rule.tradeThreshold === null || rule.tradeWindowDays === null ? "Not flagged" : `${rule.tradeThreshold} ${rule.tradeThreshold === 1 ? "visit" : "visits"} in ${rule.tradeWindowDays} ${rule.tradeWindowDays === 1 ? "day" : "days"}`
+  rule.tradeThreshold === null || rule.tradeWindowDays === null ? "Not flagged" : `${count(rule.tradeThreshold, "visit")} in ${count(rule.tradeWindowDays, "day")}`
 
 /** A project's rules, latest start first. */
 export const rulesInOrder = (rules: readonly VisitRule[]): VisitRule[] => [...rules].sort((a, b) => b.validFrom.localeCompare(a.validFrom))

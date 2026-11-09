@@ -29,10 +29,9 @@ import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { lockedContactHolder, noSuchCustomer, refuseContactOfAPerson } from "./customer-writes"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
 

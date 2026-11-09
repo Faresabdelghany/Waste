@@ -13,6 +13,7 @@ import type {
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
 import { picksLetGoBy } from "@/lib/data/address-lookup"
+import { filledRuleBreaks } from "@/lib/data/business-form-records"
 import { formReseeds, type FormSeedEdge } from "@/lib/data/business-form-seed"
 import { splitList } from "@/lib/prototype/record-values"
 import { nextServiceDates, recurrenceSentence } from "@waste/domain/planning/recurrence"
@@ -51,7 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { AddressLookupField } from "@/components/waste/address-lookup-field"
+import { AddressLookupField } from "@/components/platform/address-lookup-field"
 import { recurrenceFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type ReviewItem = {
@@ -534,6 +535,11 @@ export function BusinessRecordFormDialog({
         if (hasValue(first) && first === second) {
           errors[rule.secondField] = rule.message
         }
+      }
+
+      // Read on the fields shown, as the workspace's own checks are.
+      if (rule.type === "filled") {
+        for (const fieldId of filledRuleBreaks(rule, submittedValues)) errors[fieldId] = rule.message
       }
     }
 

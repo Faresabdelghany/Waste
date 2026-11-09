@@ -7,6 +7,9 @@ export const RESOURCES = workspaceSpec("resources", {
   modules: {
     containers: {
       shown: "tab",
+      layout: "containers",
+      filters: "containers",
+      writes: "container",
       label: "Containers",
       title: "Containers",
       description: "Office-facing registry for physical containers, their service configuration, sensor pairing, agreements, and lifecycle history.",
@@ -23,6 +26,7 @@ export const RESOURCES = workspaceSpec("resources", {
     },
     inventory: {
       shown: "tab",
+      movements: true,
       label: "Inventory",
       title: "Inventory and Stock Control",
       description: "Calculated physical, available, reserved, and in-transit balances from an append-only ledger.",
@@ -39,6 +43,7 @@ export const RESOURCES = workspaceSpec("resources", {
     },
     warehouses: {
       shown: "tab",
+      movements: true,
       label: "Warehouses",
       title: "Warehouses and Movement Ledger",
       description: "Balances, individual units, reservations, transfers, thresholds, and append-only stock movements.",

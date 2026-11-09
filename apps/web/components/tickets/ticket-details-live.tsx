@@ -34,43 +34,25 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, useServerModuleState, useServerResolver, whenSaved } from "@/components/waste/business-record-store"
-import { ProofObject } from "@/components/waste/commands/route-surfaces"
-import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
-import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
-import { useApiSession } from "@/components/waste/api-session-store"
-import { useCommandOffered, useIsProviderAccount } from "@/components/waste/provider-account"
-import { PATCH_RECORD } from "@/lib/data/provider-workspace"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, useServerResolver, whenSaved } from "@/components/platform/business-record-store"
+import { ProofObject } from "@/components/platform/proof-object"
+import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
+import { useProofObjectLinks } from "@/components/platform/use-proof-object-links"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useCommandOffered, useIsProviderAccount } from "@/components/platform/provider-account"
+import { PATCH_RECORD } from "@/lib/api/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
-import { allows } from "@/lib/api/grants"
-import { moduleKeyOf, statusLabel, webIdOf } from "@/lib/api/records/adapter"
+import { allows } from "@/lib/modules/grants"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { statusLabel, webIdOf } from "@/lib/records/fields"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
-import { shownOn } from "@/lib/api/records/clock"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
-import { ADD_STOP, ROUTES_MODULE } from "@/lib/api/records/routes"
-import {
-  ASSIGN_TICKET,
-  commentOnTicket,
-  evidenceOutcome,
-  evidencePlace,
-  evidenceProofLine,
-  isOpenTicketStatus,
-  offersTicketCommand,
-  REPLY_WITH_EVIDENCE,
-  ticketDetail,
-  ticketEvidence,
-  TICKET_FIELD_VALUES_KEY,
-  ticketFieldValuesOf,
-  TICKET_LINKS,
-  TICKET_MACHINE_COMMANDS,
-  TICKET_NUMBER_FACT,
-  TICKET_SLA_FACT,
-  TICKETS_MODULE,
-  ticketOpened,
-  type TicketCommandName,
-} from "@/lib/api/records/tickets"
+import { shownOn } from "@/lib/format/clock"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
+import { ADD_STOP } from "@/lib/api/records/routes"
+import { ASSIGN_TICKET, commentOnTicket, evidenceOutcome, evidencePlace, evidenceProofLine, offersTicketCommand, REPLY_WITH_EVIDENCE, ticketDetail, ticketEvidence, TICKET_FIELD_VALUES_KEY, ticketFieldValuesOf, TICKET_LINKS, TICKET_MACHINE_COMMANDS, ticketOpened, type TicketCommandName } from "@/lib/api/records/tickets"
+import { ACCESS_MODULE, createTicketRecord, isOpenTicketStatus, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_NUMBER_FACT, TICKET_SLA_FACT, type TicketCommandWithForm, TICKETS_MODULE, updateTicketRecord } from "@/lib/data/tickets"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord, typeLetsRole } from "@/lib/api/records/ticket-types"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
@@ -82,7 +64,6 @@ import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from
 import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { editFieldsForm, fieldValuesAfterEdit, formValuesOfFields, shownFieldValue, typeFieldsOf } from "@/lib/data/ticket-types"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
-import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import type { StopTicketKind } from "@waste/domain/resolution/ticket-stops"

@@ -24,7 +24,7 @@
 // it in the file; the partial unique index behind it answers a race.
 //
 // "Within what the payment has and what the invoice owes" is the API's rule,
-// read under row locks and written after (routes/shared.ts): the project's
+// read under row locks and written after (`@waste/db/commands/shared`): the project's
 // row first, since a payment, its allocations and the invoice they pay are
 // all one project's, then the run that issued the invoice, whose lock a
 // credit note against it takes too (routes/invoices.ts), so a credit note and
@@ -70,13 +70,12 @@ import { projectToday } from "@waste/db/query/project-clock"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { invoiceScope } from "./billing-shapes"
 import { noSuchCustomer } from "./customer-writes"
 import { requireCustomer } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.payments"
 

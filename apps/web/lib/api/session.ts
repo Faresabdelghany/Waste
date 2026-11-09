@@ -1,6 +1,6 @@
 // The API session apart from React (Issue #150): who the browser is signed in
 // as, and the one place that decides when that begins and ends. The provider
-// (components/waste/api-session-store.tsx) holds one controller, binds it to
+// (components/platform/api-session-store.tsx) holds one controller, binds it to
 // the browser's storage (`attachStorage`), tells it of other tabs' writes
 // (`storageChanged`), and ticks its refresh; everything else here is testable
 // against a scripted `fetch` and in-memory storages, which is how its tests
@@ -46,7 +46,7 @@ import {
 } from "./auth"
 import { get, UNREACHABLE_STATUS, type ApiClient } from "./client"
 import type { ApiConfig, AuthConfig } from "./config"
-import { ApiProblem, genericProblem, isAccountRefusal, problemSentence, type Problem } from "./problem"
+import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, problemSentence, type Problem } from "./problem"
 import { readStoredSession, writeStoredSession } from "./session-storage"
 
 /**
@@ -297,7 +297,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
         },
         (error: unknown) => {
           // The account's refusal ends the session (`refused`); anything else leaves the grants unknown, and says why.
-          const problem = error instanceof ApiProblem ? error.problem : genericProblem(UNREACHABLE_STATUS, error instanceof Error ? error.message : "The request failed")
+          const problem = problemOfError(error)
           if (!isAccountRefusal(problem)) store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, meProblem: problem } : state))
           throw error
         },

@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { useApiSession, useApiClient } from "@/components/waste/api-session-store"
+import { useApiSession, useApiClient } from "@/components/platform/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import type { Problem } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/problem"

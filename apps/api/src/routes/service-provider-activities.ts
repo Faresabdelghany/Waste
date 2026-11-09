@@ -83,13 +83,13 @@ import { inProjects, requireProject } from "../auth/projects"
 import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, servesScheme } from "../auth/provider"
 import { requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { operation, routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, operation, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
 import { NOT_A_DRIVER, requireServiceProvider } from "./references"
 import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 
 const MODULE = "service-providers.activities"
 const ActivityPage = Page(ServiceProviderActivity)
@@ -549,9 +549,9 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
       params: IdParam,
       body: ActivityClose,
       invalid: [name === "reject" ? "the body gives no reason or names a member it does not have" : "the body names a member it does not have"],
+      forbidden: "the caller's side does not give this command: the office decides a proposal and closes its follow-ups",
       responses: {
         200: describeJson("The activity as it now stands.", ServiceProviderActivity),
-        403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or the caller's side does not give this command: the office decides a proposal and closes its follow-ups.`),
         404: describeProblem("No activity with that id this account reaches."),
         409: describeProblem(conflict),
       },
@@ -612,9 +612,9 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
         action: "create",
         body: ServiceProviderActivityCreate,
         invalid: ["the body is missing a field its kind needs, names a member the server owns or its kind does not carry, a value outside the vocabulary, a project the caller may not name, a provider not the caller's own (a provider's account) or never assigned in the project (the office), a Service Area not the provider's in the project, a scheme not the project's, a group not the scheme's, the days the group runs on already, or a first day before tomorrow or outside the scheme's period"],
+        forbidden: "a provider's account opens a compliance follow-up",
         responses: {
           201: describeCreated("The activity as it was opened.", ServiceProviderActivity),
-          403: describeProblem(`No active account here, the caller's role does not allow \`create\` on \`${MODULE}\`, or a provider's account opens a compliance follow-up.`),
           409: describeProblem("The proposal's scheme is archived, its group is parked, or its provider does not serve the scheme on the day it would apply from."),
         },
       },
@@ -696,9 +696,9 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
         params: IdParam,
         body: ServiceProviderActivityPatch,
         invalid: ["the patch is empty", "names a member the caller does not own or the kind does not carry", "a Service Area not the provider's in the project", "the days the group runs on already", "a first day before tomorrow or outside the scheme's period"],
+        forbidden: "a provider's account corrects the office's follow-up",
         responses: {
           200: describeJson("The activity as it now stands.", ServiceProviderActivity),
-          403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or a provider's account corrects the office's follow-up.`),
           404: describeProblem("No activity with that id this account reaches."),
           409: describeProblem("The activity is closed, or the proposal as it would stand is about an archived scheme or a parked group, or a scheme its provider does not serve on the day."),
         },

@@ -10,7 +10,7 @@ import { validateGuidedScheme } from "@/lib/prototype/route-schemes/draft"
 import { SERVING_KEY } from "@/lib/prototype/route-schemes/matching"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 
-import { statusLabel } from "../../api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
 import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, planAheadToggledSentence, PREVIEW_UNPLACED, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"

@@ -16,11 +16,11 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
-import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useBusinessRecordStore } from "@/components/platform/business-record-store"
+import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useModuleReady, useRowHistory } from "@/components/waste/commands/use-command-support"
+import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
 import {
   addMaintenancePlan,
   cancelMaintenanceOrder,

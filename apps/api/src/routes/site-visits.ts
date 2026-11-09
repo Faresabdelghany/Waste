@@ -37,10 +37,10 @@ import { lockRow } from "@waste/db/commands/shared"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
+import { requireNotAhead } from "./shared"
 
 const MODULE = "operate.site-visits"
 

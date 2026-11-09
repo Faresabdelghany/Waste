@@ -13,18 +13,17 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { moduleAt } from "@/lib/modules/keys"
+import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
+import type { BusinessRecord } from "@/lib/data/business-modules"
+import { mintedRecord } from "@/lib/data/containers"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
+import { createTicketRecord, tokenOptions } from "@/lib/data/tickets"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
 
-import { allows, type Grants } from "../api/grants"
-import { moduleKeyOf } from "../api/records/adapter"
-import { DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
-import { PICKUPS_MODULE } from "../api/records/pickups"
-import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "../api/records/provider-activities"
-import { ASSIGN_ROUTE, DISPATCH_ROUTE, ROUTES_MODULE } from "../api/records/routes"
-import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord } from "./business-modules"
-import { mintedRecord } from "./containers"
-import { createTicketRecord, tokenOptions } from "./tickets"
+import { DEACTIVATE_USER, REACTIVATE_USER } from "./records/organisation"
+import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "./records/provider-activities"
+import { ASSIGN_ROUTE, DISPATCH_ROUTE } from "./records/routes"
 
 /** Service Providers › Service Provider Workspace: a provider's own team, read and invited through `/users` (#291 C24). */
 export const TEAM_MODULE = moduleAt("service-providers.service-provider-workspace")

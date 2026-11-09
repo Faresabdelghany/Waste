@@ -19,15 +19,14 @@
 // the project's charge for the ticket's type, else its kind, to stand in.
 // The stop a ticket is about (M6 of #293) is one of its route's, of any
 // outcome: a missed one is what a complaint is about.
-import { useModuleRecords } from "@/components/waste/business-record-store"
-import { useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { useModuleRecords } from "@/components/platform/business-record-store"
+import { useRelationPickers, type RelationPickers } from "@/components/platform/use-command-support"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
-import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { ACCESS_MODULE, recollectionStopOptions, TICKET_NUMBER_FACT, ticketFormFor, TICKETS_MODULE, ticketStopOptions } from "@/lib/data/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
@@ -36,7 +35,6 @@ import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
 import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
-import { ACCESS_MODULE, recollectionStopOptions, ticketFormFor, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
 const keyOf = (location: ModuleLocation) => moduleKeyOf(location.workspaceId, location.moduleId)

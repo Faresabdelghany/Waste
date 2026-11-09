@@ -21,8 +21,8 @@ import { schemeOccurrences } from "@/lib/api/records/route-schemes"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
-import { useApiClient } from "./api-session-store"
-import { useServerModuleState } from "./business-record-store"
+import { useApiClient } from "@/components/platform/api-session-store"
+import { useServerModuleState } from "@/components/platform/business-record-store"
 import { SCHEME_SEASONS_KEY } from "@/lib/prototype/route-schemes/recurrence-values"
 
 /** How far ahead the tab looks: eight weeks, the fortnightly scheme's four collections. */

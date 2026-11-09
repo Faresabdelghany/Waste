@@ -23,7 +23,7 @@ import { plan } from "@waste/db/schema/routing"
 import { optimiseSolver } from "@waste/domain/routing/plans"
 import { and, asc, eq, gt } from "drizzle-orm"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { findReachedRoute, noSuchRoute } from "./execution-shapes"
@@ -31,7 +31,6 @@ import { ensurePlan, findPlan, findReachedPlan, legsOfPlan, noSuchPlan, planColu
 import { labelOf } from "@waste/db/shapes/routes"
 import { pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.routes"
 

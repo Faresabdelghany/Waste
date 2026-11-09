@@ -80,14 +80,15 @@ import { NO_PROOF_STORAGE } from "@waste/domain/storage-objects"
 
 import type { ApiClient } from "../api/client"
 import { problemOfError, problemSentence, type Problem } from "../api/problem"
+import { putObject } from "../api/storage"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
 import { EMPTY_SNAPSHOT, kept, type ReadSnapshot, type ReadSnapshotStore } from "./read-snapshot"
 import { createCommandIds, pickupIdOf, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
 import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
-import { identifyOnRoute, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
-import { BROWSER_TIMERS, type Timers } from "./timers"
+import { identifyOnRoute, outOfReach, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
+import { BROWSER_TIMERS, type Timers } from "../timers"
 
 /** How long the queue waits before trying again while anything waits. */
 export const DRAIN_RETRY_MS = 30_000

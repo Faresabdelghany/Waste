@@ -41,22 +41,8 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
-import {
-  hasPrefix,
-  isLocalRefusal,
-  ofKind,
-  patchOf,
-  statusLabel,
-  statusToken,
-  typed,
-  typedFlag,
-  webIdOf,
-  type Client,
-  type LocalRefusal,
-  type MappingContext,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { patchOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, ofKind, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { HAUL_OUT_ACTIONS } from "./haul-out"
 import { SET_STOCK_MINIMUMS, SET_STOCK_MINIMUMS_ACTION } from "./stock"
 

@@ -10,9 +10,8 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
-import { accessModule } from "../api/records/organisation"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"
@@ -41,7 +40,7 @@ export const TICKET_TEAM_FIELDS: readonly BusinessFormField[] = [
     id: "memberUserAccountIds",
     label: "Members",
     type: "multiselect",
-    relation: { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId },
+    relation: moduleAt("configure.access"),
     description: "Who is in the team. Anyone who works tickets takes a team's ticket, member or not.",
   },
 ]

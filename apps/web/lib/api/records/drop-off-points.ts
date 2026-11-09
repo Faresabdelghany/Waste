@@ -25,7 +25,8 @@ import { DROP_OFF_KIND_OPTIONS, exceptionsOf, exceptionsText, exceptionsToSave, 
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, isLocalRefusal, patchOf, statusLabel, typed, typedFlag, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, statusLabel, typed, typedFlag, type LocalRefusal } from "@/lib/records/fields"
 import { projectTimezoneOf, todayIn } from "./clock"
 import {
   coordinatesFact,

@@ -34,7 +34,8 @@ import {
   type StopMatchRule,
 } from "./matching"
 import { isHolidayPolicy, type HolidayPolicy } from "@waste/domain/planning/occurrences"
-import { isRecurrenceFrequency, type RecurrenceFrequency, type WeekRotation } from "@waste/domain/planning/recurrence"
+import { isRecurrenceFrequency } from "@waste/domain/planning/recurrence"
+import type { RecurrenceFrequency, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 import { isSchemeServiceType } from "./scope"
 import { parseServiceDays } from "./recurrence-values"

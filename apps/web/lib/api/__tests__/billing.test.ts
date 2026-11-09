@@ -21,7 +21,8 @@ import { PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED } from "@waste/domain/finance/bill
 import { OFFICE_CANCEL_REASONS } from "../../data/commercial"
 import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import { agreementAdapter } from "../records/agreements"
 import {
   billableEventAdapter,

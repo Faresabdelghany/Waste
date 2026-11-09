@@ -37,7 +37,9 @@ import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
 import { tankSummary } from "@/lib/data/tank-words"
 import { sessionRecords } from "@/lib/driver/position-recorder"
-import { DRIVER_REASON_LABELS, endRouteWarning, entriesInOrder, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { endRouteWarning, entriesInOrder, mapsHref, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, waitingOn } from "@/lib/driver/route-view"
+import { stopsInOrder } from "@waste/domain/execution/routes"
+import { DRIVER_REASON_LABELS, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS } from "@/lib/data/route-labels"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */

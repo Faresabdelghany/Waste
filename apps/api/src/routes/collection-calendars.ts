@@ -27,19 +27,19 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { collectionCalendar } from "@waste/db/schema/collection-calendars"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/commands/shared"
+import { refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.calendars"
 const CollectionCalendarPage = Page(CollectionCalendar)
@@ -76,21 +76,7 @@ const nameTaken = (name: string) => `This project already has a collection calen
 const CALENDAR_RUNNING = "collection_calendar_no_overlap"
 const CALENDAR_RUNNING_SENTENCE = "This project already has a calendar in force over that period; a project has one calendar at a time"
 
-const noSuchCalendar = (id: string) => problem(404, { detail: `No collection calendar ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every calendar statement is bounded by. */
-const scope = (principal: Principal) =>
-  and(eq(collectionCalendar.companyId, principal.companyId), inProjects(collectionCalendar.projectId, principal))
-
-/** One calendar of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findCalendar(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(collectionCalendar)
-    .where(and(scope(principal), eq(collectionCalendar.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchCalendar, get: getCalendar, locked: lockedCalendar, list: listCalendars } = scoped(collectionCalendar, { noun: "collection calendar", reach: "projects", columns })
 
 // The writes the routes and the calendars' CSV import (routes/import-rows.ts,
 // O30 of #290) share, so an imported row is held to every rule a form's is and
@@ -112,9 +98,7 @@ export async function createCalendar(tx: Tx, principal: Principal, body: Collect
 
 /** Renames a calendar or moves its period, under its row lock. The 404 where the caller reaches no such calendar. */
 export async function patchCalendar(tx: Tx, principal: Principal, id: string, patch: CollectionCalendarPatch): Promise<CollectionCalendar> {
-  await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, strengthFor(collectionCalendar, patch))
-  const current = await findCalendar(tx, principal, id)
-  if (current === undefined) throw noSuchCalendar(id)
+  const current = await lockedCalendar(tx, principal, id, strengthFor(collectionCalendar, patch))
   if (patch.validFrom !== undefined || patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
 
   const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
@@ -160,24 +144,11 @@ export function collectionCalendarRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(collectionCalendar)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(collectionCalendar.projectId, projectId),
-              day === undefined ? undefined : validOn(collectionCalendar, day),
-              after === undefined ? undefined : gt(collectionCalendar.id, after),
-            ),
-          )
-          .orderBy(asc(collectionCalendar.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listCalendars(tx, principal, at, projectId === undefined ? undefined : eq(collectionCalendar.projectId, projectId), day === undefined ? undefined : validOn(collectionCalendar, day))
         return c.json({ items: items.map(calendarOf), nextCursor })
       },
     )
@@ -218,8 +189,7 @@ export function collectionCalendarRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findCalendar(tx, principal, id)
-        if (row === undefined) throw noSuchCalendar(id)
+        const row = await getCalendar(tx, principal, id)
         return c.json(calendarOf(row))
       },
     )

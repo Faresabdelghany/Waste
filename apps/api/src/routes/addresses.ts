@@ -34,9 +34,8 @@ import { NO_REGISTER, RegisterUnavailable, REGISTER_UNAVAILABLE, type AddressReg
 import type { IdentifiedEnv } from "../auth/principal"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
-import { describeJson } from "./shared"
 
 const MODULE: ModuleKey = "customers.properties"
 

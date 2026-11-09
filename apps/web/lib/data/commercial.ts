@@ -18,7 +18,7 @@ import { BILLABLE_EVENT_KINDS, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, ty
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { ofKind } from "@/lib/api/records/adapter"
+import { ofKind } from "@/lib/records/fields"
 
 import type { BusinessRecord } from "./business-modules"
 

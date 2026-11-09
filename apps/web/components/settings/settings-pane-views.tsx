@@ -1,6 +1,6 @@
 "use client"
 
-// What draws each pane of the Settings table (lib/data/settings-panes.ts),
+// What draws each pane of the Settings table (lib/modules/settings-panes.ts),
 // loaded when the pane is first shown, and the glyph of each icon the table
 // names. Every view takes the same props, so the shell never learns how a
 // pane navigates: a pane's own state travels in the params it declares.
@@ -31,7 +31,7 @@ import {
   Warning,
 } from "@phosphor-icons/react/dist/ssr"
 
-import type { SettingsPaneIcon, SettingsPaneId, SettingsParams } from "@/lib/data/settings-panes"
+import type { SettingsPaneIcon, SettingsPaneId, SettingsParams } from "@/lib/modules/settings-panes"
 
 export type SettingsPaneProps = {
   paneId: SettingsPaneId

@@ -79,21 +79,23 @@ import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { liveAllocationsName } from "@waste/domain/resources/allocations"
 import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT, groupsName, poweredVehicleHasACompartment } from "@waste/domain/resources/fleet"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
-import { and, asc, eq, gt, inArray, or } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
 
 import type { Principal } from "../auth/principal"
 import { reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
+import { requireProviderShape } from "./provider-shape"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, requireProviderShape, stamp } from "./shared"
+import { stamp } from "./shared"
 import { liveAllocationsNaming } from "./vehicle-allocations"
 
 const MODULE = "fleet.vehicles"
@@ -307,8 +309,6 @@ const collisions = (values: { registration?: string; callsign?: string | null })
   ...(values.callsign == null ? {} : { [CALLSIGN_TAKEN]: callsignTaken(values.callsign) }),
 })
 
-const noSuchVehicle = (id: string) => problem(404, { detail: `No vehicle ${id} in the projects this account works in` })
-
 /** What a retirement under live allocations, or under the collection groups of schemes in force, is refused with, counting them. */
 const liveAllocationsNameThis = liveAllocationsName("vehicle")
 const groupsNameThis = groupsName("vehicle")
@@ -317,18 +317,7 @@ const groupsNameThis = groupsName("vehicle")
 const liveAllocations = (companyId: string, vehicleId: string, now: Date) =>
   liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)), now)
 
-/** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every vehicle statement is bounded by. */
-const scope = (principal: Principal) => and(eq(vehicle.companyId, principal.companyId), reachesFleet(principal, vehicle))
-
-/** One vehicle of this company by id, inside the caller's reach; undefined when it is neither. */
-async function findVehicle(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(vehicle)
-    .where(and(scope(principal), eq(vehicle.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchVehicle, get: getVehicle, locked: lockedVehicle, list: listVehicles } = scoped(vehicle, { noun: "vehicle", reach: (principal) => reachesFleet(principal, vehicle), columns })
 
 // The writes the routes and the fleet's CSV import (routes/import-rows.ts,
 // O30 of #290) share, so an imported row is held to every rule a form's is and
@@ -371,15 +360,13 @@ export async function createVehicle(tx: Tx, principal: Principal, body: VehicleC
 /** Changes one vehicle the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and a retirement refused under what it would strand. */
 export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch, now: () => Date): Promise<Vehicle> {
   // The row every rule below is held against, locked before it is read
-  // (routes/shared.ts): a retirement and an allocation being made are two
+  // (`@waste/db/commands/shared`): a retirement and an allocation being made are two
   // halves of one rule, and they serialise here.
-  await lockRow(tx, vehicle, { companyId: principal.companyId, id }, strengthFor(vehicle, patch))
-  const current = await findVehicle(tx, principal, id)
-  if (current === undefined) throw noSuchVehicle(id)
+  const current = await lockedVehicle(tx, principal, id, strengthFor(vehicle, patch))
   const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
   const merged = { ...current, ...patch }
 
-  // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+  // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/place-rules.ts): a patch carries one half and the stored row the other.
   requireOwnFleet(principal, { kind: patch.ownership, serviceProviderId: patch.serviceProviderId }, "vehicle", "patch")
   requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
   await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
@@ -438,28 +425,12 @@ export function vehicleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, kind, vehicleTypeId, status, homeDepotId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) await requireReachedProject(tx, principal, projectId, now, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(vehicle)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(vehicle.projectId, projectId),
-              kind === undefined ? undefined : eq(vehicle.kind, kind),
-              vehicleTypeId === undefined ? undefined : eq(vehicle.vehicleTypeId, vehicleTypeId),
-              status === undefined ? undefined : eq(vehicle.status, status),
-              homeDepotId === undefined ? undefined : eq(vehicle.homeDepotId, homeDepotId),
-              after === undefined ? undefined : gt(vehicle.id, after),
-            ),
-          )
-          .orderBy(asc(vehicle.id))
-          .limit(fetchLimit(limit))
+        const { items, nextCursor } = await listVehicles(tx, principal, at, projectId === undefined ? undefined : eq(vehicle.projectId, projectId), kind === undefined ? undefined : eq(vehicle.kind, kind), vehicleTypeId === undefined ? undefined : eq(vehicle.vehicleTypeId, vehicleTypeId), status === undefined ? undefined : eq(vehicle.status, status), homeDepotId === undefined ? undefined : eq(vehicle.homeDepotId, homeDepotId))
         // Paged first, so the row that only proves there is a next page is not one whose compartments are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
         const compartments = await compartmentsOf(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => vehicleOf(row, compartments.get(row.id) ?? [])), nextCursor })
       },
@@ -501,8 +472,7 @@ export function vehicleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findVehicle(tx, principal, id)
-        if (row === undefined) throw noSuchVehicle(id)
+        const row = await getVehicle(tx, principal, id)
         return c.json(await vehicleWithCompartments(tx, principal.companyId, row))
       },
     )

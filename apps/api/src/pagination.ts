@@ -64,6 +64,12 @@ export function afterCursor(cursor: string | undefined): string | undefined {
   return id
 }
 
+/** Where a list's page starts and how many rows it holds. */
+export type PageAt = { after: string | undefined; limit: number }
+
+/** The page a request asks for: its cursor read (a 400 naming `cursor` for one this API did not write) and its size. */
+export const pageAt = ({ cursor, limit }: { cursor?: string; limit: number }): PageAt => ({ after: afterCursor(cursor), limit })
+
 /** How many rows to ask the database for: the page, and one to see whether there is another page. */
 export function fetchLimit(limit: number): number {
   return limit + 1
@@ -75,6 +81,9 @@ export type Paged<Item> = {
   /** The cursor to ask for the next page with; null on the last page. */
   nextCursor: string | null
 }
+
+/** A page's items as the wire spells them, its cursor kept. */
+export const mapPage = <Row, Item>({ items, nextCursor }: Paged<Row>, of: (row: Row) => Item): Paged<Item> => ({ items: items.map(of), nextCursor })
 
 /** The page out of what `fetchLimit(limit)` rows came back: the surplus row is the proof there is a next page, never an item. */
 export function pageOf<Item extends { id: string }>(rows: readonly Item[], limit: number): Paged<Item> {

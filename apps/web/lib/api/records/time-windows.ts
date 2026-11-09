@@ -11,7 +11,7 @@ import { shiftProblem, WINDOW_CLOSES_AFTER_IT_OPENS, windowIsOrdered } from "@wa
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 
-import { isLocalRefusal, typed, type LocalRefusal } from "./adapter"
+import { isLocalRefusal, typed, type LocalRefusal } from "@/lib/records/fields"
 import { refusal } from "./places"
 
 /** What a window with one end is told, at the end left blank. */

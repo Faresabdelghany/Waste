@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { projectCalendarLabel } from "@/lib/prototype/route-schemes/project-calendar"
 import {
   PREVIEW_HORIZON_MONTHS,

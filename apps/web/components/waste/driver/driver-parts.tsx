@@ -10,6 +10,7 @@ import { ClockCounterClockwise, X } from "@phosphor-icons/react/dist/ssr"
 import { Button } from "@/components/ui/button"
 import { useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import type { RouteProgress } from "@waste/contracts/routes"
+import { count } from "@waste/domain/text"
 import type { Rejection } from "@/lib/driver/driver-app"
 import { keptNotice } from "@/lib/driver/route-view"
 
@@ -62,5 +63,5 @@ export function KeptNotice({ readAt }: { readAt: string | null | undefined }) {
 /** "3 of 12 stops done". */
 export function progressLine(progress: RouteProgress): string {
   const done = progress.total - progress.planned
-  return `${done} of ${progress.total} ${progress.total === 1 ? "stop" : "stops"} done`
+  return `${done} of ${count(progress.total, "stop")} done`
 }

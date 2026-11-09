@@ -25,7 +25,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { canonicalCalendarName } from "@/components/waste/business-filter-popover"
+import { canonicalCalendarName } from "@/components/platform/business-filter-popover"
 
 type ContainerProfile = {
   id: string

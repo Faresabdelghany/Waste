@@ -25,6 +25,7 @@ import type { AuditedTable } from "@waste/contracts/audit"
 import type { ModuleKey } from "@waste/domain/access/modules"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
+import { type LocalRefusal, webIdOf } from "@/lib/records/fields"
 
 import type { ApiClient } from "../client"
 
@@ -73,9 +74,6 @@ export type MappingContext = {
    */
   today?: (timezone: string | undefined) => string
 }
-
-/** A write the adapter refused before the API saw it, in the API's own words: a 400 with the field it names. */
-export type LocalRefusal = { path: string; message: string }
 
 /** What a command's dialog hands the store: its values by field, opaque to the store and read only by the command's `toBody`. */
 export type CommandInput = Readonly<Record<string, unknown>>
@@ -230,44 +228,8 @@ export function recordFrom<R extends Resource>(adapter: Pick<ResourceAdapter<R>,
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */
 export type Client = ApiClient
 
-export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
-  typeof value === "object" && value !== null && typeof (value as LocalRefusal).path === "string" && typeof (value as LocalRefusal).message === "string"
-
-/** `${workspaceId}.${moduleId}`, the key every store, link and relation uses. */
-export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string): ModuleKey => `${workspaceId}.${moduleId}` as ModuleKey
-
-/** `<prefix>-<uuid>`: a resource's web id. */
-export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`
-
-/** True for a record whose id carries the prefix — a browser-minted one or a `webIdOf`. */
-export const hasPrefix = (prefix: string) => (record: Pick<BusinessRecord, "id">) => record.id.startsWith(`${prefix}-`)
-
-/**
- * The rule every adapter's `owns` follows: a record is of a kind when its id
- * carries the kind's prefix — a `webIdOf` — or, for a record
- * the workspace has just made (whose id is `<moduleId>-<slug of the form's
- * recordKind>-<clock>`, `organization-project-1700000000000`), when its
- * `recordKind` is the kind's. A form's `recordKind` is the one word the
- * generic create path stamps on every record it makes, so it is what a new
- * row is recognised by until the server has answered and the adapter's own
- * id has replaced the minted one.
- */
-export const ofKind = (prefix: string, recordKinds: readonly string[]) => (record: Pick<BusinessRecord, "id" | "recordKind">) =>
-  hasPrefix(prefix)(record) || (record.recordKind !== undefined && recordKinds.includes(record.recordKind))
-
 /** What the wire does not carry, the same for every resource: nothing here is read back into a write body. */
 const NO_PRESENTATION: Pick<BusinessRecord, "owner" | "value" | "description" | "related"> = { owner: "", value: "", description: "", related: [] }
-
-/** `active` → `Active`, `service-contact` → `Service contact`: a wire token as a status or a fact reads. */
-export function statusLabel(token: string): string {
-  const words = token.replace(/[-_]+/g, " ")
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
-
-/** The inverse: `Active` → `active`, `Service contact` → `service-contact`. */
-export function statusToken(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, "-")
-}
 
 const DAY_MS = 86_400_000
 
@@ -300,26 +262,12 @@ function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updat
   return { updated, freshness: updated, source: "Waste API" }
 }
 
-/** A typed form value read as a non-blank string, or undefined. */
-export function typed(record: Pick<BusinessRecord, "submittedValues">, key: string): string | undefined {
-  const value = record.submittedValues?.[key]
-  if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
-  return trimmed === "" ? undefined : trimmed
-}
-
 /** A command dialog's value read as a non-blank string, or undefined: `typed`, for what a person said. */
 export function said(input: CommandInput, key: string): string | undefined {
   const value = input[key]
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed === "" ? undefined : trimmed
-}
-
-/** A typed form value read as a boolean, or undefined when it is not one. */
-export function typedFlag(record: Pick<BusinessRecord, "submittedValues">, key: string): boolean | undefined {
-  const value = record.submittedValues?.[key]
-  return typeof value === "boolean" ? value : undefined
 }
 
 /**

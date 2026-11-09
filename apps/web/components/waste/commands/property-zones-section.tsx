@@ -2,10 +2,11 @@
 // A property's notification zones in its details (O29 of #290, row 1.13):
 // the Planning Areas of purpose `notification` its point lies in today,
 // re-read when the point moves. The sentences are lib/data/property-zones.ts'.
-import { useApiSession } from "@/components/waste/api-session-store"
-import { useRowHistory } from "@/components/waste/commands/use-command-support"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useRowHistory } from "@/components/platform/use-command-support"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
-import { propertyZones, zonesReadable, zonesSentence } from "@/lib/data/property-zones"
+import { zonesReadable, zonesSentence } from "@/lib/data/property-zones"
+import { propertyZones } from "@/lib/api/property-details"
 
 export function PropertyZonesSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()

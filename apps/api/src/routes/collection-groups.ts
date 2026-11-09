@@ -42,7 +42,7 @@
 // shared with the scheme's create.
 //
 // Every write here holds two rules across the scheme's groups, so every write
-// takes the scheme's row lock first (routes/shared.ts; the scheme's own patch
+// takes the scheme's row lock first (`@waste/db/commands/shared`; the scheme's own patch
 // takes the same lock) and reads the group underneath it: a group's days lie
 // within the scheme's service days (400 at `days`), and no container is
 // picked by two groups that run on a shared day (400 at the entry, naming the
@@ -76,12 +76,11 @@ import { projectToday } from "@waste/db/query/project-clock"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
 import { assembleGroups, findScheme, requireNotArchived, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, groupScope, groupsOf, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotPickedTwice, requireStructure, writeGroupSets, type GroupRow } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
 

@@ -17,11 +17,24 @@ import { splitList } from "@/lib/prototype/record-values"
 import type {
   BusinessFormField,
   BusinessFormSchema,
+  BusinessFormValidationRule,
   BusinessFormValue,
   BusinessFormValues,
   BusinessRelationTarget,
 } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+
+/**
+ * The fields a `filled` rule tells its message at where the values shown
+ * break it: none where its condition does not hold, or where enough of its
+ * fields hold a value.
+ */
+export function filledRuleBreaks(rule: Extract<BusinessFormValidationRule, { type: "filled" }>, shown: BusinessFormValues): readonly string[] {
+  const condition = shown[rule.when.fieldId]
+  if (typeof condition !== "string" || !rule.when.oneOf.includes(condition)) return []
+  const filled = rule.fields.filter((fieldId) => Boolean(shown[fieldId])).length
+  return (rule.exactly ? filled !== 1 : filled === 0) ? rule.at : []
+}
 
 export type FormRecordResolvers = {
   /** Display name of a linked record — facts and relation labels show it instead of the id. */
@@ -53,15 +66,6 @@ export type FormRecordDerivation = {
   nameValue: string
 }
 
-/**
- * A multiselect stores its picks as one comma-separated string, read through
- * the domain list reader so a comma inside a number ("Igloo · 2,500 L") is
- * not a separator here either (issue #43).
- */
-export function splitMultiValue(value: string): string[] {
-  return splitList(value)
-}
-
 /** What a submitted value reads as in facts and context. */
 export function displayFormValue(
   field: BusinessFormField,
@@ -75,7 +79,7 @@ export function displayFormValue(
     field.options?.find((option) => option.value === item)?.label ??
     item
   return field.type === "multiselect"
-    ? splitMultiValue(value).map(label).join(" · ")
+    ? splitList(value).map(label).join(" · ")
     : label(value)
 }
 
@@ -127,7 +131,7 @@ export function deriveFormRecord(
 
     if (field.relation && typeof value === "string") {
       const target = resolvers.resolveRelationTarget?.(field.relation) ?? field.relation
-      const recordIds = field.type === "multiselect" ? splitMultiValue(value) : [value]
+      const recordIds = field.type === "multiselect" ? splitList(value) : [value]
       for (const recordId of recordIds) {
         relationRefs.push({
           fieldId: field.id,

@@ -25,9 +25,10 @@ import {
   roleRowsOf,
   userRowsOf,
   type Invite,
-} from "../../data/users-roles"
+} from "@/lib/api/users-roles"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import { accessModule, companyAdapter, projectAdapter, REPLACE_ROLE_GRANTS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
 import { commandRecord, IDLE, loaded, loadFailed, loading, notGranted, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"

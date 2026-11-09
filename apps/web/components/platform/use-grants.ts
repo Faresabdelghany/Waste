@@ -1,8 +1,8 @@
 "use client"
 
-import { useShellIdentity } from "@/components/top-bar/shell-identity"
-import { useApiSession } from "@/components/waste/api-session-store"
-import { accountGrants, type Grants } from "@/lib/api/grants"
+import { useShellIdentity } from "@/components/platform/shell-identity"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { accountGrants, type Grants } from "@/lib/modules/grants"
 
 /**
  * The grants the account signed in works under, the office's and a

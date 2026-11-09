@@ -32,26 +32,24 @@ import { projectToday } from "@waste/db/query/project-clock"
 import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { pickup } from "@waste/db/schema/execution"
 import { onlyABookedBooking } from "@waste/domain/execution/bulky"
-import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, gte, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
+import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow } from "@waste/db/commands/shared"
-import { bookingAnswered, bookingOf, bulkyItemsOf, selectBookings, statusOf, type BookingRow } from "@waste/db/shapes/bulky-bookings"
+import { bookingAnswered, bookingOf, bookingStatusIs, bulkyItemsOf, selectBookings, statusOf, type BookingRow } from "@waste/db/shapes/bulky-bookings"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 
 const MODULE = "operate.bulky-bookings"
 
@@ -61,14 +59,6 @@ const BookingPage = Page(BulkyBooking)
 export const INACTIVE_CUSTOMER = "The customer is inactive; a bulky collection is booked for an active customer"
 /** What a query naming a project and a place of another is told. */
 const NOT_THE_PROJECTS_PLACE = "Not a place of the project the query names"
-
-/** Where each status stands in the row: the stamp, then the live stop. */
-const STATUS_WHERE: Readonly<Record<BulkyBookingStatus, SQL | undefined>> = {
-  cancelled: isNotNull(bulkyBooking.cancelledAt),
-  routed: and(isNull(bulkyBooking.cancelledAt), eq(pickup.status, "planned")),
-  collected: and(isNull(bulkyBooking.cancelledAt), eq(pickup.status, "completed")),
-  booked: and(isNull(bulkyBooking.cancelledAt), isNull(pickup.id)),
-}
 
 const noSuchBooking = (id: string) => problem(404, { detail: `No bulky booking ${id} in the projects this account works in` })
 
@@ -144,7 +134,7 @@ export function bulkyBookingRoutes(deps: RouteDeps) {
             and(
               bookingScope(principal),
               projectId === undefined ? undefined : eq(bulkyBooking.projectId, projectId),
-              status === undefined ? undefined : STATUS_WHERE[status],
+              status === undefined ? undefined : bookingStatusIs(status),
               customerId === undefined ? undefined : eq(bulkyBooking.customerId, customerId),
               propertyId === undefined ? undefined : eq(bulkyBooking.propertyId, propertyId),
               sharedCollectionPointId === undefined ? undefined : eq(bulkyBooking.sharedCollectionPointId, sharedCollectionPointId),

@@ -15,7 +15,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
 
 import type { RoutingQuota } from "@waste/contracts/routing-quota"
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import { routingQuota } from "@/lib/api/routing"
 

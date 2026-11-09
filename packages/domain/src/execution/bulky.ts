@@ -132,9 +132,6 @@ export function bulkyBookingStatus(booking: { cancelledAt: unknown; stopStatus: 
   return "booked"
 }
 
-// The API's pickups route still reads it here; its home is the vocabulary.
-export { LIVE_STOP_STATUSES } from "./vocabulary"
-
 /** The commands a booking's status gates, as a sentence names each. */
 export type BulkyCommand = "route" | "cancel" | "change"
 const DONE: Readonly<Record<BulkyCommand, string>> = { route: "routed", cancel: "cancelled", change: "changed" }

@@ -18,12 +18,15 @@ import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/d
 import { isIsoDate } from "@waste/domain/days"
 import { firstDayOut } from "@waste/domain/periods"
 
+import { LAST_DAY_ON_OR_AFTER } from "@/lib/data/availability"
 import { moduleAt } from "@/lib/modules/keys"
 
 import { create, listAll, remove } from "../client"
-import { actionOf, said, statusLabel, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
+import { actionOf, said, type Client, type CommandInput, type RecordAction } from "./adapter"
+import { statusLabel, type LocalRefusal } from "@/lib/records/fields"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
+import { capitalised } from "@/lib/format/words"
 
 /** The two modules whose rows the periods belong to. */
 const DRIVERS = moduleAt("fleet.drivers")
@@ -39,9 +42,6 @@ export type AwayPeriod = { id: string; validFrom: string; validTo: string | null
 
 /** What the record form hands the action: the first day away, the last (blank while not known), why, and a note. */
 export type AwayInput = { validFrom: string; lastDay: string; reason: string; note: string }
-
-/** What the last day is told when it comes before the first. */
-export const LAST_DAY_ON_OR_AFTER = "The last day away is on or after the first"
 
 /** The body of a period's create, from the form, or a refusal naming the field. `reasons` are the wire's tokens. */
 export function periodBody(input: CommandInput, reasons: readonly string[]): { validFrom: string; validTo: string | null; reason: string; note?: string } | LocalRefusal {
@@ -126,5 +126,5 @@ export function removeVehicleUnavailability(sendAction: SendAction, recordId: st
 /** A period as its line reads: "Mon 12 Oct – Wed 14 Oct · Holiday · Autumn break", "From Mon 2 Nov · Leave". */
 export function awayLine(period: AwayPeriod): string {
   const phrase = periodPhrase(period)
-  return [`${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`, statusLabel(period.reason), period.note].filter((part) => part !== null && part !== "").join(" · ")
+  return [capitalised(phrase), statusLabel(period.reason), period.note].filter((part) => part !== null && part !== "").join(" · ")
 }

@@ -5,8 +5,8 @@
 // (lib/data/applications.ts); the page reads the applications and the
 // customers through the store like any pane, and prints itself with the
 // browser's own dialog — no PDF, which waits for C5's renderer.
-import { useApiSession } from "@/components/waste/api-session-store"
-import { useModuleRecords } from "@/components/waste/business-record-store"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useModuleRecords } from "@/components/platform/business-record-store"
 import { Button } from "@/components/ui/button"
 import { customersModule } from "@/lib/api/records/registry"
 import { APPLICATION_SERVER_ID_KEY, APPLICATIONS_MODULE, decisionLetterOf, letterOffered } from "@/lib/data/applications"

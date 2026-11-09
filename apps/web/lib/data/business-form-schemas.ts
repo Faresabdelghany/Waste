@@ -1,5 +1,6 @@
 import { DRIVER_PICKUP_REASONS, type DriverPickupReason } from "@waste/domain/execution/vocabulary"
 
+import { moduleAt } from "@/lib/modules/keys"
 import {
   commercialImproveBusinessFormSchemas,
 } from "@/lib/data/business-form-schemas-commercial-improve"
@@ -405,7 +406,7 @@ function enhanceField(
   if (fieldKey === "commercial.events.customerId") {
     enhanced = {
       ...enhanced,
-      relation: { workspaceId: "customers", moduleId: "contacts" },
+      relation: moduleAt("customers.contacts"),
     }
   }
 

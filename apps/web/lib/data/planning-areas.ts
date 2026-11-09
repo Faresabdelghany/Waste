@@ -13,6 +13,7 @@
 import { PLANNING_AREA_PURPOSES, type PlanningAreaPurpose } from "@waste/domain/planning/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
+import { ofKind } from "@/lib/records/fields"
 import { slugify } from "@/lib/utils"
 
 import { deriveFormRecord } from "./business-form-records"
@@ -33,6 +34,9 @@ import {
 
 /** Where planning-area records live — every consumer resolves through this. */
 export const PLANNING_AREAS_MODULE = moduleAt("configure.areas")
+
+/** Whether a loaded row is a planning area: its id, or — a row made this session, under its minted id — its kind. */
+export const isPlanningAreaRecord = ofKind("area", ["Operational Planning Area version"])
 
 const PURPOSES: ReadonlySet<string> = new Set<PlanningAreaPurpose>(PLANNING_AREA_PURPOSES)
 

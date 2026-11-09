@@ -47,9 +47,9 @@ import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/regist
 import { KEY_MAX, SLUG_PATTERN } from "@waste/domain/text"
 
 import { moduleAt } from "@/lib/modules/keys"
+import { splitList } from "@/lib/prototype/record-values"
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import { splitMultiValue } from "./business-form-records"
 import { type BusinessRecord } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
 
@@ -215,12 +215,12 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
         name,
         key: text(values, "key") ?? "",
         description: text(values, "description") ?? null,
-        containerTypeIds: ids === undefined ? [] : splitMultiValue(ids),
+        containerTypeIds: ids === undefined ? [] : splitList(ids),
       }
     }
     case "contaminant-code": {
       const ids = text(values, "wasteFractionIds")
-      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitMultiValue(ids) }
+      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitList(ids) }
     }
     case "decommission-reason":
       return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active" }
@@ -464,7 +464,7 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
       : []),
     ...(kind === "service-frequency"
       ? [
-          { id: "projectId", label: "Project", type: "select" as const, required: true, relation: { workspaceId: "configure" as const, moduleId: "organization" } },
+          { id: "projectId", label: "Project", type: "select" as const, required: true, relation: moduleAt("configure.organization") },
           { id: "description", label: "Description", type: "textarea" as const },
           { id: "collectionsPerWeek", label: "Collections per week", type: "number" as const, min: 1, placeholder: "Blank is on demand" },
           { id: "weeksBetween", label: "Weeks between", type: "number" as const, min: 1, placeholder: "Once a week or less often" },

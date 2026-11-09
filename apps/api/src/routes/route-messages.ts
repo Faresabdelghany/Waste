@@ -32,13 +32,12 @@ import { newId } from "@waste/db/ids"
 import { replayed } from "@waste/db/commands/shared"
 import type { RouteRow } from "@waste/db/shapes/routes"
 
-import { resolveDriver } from "../auth/driver"
+import { NO_DRIVER_PROFILE, resolveDriver } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
 import { findAssignedRoute, findRoute, noSuchAssignedRoute, noSuchRoute } from "./execution-shapes"
-import { describeJson, IdParam } from "./shared"
 
 const OFFICE_MODULE = "route-studio.routes"
 const DRIVER_MODULE = "operate.driver-app"
@@ -168,9 +167,9 @@ export function routeMessageRoutes(deps: RouteDeps) {
         module: DRIVER_MODULE,
         action: "view",
         params: IdParam,
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The route's messages.", RouteMessages),
-          403: describeProblem(`No active account here, the caller's role does not allow \`view\` on \`${DRIVER_MODULE}\`, or no active driver profile is bound to this login.`),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
       },
@@ -195,10 +194,10 @@ export function routeMessageRoutes(deps: RouteDeps) {
         params: IdParam,
         body: DriverRouteMessageCreate,
         invalid: ["the body has no id, an empty or too long body, or a member the command does not take"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The message already written under that id.", RouteMessage),
           201: describeAppended("The message as the thread reads it."),
-          403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${DRIVER_MODULE}\`, or no active driver profile is bound to this login.`),
           404: describeProblem("No route with that id is assigned to this driver."),
           409: describeProblem("The id names another message."),
         },

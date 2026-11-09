@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import {

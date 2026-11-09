@@ -56,12 +56,12 @@ import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { createAgreement, createSubscription, patchAgreement, readAgreement, readSubscription } from "./agreements"
 import { findProperty, noSuchProperty, propertyWithParties } from "./property-writes"
 import { requireCustomer } from "./references"
-import { describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 
 /** What a move with subscriptions to carry and no number for the incoming agreement is told. */
 export const NUMBER_OWED = "The outgoing customer subscribes at this property, so the incoming customer's agreement needs a number"

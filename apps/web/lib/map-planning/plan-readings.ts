@@ -20,12 +20,12 @@
 import type { ActivePlan, Plan, PlanDetail } from "@waste/contracts/plans"
 import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
-import { typed } from "@/lib/api/records/adapter"
+import { typed } from "@/lib/records/fields"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_ACTIVE_PLAN_KEY } from "@/lib/data/routes"
 import { resumesPhrase, WAITING_FOR_QUOTA } from "@/lib/routing/readings"
 
-import { formatDistance, formatDuration } from "./format"
+import { formatDistance, formatDuration } from "@/lib/format/measures"
 
 const oneOf = <Token extends string>(tokens: readonly Token[], value: unknown): value is Token => typeof value === "string" && (tokens as readonly string[]).includes(value)
 

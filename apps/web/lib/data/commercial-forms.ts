@@ -24,7 +24,7 @@ import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import { PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import type { InvoiceDetail } from "@waste/contracts/invoices"
 
-import { statusLabel } from "@/lib/api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 
 import { AGREEMENTS_MODULE } from "./agreements"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"

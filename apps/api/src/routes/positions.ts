@@ -34,11 +34,10 @@ import { POSITION_RETENTION_DAYS, TRACK_POINTS_MAX } from "@waste/domain/executi
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
 import type { RouteRow } from "@waste/db/shapes/routes"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest } from "../problem"
 import { findReachedRoute, noSuchRoute } from "./execution-shapes"
 import { planStopsByPlan } from "./plan-shapes"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.live"
 

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.

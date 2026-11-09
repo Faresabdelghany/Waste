@@ -17,7 +17,7 @@
 // then goes without one, which is the rule.
 import type { FlatPoint } from "@waste/contracts/geojson"
 
-import { BROWSER_TIMERS, type Timers } from "./timers"
+import { BROWSER_TIMERS, type Timers } from "../timers"
 
 /** What a located command's body carries: the point and how well the phone knew it, in whole metres. */
 export type Fix = { location: FlatPoint; accuracyM: number }

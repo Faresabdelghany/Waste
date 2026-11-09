@@ -23,7 +23,7 @@ import { batchDue, keepsFix, POSITION_RULES } from "@waste/domain/execution/posi
 
 import type { DriverRouteDetail } from "@waste/contracts/driver-commands"
 
-import { BROWSER_TIMERS, type Timers } from "./timers"
+import { BROWSER_TIMERS, type Timers } from "../timers"
 
 /** The open batch: the route its session runs on, and the fixes kept so far, oldest first. */
 export type PositionBatch = { routeId: string; points: PositionFix[] }

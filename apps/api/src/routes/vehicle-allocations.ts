@@ -74,21 +74,22 @@ import { LIVE_ALLOCATION_STATUSES, type AllocationAction, type AllocationStatus 
 import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
 import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
-import { fitsOf, vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { refuseOverlap } from "@waste/db/commands/shared"
+import { fitsOf } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { projectTimezone } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { daysThrough, refuseCrewAway } from "./availability-rules"
 import { findDriver, findVehicle, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 /** The grant every route here runs under: the planner's, not the fleet's. */
 const MODULE = "fleet.vehicle-planning"
@@ -119,8 +120,6 @@ const RELEASED_DOES_NOT_CHANGE = "Released allocations do not change; allocate a
 
 /** What a body naming a trailer that another live allocation reserves as its vehicle is told, at `trailerId`. */
 const trailerIsAVehicle = (label: string): string => `${label} is the vehicle of another allocation over part of that window`
-
-const noSuchAllocation = (id: string) => problem(404, { detail: `No vehicle allocation ${id} in the projects this account works in` })
 
 const columns = {
   id: vehicleAllocation.id,
@@ -199,19 +198,7 @@ function eventOf(row: EventRow): VehicleAllocationEvent {
   }
 }
 
-/** The rows of this company, in the projects the caller works in: what every allocation statement is bounded by. */
-const allocationScope = (principal: Principal): SQL | undefined =>
-  and(eq(vehicleAllocation.companyId, principal.companyId), inProjects(vehicleAllocation.projectId, principal))
-
-/** One allocation of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findAllocation(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(vehicleAllocation)
-    .where(and(allocationScope(principal), eq(vehicleAllocation.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: allocationScope, noSuch: noSuchAllocation, find: findAllocation, get: getAllocation, locked: lockedAllocation, list: listAllocations } = scoped(vehicleAllocation, { noun: "vehicle allocation", reach: "projects", columns })
 
 /**
  * The `where` fragment matching the rows whose window touches the one given:
@@ -398,18 +385,6 @@ async function appendEvent(tx: Tx, principal: Principal, row: Row, action: Alloc
   })
 }
 
-/**
- * The allocation the path names, locked and read: the three commands hold
- * rules the API rather than the database holds — the status, the licence, the
- * trailer's other role — so they take the row lock first and read afterwards
- * (routes/shared.ts), and two commands on one allocation take turns.
- */
-async function lockedAllocation(tx: Tx, principal: Principal, id: string): Promise<Row> {
-  await lockRow(tx, vehicleAllocation, { companyId: principal.companyId, id })
-  const current = await findAllocation(tx, principal, id)
-  if (current === undefined) throw noSuchAllocation(id)
-  return current
-}
 
 /** Moves the row to a status, and answers it as written. */
 async function setStatus(tx: Tx, principal: Principal, id: string, status: AllocationStatus): Promise<Row> {
@@ -444,28 +419,11 @@ export function vehicleAllocationRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, driverId, trailerId, status, overlappingFrom, overlappingTo } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(vehicleAllocation)
-          .where(
-            and(
-              allocationScope(principal),
-              projectId === undefined ? undefined : eq(vehicleAllocation.projectId, projectId),
-              vehicleId === undefined ? undefined : eq(vehicleAllocation.vehicleId, vehicleId),
-              driverId === undefined ? undefined : eq(vehicleAllocation.driverId, driverId),
-              trailerId === undefined ? undefined : eq(vehicleAllocation.trailerId, trailerId),
-              status === undefined ? undefined : eq(vehicleAllocation.status, status),
-              overlappingFrom === undefined || overlappingTo === undefined ? undefined : touches(overlappingFrom, overlappingTo),
-              after === undefined ? undefined : gt(vehicleAllocation.id, after),
-            ),
-          )
-          .orderBy(asc(vehicleAllocation.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listAllocations(tx, principal, at, projectId === undefined ? undefined : eq(vehicleAllocation.projectId, projectId), vehicleId === undefined ? undefined : eq(vehicleAllocation.vehicleId, vehicleId), driverId === undefined ? undefined : eq(vehicleAllocation.driverId, driverId), trailerId === undefined ? undefined : eq(vehicleAllocation.trailerId, trailerId), status === undefined ? undefined : eq(vehicleAllocation.status, status), overlappingFrom === undefined || overlappingTo === undefined ? undefined : touches(overlappingFrom, overlappingTo))
         return c.json({ items: items.map(allocationOf), nextCursor })
       },
     )
@@ -532,8 +490,7 @@ export function vehicleAllocationRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findAllocation(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchAllocation(id)
+        const row = await getAllocation(c.get("tx"), c.get("principal"), id)
         return c.json(allocationOf(row))
       },
     )

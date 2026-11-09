@@ -48,11 +48,11 @@ import { stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
 const TankPage = Page(TankInstallation)
@@ -63,8 +63,6 @@ const ANOTHER_TANK = "tank_installation_no_overlap"
 export const standsForAnotherTank = (label: string) => `${label} stands for another tank over part of that period`
 export const notPlacedAt = (label: string, place: string, day: string) => `${label} is not placed at ${place} on ${day}; a tank's container serves its property`
 export const INSPECTED_BY_TODAY = "An inspection is recorded on or after the day it was made"
-
-const noSuchTank = (id: string) => problem(404, { detail: `No tank installation ${id} in the projects this account works in` })
 
 const columns = {
   id: tankInstallation.id,
@@ -113,20 +111,12 @@ async function answered(tx: Tx, companyId: string, rows: readonly Row[]): Promis
   return rows.map((row) => tankOf(row, emptyings.get(row.containerId)))
 }
 
-const scope = (principal: Principal) => and(eq(tankInstallation.companyId, principal.companyId), inProjects(tankInstallation.projectId, principal))
-
-async function findTank(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx.select(columns).from(tankInstallation).where(and(scope(principal), eq(tankInstallation.id, id))).limit(1)
-  return row
-}
+const { get: getTank, locked: lockedInstallation, list: listTanks } = scoped(tankInstallation, { noun: "tank installation", reach: "projects", columns })
 
 /** The tank's locks, its Property's first, top down; then the tank read again underneath them. */
 async function lockedTank(tx: Tx, principal: Principal, found: Row): Promise<Row> {
   await lockRow(tx, property, { companyId: principal.companyId, id: found.propertyId })
-  await lockRow(tx, tankInstallation, { companyId: principal.companyId, id: found.id })
-  const current = await findTank(tx, principal, found.id)
-  if (current === undefined) throw noSuchTank(found.id)
-  return current
+  return await lockedInstallation(tx, principal, found.id)
 }
 
 const inspectionColumns = {
@@ -173,26 +163,11 @@ export function tankRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, propertyId, containerId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const tx = c.get("tx")
-        const rows = await tx
-          .select(columns)
-          .from(tankInstallation)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(tankInstallation.projectId, projectId),
-              propertyId === undefined ? undefined : eq(tankInstallation.propertyId, propertyId),
-              containerId === undefined ? undefined : eq(tankInstallation.containerId, containerId),
-              day === undefined ? undefined : validOn(tankInstallation, day),
-              after === undefined ? undefined : gt(tankInstallation.id, after),
-            ),
-          )
-          .orderBy(asc(tankInstallation.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listTanks(tx, principal, at, projectId === undefined ? undefined : eq(tankInstallation.projectId, projectId), propertyId === undefined ? undefined : eq(tankInstallation.propertyId, propertyId), containerId === undefined ? undefined : eq(tankInstallation.containerId, containerId), day === undefined ? undefined : validOn(tankInstallation, day))
         return c.json({ ...page, items: await answered(tx, principal.companyId, page.items) })
       },
     )
@@ -264,8 +239,7 @@ export function tankRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findTank(tx, principal, id)
-        if (row === undefined) throw noSuchTank(id)
+        const row = await getTank(tx, principal, id)
         const [tank] = await answered(tx, principal.companyId, [row])
         return c.json(tank)
       },
@@ -293,8 +267,7 @@ export function tankRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findTank(tx, principal, id)
-        if (found === undefined) throw noSuchTank(id)
+        const found = await getTank(tx, principal, id)
         const current = await lockedTank(tx, principal, found)
         requireOrdered(periodAfter(current, { validTo: patch.validTo }))
         const [bin] = await tx.select({ label: container.label }).from(container).where(and(eq(container.companyId, principal.companyId), eq(container.id, current.containerId))).limit(1)
@@ -330,8 +303,7 @@ export function tankRoutes(deps: RouteDeps) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const tank = await findTank(tx, principal, id)
-        if (tank === undefined) throw noSuchTank(id)
+        const tank = await getTank(tx, principal, id)
         const rows = await tx
           .select(inspectionColumns)
           .from(tankInspection)
@@ -363,8 +335,7 @@ export function tankRoutes(deps: RouteDeps) {
         const body = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findTank(tx, principal, id)
-        if (found === undefined) throw noSuchTank(id)
+        const found = await getTank(tx, principal, id)
         const tank = await lockedTank(tx, principal, found)
         const today = await projectToday(tx, { companyId: principal.companyId, projectId: tank.projectId }, now)()
         if (body.inspectedOn > today) throw invalidRequest("body", [{ path: "inspectedOn", message: INSPECTED_BY_TODAY }])

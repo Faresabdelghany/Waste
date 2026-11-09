@@ -12,16 +12,16 @@ import { DownloadSimple } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
-import { useServerModuleState } from "@/components/waste/business-record-store"
-import { useProjectTimezone } from "@/components/waste/commands/use-command-support"
+import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useServerModuleState } from "@/components/platform/business-record-store"
+import { useProjectTimezone } from "@/components/platform/use-command-support"
 import { readCustomerExport } from "@/lib/api/customer-export"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
 import { customerExportFileName, customerExportOf } from "@/lib/data/customer-export"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 
 export function CustomerExportSection({ record }: { record: BusinessRecord }) {
   const client = useApiClient()

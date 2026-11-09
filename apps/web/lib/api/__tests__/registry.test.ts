@@ -8,7 +8,8 @@ import { CustomerCreate, CustomerPatch, type Customer } from "@waste/contracts/c
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope } from "../../data/project-scope"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import { CUSTOMER_PREFIXES, customerAdapter, customerKindOf, customersModule } from "../records/registry"
 
 const NOW = new Date("2026-09-25T12:00:00Z")

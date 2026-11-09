@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { genericProblem, problemSentence } from "@/lib/api/problem"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { mintRoleId, newRoleRecord } from "@/lib/data/users-roles"
+import { mintRoleId, newRoleRecord } from "@/lib/api/users-roles"
 
 /** The Start from option that copies nothing. */
 const NO_PERMISSIONS = "none"

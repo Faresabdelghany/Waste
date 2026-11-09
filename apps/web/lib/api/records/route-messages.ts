@@ -8,7 +8,7 @@ import type { RouteMessage } from "@waste/contracts/route-messages"
 import { routeMessageIssue } from "@waste/domain/execution/route-messages"
 
 import { get, post } from "../client"
-import { shownOn } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 
 type Client = Parameters<typeof get>[0]
 

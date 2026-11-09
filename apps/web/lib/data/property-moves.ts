@@ -5,7 +5,8 @@
 // `dryRun` and says what ends, what begins and what stays in service, and
 // lists the charges the move leaves past its day for the office to credit or
 // cancel (the API reprices nothing, the owner's decision on #374); Move sends
-// the same body without it. Nothing is computed here: what the move does is
+// the same body without it (`moveProperty`, lib/api/property-details.ts).
+// Nothing is computed here: what the move does is
 // the API's answer, read into sentences. A sale is a move of the owner.
 import type { MoveCreate, MoveOutcome } from "@waste/contracts/moves"
 import { ANOTHER_CUSTOMER_MOVES_IN } from "@waste/domain/registry/moves"
@@ -13,9 +14,8 @@ import { PROPERTY_PARTY_ROLES } from "@waste/domain/registry/vocabulary"
 import { splitList } from "@/lib/prototype/record-values"
 import { lastDayIn } from "@waste/domain/periods"
 
-import { command, type ApiClient } from "../api/client"
-import { allows, type Grants } from "../api/grants"
-import type { LocalRefusal } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import type { LocalRefusal } from "@/lib/records/fields"
 import { formatMinor } from "../commercial/money"
 import type { BusinessRecord } from "./business-modules"
 import { PARTY_FIELDS } from "./properties"
@@ -26,8 +26,6 @@ export type MoveTyped = { on: string; outgoing: string; incoming: string; payer:
 /** Whether the role may move a property's occupant: the move writes the parties and the agreements, so it asks edit on both, as the API does. */
 export const moveOffered = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "edit") && allows(grants, "customers.agreements", "edit")
 
-/** The move, or its dry run: the API's answer either way. */
-export const moveProperty = (client: ApiClient, propertyServerId: string, body: MoveCreate): Promise<MoveOutcome> => command<MoveOutcome>(client, `/properties/${propertyServerId}/moves`, body)
 
 /** Who may move out: every customer the record names today, in any role, each once, in the order the roles are listed. */
 export function movingOutOf(record: Pick<BusinessRecord, "submittedValues">): string[] {

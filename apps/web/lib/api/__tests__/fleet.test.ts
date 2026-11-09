@@ -20,7 +20,8 @@ import { driverProfile, vehicleProfile } from "@/lib/prototype/route-schemes/fle
 
 import { FIXTURE_PROJECT_IDS, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import {
   compartmentDraftsOf,
   compartmentsOfRecord,

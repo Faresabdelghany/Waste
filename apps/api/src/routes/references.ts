@@ -1,6 +1,6 @@
 // An id a body names, held to the scope its key allows (Issue #78).
 //
-// `requireRow` (routes/shared.ts) is the statement — a row of this company,
+// `requireRow` (below) is the statement — a row of this company,
 // under whatever else its key demands — and the sentence was left with the
 // route, which knows what the thing is called. That held while one route
 // named a thing. It stopped holding when the second did: a container type is
@@ -54,13 +54,12 @@ import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "
 import { retiredTeam } from "@waste/domain/resolution/teams"
 import { ACTIVE_TEAM_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, eq, inArray, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import type { TenantTable } from "@waste/db/commands/shared"
 import { NOT_A_SERVICE_FREQUENCY, NOT_A_WAREHOUSE } from "@waste/db/commands/stock-ledger"
 
 import { invalidRequest } from "../problem"
-import { requireRow, requireStatus, rowIssue, type NamedRow, type Target } from "./shared"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -209,7 +208,7 @@ export async function requireServiceProvider(tx: Tx, companyId: string, id: stri
   await requireRow(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
 }
 
-/** The same check as the field error or nothing (`rowIssue`, routes/shared.ts), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
+/** The same check as the field error or nothing (`rowIssue`, below), for a route listing it beside other refusals in one 400 (a place patch, routes/place-rules.ts); an id that is null or absent names nothing and is no issue. */
 export async function serviceProviderIssue(tx: Tx, companyId: string, id: string | null | undefined, path = "serviceProviderId"): Promise<ProblemFieldError | undefined> {
   if (id == null) return undefined
   return await rowIssue(tx, serviceProvider, inCompany(companyId, id), { path, message: NOT_A_SERVICE_PROVIDER })
@@ -303,7 +302,7 @@ export async function requireUnloadingStation(tx: Tx, companyId: string, id: str
 // routes/fleet-lookups.ts reads it, refusing in the sentences spelled here.
 // Both checks answer the row's status (round B of the #101 review, #79's
 // rule: a status gates a new reference and never an existing one) through
-// `requireStatus` in routes/shared.ts — `requireRow`'s statement with one
+// `requireStatus` below — `requireRow`'s statement with one
 // column more, the same 400 at the field when there is no such row — so a
 // route naming a vehicle or a driver afresh can refuse a retired or an
 // unavailable one through @waste/domain/status-gates without a second statement, and
@@ -591,5 +590,73 @@ export async function requireServiceAreaAssignment(
     .where(and(eq(serviceAreaAssignment.companyId, scope.companyId), inArray(serviceAreaAssignment.projectId, projects), eq(serviceAreaAssignment.id, id)))
     .limit(1)
   if (found === undefined) throw refusal()
+  return found
+}
+
+/** A table whose rows carry a status beside the key: every Registry record that is not effective-dated. */
+export type StatusTable = TenantTable & { status: PgColumn }
+
+/** The row a body named: this company's, and under whatever else its key demands. */
+export type NamedRow = { companyId: string; id: string; also?: SQL }
+
+/** Where a refused id is answered: on the body it came in, or on the query string a list filter named it in. */
+export type Target = "body" | "query"
+
+/**
+ * Holds an id a body named to a row that is really there — in this company,
+ * and under whatever else its key demands, which `also` carries: the project
+ * a project-scoped row belongs to, the agreement a subscription hangs on, the
+ * property a party is a party to.
+ *
+ * A row that is not there is a 400 naming the field. The foreign key is the
+ * backstop and would answer 23503, a 500 saying nothing, where this says
+ * which id to fix; and since the fence hides another company's row, "it is
+ * not yours" and "it does not exist" are the same answer on the wire.
+ *
+ * The sentence stays with the route, which knows what the field is called and
+ * what the thing is ("Not a container type of this company"). This runs the
+ * lookup, always with `company_id`, and shapes the refusal — so the check a
+ * product makes of its container type is the check a subscription will make
+ * of its product and an agreement of its customer. A `query` target refuses
+ * on the query string, for a list filter that names a row; a body on the body.
+ */
+export async function requireRow(tx: Tx, table: TenantTable, row: NamedRow, refusal: ProblemFieldError, target: Target = "body"): Promise<void> {
+  const issue = await rowIssue(tx, table, row, refusal)
+  if (issue !== undefined) throw invalidRequest(target, [issue])
+}
+
+/**
+ * The same lookup as an answer rather than a throw: the refusal where there
+ * is no such row, undefined where there is. For a route that holds a body to
+ * several rules at once and lists every refusal in one 400 — a place patch's
+ * provider beside its two shape rules (routes/place-rules.ts) — so a client
+ * mending one is not told about the other on its next try.
+ */
+export async function rowIssue(tx: Tx, table: TenantTable, row: NamedRow, refusal: ProblemFieldError): Promise<ProblemFieldError | undefined> {
+  return (await answering(tx, table, table.id, row)) === undefined ? refusal : undefined
+}
+
+/**
+ * The same lookup for a table whose rows carry a status, answering it: one
+ * statement proves the row is there and says what state it is in, so a route
+ * that gates a new reference on that state (@waste/domain/status-gates) asks once,
+ * and a row that is not there is still the 400 above, before any 409. The
+ * caller names the vocabulary the column's check holds the value to. A
+ * `query` target refuses on the query string, for a list filter that names a
+ * row (`GET /tickets?customerId=`, Issue #109); a body on the body.
+ */
+export async function requireStatus<Status extends string>(tx: Tx, table: StatusTable, row: NamedRow, refusal: ProblemFieldError, target: Target = "body"): Promise<Status> {
+  const found = await answering(tx, table, table.status, row)
+  if (found === undefined) throw invalidRequest(target, [refusal])
+  return found.answer as Status
+}
+
+/** One column of the row a body named, or undefined when there is no such row: the statement behind the three doors above. */
+async function answering(tx: Tx, table: TenantTable, column: PgColumn, row: NamedRow): Promise<{ answer: unknown } | undefined> {
+  const [found] = await tx
+    .select({ answer: column })
+    .from(table)
+    .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id), row.also))
+    .limit(1)
   return found
 }

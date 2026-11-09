@@ -19,7 +19,10 @@
 // in legacy-ids.ts: the tab a retired id opens is one of its pane's tabs,
 // declared beside it and changing with it, and the one resolution below reads
 // both.
-import { PLACEHOLDERS } from "./message-templates"
+import { MESSAGE_VARIABLES } from "@waste/domain/messaging/template"
+
+/** The placeholders a message template may name, as a person types them. */
+const PLACEHOLDERS = MESSAGE_VARIABLES.map((name) => `{{${name}}}`)
 
 export const SETTINGS_SECTIONS = [
   { id: "personal", label: "Personal" },

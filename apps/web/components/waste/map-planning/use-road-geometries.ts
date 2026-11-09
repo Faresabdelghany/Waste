@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import type { Position2D } from "@waste/contracts/geojson"
 import type { LngLat } from "@waste/domain/map-planning/geo"
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import { previewRoad } from "@/lib/api/routing"
 import { roadGeometryKey, roadGeometryOfLegs, type RoadGeometry } from "@/lib/map-planning/road-geometry"

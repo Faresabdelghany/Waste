@@ -12,7 +12,7 @@
 // holds the patch against the stored row before the update goes out and
 // refuses in the contracts' own words at the contracts' own paths, so one rule
 // has one sentence wherever it was noticed: the provider through
-// `providerShapeIssue` (routes/shared.ts, the one refusal shape the fleet
+// `providerShapeIssue` (routes/provider-shape.ts, the one refusal shape the fleet
 // shares), and the hours, both collected into one 400 listing every rule the
 // patch breaks, the way the validator lists a body's issues, so a client
 // mending one is not told about the other on its next try. `requirePlacePatch`
@@ -46,8 +46,8 @@ import { timeOf } from "@waste/db/shapes/times"
 import { BOTH_HOURS_OR_NEITHER, hoursShape, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 
 import { invalidRequest } from "../problem"
+import { providerShapeIssue } from "./provider-shape"
 import { serviceProviderIssue } from "./references"
-import { providerShapeIssue } from "./shared"
 
 /** The four columns the two shape rules read, as a stored depot or station carries them. */
 export type PlaceShape = {

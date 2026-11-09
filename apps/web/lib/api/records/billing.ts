@@ -83,12 +83,14 @@ import {
 } from "@/lib/data/commercial"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { moduleKeyOf, NOTHING_RESOLVED, said, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
-import { shownOn } from "./clock"
+import { NOTHING_RESOLVED, said, type Client, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { statusLabel, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
+import { shownOn } from "@/lib/format/clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerKindOf } from "./registry"
-import { kilograms } from "./weights"
+import { kilograms } from "@/lib/format/measures"
 
 export const QUANTITY_REFUSAL = "A quantity is a whole number, 1 or more"
 /** What an edit of an event is told: it moves by its commands. */

@@ -30,8 +30,8 @@ import type { ProofObjectLink, ProofObjectLinks } from "@waste/contracts/proof-o
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
+import { stopNumber } from "@waste/domain/execution/routes"
 
-import { moduleAt } from "@/lib/modules/keys"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
@@ -39,17 +39,17 @@ import { NO_ONE } from "@/lib/data/properties"
 import { workspaceHref } from "@/lib/data/workspace-href"
 
 import { command, get, listAll } from "../client"
-import { moduleKeyOf, ofKind, said, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
-import { shownOn, wallClockIn } from "./clock"
+import { said, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { ofKind, statusLabel, typed, webIdOf } from "@/lib/records/fields"
+import { shownOn, wallClockIn } from "@/lib/format/clock"
 import { LIVE_MODULE } from "./live"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 
 import { referenced, refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
-import { ROUTES_MODULE, routesWindowFrom } from "./routes"
-
-/** The workspace module the pickups are the rows of. */
-export const PICKUPS_MODULE = moduleAt("route-studio.pickups")
+import { routesWindowFrom } from "./routes"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
 
 /** The stop's commands, by the names the surfaces send. */
 export const REMOVE_PICKUP = "remove"
@@ -91,7 +91,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): RecordF
   const byTheOffice = pickup.origin === "office"
   // An API from before the service sends none: every stop then emptied its container.
   const service = pickup.service ?? "empty"
-  const stop = pickup.sequence ?? pickup.position
+  const stop = stopNumber(pickup)
   const status = statusLabel(pickup.status)
   const facts: Record<string, string> = {
     Route: route?.name ?? routeWebId,

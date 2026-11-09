@@ -14,8 +14,10 @@ import { WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { TICKET_STATUS_LABELS, UNMATCHED_LABELS, WEIGHBRIDGE_MODULE, WEIGHBRIDGE_PREFIX, WEIGHBRIDGE_RECORD_KIND } from "@/lib/data/weighbridge"
 
 import { command, get, listAll, type ApiFile } from "../client"
-import { said, typed, webIdOf, type ResourceAdapter, type ServerModule } from "./adapter"
-import { shownOn } from "./clock"
+import { said, type ResourceAdapter, type ServerModule } from "./adapter"
+import { typed, webIdOf } from "@/lib/records/fields"
+import { kilograms } from "@/lib/format/measures"
+import { shownOn } from "@/lib/format/clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
 import { routesWindowFrom } from "./routes"
@@ -26,7 +28,6 @@ export type { ApiFile }
 export const MATCH_TICKET = "match"
 export const DISMISS_TICKET = "dismiss"
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** The commands a ticket's details offer: Match and Dismiss while it waits, none once it is matched or dismissed. */
 export const ticketCommandsOffered = (record: { submittedValues?: Record<string, unknown> }): string[] => (record.submittedValues?.status === "unmatched" ? [MATCH_TICKET, DISMISS_TICKET] : [])

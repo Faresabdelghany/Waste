@@ -16,7 +16,7 @@ import { ADDRESS_ATTRIBUTION, ADDRESS_QUERY_MIN } from "@waste/domain/registry/a
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { addressPicked, lookupFailure } from "@/lib/data/address-lookup"
 import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-form-types"
 import { get, withQuery } from "@/lib/api/client"

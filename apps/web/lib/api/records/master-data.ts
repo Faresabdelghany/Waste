@@ -47,7 +47,8 @@ import {
 } from "@/lib/data/master-data"
 
 import { create, get, listAll, patch, put } from "../client"
-import { patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, type Client, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 

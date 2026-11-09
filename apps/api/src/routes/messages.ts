@@ -20,30 +20,25 @@
 // (routes/notifications.ts).
 import { Message, MessageCreate, MessageListQuery } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
-import type { Tx } from "@waste/db/client"
 import { queueMessage } from "@waste/db/commands/messaging"
 import { customer } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { Refused } from "@waste/domain/refusal"
-import { and, desc, eq, isNotNull, lt } from "drizzle-orm"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, WORKER_QUEUE_MISSING } from "../problem"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem, invalidRequest, WORKER_QUEUE_MISSING } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "customers.contacts"
 const MessagePage = Page(Message)
 
 export const PICK_A_TEMPLATE = "Pick a message template of a project you work in"
 export const PICK_A_CUSTOMER = "Pick a customer the company has"
-
-const noSuchMessage = (id: string) => problem(404, { detail: `No message ${id} in the projects this account works in` })
 
 export const messageColumns = {
   id: message.id,
@@ -90,13 +85,7 @@ export const messageOf = (row: Row): Message => ({
   ...stampsOf(row),
 })
 
-/** The customers' messages of the caller's projects: what both reads of the log are bounded by. */
-const scope = (principal: Principal) => and(eq(message.companyId, principal.companyId), inProjects(message.projectId, principal), isNotNull(message.customerId))
-
-async function findMessage(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx.select(messageColumns).from(message).where(and(scope(principal), eq(message.id, id))).limit(1)
-  return row
-}
+const { get: getMessage, list: listMessages } = scoped(message, { noun: "message", reach: "projects", columns: messageColumns, also: isNotNull(message.customerId), order: "desc" })
 
 export function messageRoutes(deps: RouteDeps) {
   const { jobs } = deps
@@ -120,23 +109,9 @@ export function messageRoutes(deps: RouteDeps) {
         const { limit, cursor, projectId, customerId, status } = c.req.valid("query")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(messageColumns)
-          .from(message)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(message.projectId, projectId),
-              customerId === undefined ? undefined : eq(message.customerId, customerId),
-              status === undefined ? undefined : eq(message.status, status),
-              after === undefined ? undefined : lt(message.id, after),
-            ),
-          )
-          .orderBy(desc(message.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(messageOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listMessages(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(message.projectId, projectId), customerId === undefined ? undefined : eq(message.customerId, customerId), status === undefined ? undefined : eq(message.status, status))
+        return c.json(mapPage(page, messageOf))
       },
     )
     .post(
@@ -170,8 +145,7 @@ export function messageRoutes(deps: RouteDeps) {
         if (holder === undefined) throw invalidRequest("body", [{ path: "customerId", message: PICK_A_CUSTOMER }])
         const queued = await queueMessage(tx, jobs.send, { id: newId(), companyId: principal.companyId, templateId: body.templateId, customerId: body.customerId, contactId: body.contactId ?? null })
         if (queued.kind === "refused") throw new Refused(queued.refusal)
-        const row = await findMessage(tx, principal, queued.message.id)
-        if (row === undefined) throw noSuchMessage(queued.message.id)
+        const row = await getMessage(tx, principal, queued.message.id)
         return created(c, "/messages", messageOf(row))
       },
     )
@@ -191,8 +165,7 @@ export function messageRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findMessage(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchMessage(id)
+        const row = await getMessage(c.get("tx"), c.get("principal"), id)
         return c.json(messageOf(row))
       },
     )

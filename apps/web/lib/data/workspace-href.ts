@@ -4,9 +4,10 @@
 // (lib/modules). The Driver App opens its own surface. An address a module has
 // left is redirected by lib/data/legacy-ids.ts (`migrateLegacyHref`) and
 // next.config.mjs, never here.
-import { CONTROL_CENTER, WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
+import { CONTROL_CENTER_TWIN } from "@/lib/modules/keys"
+import { WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
 
-import { DEFAULT_SETTINGS_PANE, settingsHref } from "./settings-panes"
+import { DEFAULT_SETTINGS_PANE, settingsHref } from "@/lib/modules/settings-panes"
 
 /** The params that name a module, and a record in it, on the page showing them: `params` kept beside them. */
 export function moduleParams(moduleId: string, recordId?: string, params?: URLSearchParams): URLSearchParams {
@@ -25,11 +26,12 @@ export function workspaceHref(location: ModuleLocation, recordId?: string, { pag
   const { workspaceId, moduleId } = location
   const params = moduleParams(moduleId, recordId)
   if (page !== undefined) return `${page}?${params.toString()}`
-  // The Driver App opens its own surface, which reads no `?module=` (Issue #145); every other module shown elsewhere keeps its workspace's address.
-  if (workspaceId === "operate" && moduleId === "driver-app") return "/driver"
-  const shown = moduleSpecOf(location)?.shown
+  const spec = moduleSpecOf(location)
+  // An app of its own opens itself, reading no `?module=` (the Driver App, Issue #145); a module shown elsewhere keeps its workspace's address.
+  if (spec?.shown === "app" && spec.deepLink !== undefined) return spec.deepLink
+  const shown = spec?.shown
   if (typeof shown === "object") return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
   // Configure's one module with no pane, Control Center, opens its twin.
-  if (workspaceId === "configure") return workspaceHref({ workspaceId: CONTROL_CENTER, moduleId }, recordId)
+  if (workspaceId === "configure") return workspaceHref(CONTROL_CENTER_TWIN, recordId)
   return `${WORKSPACES[workspaceId].path}?${params.toString()}`
 }

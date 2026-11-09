@@ -7,8 +7,8 @@ import { GearSix, Key, Moon, SignOut, Sun } from "@phosphor-icons/react/dist/ssr
 
 import { useAppTheme } from "@/components/app-theme-provider"
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog"
-import { useShellIdentity } from "@/components/top-bar/shell-identity"
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useShellIdentity } from "@/components/platform/shell-identity"
+import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { initialsOf } from "@/lib/data/account-profile"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import type { LinearThemeId } from "@/lib/app-themes"
 import { cn } from "@/lib/utils"
 

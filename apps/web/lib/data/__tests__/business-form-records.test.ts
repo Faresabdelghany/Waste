@@ -8,8 +8,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { clearedFactKeys, deriveFormRecord } from "../business-form-records"
-import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
+import { clearedFactKeys, deriveFormRecord, filledRuleBreaks } from "../business-form-records"
+import { getBusinessFormSchema } from "../business-form-schemas"
+import type { BusinessFormSchema, BusinessFormValidationRule, BusinessFormValues } from "../business-form-types"
 
 const schema: BusinessFormSchema = {
   key: "commercial.price-rows",
@@ -94,5 +95,29 @@ describe("deriveFormRecord beside it", () => {
     assert.equal(facts.Zone, undefined)
     assert.equal(facts["Effective to"], undefined)
     assert.equal(facts.Amount, "18.50")
+  })
+})
+
+describe("a filled rule", () => {
+  const filledRule = (workspaceId: Parameters<typeof getBusinessFormSchema>[0], moduleId: string) => {
+    const rule = getBusinessFormSchema(workspaceId, moduleId)?.validationRules?.find((candidate): candidate is Extract<BusinessFormValidationRule, { type: "filled" }> => candidate.type === "filled")
+    assert.ok(rule, `${workspaceId}.${moduleId}`)
+    return rule
+  }
+
+  test("asks a person for an email address or a phone number, and an organisation for neither", () => {
+    const rule = filledRule("customers", "contacts")
+    assert.deepEqual(filledRuleBreaks(rule, { partyType: "person", email: "", phone: "" }), ["email"])
+    assert.deepEqual(filledRuleBreaks(rule, { partyType: "person", phone: "+45 12 34 56 78" }), [])
+    assert.deepEqual(filledRuleBreaks(rule, { partyType: "person", email: "anna@example.invalid" }), [])
+    assert.deepEqual(filledRuleBreaks(rule, { partyType: "company" }), [])
+  })
+
+  test("allocates a vehicle to one route or one route scheme, never both and never neither", () => {
+    const rule = filledRule("fleet", "vehicle-planning")
+    assert.deepEqual(filledRuleBreaks(rule, { allocationAction: "allocate" }), ["routeId", "schemeId"])
+    assert.deepEqual(filledRuleBreaks(rule, { allocationAction: "change", routeId: "route-1", schemeId: "scheme-1" }), ["routeId", "schemeId"])
+    assert.deepEqual(filledRuleBreaks(rule, { allocationAction: "allocate", schemeId: "scheme-1" }), [])
+    assert.deepEqual(filledRuleBreaks(rule, { allocationAction: "release" }), [], "a release names neither")
   })
 })

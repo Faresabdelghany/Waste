@@ -11,7 +11,7 @@
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import { landingOf } from "@/lib/api/landing"
 import { whoOf } from "@/lib/api/session"
 

@@ -16,9 +16,8 @@ import { isIsoDate } from "@waste/domain/days"
 import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/route-schemes/validation"
 import { count } from "@waste/domain/text"
 
-import { typed } from "@/lib/api/records/adapter"
-import { dayIn } from "@/lib/api/records/clock"
-import type { ModuleState } from "@/lib/api/records/server-records"
+import { typed } from "@/lib/records/fields"
+import { dayIn } from "@/lib/format/clock"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
@@ -125,6 +124,9 @@ export function licenceDayOf(effectiveFrom: string, timezone: string | undefined
 /** What stands in for the zero-match sentence where the API's containers are not placed. */
 export const PREVIEW_UNPLACED = "The containers' places are not read, so this preview cannot count them; the API matches containers when it generates routes."
 
+/** What the preview reads of a module's state in the store: whether its read is ready. */
+type ModuleRead = { readonly status: string }
+
 /**
  * Whether the preview had the API's containers placed (#207). On the
  * browser's own path, or with the containers still on fixtures, it always
@@ -134,7 +136,7 @@ export const PREVIEW_UNPLACED = "The containers' places are not read, so this pr
  * containers, or with the API's standing nowhere because their place is
  * unread.
  */
-export function containersPlaced(apiConfigured: boolean, containers: ModuleState | null, through: readonly (ModuleState | null)[]): boolean {
+export function containersPlaced(apiConfigured: boolean, containers: ModuleRead | null, through: readonly (ModuleRead | null)[]): boolean {
   if (!apiConfigured || containers === null) return true
   return [containers, ...through].every((state) => state === null || state.status === "ready")
 }

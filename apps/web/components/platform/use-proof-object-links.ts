@@ -7,7 +7,7 @@
 // ticket's evidence (M6 of #293) read them through this one hook.
 import { useEffect, useState } from "react"
 
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { pickupProofObjects } from "@/lib/api/records/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"

@@ -23,10 +23,10 @@ import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 
 const MODULE = "configure.calendars"
 const HolidayListPage = Page(HolidayList)

@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react"
 
-import { settingsPaneHeading, type SettingsPane } from "@/lib/data/settings-panes"
+import { settingsPaneHeading, type SettingsPane } from "@/lib/modules/settings-panes"
 
 /** What frames the pane Settings shows, from its table entry: the bar above it, its title and its description. */
 export type SettingsPaneFrame = { heading: string; title: string; description: string }

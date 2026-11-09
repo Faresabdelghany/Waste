@@ -46,17 +46,15 @@ import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { sharedCollectionPoint, sharedCollectionPointMember } from "@waste/db/schema/customers"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
 import {
   entriesFor,
   entriesOf,
@@ -67,8 +65,8 @@ import {
   type MemberSet,
   type Parent,
 } from "./members"
+import { scoped } from "../scoped"
 import { requireCustomer } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.shared"
 const SharedCollectionPointPage = Page(SharedCollectionPoint)
@@ -150,21 +148,7 @@ async function pointWithMembers(tx: Tx, companyId: string, row: Row): Promise<Sh
 const NAME_TAKEN = "shared_collection_point_project_id_name_key"
 const nameTaken = (name: string) => `This project already has a shared collection point called ${JSON.stringify(name)}`
 
-const noSuchPoint = (id: string) => problem(404, { detail: `No shared collection point ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every point statement is bounded by. */
-const scope = (principal: Principal) =>
-  and(eq(sharedCollectionPoint.companyId, principal.companyId), inProjects(sharedCollectionPoint.projectId, principal))
-
-/** One point of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findPoint(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(sharedCollectionPoint)
-    .where(and(scope(principal), eq(sharedCollectionPoint.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchPoint, find: findPoint, get: getPoint, list: listPoints } = scoped(sharedCollectionPoint, { noun: "shared collection point", reach: "projects", columns })
 
 export function sharedCollectionPointRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -185,25 +169,13 @@ export function sharedCollectionPointRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(sharedCollectionPoint)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(sharedCollectionPoint.projectId, projectId),
-              after === undefined ? undefined : gt(sharedCollectionPoint.id, after),
-            ),
-          )
-          .orderBy(asc(sharedCollectionPoint.id))
-          .limit(fetchLimit(limit))
+        const { items, nextCursor } = await listPoints(tx, principal, at, projectId === undefined ? undefined : eq(sharedCollectionPoint.projectId, projectId))
         // Paged first, so the row that only proves there is a next page is
         // not one of the points whose members are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
         const served = await entriesOf(tx, members, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => pointOf(row, served.get(row.id) ?? [])), nextCursor })
       },
@@ -262,8 +234,7 @@ export function sharedCollectionPointRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findPoint(tx, principal, id)
-        if (row === undefined) throw noSuchPoint(id)
+        const row = await getPoint(tx, principal, id)
         return c.json(await pointWithMembers(tx, principal.companyId, row))
       },
     )

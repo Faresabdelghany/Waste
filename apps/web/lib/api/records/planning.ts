@@ -66,20 +66,12 @@ import { firstDayOut, inForceOn, lastDayIn, periodOn, type PeriodStanding } from
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
-import { PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/planning-areas"
+import { isPlanningAreaRecord, PLANNING_AREAS_MODULE, planningAreaPurposeOptions } from "@/lib/data/planning-areas"
 
 import { create, get, listAll, patch } from "../client"
 import { holidayListAdapter } from "./holiday-lists"
-import {
-  ofKind,
-  patchOf,
-  typed,
-  webIdOf,
-  type Client,
-  type LocalRefusal,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { patchOf, type Client, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { todayIn } from "./clock"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
@@ -262,7 +254,7 @@ function successorWriteOf(before: BusinessRecord, after: BusinessRecord): NonNul
 export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource, unknown, PlanningAreaWrite> = {
   prefix: "area",
   auditTable: "planning_area",
-  owns: ofKind("area", ["Operational Planning Area version"]),
+  owns: isPlanningAreaRecord,
   // No status on the wire: the record's is a reading of its versions, and every move the lifecycle offers is refused.
   statuses: undefined,
   list: async (client) => {

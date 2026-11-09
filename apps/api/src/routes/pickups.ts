@@ -73,14 +73,15 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { bulkyBooking } from "@waste/db/schema/bulky"
+import { liveStop } from "@waste/db/shapes/bulky-bookings"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import type { Action } from "@waste/domain/access/modules"
-import { bulkyBookingStatus, LIVE_STOP_STATUSES, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { bulkyBookingStatus, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import type { OfficeStopService, PickupService } from "@waste/domain/execution/vocabulary"
 import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerService } from "@waste/domain/execution/work-orders"
-import { and, asc, desc, eq, gt, gte, inArray, lte } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, lte } from "drizzle-orm"
 import { inForceOn } from "@waste/domain/periods"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
@@ -92,7 +93,7 @@ import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-plac
 import { actorOf, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { routeLabel } from "@waste/domain/numbering"
@@ -103,7 +104,6 @@ import { findRoute, noSuchPickup, pickupReach, pickupScope, requireReachedRoute 
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
 import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { bookTicket, requireBookableTicket, requireTicketForStop } from "./ticket-stops"
 import { requireTag } from "./pickup-exceptions"
 
@@ -215,7 +215,7 @@ async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: Rout
       stopRoute: route.number,
     })
     .from(bulkyBooking)
-    .leftJoin(pickup, and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, LIVE_STOP_STATUSES)))
+    .leftJoin(pickup, liveStop)
     .leftJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.id, bookingId)))
     .limit(1)

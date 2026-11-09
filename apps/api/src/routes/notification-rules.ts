@@ -39,9 +39,8 @@ import { newId } from "@waste/db/ids"
 import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.templates"
 

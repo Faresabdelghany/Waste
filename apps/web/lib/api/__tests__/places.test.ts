@@ -16,7 +16,8 @@ import { DEPOT_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/voca
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import { wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"

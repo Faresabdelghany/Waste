@@ -14,9 +14,9 @@ import { SITE_VISITS_MODULE } from "@/lib/data/site-visits"
 import type { Action } from "@waste/domain/access/modules"
 import { emptyBusinessFilters } from "@/lib/prototype/business-filters"
 
-import type { Grants } from "../grants"
-import { moduleKeyOf } from "../records/adapter"
-import { ROUTES_MODULE } from "../records/routes"
+import type { Grants } from "@/lib/modules/grants"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 
 describe("the command surfaces", () => {
   test("are a switched module's own, never a module the API does not back", () => {

@@ -6,7 +6,9 @@ import { describe, test } from "node:test"
 
 import { MODULE_KEYS, WORKSPACE_KEYS } from "@waste/domain/access/modules"
 
-import { CONTROL_CENTER, MODULES, WORKSPACES, moduleAt, moduleSpecOf, pageModuleIds } from "../manifest"
+import type { BusinessRecord } from "@/lib/prototype/prototype-record"
+
+import { CONTROL_CENTER, MODULES, WORKSPACES, moduleAt, moduleSpecOf, moduleSpecOfKey, pageModuleIds } from "../manifest"
 import { PROVIDER_PAGES, PROVIDER_WORKSPACE_PATH } from "../provider-pages"
 
 describe("the module manifest", () => {
@@ -45,11 +47,11 @@ describe("the module manifest", () => {
   test("gives a module shown elsewhere the surface it opens", () => {
     const elsewhere = Object.entries(MODULES).filter(([, spec]) => spec.shown === "elsewhere")
     assert.deepEqual(elsewhere.map(([key, spec]) => [key, spec.deepLink]), [
-      ["operate.driver-app", "/driver"],
       ["customers.citizen-portal", "/portal"],
       ["service-providers.service-provider-workspace", "/service-provider-workspace"],
       ["configure.control-center", "/control-center"],
     ])
+    assert.deepEqual(Object.entries(MODULES).flatMap(([key, spec]) => (spec.shown === "app" ? [[key, spec.deepLink]] : [])), [["operate.driver-app", "/driver"]])
   })
 })
 
@@ -84,5 +86,48 @@ describe("the provider's workspace", () => {
     for (const page of PROVIDER_PAGES) {
       for (const moduleId of page.moduleIds) assert.equal(moduleSpecOf({ workspaceId: page.workspaceId, moduleId })?.providerPage, page.id, `${page.id}: ${moduleId}`)
     }
+  })
+})
+
+describe("a module's own rules", () => {
+  const row = (id: string, extra: Partial<BusinessRecord> = {}) => ({ id, name: id, status: "Active", ...extra }) as BusinessRecord
+
+  test("name a form's module by the form's key, and none for a command's form", () => {
+    assert.equal(moduleSpecOfKey("route-studio.schemes"), MODULES["route-studio.schemes"])
+    assert.equal(moduleSpecOfKey("customers.applications.decide"), undefined)
+    assert.equal(moduleSpecOfKey("operate.routes"), undefined)
+  })
+
+  test("offer a contact field the persons alone, and a customer field every party, each beside a status not active", () => {
+    const picked = MODULES["customers.contacts"].picked
+    const company = row("company-greenloop", { status: "Inactive" })
+    assert.equal(picked?.offers?.("recipientContactId", company), false)
+    assert.equal(picked?.offers?.("recipientContactId", row("contact-anna")), true)
+    assert.equal(picked?.offers?.("customerId", company), true)
+    assert.equal(picked?.label?.(company), "company-greenloop · Inactive")
+    assert.equal(picked?.label?.(row("contact-anna")), "contact-anna")
+  })
+
+  test("offer a trailer field the trailers alone and a vehicle field the rest, a picked vehicle named by its callsign", () => {
+    const picked = MODULES["fleet.vehicles"].picked
+    const trailer = row("trailer-7")
+    const truck = row("vehicle-31", { name: "WH-31 · AB 12 345" })
+    assert.deepEqual([picked?.offers?.("trailerId", trailer), picked?.offers?.("trailerId", truck)], [true, false])
+    assert.deepEqual([picked?.offers?.("vehicleId", trailer), picked?.offers?.("vehicleId", truck)], [false, true])
+    assert.equal(picked?.named?.(truck), "WH-31")
+  })
+
+  test("keep a party's own rows to its provider's scope", () => {
+    const operated = Object.entries(MODULES).flatMap(([key, spec]) => (spec.providerOperated ? [key] : [])).sort()
+    assert.deepEqual(operated, [
+      "commercial.service-provider-prices",
+      "commercial.settlements",
+      "fleet.drivers",
+      "fleet.vehicles",
+      "route-studio.routes",
+      "service-providers.service-areas",
+      "service-providers.service-provider-workspace",
+      "service-providers.service-providers",
+    ])
   })
 })

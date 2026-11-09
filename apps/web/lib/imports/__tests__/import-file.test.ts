@@ -18,7 +18,7 @@ import {
   readImportFile,
   textOf,
 } from "../import-file"
-import type { Grants } from "../../api/grants"
+import type { Grants } from "@/lib/modules/grants"
 
 const grants = (...entries: [ModuleKey, ...Action[]][]): Grants => entries.map(([moduleKey, ...actions]) => ({ moduleKey, actions }))
 

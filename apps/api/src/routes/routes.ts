@@ -104,7 +104,8 @@ import { lockRow, lockRows, nextNumber } from "@waste/db/commands/shared"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
 import { receiptColumns, receiptOf } from "@waste/db/shapes/driver-commands"
-import { routeFitStops, vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { routeFitStops } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { handBackWindow } from "@waste/db/commands/route-holds"
 import { timeOf } from "@waste/db/shapes/times"
 
@@ -113,7 +114,7 @@ import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
 import { detailOf, findReachedRoute, findRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
@@ -123,7 +124,7 @@ import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./worklo
 import { requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE } from "./scheme-groups"
 import { askGenerationBestEffort } from "./generation"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
 import { refuseAllocatedElsewhere, refuseDoubleBooked } from "./crew-day"
 import { refuseMisfit } from "./fleet-fit"
@@ -188,7 +189,7 @@ export const orderMismatch = (missing: number, strangers: number): string =>
 /**
  * The route the path names, locked and read: every command holds a rule the
  * API rather than the database holds — the status, the licence, the order —
- * so it takes the row lock first and reads afterwards (routes/shared.ts).
+ * so it takes the row lock first and reads afterwards (`@waste/db/commands/shared`).
  * Exported for the Plan endpoints (routes/plans.ts), whose optimise is a
  * command over the route.
  */

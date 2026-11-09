@@ -14,10 +14,11 @@
 // (the command surface's `shows`), and an area's details list its
 // assignments, which the provider prices and the settlements pick from. An indexed provider price is a create of the prices module that
 // names the row it indexes: the next row of the chain.
+import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { periodOn, type PeriodStanding } from "@waste/domain/periods"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { hasPrefix, ofKind } from "@/lib/api/records/adapter"
+import { hasPrefix, ofKind } from "@/lib/records/fields"
 
 import type { BusinessRecord } from "./business-modules"
 import { SERVICE_AREAS_MODULE } from "./service-areas"
@@ -26,6 +27,11 @@ export { SERVICE_AREAS_MODULE }
 export const PROVIDER_PRICES_MODULE = moduleAt("commercial.service-provider-prices")
 export const SETTLEMENTS_MODULE = moduleAt("commercial.settlements")
 export const WEIGHTS_MODULE = moduleAt("route-studio.weights")
+/** A review status as the desk reads it: `captured` is the queue. */
+export const REVIEW_LABELS: Readonly<Record<WeightReviewStatus, string>> = { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" }
+/** The reviews, by the command each is sent as. */
+export const WEIGHT_REVIEW_COMMANDS = ["approve", "reject", "correct"] as const
+export type WeightReviewCommand = (typeof WEIGHT_REVIEW_COMMANDS)[number]
 /** The service providers an area is awarded to. */
 export const SERVICE_PROVIDERS_MODULE = moduleAt("service-providers.service-providers")
 

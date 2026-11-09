@@ -57,7 +57,7 @@ import {
   weekendLabel,
   type ProjectCalendar,
 } from "@/lib/prototype/route-schemes/project-calendar"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import { SCHEME_EDIT_POLICY_LABELS } from "@/lib/prototype/route-schemes/creation"
 import { schemeEditPolicy } from "@/lib/prototype/route-schemes/edit"
@@ -111,13 +111,13 @@ import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
-import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
+import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
 import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
-import { dayIn } from "@/lib/api/records/clock"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { dayIn } from "@/lib/format/clock"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { planAheadToggledSentence, validationWhenUnplaced } from "@/lib/data/route-schemes"
-import { useBusinessRecordStore, useServerModuleState, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, useModuleRecords, whenSaved } from "@/components/platform/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
 import { SchemeSeasonsCard } from "@/components/waste/scheme-seasons"
 import {
@@ -129,8 +129,8 @@ import {
 import {
   NoRecordsShown,
   recordStatusTone,
-} from "@/components/waste/business-record-views"
-import { RecordSearchInput } from "@/components/waste/record-search-input"
+} from "@/components/platform/business-record-views"
+import { RecordSearchInput } from "@/components/platform/record-search-input"
 import { readableKey } from "@/lib/data/record-key"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 

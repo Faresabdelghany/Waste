@@ -8,21 +8,21 @@
 // the store's toast in its words, over the form still holding what was
 // typed. The module is a provider's account's alone (`providersOnly`): the
 // office invites and switches accounts in Settings › Users & roles. The form
-// is lib/data/provider-workspace.ts's.
+// is lib/api/provider-workspace.ts's.
 import { useState } from "react"
 import { Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useApiSession } from "@/components/waste/api-session-store"
-import { savedRow, useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
-import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/waste/commands/use-command-support"
-import { useCommandOffered, useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { savedRow, useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
+import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
+import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/platform/use-command-support"
+import { useCommandOffered, useProviderWebId, useProviderWorkspace } from "@/components/platform/provider-account"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "@/lib/api/records/organisation"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/data/provider-workspace"
+import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/api/provider-workspace"
 
 /** Add user: a provider's account invites into its own team. */
 export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {

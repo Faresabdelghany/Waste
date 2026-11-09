@@ -28,7 +28,6 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 
 import {
-  businessWorkspaces,
   FIXTURE_PROJECT_IDS,
   getModuleDefinition,
   getWorkspaceDefinition,
@@ -118,7 +117,8 @@ import type {
 import { isSoftDeleted, softDeletedRecord } from "@/lib/prototype/record-visibility"
 import { resolveBusinessRelation } from "@/lib/data/business-links"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { moduleSpecOf } from "@/lib/modules/manifest"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
+import { moduleSpecOfKey, moduleSpecOf, type ProviderForm } from "@/lib/modules/manifest"
 import {
   agreementFormSchemaOnApi,
   agreementPriceListOptions,
@@ -190,7 +190,7 @@ import { CheckRow } from "@/components/ui/check-row"
 import {
   BusinessFilterPopover,
   canonicalCalendarName,
-} from "@/components/waste/business-filter-popover"
+} from "@/components/platform/business-filter-popover"
 import {
   businessFilterChips,
   matchesBusinessFilters,
@@ -200,7 +200,7 @@ import {
   type BusinessFilters,
 } from "@/lib/prototype/business-filters"
 import { RecordHistory } from "@/components/waste/record-history"
-import { RecordSearchInput } from "@/components/waste/record-search-input"
+import { RecordSearchInput } from "@/components/platform/record-search-input"
 import {
   canonicalServiceFrequencyName,
 } from "@/lib/prototype/service-frequencies"
@@ -210,7 +210,7 @@ import {
   type BusinessGroupOption,
   type BusinessViewOptions,
   type BusinessViewType,
-} from "@/components/waste/business-view-options-popover"
+} from "@/components/platform/business-view-options-popover"
 import {
   BusinessRecordBoardView,
   BusinessRecordCardsView,
@@ -220,8 +220,8 @@ import {
   recordProgress,
   recordStatusTone,
   type RecordExtraAction,
-} from "@/components/waste/business-record-views"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+} from "@/components/platform/business-record-views"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { SchemeEditPolicyDialog } from "@/components/waste/scheme-edit-policy-dialog"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { useSchemeEditCommit } from "@/components/waste/use-scheme-edit-commit"
@@ -233,21 +233,21 @@ import {
 } from "@/components/waste/scheme-create-flow"
 import { CollectionGroupsEditorDialog } from "@/components/waste/collection-groups-editor"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
-import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
+import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryGranted, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
 import { spellsStatus, type WriteOutcome } from "@/lib/api/records/server-records"
-import { useActiveRoutes } from "@/components/waste/active-routes-store"
+import { useActiveRoutes } from "@/components/platform/active-routes-store"
 import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { exportShownRows } from "@/lib/data/workspace-export"
 import {
   isInProjectScope,
@@ -260,9 +260,8 @@ import {
 } from "@/lib/data/project-scope"
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
-import { useGrants } from "@/components/auth/use-grants"
-import { mayOn } from "@/lib/api/grants"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { useGrants } from "@/components/platform/use-grants"
+import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type BusinessWorkspaceProps = {
@@ -289,6 +288,19 @@ type BusinessWorkspaceProps = {
   /** Name written as owner/actor on audit events and created records. */
   actorName?: string
 }
+
+// The modules the workspace reads besides the one shown, by key.
+const ORGANISATION = moduleAt("configure.organization")
+const CONTAINERS = moduleAt("resources.containers")
+const DEPOTS = moduleAt("resources.depots")
+const VEHICLES = moduleAt("fleet.vehicles")
+const DRIVERS = moduleAt("fleet.drivers")
+const VEHICLE_PLANNING = moduleAt("fleet.vehicle-planning")
+const ROUTES = moduleAt("route-studio.routes")
+const PICKUPS = moduleAt("route-studio.pickups")
+const SERVICE_PROVIDERS = moduleAt("service-providers.service-providers")
+const PROVIDER_TEAM = moduleAt("service-providers.service-provider-workspace")
+const PROVIDER_PRICES = moduleAt("commercial.service-provider-prices")
 
 // The header no longer offers a project switcher; generic workspaces run in the
 // default project (the sidebar identity "Copenhagen Central") unless a restricted
@@ -576,7 +588,7 @@ function createsImmutableCompanion(module: ModuleDefinition, action: string): bo
   const normalized = action.toLowerCase()
   if (createsCorrection(action)) return true
   if (
-    (module.id === "inventory" || module.id === "warehouses") &&
+    module.movements === true &&
     ["receive", "transfer", "reserve", "adjust", "release", "issue"].some((verb) =>
       normalized.includes(verb),
     )
@@ -588,25 +600,11 @@ function createsImmutableCompanion(module: ModuleDefinition, action: string): bo
 
 function companionLabel(module: ModuleDefinition, action: string, record: BusinessRecord): string {
   if (createsCorrection(action)) return `Correction for ${record.name}`
-  if (module.id === "inventory" || module.id === "warehouses") {
+  if (module.movements === true) {
     return `${action} ledger entry · ${record.name}`
   }
   return `${action.replace(/^Create\s+/i, "")} · ${record.name}`
 }
-
-// Records of these modules are operated by a specific party, so a service provider
-// scope offers only its own — unlike shared registries (projects, depots,
-// ticket types), where unattributed records stay selectable.
-const serviceProviderOperatedRelationModuleIds = new Set([
-  "routes",
-  "vehicles",
-  "drivers",
-  "service-provider-workspace",
-  "service-areas",
-  "service-provider-prices",
-  "settlements",
-  "service-providers",
-])
 
 function RecordValue({ record }: { record: BusinessRecord }) {
   const progress = recordProgress(record)
@@ -647,28 +645,10 @@ function ContainerSensorState({ record }: { record: BusinessRecord }) {
   )
 }
 
-function resolveFormModule(workspaceId: WorkspaceId, moduleId: string) {
-  const requestedWorkspace = getWorkspaceDefinition(workspaceId)
-  const directModule = requestedWorkspace.modules.find(
-    (module) => module.id === moduleId,
-  )
-  if (directModule) {
-    return { workspaceId, module: directModule }
-  }
-
-  for (const candidateWorkspace of Object.values(businessWorkspaces)) {
-    const candidateModule = candidateWorkspace.modules.find(
-      (module) => module.id === moduleId,
-    )
-    if (candidateModule) {
-      return {
-        workspaceId: candidateWorkspace.id,
-        module: candidateModule,
-      }
-    }
-  }
-
-  return null
+/** The module at a location, with its workspace; null where the registry holds none. */
+function resolveFormModule({ workspaceId, moduleId }: ModuleLocation) {
+  const module = getModuleDefinition({ workspaceId, moduleId })
+  return module ? { workspaceId, module } : null
 }
 
 function normalizedLifecycleValue(value: string) {
@@ -710,83 +690,35 @@ function initialFormStatus(
   return currentStatus
 }
 
-// A service provider-scoped workspace already knows which service provider, project,
-// service area, and signed-in manager it belongs to, so the invite form must
-// not ask for any of them: all four are stamped from the account and its
-// fixed scope at submit time, leaving only the person's own details.
-const SERVICE_PROVIDER_ACCOUNT_FIELD_IDS = [
-  "serviceProviderId",
-  "projectId",
-  "serviceAreaId",
-  "invitedBy",
-] as const
-
-// A service provider manager raises tickets on their own work for the office to
-// resolve, so the office-side fields disappear: Project and Source are known
-// from the account, response SLAs, parent tickets, and the customer/internal
-// communication split are the office's to manage, and Category comes from the
-// selected Ticket type. Evidence is uploaded directly instead of referenced.
-const SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS: readonly string[] = [
-  "projectId",
-  "responseDueAt",
-  "occurredAt",
-  "parentTicketId",
-  "internalComment",
-  "customerMessage",
-  "source",
-  "category",
-]
-
+/** A module's form as a service provider's own account is shown it (the module's `providerForm`): the fields its scope answers gone, its references uploaded. */
 function serviceProviderScopedFormSchema(
   schema: BusinessFormSchema | undefined,
+  providerForm: ProviderForm | undefined,
   serviceProviderScopeId: string | undefined,
 ): BusinessFormSchema | undefined {
-  if (!schema || !serviceProviderScopeId) return schema
-  if (schema.key === "service-providers.service-provider-workspace") {
-    const hiddenFieldIds: readonly string[] = SERVICE_PROVIDER_ACCOUNT_FIELD_IDS
-    return {
-      ...schema,
-      description: "Add a user with access limited to your service provider.",
-      contextFieldIds: schema.contextFieldIds?.filter(
-        (fieldId) => !hiddenFieldIds.includes(fieldId),
-      ),
-      sections: schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields.filter(
-          (field) => !hiddenFieldIds.includes(field.id),
+  if (!schema || !serviceProviderScopeId || providerForm === undefined) return schema
+  const { description, hides, uploads } = providerForm
+  return {
+    ...schema,
+    description,
+    contextFieldIds: schema.contextFieldIds?.filter((fieldId) => !hides.includes(fieldId)),
+    sections: schema.sections.map((section) => ({
+      ...section,
+      fields: section.fields
+        .filter((field) => !hides.includes(field.id))
+        .map((field) =>
+          field.id === uploads
+            ? {
+                ...field,
+                type: "file" as const,
+                label: "Attachments",
+                description: undefined,
+                placeholder: undefined,
+              }
+            : field,
         ),
-      })),
-    }
+    })),
   }
-  if (schema.key === "operate.tickets") {
-    return {
-      ...schema,
-      description:
-        "Raise a scoped case on your own work for the office to resolve. Assignment and resolution history remain separate parts of the Ticket.",
-      contextFieldIds: schema.contextFieldIds?.filter(
-        (fieldId) => !SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS.includes(fieldId),
-      ),
-      sections: schema.sections.map((section) => ({
-        ...section,
-        fields: section.fields
-          .filter(
-            (field) => !SERVICE_PROVIDER_TICKET_HIDDEN_FIELD_IDS.includes(field.id),
-          )
-          .map((field) =>
-            field.id === "attachmentReferences"
-              ? {
-                  ...field,
-                  type: "file" as const,
-                  label: "Attachments",
-                  description: undefined,
-                  placeholder: undefined,
-                }
-              : field,
-          ),
-      })),
-    }
-  }
-  return schema
 }
 
 type SchemeStoredValues = Record<string, string | boolean | undefined>
@@ -904,6 +836,8 @@ export function BusinessWorkspace({
     },
     [getRecords],
   )
+  // The records of a module the workspace names by key.
+  const recordsAt = useCallback((location: ModuleLocation) => getRecords(location.workspaceId, location.moduleId), [getRecords])
   const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
     serviceProviderScopeId ? "service-provider" : "operator",
   )
@@ -960,8 +894,8 @@ export function BusinessWorkspace({
   // and created alike (issue #44) — what a scope is compared against, what a
   // created record is stamped with, and where a scope's label is read.
   const projectRecords = useMemo(
-    () => projectRecordsOf(moduleRecords("configure", "organization")),
-    [moduleRecords],
+    () => projectRecordsOf(recordsAt(ORGANISATION)),
+    [recordsAt],
   )
   const [selectedRecord, setSelectedRecord] = useState<BusinessRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<BusinessRecord | null>(null)
@@ -1022,8 +956,7 @@ export function BusinessWorkspace({
   // A grant on another module — Map Planning creates Service Areas, so it
   // follows the Service Areas module's create grant, not Plan's.
   const hasGrantOn = (location: ModuleLocation, action: Action) => mayOn(grants, moduleKeyOf(location.workspaceId, location.moduleId), action)
-  const isContainersAssetsView =
-    workspace.id === "resources" && activeModule.id === "containers"
+  const isContainersAssetsView = activeModule.layout === "containers"
   // How a switched module is operated beyond its own forms (Issue #181): what
   // stands in for its primary action, and its rows' commands in their details.
   const commandSurface = commandSurfaceFor(workspace.id, activeModule.id)
@@ -1042,7 +975,7 @@ export function BusinessWorkspace({
       : selectedRecord
   // Map Planning (2026-09-16) renders its own page below the header: no
   // search, filter, or table rows — the map owns its toolbar.
-  const isMapPlanningView = workspace.id === "plan" && activeModule.id === "map-planning"
+  const isMapPlanningView = activeModule.layout === "map-planning"
   // A workspace's tabs are the modules the manifest shows as one; the rest of its page's are under More.
   const primaryModules = workspace.modules.filter((module) => module.shown === "tab")
   const secondaryModules = workspace.modules.filter((module) => module.shown !== "tab")
@@ -1054,15 +987,11 @@ export function BusinessWorkspace({
     return serviceProviderScopedFormSchema(
       // The agreement form as the API takes it: the fields the wire has no home for gone (lib/data/agreements.ts).
       isAgreementsView && registered ? agreementFormSchemaOnApi(registered) : registered,
+      activeModule.providerForm,
       serviceProviderScopeId,
     )
-  }, [activeModule.id, isAgreementsView, serviceProviderScopeId, workspace.id])
-  const relatedCreateModule = relatedCreateTarget
-    ? resolveFormModule(
-        relatedCreateTarget.workspaceId,
-        relatedCreateTarget.moduleId,
-      )
-    : null
+  }, [activeModule.id, activeModule.providerForm, isAgreementsView, serviceProviderScopeId, workspace.id])
+  const relatedCreateModule = relatedCreateTarget ? resolveFormModule(relatedCreateTarget) : null
   const formSchema = useMemo(
     () =>
       relatedCreateTarget?.schemaOverride ??
@@ -1077,11 +1006,13 @@ export function BusinessWorkspace({
     workspaceId: relatedCreateModule?.workspaceId ?? workspace.id,
     moduleId: relatedCreateModule?.module.id ?? activeModule.id,
   }
-  const formWriteTarget = resolveFormModule(formWriteRequest.workspaceId, formWriteRequest.moduleId)
+  const formWriteTarget = resolveFormModule(formWriteRequest)
+  // The module whose form is open, by the form's key: what the form's own write and pickers follow.
+  const formModule = formSchema ? moduleSpecOfKey(formSchema.key) : undefined
   const formTargetOnApi = useServerModuleState(formWriteTarget?.workspaceId ?? workspace.id, formWriteTarget?.module.id ?? activeModule.id)
   // Route Schemes get a chooser between Quick create and the Guided Setup wizard.
   const isSchemeCreateFlow =
-    activeModuleFormSchema?.key === "route-studio.schemes"
+    activeModuleFormSchema !== undefined && activeModule.writes === "scheme"
   const activeRecords = useMemo(() => {
     let records = getRecords(workspace.id, activeModule.id).filter(recordAllowed)
     // Scheme status is always the derived lifecycle status (issue #25) —
@@ -1090,7 +1021,7 @@ export function BusinessWorkspace({
     // row context is likewise derived (issue #30, D15): real stored
     // area/project names plus structured service days, never the fixture
     // display copy.
-    if (activeModule.id === "schemes") {
+    if (activeModule.layout === "schemes") {
       const today = todayIso()
       const areas = moduleRecords(
         PLANNING_AREAS_MODULE.workspaceId,
@@ -1109,7 +1040,7 @@ export function BusinessWorkspace({
     // A calendar's value is always derived from its structured validity
     // (issue #27, D13; a calendar carries no holidays since 2026-11-05) —
     // stored display copies and form-submit placeholders are never rendered.
-    if (activeModule.id === "calendars") {
+    if (activeModule.layout === "calendars") {
       records = records.map((record) => withDerivedCalendarValue(record))
     }
     // Service provider isolation covers user-created records too, which a static
@@ -1130,8 +1061,7 @@ export function BusinessWorkspace({
   // A route opens its own page over its command surface (RouteDetailsOnApi):
   // its stops first, its facts and History beside them.
   const isRoutePageOnApi =
-    workspace.id === "route-studio" &&
-    activeModule.id === "routes" &&
+    activeModule.details === "route-page" &&
     Boolean(selectedRecord) &&
     RowSurface !== undefined
   // Scheme detail is a dedicated full page (issue #29, D8) — same routing
@@ -1139,83 +1069,31 @@ export function BusinessWorkspace({
   // of it. Re-resolved from activeRecords so the page always shows the live
   // canonical record (derived status included), never a stale click snapshot.
   const schemeDetailRecord =
-    workspace.id === "route-studio" &&
-    activeModule.id === "schemes" &&
+    activeModule.details === "scheme-page" &&
     selectedRecord
       ? (activeRecords.find((candidate) => candidate.id === selectedRecord.id) ??
         selectedRecord)
       : null
   const isServiceProviderDetails =
-    workspace.id === "service-providers" &&
-    activeModule.id === "service-providers" &&
+    activeModule.details === "provider-page" &&
     Boolean(selectedRecord)
   const isTicketDetails =
-    workspace.id === "operate" &&
-    activeModule.id === "tickets" &&
+    activeModule.details === "ticket-dialog" &&
     Boolean(selectedRecord)
   const selectedServiceProviderId = isServiceProviderDetails ? selectedRecord?.id ?? "" : ""
-  const relatedServiceProviderUsers = useMemo(() => {
-    if (!selectedServiceProviderId) return []
-    const serviceProviderWorkspace = getWorkspaceDefinition("service-providers")
-    const usersModule = serviceProviderWorkspace.modules.find(
-      (module) => module.id === "service-provider-workspace",
-    )
-    if (!usersModule) return []
-    return getRecords(
-      "service-providers",
-      usersModule.id).filter(
-      (record) =>
-        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
-    )
-  }, [getRecords, selectedServiceProviderId])
-  const relatedServiceProviderVehicles = useMemo(() => {
-    if (!selectedServiceProviderId) return []
-    const fleetWorkspace = getWorkspaceDefinition("fleet")
-    const vehiclesModule = fleetWorkspace.modules.find(
-      (module) => module.id === "vehicles",
-    )
-    if (!vehiclesModule) return []
-    return getRecords("fleet", vehiclesModule.id).filter(
-      (record) =>
-        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
-    )
-  }, [getRecords, selectedServiceProviderId])
-  const relatedServiceProviderDrivers = useMemo(() => {
-    if (!selectedServiceProviderId) return []
-    const fleetWorkspace = getWorkspaceDefinition("fleet")
-    const driversModule = fleetWorkspace.modules.find(
-      (module) => module.id === "drivers",
-    )
-    if (!driversModule) return []
-    return getRecords("fleet", driversModule.id).filter(
-      (record) =>
-        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
-    )
-  }, [getRecords, selectedServiceProviderId])
-  const relatedServiceAreas = useMemo(() => {
-    if (!selectedServiceProviderId) return []
-    const serviceProviderWorkspace = getWorkspaceDefinition("service-providers")
-    const serviceAreasModule = serviceProviderWorkspace.modules.find(
-      (module) => module.id === "service-areas",
-    )
-    if (!serviceAreasModule) return []
-    return getRecords(
-      "service-providers",
-      serviceAreasModule.id).filter(
-      (record) =>
-        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
-    )
-  }, [getRecords, selectedServiceProviderId])
-  const relatedServiceProviderPrices = useMemo(() => {
-    if (!selectedServiceProviderId) return []
-    const commercialWorkspace = getWorkspaceDefinition("commercial")
-    const ratesModule = commercialWorkspace.modules.find((module) => module.id === "service-provider-prices")
-    if (!ratesModule) return []
-    return getRecords("commercial", ratesModule.id).filter(
-      (record) =>
-        record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record),
-    )
-  }, [getRecords, selectedServiceProviderId])
+  // A provider's details list its own rows of the modules it operates in.
+  const providerRowsOf = useCallback(
+    (location: ModuleLocation) =>
+      selectedServiceProviderId
+        ? recordsAt(location).filter((record) => record.serviceProviderId === selectedServiceProviderId && !isSoftDeleted(record))
+        : [],
+    [recordsAt, selectedServiceProviderId],
+  )
+  const relatedServiceProviderUsers = useMemo(() => providerRowsOf(PROVIDER_TEAM), [providerRowsOf])
+  const relatedServiceProviderVehicles = useMemo(() => providerRowsOf(VEHICLES), [providerRowsOf])
+  const relatedServiceProviderDrivers = useMemo(() => providerRowsOf(DRIVERS), [providerRowsOf])
+  const relatedServiceAreas = useMemo(() => providerRowsOf(SERVICE_AREAS_MODULE), [providerRowsOf])
+  const relatedServiceProviderPrices = useMemo(() => providerRowsOf(PROVIDER_PRICES), [providerRowsOf])
   // Record scoping compares against the selected project record's id, so a
   // project the fixture union never knew shows exactly its own records and
   // leaks into no other scope (issue #44).
@@ -1243,14 +1121,14 @@ export function BusinessWorkspace({
     return {
       // On the Pilot a server container stands where its placement in force
       // today is delivered at, which its record carries (#184, lib/api/records/container-places.ts).
-      containers: moduleRecords("resources", "containers"),
-      planningAreas: moduleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId),
-      serviceAreas: moduleRecords("service-providers", "service-areas"),
-      routes: moduleRecords("route-studio", "routes"),
-      pickups: moduleRecords("route-studio", "pickups"),
-      schemes: moduleRecords("route-studio", "schemes"),
+      containers: recordsAt(CONTAINERS),
+      planningAreas: recordsAt(PLANNING_AREAS_MODULE),
+      serviceAreas: recordsAt(SERVICE_AREAS_MODULE),
+      routes: recordsAt(ROUTES),
+      pickups: recordsAt(PICKUPS),
+      schemes: recordsAt(ROUTE_SCHEMES_MODULE),
     }
-  }, [isMapPlanningView, moduleRecords])
+  }, [isMapPlanningView, recordsAt])
 
   const filteredRecords = useMemo(() => {
     const matchingRecords = visibleScopedRecords.filter((record) => {
@@ -1399,15 +1277,14 @@ export function BusinessWorkspace({
   // page and the service provider workspace render the same rich record table.
   const moduleViewKind = resolveModuleViewKind(activeModule)
   const isQueueView = moduleViewKind === "queue"
-  const isTicketsView = activeModule.id === "tickets"
-  const isRoutesView = activeModule.id === "routes"
+  const isRoutesView = activeModule.layout === "routes"
   // Collection Calendars list (issue #27, D28iii): the project and the
   // validity, derived per record.
-  const isCalendarsView = activeModule.id === "calendars"
+  const isCalendarsView = activeModule.layout === "calendars"
   // Operators and service provider managers pin route days to their own sidebar's
   // Active Routes group from a star column on the routes table.
   const showRouteStarColumn = isRoutesView
-  const isServiceProviderUsersView = activeModule.id === "service-provider-workspace"
+  const isServiceProviderUsersView = activeModule.layout === "accounts"
   const isRichRecordView = moduleViewKind === "rich"
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
     ? ["table", "list", "board", "timeline"]
@@ -1457,7 +1334,7 @@ export function BusinessWorkspace({
   const canRunRecordActions = hasGrant("edit")
   // The Plan Ahead toggle (FR-11, ticket #8) on a scheme's row menu, only for
   // schemes whose recurrence is structured enough to generate.
-  const isSchemesView = activeModule.id === "schemes"
+  const isSchemesView = activeModule.layout === "schemes"
   // Per-scheme derived row presentation, one pass over one related-records
   // load: the live Attention warnings (issue #25, D5/D20 — recomputed from
   // canonical stored configuration, never read from persisted "Validation
@@ -1468,17 +1345,11 @@ export function BusinessWorkspace({
     if (!isSchemesView) {
       return new Map<string, SchemeRowSummary & { attention: string[] }>()
     }
-    const relatedModuleRecords = (workspaceId: WorkspaceId, moduleId: string) => {
-      const module = getWorkspaceDefinition(workspaceId).modules.find(
-        (candidate) => candidate.id === moduleId,
-      )
-      return module ? getRecords(workspaceId, module.id) : []
-    }
     const related = {
       schemes: activeRecords,
-      allocations: relatedModuleRecords("fleet", "vehicle-planning"),
-      containers: relatedModuleRecords("resources", "containers"),
-      vehicles: relatedModuleRecords("fleet", "vehicles"),
+      allocations: recordsAt(VEHICLE_PLANNING),
+      containers: recordsAt(CONTAINERS),
+      vehicles: recordsAt(VEHICLES),
     }
     return new Map(
       activeRecords.map((record) => [
@@ -1489,7 +1360,7 @@ export function BusinessWorkspace({
         },
       ]),
     )
-  }, [activeRecords, getRecords, isSchemesView])
+  }, [activeRecords, isSchemesView, recordsAt])
   // Derived Collection Calendars presentation (issue #27, D28iii): the table's
   // Validity cell derives from each record's structured submittedValues.
   const calendarRowsById = useMemo(() => {
@@ -1513,17 +1384,17 @@ export function BusinessWorkspace({
                 // row: the status/context seams (issues #25/#30) are
                 // render-time and must never be frozen into the store.
                 const stored =
-                  getRecords("route-studio", "schemes").find(
+                  recordsAt(ROUTE_SCHEMES_MODULE).find(
                     (candidate) => candidate.id === target.id,
                   ) ?? target
-                whenSaved(upsertRecord("route-studio", "schemes", setPlanAhead(stored, enabled)), () =>
+                whenSaved(upsertRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, setPlanAhead(stored, enabled)), () =>
                   toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", { description: planAheadToggledSentence(stored, enabled) }),
                 )
               },
             },
           ]
         : undefined,
-    [canRunRecordActions, getRecords, isSchemesView, upsertRecord],
+    [canRunRecordActions, isSchemesView, recordsAt, upsertRecord],
   )
   // The agreements module's sheet actions on the API (slice 9a of #81): the
   // edit a standard view offers no row action for — an agreement's period
@@ -1602,12 +1473,7 @@ export function BusinessWorkspace({
         label: "Status",
         count: distinctCount((record) => record.status, "state"),
       },
-      ...(isRoutesView
-        ? ["Project", "Area"]
-        : isServiceProviderUsersView
-          ? ["Role"]
-          : []
-      ).map((label) => ({
+      ...(typeof activeModule.view === "object" ? activeModule.view.groupBy ?? [] : []).map((label) => ({
         value: label,
         label,
         count: distinctCount(
@@ -1625,9 +1491,8 @@ export function BusinessWorkspace({
       })),
     ]
   }, [
-    isServiceProviderUsersView,
+    activeModule.view,
     isRichRecordView,
-    isRoutesView,
     factColumnOptions,
     visibleScopedRecords,
   ])
@@ -1659,8 +1524,7 @@ export function BusinessWorkspace({
         // The calendars' Validity stands in place of the value (#27).
         Number(viewOptions.showContext) +
         Number(viewOptions.showUpdated)
-  const isFleetPlanningView =
-    workspace.id === "fleet" && activeModule.id === "vehicle-planning"
+  const isFleetPlanningView = activeModule.layout === "allocations"
   const fleetPlanningItems = useMemo<TimelineItem[]>(
     () =>
       isFleetPlanningView
@@ -1776,7 +1640,7 @@ export function BusinessWorkspace({
         ) ?? null
       // Deep-linked schemes show the derived lifecycle status (issue #25)
       // and derived row context (issue #30) too.
-      if (record && module.id === "schemes") {
+      if (record && module.layout === "schemes") {
         record = withEffectiveSchemeStatus(record, todayIso())
         record = withDerivedSchemeContext(
           record,
@@ -1785,7 +1649,7 @@ export function BusinessWorkspace({
         )
       }
       // Deep-linked calendars show the derived validity too (issue #27).
-      if (record && module.id === "calendars") {
+      if (record && module.layout === "calendars") {
         record = withDerivedCalendarValue(record)
       }
       // Deep links cannot escape a service provider scope; the API's own fence holds a switched module's.
@@ -1987,16 +1851,13 @@ export function BusinessWorkspace({
       values: BusinessFormValues,
     ): readonly BusinessFormOption[] => {
       if (!field.relation) return field.options ?? []
-      const resolved = resolveFormModule(
-        field.relation.workspaceId,
-        field.relation.moduleId,
-      )
+      const resolved = resolveFormModule(field.relation)
       if (!resolved) return []
       // The scheme form offers only rows the store reads from the API: a
       // module on fixtures offers nothing, since a fixture row names nothing
       // the API holds, and a value the scheme already names stays as its id chip.
       if (
-        formSchema?.key === "route-studio.schemes" &&
+        formModule?.writes === "scheme" &&
         !isServerBacked(resolved.workspaceId, resolved.module.id)
       ) {
         const current = values[field.id]
@@ -2062,7 +1923,8 @@ export function BusinessWorkspace({
         // reference — while shared registries without attribution remain.
         .filter((record) => {
           if (!serviceProviderScopeId || fencedByApi(resolved.workspaceId, resolved.module.id)) return true
-          if (serviceProviderOperatedRelationModuleIds.has(resolved.module.id)) {
+          // A party's own rows are offered a provider's scope only where they are its own; a shared registry's unattributed ones stay.
+          if (resolved.module.providerOperated === true) {
             return record.serviceProviderId === serviceProviderScopeId
           }
           return (
@@ -2070,18 +1932,6 @@ export function BusinessWorkspace({
           )
         })
         .filter((record) => {
-          if (
-            field.id === "scheduleId" &&
-            resolved.module.id === "finance"
-          ) {
-            if (!record.id.startsWith("billing-schedule-")) return false
-          }
-          if (
-            field.id === "templateId" &&
-            resolved.module.id === "templates"
-          ) {
-            if (!record.id.startsWith("template-")) return false
-          }
           // A picker at the master data module gets the kind its field asks
           // for (slice 2 of #81): the rule is the adapters' own ownership —
           // the id's prefix, then the typed kind — so a renamed row stays in
@@ -2130,32 +1980,8 @@ export function BusinessWorkspace({
               return false
             }
           }
-          if (resolved.module.id === "contacts") {
-            const createdPartyType = record.submittedValues?.partyType
-            const isPerson =
-              record.id.startsWith("contact-") || createdPartyType === "person"
-            // A customer field names a Customer in the glossary's sense — a
-            // person or an organisation alike (the seed's private owners hold
-            // agreements and own properties) — so it offers both.
-            if (
-              (field.id === "recipientContactId" ||
-                /ContactId$/i.test(field.id)) &&
-              !isPerson
-            ) {
-              return false
-            }
-          }
-
-          if (
-            resolved.workspaceId === "fleet" &&
-            resolved.module.id === "vehicles"
-          ) {
-            const resourceKind = record.submittedValues?.resourceKind
-            const isTrailer =
-              resourceKind === "trailer" || record.id.startsWith("trailer-")
-            if (field.id === "trailerId" && !isTrailer) return false
-            if (field.id === "vehicleId" && isTrailer) return false
-          }
+          // The module's own rule for which of its rows a field of this id is offered (a contact field's persons, a trailer field's trailers).
+          if (resolved.module.picked?.offers?.(field.id, record) === false) return false
 
           if (
             selectedProjectId &&
@@ -2175,8 +2001,8 @@ export function BusinessWorkspace({
       // licence rule as the wizard's group editor (quickDriverOptions, issue
       // #37): every driver listed, an ineligible one disabled with the
       // reason, an unknown licence never eligible.
-      if (formSchema?.key === "route-studio.schemes" && field.id === "plannedDriverId") {
-        const vehicles = resolveFormModule("fleet", "vehicles")
+      if (formModule?.writes === "scheme" && field.id === "plannedDriverId") {
+        const vehicles = resolveFormModule(VEHICLES)
         return driverFormOptions(
           values,
           permittedRecords,
@@ -2185,17 +2011,13 @@ export function BusinessWorkspace({
             : [],
         )
       }
-      // A picker hides no row by status (#79: a status gates a new reference,
-      // never an existing one, and the API's 409 says so); a customer picker
-      // shows a row's status beside its name, so a person sees the refusal
-      // coming.
-      const showsStatus = resolved.module.id === "contacts"
+      const labelOf = resolved.module.picked?.label
       return permittedRecords.map((record) => ({
         value: record.id,
-        label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
+        label: labelOf ? labelOf(record) : record.name,
       }))
     },
-    [isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, fencedByApi, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, fencedByApi, formModule?.writes, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {
@@ -2219,7 +2041,7 @@ export function BusinessWorkspace({
       // recurrence shapes map onto today's options, and a missing planned
       // start time stays missing (issue #32).
       const seeded: BusinessFormValues =
-        activeModuleFormSchema.key === "route-studio.schemes"
+        activeModule.writes === "scheme"
           ? {
               ...formInitialValues,
               ...seedSchemeEditValues(editingRecord.submittedValues),
@@ -2232,7 +2054,7 @@ export function BusinessWorkspace({
       // the route's own project (issue #23). Map the stamps and the current
       // assignment facts onto the form fields; quick-created routes already
       // carry the form keys and are left alone.
-      if (activeModuleFormSchema.key === "route-studio.routes") {
+      if (activeModule.writes === "route") {
         if (typeof seeded.operatingDate !== "string" || !seeded.operatingDate) {
           const stampedDate =
             (typeof seeded.actualDate === "string" && seeded.actualDate) ||
@@ -2247,11 +2069,11 @@ export function BusinessWorkspace({
           seeded.projectId = editingRecord.projectIds[0]
         }
         const resolveFleetRecordId = (
-          moduleId: "vehicles" | "drivers",
+          fleet: typeof VEHICLES | typeof DRIVERS,
           label: string | undefined,
         ) => {
           if (!label || /^unassigned$/i.test(label)) return ""
-          const resolved = resolveFormModule("fleet", moduleId)
+          const resolved = resolveFormModule(fleet)
           if (!resolved) return ""
           // Route facts hold the vehicle callsign ("WH-31"), the registry
           // name carries the plate after it.
@@ -2261,7 +2083,7 @@ export function BusinessWorkspace({
               resolved.module.id).find(
               (candidate) =>
                 candidate.name === label ||
-                candidate.name.split(" · ")[0] === label,
+                resolved.module.picked?.named?.(candidate) === label,
             )?.id ?? ""
           )
         }
@@ -2270,7 +2092,7 @@ export function BusinessWorkspace({
         // vehicleId/driverId can be stale. Resolve from facts first and fall
         // back to whatever the record stored.
         const vehicleId = resolveFleetRecordId(
-          "vehicles",
+          VEHICLES,
           editingRecord.facts.Vehicle ??
             (typeof seeded.appliedVehicle === "string"
               ? seeded.appliedVehicle
@@ -2278,7 +2100,7 @@ export function BusinessWorkspace({
         )
         if (vehicleId) seeded.vehicleId = vehicleId
         const driverId = resolveFleetRecordId(
-          "drivers",
+          DRIVERS,
           editingRecord.facts.Driver ??
             (typeof seeded.appliedDriver === "string"
               ? seeded.appliedDriver
@@ -2395,6 +2217,7 @@ export function BusinessWorkspace({
     }
     return values
   }, [
+    activeModule.writes,
     activeModuleFormSchema,
     editingRecord,
     formInitialValues,
@@ -2412,7 +2235,7 @@ export function BusinessWorkspace({
     // (D36): the schema dialog edits scheme-level fields only — the groups
     // are edited on the scheme page — so those fields are hidden here.
     const hidesGroupFields =
-      activeModuleFormSchema.key === "route-studio.schemes" &&
+      activeModule.writes === "scheme" &&
       hasExplicitCollectionGroups(editingRecord.submittedValues)
     const sections = hidesGroupFields
       ? activeModuleFormSchema.sections
@@ -2434,7 +2257,7 @@ export function BusinessWorkspace({
         completionMessage: `The ${entity.toLowerCase()} was updated and its audit history extended.`,
       },
     }
-  }, [activeModule.entityLabel, activeModuleFormSchema, editingRecord, isAgreementsView])
+  }, [activeModule.entityLabel, activeModule.writes, activeModuleFormSchema, editingRecord, isAgreementsView])
 
   const validateFormValues = useCallback(
     (values: BusinessFormValues) => {
@@ -2483,11 +2306,11 @@ export function BusinessWorkspace({
         }
       }
 
-      if (formSchema.key === "route-studio.schemes") {
+      if (formModule?.writes === "scheme") {
         // The same licence rule the select applies, at submit (issue #37):
         // a driver picked before the vehicle changed is refused with the reason.
-        const vehicles = resolveFormModule("fleet", "vehicles")
-        const drivers = resolveFormModule("fleet", "drivers")
+        const vehicles = resolveFormModule(VEHICLES)
+        const drivers = resolveFormModule(DRIVERS)
         const reason = quickDriverIssue(
           values,
           drivers ? getRecords(drivers.workspaceId, drivers.module.id) : [],
@@ -2508,32 +2331,9 @@ export function BusinessWorkspace({
         errors.projectId = "The selected project is outside the current workspace scope."
       }
 
-      if (
-        formSchema.key === "customers.contacts" &&
-        values.partyType === "person" &&
-        !values.email &&
-        !values.phone
-      ) {
-        errors.email = "A person needs an email address or phone number."
-      }
-
-      if (
-        formSchema.key === "fleet.vehicle-planning" &&
-        (values.allocationAction === "allocate" ||
-          values.allocationAction === "change")
-      ) {
-        const hasRoute = typeof values.routeId === "string" && Boolean(values.routeId)
-        const hasScheme =
-          typeof values.schemeId === "string" && Boolean(values.schemeId)
-        if (hasRoute === hasScheme) {
-          errors.routeId = "Select either one route or one route scheme."
-          errors.schemeId = "Select either one route or one route scheme."
-        }
-      }
-
       return errors
     },
-    [agreementsOnApi, editingRecord?.id, formSchema, formTargetRecords, getRecords, projectScope],
+    [agreementsOnApi, editingRecord?.id, formModule?.writes, formSchema, formTargetRecords, getRecords, projectScope],
   )
 
   const getFormReviewSummary = useCallback(
@@ -2575,8 +2375,9 @@ export function BusinessWorkspace({
       toast.success(formSchema.recordKind, {
         description: formSchema.execution.completionMessage,
       })
-      if (formSchema.key === "customers.citizen-portal") {
-        router.push("/portal")
+      // A preview opens the surface its module is shown on (the citizen portal).
+      if (formModule?.deepLink !== undefined) {
+        router.push(formModule.deepLink)
       }
       return
     }
@@ -2606,19 +2407,14 @@ export function BusinessWorkspace({
     // "name · context · status" option label used inside the dropdowns.
     const relationRecordName = (field: BusinessFormField, recordId: string) => {
       if (!field.relation) return undefined
-      const resolved = resolveFormModule(
-        field.relation.workspaceId,
-        field.relation.moduleId,
-      )
+      const resolved = resolveFormModule(field.relation)
       if (!resolved) return undefined
-      const name = getRecords(
+      const linked = getRecords(
         resolved.workspaceId,
-        resolved.module.id).find((candidate) => candidate.id === recordId)?.name
-      if (!name) return undefined
-      // Vehicle names carry the registration plate; facts show the callsign.
-      return resolved.workspaceId === "fleet" && resolved.module.id === "vehicles"
-        ? name.split(" · ")[0]
-        : name
+        resolved.module.id).find((candidate) => candidate.id === recordId)
+      if (!linked?.name) return undefined
+      // The name a fact gives a row, its module's own where it has one (a vehicle's callsign).
+      return resolved.module.picked?.named?.(linked) ?? linked.name
     }
 
     // The shared derivation (lib/data/business-form-records.ts) with what only
@@ -2631,7 +2427,7 @@ export function BusinessWorkspace({
           (option) => option.value === item,
         )?.label,
       resolveRelationTarget: (relation) => {
-        const resolved = resolveFormModule(relation.workspaceId, relation.moduleId)
+        const resolved = resolveFormModule(relation)
         return resolved
           ? { workspaceId: resolved.workspaceId, moduleId: resolved.module.id }
           : undefined
@@ -2650,8 +2446,8 @@ export function BusinessWorkspace({
     // submitted value, display fact, and relation ref.
     if (
       !editingRecord &&
-      formSchema.key === "route-studio.schemes" &&
-      activeModule.id === "schemes"
+      formModule?.writes === "scheme" &&
+      activeModule.writes === "scheme"
     ) {
       const extraValues: BusinessFormValues = {}
       const extraFacts: Record<string, string> = {}
@@ -2663,10 +2459,7 @@ export function BusinessWorkspace({
         extraValues[field.id] = value
         extraFacts[field.label] = displayFormValue(field, value)
         if (field.relation && typeof value === "string") {
-          const relationTarget = resolveFormModule(
-            field.relation.workspaceId,
-            field.relation.moduleId,
-          )
+          const relationTarget = resolveFormModule(field.relation)
           extraRelations.push({
             fieldId: field.id,
             workspaceId: relationTarget?.workspaceId ?? field.relation.workspaceId,
@@ -2708,11 +2501,11 @@ export function BusinessWorkspace({
     // selectedProjectIds below.
     if (
       serviceProviderScopeId &&
-      formSchema.key === "service-providers.service-provider-workspace" &&
+      formModule?.writes === "account" &&
       !editingRecord &&
       !values.serviceProviderId
     ) {
-      const serviceProviderTarget = resolveFormModule("service-providers", "service-providers")
+      const serviceProviderTarget = resolveFormModule(SERVICE_PROVIDERS)
       const serviceProviderName = serviceProviderTarget
         ? getRecords(
             serviceProviderTarget.workspaceId,
@@ -2722,13 +2515,12 @@ export function BusinessWorkspace({
         facts["Service provider"] = serviceProviderName
         relationRefs.push({
           fieldId: "serviceProviderId",
-          workspaceId: "service-providers",
-          moduleId: "service-providers",
+          ...SERVICE_PROVIDERS,
           recordId: serviceProviderScopeId,
           label: serviceProviderName,
         })
       }
-      const areaTarget = resolveFormModule("service-providers", "service-areas")
+      const areaTarget = resolveFormModule(SERVICE_AREAS_MODULE)
       const serviceProviderAreas = areaTarget
         ? getRecords(
             areaTarget.workspaceId,
@@ -2738,8 +2530,7 @@ export function BusinessWorkspace({
         facts["Allowed service area"] = serviceProviderAreas[0].name
         relationRefs.push({
           fieldId: "serviceAreaId",
-          workspaceId: "service-providers",
-          moduleId: "service-areas",
+          ...SERVICE_AREAS_MODULE,
           recordId: serviceProviderAreas[0].id,
           label: serviceProviderAreas[0].name,
         })
@@ -2753,7 +2544,7 @@ export function BusinessWorkspace({
     // Service provider users are captured as First/Last name fields; the record
     // name is the composed full name.
     const serviceProviderUserName =
-      formSchema.key === "service-providers.service-provider-workspace"
+      formModule?.writes === "account"
         ? [values.firstName, values.lastName]
             .filter(
               (part): part is string =>
@@ -2765,18 +2556,18 @@ export function BusinessWorkspace({
     const nameValue =
       submittedNameValue ||
       serviceProviderUserName ||
-      (formSchema.key === "resources.containers"
+      (formModule?.writes === "container"
         ? `BIN-${String(now).slice(-5)}`
         : "")
     if (
-      formSchema.key === "resources.containers" &&
+      formModule?.writes === "container" &&
       nameField &&
       !submittedNameValue
     ) {
       facts[nameField.label] = nameValue
     }
     const recordName =
-      formSchema.key === "route-studio.routes"
+      formModule?.writes === "route"
         ? // Routes carry no user-entered name; the system issues the Route ID.
           `RC-${String(now).slice(-4)}`
         : formSchema.mode === "action"
@@ -2918,10 +2709,10 @@ export function BusinessWorkspace({
         relationRefs,
         projectIds,
       }
-      if (resolvedTarget.module.id === "routes") {
+      if (resolvedTarget.module.writes === "route") {
         updatedRecord = normalizeRouteRecord(updatedRecord)
       }
-      if (resolvedTarget.module.id === "schemes") {
+      if (resolvedTarget.module.writes === "scheme") {
         // The one scheme edit-save (issue #33, D31): commitSchemeEdit applies
         // the edit by the scheme's edit policy (issue #38) — asking first when
         // the policy says so. The dialog closes once the save is applied, so
@@ -2930,7 +2721,7 @@ export function BusinessWorkspace({
         // from, and the planner reads the policy and the kept configuration
         // off it.
         const stored =
-          moduleRecords("route-studio", "schemes").find(
+          recordsAt(ROUTE_SCHEMES_MODULE).find(
             (candidate) => candidate.id === editingRecord.id,
           ) ?? editingRecord
         commitSchemeEdit(stored, normalizeRouteSchemeRecord(updatedRecord), () => setEditingRecord(null))
@@ -2989,10 +2780,10 @@ export function BusinessWorkspace({
       submittedValues: { ...values, ...(relatedCreateTarget?.extraValues ?? {}) },
       relationRefs,
     }
-    if (resolvedTarget.module.id === "routes") {
+    if (resolvedTarget.module.writes === "route") {
       newRecord = normalizeRouteRecord(newRecord)
     }
-    if (resolvedTarget.module.id === "schemes") {
+    if (resolvedTarget.module.writes === "scheme") {
       newRecord = normalizeRouteSchemeRecord(newRecord)
     }
     // On a switched module the dialog waits for the API's answer, its submit
@@ -3045,12 +2836,11 @@ export function BusinessWorkspace({
     const relationRefs: NonNullable<BusinessRecord["relationRefs"]> = []
     const linkRecord = (
       fieldId: string,
-      workspaceId: WorkspaceId,
-      moduleId: string,
+      location: ModuleLocation,
       recordId?: string,
     ) => {
       if (!recordId) return undefined
-      const resolved = resolveFormModule(workspaceId, moduleId)
+      const resolved = resolveFormModule(location)
       if (!resolved) return undefined
       const record = getRecords(
         resolved.workspaceId,
@@ -3066,33 +2856,13 @@ export function BusinessWorkspace({
       return record
     }
 
-    const project = linkRecord("projectId", "configure", "organization", data.projectId)
-    const area = linkRecord(
-      "planningAreaId",
-      PLANNING_AREAS_MODULE.workspaceId,
-      PLANNING_AREAS_MODULE.moduleId,
-      data.planningAreaId,
-    )
-    const depot = linkRecord("depotId", "resources", "depots", data.depotId)
-    const unloadingStation = linkRecord(
-      "unloadingStationId",
-      "resources",
-      "depots",
-      data.unloadingStationId,
-    )
+    const project = linkRecord("projectId", ORGANISATION, data.projectId)
+    const area = linkRecord("planningAreaId", PLANNING_AREAS_MODULE, data.planningAreaId)
+    const depot = linkRecord("depotId", DEPOTS, data.depotId)
+    const unloadingStation = linkRecord("unloadingStationId", DEPOTS, data.unloadingStationId)
 
-    const containersModule = businessWorkspaces.resources.modules.find(
-      (candidate) => candidate.id === "containers",
-    )
-    const containerRecords = containersModule
-      ? getRecords("resources", containersModule.id)
-      : []
-    const vehiclesModule = businessWorkspaces.fleet.modules.find(
-      (candidate) => candidate.id === "vehicles",
-    )
-    const vehicleRecords = vehiclesModule
-      ? getRecords("fleet", vehiclesModule.id)
-      : []
+    const containerRecords = recordsAt(CONTAINERS)
+    const vehicleRecords = recordsAt(VEHICLES)
 
     // Collection groups (D33): each group links its own vehicle, driver, and
     // service provider, and carries their display names so generation stamps
@@ -3100,34 +2870,28 @@ export function BusinessWorkspace({
     const linkedIds = new Set<string>()
     const linkOnce = (
       fieldId: string,
-      workspaceId: WorkspaceId,
-      moduleId: string,
+      location: ModuleLocation,
       recordId?: string,
     ) => {
       if (!recordId) return undefined
       const key = `${fieldId}:${recordId}`
       if (linkedIds.has(key)) {
-        return moduleRecords(workspaceId, moduleId).find(
+        return recordsAt(location).find(
           (candidate) => candidate.id === recordId,
         )
       }
       linkedIds.add(key)
-      return linkRecord(fieldId, workspaceId, moduleId, recordId)
+      return linkRecord(fieldId, location, recordId)
     }
     // Groups inherit the scheme's waste fraction (step 1) — one source of truth.
     const groups: CollectionGroup[] = draftGroups(data).map((group) => {
-      const vehicle = linkOnce("plannedVehicleId", "fleet", "vehicles", group.vehicleId)
-      const driver = linkOnce("plannedDriverId", "fleet", "drivers", group.driverId)
-      const provider = linkOnce(
-        "serviceProviderId",
-        "service-providers",
-        "service-providers",
-        group.serviceProviderId,
-      )
+      const vehicle = linkOnce("plannedVehicleId", VEHICLES, group.vehicleId)
+      const driver = linkOnce("plannedDriverId", DRIVERS, group.driverId)
+      const provider = linkOnce("serviceProviderId", SERVICE_PROVIDERS, group.serviceProviderId)
       return {
         ...group,
-        // Vehicle names carry the registration plate; facts show the callsign.
-        ...(vehicle ? { vehicleName: vehicle.name.split(" · ")[0] } : {}),
+        // The name a fact gives a vehicle, its spec's (the callsign before its plate).
+        ...(vehicle ? { vehicleName: moduleSpecOf(VEHICLES)?.picked?.named?.(vehicle) ?? vehicle.name } : {}),
         ...(driver ? { driverName: driver.name } : {}),
         ...(provider ? { serviceProviderName: provider.name } : {}),
       }
@@ -3140,7 +2904,7 @@ export function BusinessWorkspace({
         .filter((group) => group.stopSource === "manual")
         .flatMap((group) => group.containerIds),
     )) {
-      linkRecord("containerIds", "resources", "containers", containerId)
+      linkRecord("containerIds", CONTAINERS, containerId)
     }
     const dayPlans = resolvedDraftPlans(data, containerRecords)
     if (origin.extraRelations) relationRefs.push(...origin.extraRelations)
@@ -3149,17 +2913,12 @@ export function BusinessWorkspace({
     // service provider-scoped view can see — a double-booked default is real either
     // way, and the review step's preview uses the same unscoped set. Vehicle
     // Planning allocations join the check the same way (issue #11).
-    const allocationModule = businessWorkspaces.fleet.modules.find(
-      (candidate) => candidate.id === "vehicle-planning",
-    )
     // With the API's containers not placed the zero-match sentence is no evidence and does not make the scheme a Draft (#207).
     const validation = validationWhenUnplaced(
       validateGuidedScheme(
         data,
         getRecords(workspace.id, activeModule.id),
-        allocationModule
-          ? getRecords("fleet", allocationModule.id)
-          : [],
+        recordsAt(VEHICLE_PLANNING),
         containerRecords,
         vehicleRecords,
       ),
@@ -3193,7 +2952,7 @@ export function BusinessWorkspace({
         // Holidays follow the project (holiday model 2026-09-16): its explicit list.
         "Holiday list":
           resolveProjectCalendar(data.projectId, {
-            projects: moduleRecords("configure", "organization"),
+            projects: recordsAt(ORGANISATION),
             calendars: moduleRecords(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId),
           }).list?.name ?? NO_HOLIDAY_LIST_LABEL,
         ...(recurrence ? { Recurrence: recurrenceSentence(recurrence) } : {}),
@@ -3293,7 +3052,7 @@ export function BusinessWorkspace({
   const handleSchemeGroupsSave = (groups: CollectionGroup[]) => {
     if (!groupsEditorScheme) return
     const stored =
-      moduleRecords("route-studio", "schemes").find(
+      recordsAt(ROUTE_SCHEMES_MODULE).find(
         (candidate) => candidate.id === groupsEditorScheme.id,
       ) ?? groupsEditorScheme
     const serviceDays = serviceDaysFromValues(stored.submittedValues ?? {})
@@ -3329,8 +3088,7 @@ export function BusinessWorkspace({
 
     if (target === "user") {
       setRelatedCreateTarget({
-        workspaceId: "service-providers",
-        moduleId: "service-provider-workspace",
+        ...PROVIDER_TEAM,
         initialValues: {
           serviceProviderId,
           serviceAreaId: relatedServiceAreas[0]?.id ?? "",
@@ -3342,8 +3100,7 @@ export function BusinessWorkspace({
 
     if (target === "vehicle") {
       setRelatedCreateTarget({
-        workspaceId: "fleet",
-        moduleId: "vehicles",
+        ...VEHICLES,
         initialValues: {
           serviceProviderId,
           ownershipType: "service-provider",
@@ -3355,8 +3112,7 @@ export function BusinessWorkspace({
 
     if (target === "driver") {
       setRelatedCreateTarget({
-        workspaceId: "fleet",
-        moduleId: "drivers",
+        ...DRIVERS,
         initialValues: {
           serviceProviderId,
           employmentType: "service-provider",
@@ -3583,18 +3339,7 @@ export function BusinessWorkspace({
                   records={visibleScopedRecords}
                   value={businessFilters}
                   onChange={setBusinessFilters}
-                  variant={
-                    isContainersAssetsView
-                      ? "containers"
-                      : workspace.id === "service-providers" &&
-                          activeModule.id === "service-providers"
-                        ? "service-providers"
-                        : isServiceProviderUsersView
-                          ? "service-provider-users"
-                          : isTicketsView
-                            ? "tickets"
-                            : "default"
-                  }
+                  variant={activeModule.filters ?? "default"}
                   readers={listReaders}
                 />
                 <BusinessViewOptionsPopover
@@ -3611,7 +3356,7 @@ export function BusinessWorkspace({
                   columnOptions={factColumnOptions}
                   groupOptions={recordGroupOptions}
                   columnsStyle={
-                    activeModule.id === "pickups" ? "display" : "chips"
+                    typeof activeModule.view === "object" && activeModule.view.columnsShown === "display" ? "display" : "chips"
                   }
                   fixedColumnChips={
                     isServiceProviderUsersView
@@ -4652,13 +4397,8 @@ function ActionDecisionDialog({
                   <p className="text-xs text-muted-foreground">
                     Records are soft-deleted and the category, explanation, actor, and time are written to the central deletion log.
                   </p>
-                  {module.id === "schemes" && (
-                    <p className="text-xs text-muted-foreground">
-                      Deleting a route scheme stops Plan Ahead and future
-                      generation and cancels its future planned routes (kept
-                      as records). Executed, active and completed routes and
-                      their stops are preserved as operational history.
-                    </p>
+                  {module.deletes !== undefined && (
+                    <p className="text-xs text-muted-foreground">{module.deletes}</p>
                   )}
                 </div>
               )}

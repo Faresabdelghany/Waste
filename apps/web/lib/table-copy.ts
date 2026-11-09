@@ -1,5 +1,4 @@
-import { problemSentence } from "./api/problem"
-import type { ModuleState } from "./api/records/server-records"
+import { problemSentence, type Problem } from "./api/problem"
 
 /** "1 record", "12 records", or "3 of 12 records": a table's count line, the noun agreeing with the total. */
 export function recordCountLabel(shown: number, total: number = shown): string {
@@ -13,12 +12,15 @@ export function recordCountLabel(shown: number, total: number = shown): string {
  */
 export const NARROWED_HINT = "Try a different search or filter."
 
+/** What a table reads of its module's state in the store: how its read stands, and why it failed. */
+type ModuleRead = { readonly status: string; readonly problem: Problem | null }
+
 /**
  * What an empty table says in place of "No records yet" while a module on the API has not answered:
  * its rows loading, its read failed and why, or no API configured to keep them. Null once they are
  * here, for a module the role does not view, and for one on the browser's own path (null).
  */
-export function awaitedRowsSentence(state: Pick<ModuleState, "status" | "problem"> | null): string | null {
+export function awaitedRowsSentence(state: ModuleRead | null): string | null {
   if (state === null) return null
   if (state.status === "kept-on-api") return state.problem === null ? null : problemSentence(state.problem)
   if (state.status === "idle" || state.status === "loading") return "Loading records…"

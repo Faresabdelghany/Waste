@@ -23,14 +23,15 @@
 import type { ComponentType } from "react"
 
 import { AlertCommandsSurface, NewTicketSurface, RaiseAlertSurface } from "@/components/tickets/resolution-surfaces"
-import { mayTake, type Grants, type ModuleAction } from "@/lib/api/grants"
+import { mayTake, type Grants, type ModuleAction } from "@/lib/modules/grants"
 import type { BusinessRecord, ModuleLocation, WorkspaceId } from "@/lib/data/business-modules"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
+import { moduleKeyOf } from "@/lib/modules/keys"
 import { isServerBacked, type SwitchedModuleKey } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"
 import { inspectionOpen } from "@/lib/data/inspections"
-import { isTeamMember } from "@/lib/data/provider-workspace"
+import { isTeamMember } from "@/lib/api/provider-workspace"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 
@@ -61,11 +62,6 @@ import { WarehouseStockSurface } from "./stock-surfaces"
 import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
 
-/** What a primary surface is handed: the label the module's primary action carries. */
-export type PrimarySurfaceProps = { label: string }
-
-/** What a row surface is handed: the row whose details are open. */
-export type RowSurfaceProps = { record: BusinessRecord }
 
 export type CommandSurface = {
   /**

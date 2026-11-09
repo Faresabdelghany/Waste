@@ -1,8 +1,8 @@
 // The fixtures' Settings form: the controls of the panes whose values only
 // this browser keeps (SETTINGS_STORAGE_KEY), which nothing reads (#487), so
 // fixture mode alone offers them. Each pane's title and description are the
-// Settings table's (lib/data/settings-panes.ts); these are its groups.
-import type { SettingsPaneId } from "@/lib/data/settings-panes"
+// Settings table's (lib/modules/settings-panes.ts); these are its groups.
+import type { SettingsPaneId } from "@/lib/modules/settings-panes"
 
 type ControlBase = {
   id: string

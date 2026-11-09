@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState, type FormEvent } from "react"
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr"
 
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

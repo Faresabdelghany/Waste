@@ -42,9 +42,8 @@ import type { Outcome } from "@waste/routing/quota"
 
 import type { Transact } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
-import { describeJson } from "./shared"
 
 const MODULE = "route-studio.schemes"
 

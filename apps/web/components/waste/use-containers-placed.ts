@@ -12,10 +12,10 @@
 // (business-record-store.tsx's watcher, `readsChanged`), and until that read
 // lands the preview reads them as not placed, by the same rule the store
 // reads, so every preview mounted agrees.
-import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useReadBehind, useServerModuleState } from "@/components/waste/business-record-store"
+import { useApiConfigured } from "@/components/platform/api-session-store"
+import { useReadBehind, useServerModuleState } from "@/components/platform/business-record-store"
 import { CONTAINER_PLACE_MODULES } from "@/lib/api/records/container-places"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { containersPlaced } from "@/lib/data/route-schemes"
 
 const [agreements, properties, shared, areas, master] = CONTAINER_PLACE_MODULES

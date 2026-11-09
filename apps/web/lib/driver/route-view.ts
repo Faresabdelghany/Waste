@@ -16,8 +16,9 @@ import type { FlatPoint } from "@waste/contracts/geojson"
 import type { ActivePlan } from "@waste/contracts/plans"
 import type { Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
-import type { DriverPickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { extraEmptyings } from "@waste/domain/execution/services"
+import { count } from "@waste/domain/text"
+import { stopsInOrder } from "@waste/domain/execution/routes"
 
 import { itemsSentence, PICKUP_SERVICE_LABELS } from "../data/pickup-services"
 import type { QueueEntry } from "./command-queue"
@@ -31,11 +32,6 @@ export function waitingOn(waiting: readonly QueueEntry[], routeId: string): Queu
 }
 
 const waits = (waiting: readonly QueueEntry[], routeId: string, kinds: readonly PilotCommandKind[]): boolean => waitingOn(waiting, routeId).some((entry) => kinds.includes(entry.command.kind))
-
-/** The stops in the order they are driven: the active Plan's `sequence` where the read carries one, the generated `position` otherwise. */
-export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "sequence">>(pickups: readonly Stop[]): Stop[] {
-  return [...pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position) || a.position - b.position)
-}
 
 /** One entry of the route screen's list: a stop, or an unload visit the active Plan makes on the way (O15 of #290). */
 export type RouteEntry<Stop> = { kind: "stop"; stop: Stop } | { kind: "unload"; unloadingStationId: string }
@@ -184,7 +180,7 @@ export function endRouteWarning(route: Pick<DriverRouteDetail, "id" | "pickups">
   )
   const open = route.pickups.filter((stop) => stop.status === "planned" && !decided.has(stop.id)).length
   if (open === 0) return "Every stop has an outcome."
-  return `${open} ${open === 1 ? "stop" : "stops"} not done will be marked skipped`
+  return `${count(open, "stop")} not done will be marked skipped`
 }
 
 /**
@@ -199,35 +195,10 @@ export function keptNotice(readAt: string, timeZone?: string): string {
 
 /** The banner while the server is out of reach. */
 export function unreachableBanner(waiting: number): string {
-  return `Can't reach the server · ${waiting} ${waiting === 1 ? "action" : "actions"} waiting`
+  return `Can't reach the server · ${count(waiting, "action")} waiting`
 }
 
 /** The start screen's order: by operating date, then planned start, then number. */
 export function routesInDayOrder<Item extends Pick<Route, "operatingDate" | "plannedStartTime" | "number">>(routes: readonly Item[]): Item[] {
   return [...routes].sort((a, b) => a.operatingDate.localeCompare(b.operatingDate) || (a.plannedStartTime ?? "").localeCompare(b.plannedStartTime ?? "") || a.number - b.number)
-}
-
-export const ROUTE_STATUS_LABELS: Readonly<Record<RouteStatus, string>> = {
-  planned: "Planned",
-  ready: "Ready",
-  active: "Active",
-  completed: "Completed",
-  cancelled: "Cancelled",
-}
-
-export const PICKUP_STATUS_LABELS: Readonly<Record<PickupStatus, string>> = {
-  planned: "To do",
-  completed: "Completed",
-  skipped: "Skipped",
-  failed: "Failed",
-}
-
-/** The six reasons a driver gives, in the words the screen offers them. */
-export const DRIVER_REASON_LABELS: Readonly<Record<DriverPickupReason, string>> = {
-  inaccessible: "Inaccessible",
-  contamination: "Contamination",
-  "not-presented": "Not presented",
-  capacity: "Over capacity",
-  safety: "Safety",
-  other: "Other",
 }

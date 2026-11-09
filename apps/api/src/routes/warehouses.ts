@@ -33,22 +33,19 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Warehouse, WarehouseCreate, WarehouseListQuery, WarehousePatch } from "@waste/contracts/places"
-import type { Tx } from "@waste/db/client"
 import { warehouse } from "@waste/db/schema/places"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { pointInvalid } from "./place-rules"
 import { requireDepot } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.warehouses"
 const WarehousePage = Page(Warehouse)
@@ -94,20 +91,7 @@ const nameTaken = (name: string) => `This project already has a warehouse called
 /** `CHECK (st_isvalid(location) and not st_isempty(location) and <WGS 84>)`: the one check only the database runs on the point. */
 const LOCATION_INVALID = "warehouse_location_valid"
 
-const noSuchWarehouse = (id: string) => problem(404, { detail: `No warehouse ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every warehouse statement is bounded by. */
-const scope = (principal: Principal) => and(eq(warehouse.companyId, principal.companyId), inProjects(warehouse.projectId, principal))
-
-/** One warehouse of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findWarehouse(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(warehouse)
-    .where(and(scope(principal), eq(warehouse.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchWarehouse, get: getWarehouse, list: listWarehouses } = scoped(warehouse, { noun: "warehouse", reach: "projects", columns })
 
 export function warehouseRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -128,24 +112,11 @@ export function warehouseRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(warehouse)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(warehouse.projectId, projectId),
-              status === undefined ? undefined : eq(warehouse.status, status),
-              after === undefined ? undefined : gt(warehouse.id, after),
-            ),
-          )
-          .orderBy(asc(warehouse.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(warehouseOf), limit))
+        const page = await listWarehouses(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(warehouse.projectId, projectId), status === undefined ? undefined : eq(warehouse.status, status))
+        return c.json(mapPage(page, warehouseOf))
       },
     )
     .post(
@@ -198,8 +169,7 @@ export function warehouseRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findWarehouse(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchWarehouse(id)
+        const row = await getWarehouse(c.get("tx"), c.get("principal"), id)
         return c.json(warehouseOf(row))
       },
     )
@@ -230,8 +200,7 @@ export function warehouseRoutes(deps: RouteDeps) {
         // The row first, then what the patch points at: an id nobody minted
         // is a 404 here as in every other family, and not a 400 about a depot
         // that was never going to be written.
-        const current = await findWarehouse(tx, principal, id)
-        if (current === undefined) throw noSuchWarehouse(id)
+        const current = await getWarehouse(tx, principal, id)
         await requireDepot(tx, { companyId: principal.companyId, projectId: current.projectId }, patch.depotId)
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }

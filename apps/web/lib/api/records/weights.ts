@@ -29,23 +29,23 @@ import type { LoadReading, Unload } from "@waste/contracts/unloads"
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
 import type { UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { weightReviewTransition } from "@waste/domain/finance/transitions"
-import { WEIGHT_REVIEW_STATUSES, type WeightReviewDecision, type WeightReviewStatus } from "@waste/domain/finance/vocabulary"
+import { WEIGHT_REVIEW_STATUSES, type WeightReviewDecision } from "@waste/domain/finance/vocabulary"
 
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
-import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } from "@/lib/data/provider-money"
+import { isUnloadRecord, REVIEW_LABELS, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHT_REVIEW_COMMANDS, type WeightReviewCommand, WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
-import { said, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, projectTimezoneOf, shownOn } from "./clock"
+import { said, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
+import { typed, webIdOf } from "@/lib/records/fields"
+import { kilograms } from "@/lib/format/measures"
+import { projectTimezoneOf } from "./clock"
+import { instantOn, shownOn } from "@/lib/format/clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
 import { routesWindowFrom } from "./routes"
 
-/** A review status as the desk reads it: `captured` is the queue. */
-export const REVIEW_LABELS: Readonly<Record<WeightReviewStatus, string>> = { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" }
 const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
-export { REFUSAL_LABELS }
 
 /** What an unload's load on board reads as against the project's tolerance: the Tolerance filter's values. */
 export const TOLERANCE_LABELS = { within: "Within tolerance", above: "Above tolerance", unmeasured: "Not measured" } as const
@@ -56,9 +56,6 @@ export const toleranceOf = (load: LoadReading | null): string => (load === null 
 /** The weighbridge's net against what was weighed on board, signed: `+7.7%`, `-2.0%`, `0.0%`. */
 export const differenceOf = (load: LoadReading): string => `${load.deviationPercent > 0 ? "+" : ""}${load.deviationPercent.toFixed(1)}%`
 
-/** The reviews, by the command each is sent as, and the decision each records. */
-export const WEIGHT_REVIEW_COMMANDS = ["approve", "reject", "correct"] as const
-export type WeightReviewCommand = (typeof WEIGHT_REVIEW_COMMANDS)[number]
 const DECISION: Readonly<Record<WeightReviewCommand, WeightReviewDecision>> = { approve: "approved", reject: "rejected", correct: "corrected" }
 
 /** The reviews an unload's details offer: those the machine moves it by from its status, never the decision it holds; a corrected one none, its correction being the row to review. */
@@ -91,7 +88,6 @@ export type UnloadResource = Unload & { createdAt: string; updatedAt: string }
 const stamped = (unload: Unload): UnloadResource => ({ ...unload, createdAt: unload.recordedAt, updatedAt: unload.recordedAt })
 
 /** Whole kilograms as a person reads them: 8,240 kg; the weights list and a weight charge (O28 of #290) both spell them so. */
-export const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** A form's weight: undefined for blank, the whole kilograms of one, NaN for anything else. */
 function weightOf(input: CommandInput, key: string): number | undefined {

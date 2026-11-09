@@ -58,21 +58,22 @@ import { driver } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
 import { liveAllocationsName } from "@waste/domain/resources/allocations"
 import { groupsName, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
 
 import type { Principal } from "../auth/principal"
 import { providerIdOf, providerNameOf, reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
+import { requireProviderShape } from "./provider-shape"
 import { requireDepot, requireProviderAccount, requireServiceProvider, requireUserAccount, type Scope } from "./references"
 import { groupsInForceNaming } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, requireProviderShape } from "./shared"
 import { shiftValues } from "./time-windows"
 import { liveAllocationsNaming } from "./vehicle-allocations"
 
@@ -135,8 +136,6 @@ const collisions = (values: { workforceReference?: string | null; userAccountId?
   ...(values.userAccountId == null ? {} : { [LOGIN_TAKEN]: LOGIN_TAKEN_SENTENCE }),
 })
 
-const noSuchDriver = (id: string) => problem(404, { detail: `No driver ${id} in the projects this account works in` })
-
 /** The two statuses a driver is taken out of service with: nothing may be planned or allocated under either, so both have the same rule. */
 const OUT_OF_SERVICE: readonly string[] = ["inactive", "suspended"]
 
@@ -147,18 +146,7 @@ const groupsNameThis = groupsName("driver")
 /** The allocations the change would strand: the live ones naming the driver (@waste/domain/status-gates spells the rest). */
 const liveAllocations = (companyId: string, driverId: string, now: Date) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId), now)
 
-/** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every driver statement is bounded by. */
-const scope = (principal: Principal) => and(eq(driver.companyId, principal.companyId), reachesFleet(principal, driver))
-
-/** One driver of this company by id, inside the caller's reach; undefined when it is neither. */
-async function findDriver(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(driver)
-    .where(and(scope(principal), eq(driver.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchDriver, get: getDriver, locked: lockedDriver, list: listDrivers } = scoped(driver, { noun: "driver", reach: (principal) => reachesFleet(principal, driver), columns })
 
 /** The login a body names: any account of the company for the office, an account of its own team for a provider's (#291 slice 23b). */
 async function requireLogin(tx: Tx, principal: Principal, id: string | null | undefined): Promise<void> {
@@ -209,15 +197,13 @@ export async function createDriver(tx: Tx, principal: Principal, body: DriverCre
 export async function patchDriver(tx: Tx, principal: Principal, id: string, body: DriverPatch, now: () => Date): Promise<Driver> {
   const { shift, ...patch } = body
   // The row the provider rule is held against, locked before it is read
-  // (routes/shared.ts), so two patches that each hold alone cannot
+  // (`@waste/db/commands/shared`), so two patches that each hold alone cannot
   // together leave the row the database's check would refuse.
-  await lockRow(tx, driver, { companyId: principal.companyId, id })
-  const current = await findDriver(tx, principal, id)
-  if (current === undefined) throw noSuchDriver(id)
+  const current = await lockedDriver(tx, principal, id)
   const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
   const merged = { ...current, ...patch }
 
-  // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
+  // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/place-rules.ts), in the driver's words: a patch carries one half and the stored row the other.
   requireOwnFleet(principal, { kind: patch.employment, serviceProviderId: patch.serviceProviderId }, "driver", "patch")
   requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
   await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
@@ -269,26 +255,11 @@ export function driverRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, licenceClass, homeDepotId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) await requireReachedProject(tx, principal, projectId, now, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(driver)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(driver.projectId, projectId),
-              status === undefined ? undefined : eq(driver.status, status),
-              licenceClass === undefined ? undefined : eq(driver.licenceClass, licenceClass),
-              homeDepotId === undefined ? undefined : eq(driver.homeDepotId, homeDepotId),
-              after === undefined ? undefined : gt(driver.id, after),
-            ),
-          )
-          .orderBy(asc(driver.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listDrivers(tx, principal, at, projectId === undefined ? undefined : eq(driver.projectId, projectId), status === undefined ? undefined : eq(driver.status, status), licenceClass === undefined ? undefined : eq(driver.licenceClass, licenceClass), homeDepotId === undefined ? undefined : eq(driver.homeDepotId, homeDepotId))
         return c.json({ items: items.map(driverOf), nextCursor })
       },
     )
@@ -328,8 +299,7 @@ export function driverRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findDriver(tx, principal, id)
-        if (row === undefined) throw noSuchDriver(id)
+        const row = await getDriver(tx, principal, id)
         return c.json(driverOf(row))
       },
     )

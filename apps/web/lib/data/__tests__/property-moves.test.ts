@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import type { MoveOutcome } from "@waste/contracts/moves"
 import type { Action, ModuleKey } from "@waste/domain/access/modules"
-import type { Grants } from "@/lib/api/grants"
+import type { Grants } from "@/lib/modules/grants"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { moveBodyOf, moveOffered, moveReview, movingOutOf, type MoveTyped } from "@/lib/data/property-moves"

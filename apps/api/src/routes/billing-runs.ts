@@ -24,17 +24,16 @@ import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunListQuery, Bi
 import { Page } from "@waste/contracts/pagination"
 import { BILLING_RUN_MAX_EVENTS, grouped, previewBilling, runBilling } from "@waste/db/commands/billing-runs"
 import { billingRun } from "@waste/db/schema/finance"
-import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
+import { eq, gte, lte } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { exclusionOf, runColumns, runDetailOf, runOf } from "@waste/db/shapes/billing-runs"
+import { exclusionOf, runDetailOf, runOf } from "@waste/db/shapes/billing-runs"
 
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
-import { findRun, noSuchRun, runScope } from "./billing-shapes"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
+import { findRun, listRuns, noSuchRun } from "./billing-shapes"
 
 const MODULE = "commercial.billing"
 
@@ -65,26 +64,20 @@ export function billingRunRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(runColumns)
-          .from(billingRun)
-          .where(
-            and(
-              runScope(principal),
-              projectId === undefined ? undefined : eq(billingRun.projectId, projectId),
-              status === undefined ? undefined : eq(billingRun.status, status),
-              from === undefined ? undefined : gte(billingRun.periodFrom, from),
-              to === undefined ? undefined : lte(billingRun.periodFrom, to),
-              after === undefined ? undefined : gt(billingRun.id, after),
-            ),
-          )
-          .orderBy(asc(billingRun.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(runOf), limit))
+        const page = await listRuns(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(billingRun.projectId, projectId),
+          status === undefined ? undefined : eq(billingRun.status, status),
+          from === undefined ? undefined : gte(billingRun.periodFrom, from),
+          to === undefined ? undefined : lte(billingRun.periodFrom, to),
+        )
+        return c.json(mapPage(page, runOf))
       },
     )
     .post(

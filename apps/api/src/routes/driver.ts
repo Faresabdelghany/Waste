@@ -59,7 +59,7 @@
 //                   vehicle and the trailer of the route's project, whether
 //                   the station and the fraction are the company's, and the
 //                   clock (`OCCURRED_AT_SKEW_MS` ahead, `COMMAND_BACKDATE_MS`
-//                   behind, routes/shared.ts). Every rule of §3 is the
+//                   behind, the domain's and this file's). Every rule of §3 is the
 //                   domain's and every sentence is spelled there;
 //   the effects   — as statements, in the order decided: `start-route` opens
 //                   the session with the command's id and copies the actual
@@ -153,7 +153,6 @@ import {
   type DriverPickup,
 } from "@waste/contracts/driver-commands"
 import { RouteStatus } from "@waste/contracts/execution"
-import type { Action } from "@waste/domain/access/modules"
 import { routeLabel } from "@waste/domain/numbering"
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
@@ -182,8 +181,8 @@ import { DISPATCHED_ROUTE_STATUSES, DRIVER_COMMAND_KINDS, type DriverCommandKind
 import { isOneOf } from "@waste/domain/lists"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
 import { ACTIVE_VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
-import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
-import { alias } from "drizzle-orm/pg-core"
+import { and, asc, eq, getTableName, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { alias, type PgTable } from "drizzle-orm/pg-core"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, replayed } from "@waste/db/commands/shared"
@@ -194,13 +193,13 @@ import { proofColumns, proofOf } from "@waste/db/shapes/proofs"
 import { receiptColumns, receiptOf, type ReceiptRow } from "@waste/db/shapes/driver-commands"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { unloadAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 
-import { resolveDriver, type DriverProfile } from "../auth/driver"
+import { type DriverProfile, NO_DRIVER_PROFILE, resolveDriver } from "../auth/driver"
 import { actorOf, type Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problemBody } from "../problem"
 import { namedByCode } from "./container-identity"
@@ -209,9 +208,20 @@ import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSess
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { vehicleColumns } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
-import { COMMAND_BACKDATE_MS, describeJson, IdParam, primaryKeyOf } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { tellOfficeNotTaken } from "./unload-writes"
+
+/**
+ * How far behind the request's clock a driver command's `occurredAt` may lie:
+ * forty-eight hours. A device that was offline for two days is a device whose
+ * day is over, and its queue is answered as rejections Resolution reads rather
+ * than as facts (#104 §7.8). The receipts are still written, so nothing the
+ * device said is dropped.
+ */
+export const COMMAND_BACKDATE_MS = 48 * 3_600_000
+
+/** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default, which a driver command's `replayed` names. */
+export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -1083,10 +1093,6 @@ async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelop
   }
 }
 
-/** What every route here describes the same way: no usable token, no grant, no driver profile. */
-const driverProblems = (action: Action) => ({
-  403: describeProblem(`No active account here, the caller's role does not allow \`${action}\` on \`operate.driver-app\`, or no active driver profile is bound to this login.`),
-})
 
 export function driverDoorRoutes(deps: RouteDeps) {
   const { now, log, jobs } = deps
@@ -1100,9 +1106,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
           "The caller's own driver profile, the session they are on or null, the routes assigned to them that are `ready` or `active`, or `completed` today on their project's clock, and the three lists a start and an unload pick from: `vehicles`, the `active` powered vehicles and trailers of the driver profile's project, each with its `label` (the callsign, else the registration), `kind` and `requiredLicenceClass`; `unloadingStations`, the company's stations that are not `closed`, each with its `location`, whether it has a `weighbridge`, and the `wasteFractionIds` it accepts; and `wasteFractions`, the company's, each with its `key` and `name` — every list, and every station's fractions, by id. The caller is a driver: the account is bound to an active driver profile of the company (403 for the whole request otherwise), and the routes are the ones planned for or started by that driver — the assignment, never Project Access — so a service provider's driver, whose account works in no project, reads their assigned routes here, and picks from the same lists as any driver of their profile's project. The connected client's start screen; the offline one reads its synced buckets.",
         module: MODULE,
         action: "view",
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The driver, the open session or null, the day's routes, and what a start and an unload pick from.", DriverMe),
-          ...driverProblems("view"),
         },
       },
       async (c) => {
@@ -1129,9 +1135,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
         action: "view",
         query: DriverRouteListQuery,
         invalid: ["`status` is not a route status"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("One page of the driver's routes, each with its progress.", RoutePage),
-          ...driverProblems("view"),
         },
       },
       async (c) => {
@@ -1156,9 +1162,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
         module: MODULE,
         action: "view",
         params: IdParam,
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The route with its pickups and their places, its sessions and its unloads.", DriverRouteDetail),
-          ...driverProblems("view"),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
       },
@@ -1188,9 +1194,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
         params: IdParam,
         query: DriverIdentifyQuery,
         invalid: ["`code` is missing, blank or longer than a label"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The stops of the route the code names, by position; none when it names no container here.", DriverIdentification),
-          ...driverProblems("view"),
           404: describeProblem("No route with that id is assigned to this driver."),
         },
       },
@@ -1219,9 +1225,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
         action: "edit",
         body: DriverCommandBatch,
         invalid: ["the batch does not parse: no commands or more than two hundred, an id named twice, or an envelope out of shape. Nothing was applied or recorded"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("One outcome per command, in body order.", DriverCommandBatchOutcome),
-          ...driverProblems("edit"),
         },
       },
       async (c) => {
@@ -1248,9 +1254,9 @@ export function driverDoorRoutes(deps: RouteDeps) {
         action: "view",
         query: DriverReceiptListQuery,
         invalid: ["`routeId` is not an id"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("One page of receipts.", ReceiptPage),
-          ...driverProblems("view"),
         },
       },
       async (c) => {

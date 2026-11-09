@@ -108,11 +108,10 @@ import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import { reachesThroughAssignments } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { requireServiceAreaAssignment } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.settlements"
 
@@ -151,7 +150,7 @@ async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promi
   return row
 }
 
-/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (routes/shared.ts), and a provider's account, which commands nothing, finds no row. */
+/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (`@waste/db/commands/shared`), and a provider's account, which commands nothing, finds no row. */
 async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<SettlementRow> {
   await lockRow(tx, settlement, { companyId: principal.companyId, id })
   const current = await findSettlement(tx, writable(principal), id)

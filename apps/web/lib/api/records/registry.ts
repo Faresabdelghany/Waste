@@ -35,18 +35,8 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { paymentTermsLabel } from "@/lib/data/finance-settings"
 
 import { create, listAll, patch } from "../client"
-import {
-  isLocalRefusal,
-  patchOf,
-  statusLabel,
-  statusToken,
-  typed,
-  typedFlag,
-  webIdOf,
-  type LocalRefusal,
-  type ResourceAdapter,
-  type ServerModule,
-} from "./adapter"
+import { patchOf, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { ADD_CONTACT, ADD_CONTACT_ACTION, EDIT_CONTACT, EDIT_CONTACT_ACTION } from "./customer-contacts"
 import { SEND_MESSAGE, SEND_MESSAGE_ACTION } from "./messages"
 import { daysOrNoneOf, typedPaymentTerms } from "./organisation"

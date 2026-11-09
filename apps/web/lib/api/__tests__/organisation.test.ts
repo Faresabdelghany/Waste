@@ -12,7 +12,8 @@ import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-ca
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope, isProjectRecordId, projectRecordsOf, type ProjectRecordId } from "../../data/project-scope"
-import { NOTHING_RESOLVED, recordFrom, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
+import { webIdOf } from "@/lib/records/fields"
 import {
   accessMapOf,
   accessModule,

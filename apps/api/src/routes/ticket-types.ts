@@ -34,8 +34,8 @@ import { team, ticketType, ticketTypeAction, ticketTypeField, ticketTypePermissi
 import { notPlannable, plannedService } from "@waste/domain/resolution/automation"
 import { DEFAULT_TYPE_OFFERED } from "@waste/domain/resolution/ticket-types"
 import { TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, type TicketActionTrigger, type TicketCommand, type TicketKind } from "@waste/domain/resolution/vocabulary"
-import { advisoryLock, lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
+import { advisoryLock, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, type SQL } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -43,11 +43,12 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { NOT_A_TEAM, NOT_A_USER_ACCOUNT } from "./references"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { stamp } from "./shared"
 import { NOT_A_TICKET_TYPE } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
@@ -71,18 +72,7 @@ export const retiredDefault = (name: string) => `The ticket type ${JSON.stringif
 /** What a permission naming a role of another company, or none, is told. */
 export const NOT_A_ROLE = "Not a role of this company"
 
-const noSuchType = (id: string) => problem(404, { detail: `No ticket type ${id} in this company` })
-
-const scope = (principal: Principal) => eq(ticketType.companyId, principal.companyId)
-
-async function findType(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(ticketType)
-    .where(and(scope(principal), eq(ticketType.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchType, get: getType, locked: lockedType, list: listTypes } = scoped(ticketType, { noun: "ticket type", reach: "company", columns })
 
 /** The types on the wire, each with its fields in order, its permissions in the commands' order and its actions by trigger and place: three reads for the whole page. */
 async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<TicketType[]> {
@@ -211,16 +201,10 @@ export function ticketTypeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status, kind } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const rows = await tx
-          .select(columns)
-          .from(ticketType)
-          .where(and(scope(principal), status === undefined ? undefined : eq(ticketType.status, status), kind === undefined ? undefined : eq(ticketType.kind, kind), after === undefined ? undefined : gt(ticketType.id, after)))
-          .orderBy(asc(ticketType.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listTypes(tx, principal, at, status === undefined ? undefined : eq(ticketType.status, status), kind === undefined ? undefined : eq(ticketType.kind, kind))
         return c.json({ items: await typesOf(tx, principal.companyId, items), nextCursor })
       },
     )
@@ -273,8 +257,7 @@ export function ticketTypeRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findType(tx, principal, id)
-        if (row === undefined) throw noSuchType(id)
+        const row = await getType(tx, principal, id)
         return c.json(await typeOf(tx, principal.companyId, row))
       },
     )
@@ -303,9 +286,7 @@ export function ticketTypeRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, ticketType, { companyId: principal.companyId, id }, strengthFor(ticketType, patch))
-        const current = await findType(tx, principal, id)
-        if (current === undefined) throw noSuchType(id)
+        const current = await lockedType(tx, principal, id, strengthFor(ticketType, patch))
         const status = patch.status ?? current.status
         const isDefault = patch.isDefault ?? current.isDefault
         // A default is offered: the database's `ticket_type_default_shape`, as the sentence a person reads — retiring the default, or making a retired type one.

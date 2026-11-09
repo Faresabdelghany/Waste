@@ -1,5 +1,5 @@
 // Where the API session is kept in the browser (Issue #81), apart from the
-// React provider that reads and writes it (components/waste/api-session-store.tsx
+// React provider that reads and writes it (components/platform/api-session-store.tsx
 // says why the two tokens are kept in two places): the tab-shared half — the
 // access token, its expiry, the e-mail and the user id — in one storage
 // under `API_SESSION_STORAGE_KEY`, and the refresh token, the one long-lived

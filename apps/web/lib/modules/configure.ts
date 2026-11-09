@@ -82,6 +82,8 @@ export const CONFIGURE = workspaceSpec("configure", {
     },
     templates: {
       shown: { pane: "tickets" },
+      // A template field offers the message templates alone, of the records the module holds.
+      picked: { offers: (fieldId, record) => fieldId !== "templateId" || record.id.startsWith("template-") },
       form: false,
       label: "Tickets & Communication",
       title: "Ticket and Communication Templates",
@@ -99,6 +101,8 @@ export const CONFIGURE = workspaceSpec("configure", {
     },
     finance: {
       shown: { pane: "finance-invoicing" },
+      // A schedule field offers the billing schedules alone, of the finance records.
+      picked: { offers: (fieldId, record) => fieldId !== "scheduleId" || record.id.startsWith("billing-schedule-") },
       form: false,
       label: "Finance & Invoicing",
       title: "Finance and Invoicing Configuration",
@@ -409,6 +413,7 @@ export const CONFIGURE = workspaceSpec("configure", {
     // "configure.calendars") so generation and the wizard keep reading them.
     calendars: {
       shown: { pane: "collection-calendars" },
+      layout: "calendars",
       label: "Collection Calendars",
       title: "Collection Calendars",
       description: "Validity periods, maintained per project and year; a project's holidays are the days of the company's holiday list it names.",

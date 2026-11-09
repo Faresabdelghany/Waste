@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { businessFilterChips, type BusinessFilters } from "@/lib/prototype/business-filters"
-import { formatShortDate } from "@/lib/map-planning/format"
+import { formatShortDate } from "@/lib/format/dates"
 import {
   addSavedSelection,
   parseSavedSelections,

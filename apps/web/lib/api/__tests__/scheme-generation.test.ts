@@ -20,9 +20,9 @@ import type { RouteScheme } from "@waste/contracts/route-schemes"
 
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
-import { generationRunOf, modulesAfterRun, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun, type RunTimer } from "../records/generation"
-import { PICKUPS_MODULE } from "../records/pickups"
-import { ROUTES_MODULE } from "../records/routes"
+import { generationRunOf, modulesAfterRun, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun } from "../records/generation"
+import type { Timers } from "@/lib/timers"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
 import { GENERATE_ROUTES, routeSchemeAdapter, routeSchemesModule, type GenerationAnswer } from "../records/route-schemes"
 import { actOnRecord, loaded, rereadRecord, type ModuleState } from "../records/server-records"
 import { organisationModule, projectAdapter } from "../records/organisation"
@@ -227,7 +227,7 @@ describe("how the page reads a run it shows", () => {
 /** A timer the test fires by hand: what is pending, and how long it asked to wait. */
 function handTimer() {
   const pending: Array<{ fire: () => void; ms: number }> = []
-  const timer: RunTimer = {
+  const timer: Timers = {
     set: (fire, ms) => {
       const entry = { fire, ms }
       pending.push(entry)

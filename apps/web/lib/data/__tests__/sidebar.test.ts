@@ -1,12 +1,13 @@
 // The sidebar (Issue #248): an Active Route is a starred route the API
-// holds, and a badge a count of rows the API answered — or nothing.
+// holds, a badge a count of rows the API answered — or nothing — and the
+// item a page is, its workspace's.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { resolveActiveRouteSummaries } from "@/components/waste/active-routes-store"
+import { resolveActiveRouteSummaries } from "@/components/platform/active-routes-store"
 
 import type { BusinessRecord } from "../business-modules"
-import { navBadgeOf, navItems, type NavItem } from "../sidebar"
+import { navBadgeOf, navItemActive, navItems, type NavItem } from "../sidebar"
 
 const route = (id: string, extra: Partial<BusinessRecord> = {}): BusinessRecord => ({
   id,
@@ -49,5 +50,33 @@ describe("a nav item's badge", () => {
     assert.equal(navBadgeOf(itemNamed("operate"), undefined), undefined)
     assert.equal(navBadgeOf(itemNamed("resources"), 2), undefined)
     assert.equal(navBadgeOf(itemNamed("commercial"), 2), undefined)
+  })
+})
+
+describe("the nav item a page is", () => {
+  const activeOn = (pathname: string) => navItems.filter((item) => navItemActive(item, pathname)).map((item) => item.id)
+
+  test("its workspace's: on the workspace's page, the other pages that show it and the surfaces its modules are shown on; the root's is Operate", () => {
+    const expected: Record<string, NavItem["id"][]> = {
+      "/": ["operate"],
+      "/tickets": ["operate"],
+      "/operate": ["operate"],
+      "/plan": ["plan"],
+      "/route-studio": ["route-studio"],
+      "/routes": ["route-studio"],
+      "/fleet": ["fleet"],
+      "/customers": ["customers"],
+      "/portal": ["customers"],
+      "/resources": ["resources"],
+      "/service-providers": ["service-providers"],
+      "/service-provider-workspace/routes": ["service-providers"],
+      "/commercial": ["commercial"],
+      "/improve/imports": ["improve"],
+      "/performance": ["improve"],
+      "/settings": [],
+      "/driver": [],
+      "/control-center": [],
+    }
+    for (const [pathname, items] of Object.entries(expected)) assert.deepEqual(activeOn(pathname), items, pathname)
   })
 })

@@ -13,9 +13,10 @@ import type {
   ServiceReport,
   TicketReport,
   TonnageReport,
-  WasteDataFileQuery,
   WasteDataReport,
 } from "@waste/contracts/reports"
+
+import type { FileSeparator, WasteDataQuery } from "@/lib/insight/compliance"
 
 import { get, getFile, withQuery, type ApiClient, type ApiFile } from "./client"
 
@@ -50,11 +51,6 @@ export function revenueReport(client: ApiClient, window: ReportWindowQuery): Pro
   return get<RevenueReport>(client, withQuery("/reports/revenue", query(window)))
 }
 
-/** The waste-data report's question: one project's or every one the caller works in, a filing's period of days both inclusive, no series. */
-export type WasteDataQuery = { projectId?: string; from: string; to: string }
-
-/** How the file separates its fields: commas, or semicolons for a spreadsheet under a Danish locale. */
-export type FileSeparator = WasteDataFileQuery["separator"]
 
 const periodQuery = (query: WasteDataQuery) => ({ projectId: query.projectId, from: query.from, to: query.to })
 
