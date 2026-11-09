@@ -8,17 +8,11 @@
 // mints the charge.
 import type { PickupException, PickupExceptionHistory } from "@waste/contracts/pickup-exceptions"
 
-import { get, type ApiClient } from "../api/client"
 import { allows, type Grants } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 
-/** The place kinds a history is read for, and the path each is under. */
+/** The place kinds a history is read for (`placePickupExceptions`, lib/api/property-details.ts). */
 export type ExceptionPlace = "property" | "shared-point"
-const PLACE_PATHS: Readonly<Record<ExceptionPlace, string>> = { property: "/properties", "shared-point": "/shared-collection-points" }
-
-/** The place's history, as the one row `useRowHistory` reads. */
-export const placePickupExceptions = (place: ExceptionPlace) => (client: ApiClient, serverId: string): Promise<PickupExceptionHistory[]> =>
-  get<PickupExceptionHistory>(client, `${PLACE_PATHS[place]}/${serverId}/pickup-exceptions`).then((history) => [history])
 
 /** Whether the role reads a place's history: the place's module and the stops', the API's two grants for it. */
 export const historyReadable = (grants: Grants | undefined, place: ExceptionPlace): boolean =>

@@ -30,7 +30,8 @@ import { customerKindOf } from "@/lib/api/records/registry"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
-import { moveBodyOf, moveOffered, moveProperty, moveReview, movingOutOf, type MoveTyped } from "@/lib/data/property-moves"
+import { moveBodyOf, moveOffered, moveReview, movingOutOf, type MoveTyped } from "@/lib/data/property-moves"
+import { moveProperty } from "@/lib/api/property-details"
 
 /** The select's token for the incoming customer as the payer: a select holds no empty value. */
 const INCOMING_PAYS = "incoming"

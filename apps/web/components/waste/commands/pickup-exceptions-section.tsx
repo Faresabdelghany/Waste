@@ -16,7 +16,8 @@ import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
-import { chargeSentence, exceptionSentence, historyReadable, historySummary, placePickupExceptions, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
+import { chargeSentence, exceptionSentence, historyReadable, historySummary, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
+import { placePickupExceptions } from "@/lib/api/property-details"
 
 const READS: Readonly<Record<ExceptionPlace, ReturnType<typeof placePickupExceptions>>> = {
   property: placePickupExceptions("property"),

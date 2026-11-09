@@ -9,7 +9,7 @@
 // sentence (@waste/domain/messaging/template, which the contracts read too).
 import type { ModuleKey } from "@waste/domain/access/modules"
 import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
-import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
+import { channelShapeIssue, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
 import { allows, type Grants } from "@/lib/modules/grants"
 

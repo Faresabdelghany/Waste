@@ -1,17 +1,14 @@
 // A property's notification zones (O29 of #290, row 1.13) as its details
 // read them: the Planning Areas of purpose `notification` whose boundary in
-// force today contains the property's point, from `GET /properties/:id/zones`.
+// force today contains the property's point, from `GET /properties/:id/zones`
+// (`propertyZones`, lib/api/property-details.ts).
 // Two zones may overlap, so a property can lie in several; a property with no
 // point yet lies in none until it is placed. The collection days are not read
 // from here: they come from the property's subscriptions and the schemes that
 // collect them.
 import type { PlanningAreasAt } from "@waste/contracts/planning-areas"
 
-import { get, type ApiClient } from "../api/client"
 import { allows, type Grants } from "@/lib/modules/grants"
-
-/** The property's zones today, as the one row `useRowHistory` reads. */
-export const propertyZones = (client: ApiClient, serverId: string): Promise<PlanningAreasAt[]> => get<PlanningAreasAt>(client, `/properties/${serverId}/zones`).then((zones) => [zones])
 
 /** Whether the role reads a property's zones: the property's own grant, the API's for the read. */
 export const zonesReadable = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "view")

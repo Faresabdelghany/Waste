@@ -1,14 +1,13 @@
 // A place's Pickup Exceptions as its details read them (M5 of #293): the
-// paths the two histories are read under, the grants that read them, and the
-// sentences a stop and the rules' judgement of it are told in.
+// grants that read them, and the sentences a stop and the rules' judgement of
+// it are told in.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PickupExceptionHistory, type PickupException } from "@waste/contracts/pickup-exceptions"
+import type { PickupException } from "@waste/contracts/pickup-exceptions"
 import type { Grant } from "@waste/domain/access/grants"
 
-import type { ApiClient } from "../../api/client"
-import { chargeSentence, exceptionSentence, historyReadable, historySummary, placePickupExceptions } from "../pickup-exception-history"
+import { chargeSentence, exceptionSentence, historyReadable, historySummary } from "../pickup-exception-history"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const CODE = "01a0d3a5-e5e0-7000-8000-0000000000c1"
@@ -35,24 +34,7 @@ const item = (values: Partial<PickupException> = {}): PickupException => ({
 const names: Record<string, string> = { [CODE]: "Glass in residual", [FEE]: "Contamination fee" }
 const name = (id: string) => names[id] ?? id
 
-describe("the read", () => {
-  test("asks the property's and the shared point's history under their own paths, and answers it as one row", async () => {
-    const asked: string[] = []
-    const history: PickupExceptionHistory = { items: [item()], truncated: false }
-    const client: ApiClient = {
-      baseUrl: "http://api.test",
-      token: "t",
-      fetch: (async (url: string | URL | Request) => {
-        asked.push(String(url))
-        return new Response(JSON.stringify(history), { status: 200, headers: { "content-type": "application/json" } })
-      }) as typeof fetch,
-    }
-    assert.deepEqual(await placePickupExceptions("property")(client, ID), [history])
-    await placePickupExceptions("shared-point")(client, ID)
-    assert.deepEqual(asked.map((url) => new URL(url).pathname), [`/properties/${ID}/pickup-exceptions`, `/shared-collection-points/${ID}/pickup-exceptions`])
-    assert.equal(PickupExceptionHistory.safeParse(history).success, true)
-  })
-
+describe("the grants", () => {
   test("is the role's where it views the place's module and the stops, the API's two grants", () => {
     const stops: Grant = { moduleKey: "route-studio.pickups", actions: ["view"] }
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }, stops], "property"), true)

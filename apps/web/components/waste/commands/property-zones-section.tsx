@@ -5,7 +5,8 @@
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useRowHistory } from "@/components/platform/use-command-support"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
-import { propertyZones, zonesReadable, zonesSentence } from "@/lib/data/property-zones"
+import { zonesReadable, zonesSentence } from "@/lib/data/property-zones"
+import { propertyZones } from "@/lib/api/property-details"
 
 export function PropertyZonesSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()

@@ -27,25 +27,8 @@ import { isLocalRefusal, typed } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { dayIn } from "@/lib/api/records/clock"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
-import {
-  containersAtProperty,
-  dueSentence,
-  inspectionBodyOf,
-  inspectionsOf,
-  lastEmptyingSentence,
-  recordInspection,
-  registerTank,
-  TANK_INSPECTION_OUTCOME_LABELS,
-  TANK_KIND_LABELS,
-  TANK_OUTLET_LABELS,
-  tankBodyOf,
-  tanksEditable,
-  tanksOfProperty,
-  tanksReadable,
-  tankSummary,
-  type InspectionTyped,
-  type TankTyped,
-} from "@/lib/data/tanks"
+import { containersAtProperty, dueSentence, inspectionBodyOf, lastEmptyingSentence, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankBodyOf, tanksEditable, tanksReadable, tankSummary, type InspectionTyped, type TankTyped } from "@/lib/data/tanks"
+import { inspectionsOf, recordInspection, registerTank, tanksOfProperty } from "@/lib/api/property-details"
 
 export function TanksSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()
