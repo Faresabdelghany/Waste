@@ -16,8 +16,8 @@
 // resources/licence.ts spells the implication between them. The statuses of a
 // depot and of an unloading station are the same four, so
 // `UNLOADING_STATION_STATUSES` is `DEPOT_STATUSES` under a second name — one
-// tuple, two readers — which is why the walking test counts twenty-one names
-// over twenty lists. A Drop-off Point (Issue #293, M3) is a place residents
+// tuple, two readers — which is why the walking test counts one name more
+// than lists. A Drop-off Point (Issue #293, M3) is a place residents
 // bring waste to themselves, of the two kinds the glossary names.
 // `DRIVER_ABSENCE_REASONS` and
 // `VEHICLE_UNAVAILABILITY_REASONS` (O6 of #290) say why a driver is away or a
@@ -41,15 +41,12 @@ import { without } from "../lists"
 
 /** A vehicle drives itself or is towed: the prototype's `resourceKind`. */
 export const VEHICLE_KINDS = ["powered-vehicle", "trailer"] as const
-/** Whose vehicle it is. */
 export const VEHICLE_OWNERSHIPS = ["company", "service-provider", "leased"] as const
 /** The vehicle's lifecycle; "on route" and "position stale" are telemetry, never stored. */
 export const VEHICLE_STATUSES = ["active", "unavailable", "maintenance", "retired"] as const
-/** What the vehicle runs on. */
 export const FUEL_TYPES = ["diesel", "hvo", "biogas", "electric", "hybrid", "other"] as const
 /** The licence classes a driver may hold and a vehicle may require, lowest first: `ce` covers `c` covers `b`. */
 export const LICENCE_CLASSES = ["b", "c", "ce"] as const
-/** How the driver is employed. */
 export const EMPLOYMENT_TYPES = ["employee", "service-provider", "temporary"] as const
 /** The driver's lifecycle; "invited" is the account's and "absent" a dated window, which arrives later. */
 export const DRIVER_STATUSES = ["active", "inactive", "suspended"] as const
@@ -59,7 +56,6 @@ export const WAREHOUSE_STATUSES = ["draft", "active", "restricted", "closed"] as
 export const DEPOT_STATUSES = ["draft", "active", "seasonal", "closed"] as const
 /** The same four as a depot's: one tuple, two readers. */
 export const UNLOADING_STATION_STATUSES = DEPOT_STATUSES
-/** Whose depot it is. */
 export const DEPOT_OWNERSHIPS = ["company", "service-provider"] as const
 /** Whose unloading station it is; an incineration plant the company delivers to is `external`. */
 export const UNLOADING_STATION_OWNERSHIPS = ["company", "service-provider", "external"] as const

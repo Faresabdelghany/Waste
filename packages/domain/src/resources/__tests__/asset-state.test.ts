@@ -4,7 +4,6 @@ import { describe, test } from "node:test"
 import { ASSET_STATUS_OF_PLACE, assetStateOf, MOVEMENT_SHAPES, movementShape } from "../asset-state"
 import { ADJUSTMENT_TARGETS, ASSET_STATUSES, STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS, STOCK_PLACES, type StockMovementKind, type StockPlaceKind } from "../vocabulary"
 
-/** Every (kind, from, to) triple the vocabulary can spell. */
 const everyTriple = STOCK_MOVEMENT_KINDS.flatMap((kind) => STOCK_PLACE_KINDS.flatMap((from) => STOCK_PLACE_KINDS.map((to) => [kind, from, to] as const)))
 
 /** The pairs a kind allows, spelled out, so the table is pinned in words and not only in itself. */
