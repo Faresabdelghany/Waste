@@ -29,7 +29,7 @@ import { useBusinessRecordStore } from "@/components/platform/business-record-st
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
 import { mayView as mayViewImports } from "@/lib/imports/import-file"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { timezoneOfProject } from "@/lib/data/route-schemes"
 import {
   DASHBOARD_RANGES,

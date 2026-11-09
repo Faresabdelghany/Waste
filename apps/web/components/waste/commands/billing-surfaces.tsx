@@ -73,7 +73,7 @@ import {
   type EventCommand,
 } from "@/lib/data/commercial-forms"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
 
 // ---------------------------------------------------------------------------

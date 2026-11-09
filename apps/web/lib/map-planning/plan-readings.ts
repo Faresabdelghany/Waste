@@ -25,7 +25,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ROUTE_ACTIVE_PLAN_KEY } from "@/lib/data/routes"
 import { resumesPhrase, WAITING_FOR_QUOTA } from "@/lib/routing/readings"
 
-import { formatDistance, formatDuration } from "./format"
+import { formatDistance, formatDuration } from "@/lib/format/measures"
 
 const oneOf = <Token extends string>(tokens: readonly Token[], value: unknown): value is Token => typeof value === "string" && (tokens as readonly string[]).includes(value)
 

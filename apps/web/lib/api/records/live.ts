@@ -28,7 +28,7 @@ import { moduleAt } from "@/lib/modules/keys"
 import { get, listAll } from "../client"
 import { type Client, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { ofKind, typed } from "@/lib/records/fields"
-import { shownOn, timeOn } from "./clock"
+import { shownOn, timeOn } from "@/lib/format/clock"
 import { assignmentOf, toRouteRecord } from "./routes"
 
 /** The workspace module the live routes are the rows of. */

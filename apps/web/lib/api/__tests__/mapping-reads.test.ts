@@ -97,7 +97,7 @@ describe("a module whose mapping reads the project's day", () => {
 })
 
 /** The one place each day is read off the clock on purpose: the clock itself, and the engine's clock a load's mapping is handed. */
-const THE_CLOCK = new Set(["api/records/clock.ts", "api/records/server-records.ts"])
+const THE_CLOCK = new Set(["format/clock.ts", "api/records/clock.ts", "api/records/server-records.ts"])
 
 /**
  * Read when listed, never mapped: which default list a product's price is read from is the browser's day's (findings X3), a
@@ -124,12 +124,12 @@ function firstArgument(source: string, from: number): string {
 
 /**
  * Every day made out of the clock outside the clock, in the record layer and the helpers its mappings call (lib/data,
- * lib/prototype, lib/commercial): a call whose instant is the clock's now — `context.now`, `new Date()`, nothing at all, or a
+ * lib/prototype, lib/commercial, lib/records, lib/format): a call whose instant is the clock's now — `context.now`, `new Date()`, nothing at all, or a
  * name bound to either in the same file (`const now = context.now ?? new Date()`).
  */
 function daysOffTheClock(): string[] {
   const lib = join(import.meta.dirname, "..", "..")
-  const files = ["api/records", "data", "prototype", "commercial"].flatMap((folder) => readdirSync(join(lib, folder), { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".ts") && !file.includes("__tests__")).map((file) => `${folder}/${file}`))
+  const files = ["api/records", "data", "prototype", "commercial", "records", "format"].flatMap((folder) => readdirSync(join(lib, folder), { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".ts") && !file.includes("__tests__")).map((file) => `${folder}/${file}`))
   const found: string[] = []
   for (const file of files.filter((candidate) => !THE_CLOCK.has(candidate))) {
     const source = readFileSync(join(lib, file), "utf8")

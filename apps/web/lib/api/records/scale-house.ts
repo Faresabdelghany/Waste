@@ -38,7 +38,8 @@ import {
 import { command, create, get, listAll, patch, type ApiClient } from "../client"
 import { said, type CommandInput, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isLocalRefusal, ofKind, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
-import { shownOn } from "./clock"
+import { kilograms } from "@/lib/format/measures"
+import { shownOn } from "@/lib/format/clock"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, typedReference } from "./references"
 import { customerAdapter } from "./registry"
@@ -53,7 +54,6 @@ export const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
 /** What a ticket's or a tare's own fields are told when the patch would move them. */
 const KEPT = "What was weighed and for whom is what the ticket is: void it and weigh again"
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** A whole number of kilograms a value says, NaN for one that is not, undefined for none. */
 function weightIn(value: string | undefined): number | undefined {

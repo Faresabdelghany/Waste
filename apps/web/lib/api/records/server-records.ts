@@ -83,7 +83,7 @@ import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, type Prob
 import { PartialWrite, recordFrom, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { isLocalRefusal, statusToken, webIdOf, type LocalRefusal } from "@/lib/records/fields"
-import { dayIn } from "./clock"
+import { dayIn } from "@/lib/format/clock"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed" | "kept-on-api"
 

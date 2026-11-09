@@ -24,7 +24,7 @@ import { useBusinessRecordStore, useServerModuleState } from "@/components/platf
 import { useModuleReady, useProjectRecords, useServerNames } from "@/components/platform/use-command-support"
 import { isLocalRefusal, typed } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "@/lib/data/containers"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { customerKindOf } from "@/lib/api/records/registry"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"

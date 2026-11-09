@@ -35,7 +35,7 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { useModuleReady } from "@/components/platform/use-command-support"
 import { isLocalRefusal } from "@/lib/records/fields"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { explainPrice, explainQuery } from "@/lib/api/records/pricing"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { formatMinor } from "@/lib/commercial/money"

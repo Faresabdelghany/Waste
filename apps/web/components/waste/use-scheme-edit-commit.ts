@@ -32,7 +32,7 @@ import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/compo
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { schemeEditOnApi, schemeEditStatusOnApi, timezoneOfProject, validationWhenUnplaced, type SchemeOneOff } from "@/lib/data/route-schemes"
 import type { SchemeEditApplication, SchemeEditQuestion } from "@/lib/prototype/route-schemes/edit"
 import { schemeLiveValidation } from "@/lib/prototype/route-schemes/lifecycle"

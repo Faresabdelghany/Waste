@@ -57,7 +57,7 @@ import {
 import { command, create, get, listAll, patch } from "../client"
 import { patchOf, said, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { statusLabel, typed, webIdOf } from "@/lib/records/fields"
-import { shownOn } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"
 import { referenced, refusal } from "./places"

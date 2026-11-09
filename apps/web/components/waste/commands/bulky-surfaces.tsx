@@ -27,7 +27,7 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { bulkyAvailability, CANCEL_BOOKING, ROUTE_BOOKING } from "@/lib/api/records/bulky-bookings"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord } from "@/lib/data/agreements"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { agreementsOfCustomer, availabilityWindow, bookingPlaceOf, placesOfAgreement, withBookingDay, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"

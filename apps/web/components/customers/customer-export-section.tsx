@@ -21,7 +21,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
 import { customerExportFileName, customerExportOf } from "@/lib/data/customer-export"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 
 export function CustomerExportSection({ record }: { record: BusinessRecord }) {
   const client = useApiClient()

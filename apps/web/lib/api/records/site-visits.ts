@@ -19,7 +19,8 @@ import { chargeBasisSentence, IDENTIFICATION_LABELS, OUTCOME_LABELS, REFUSAL_LAB
 import { command, get, listAll, type ApiClient } from "../client"
 import { type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { ofKind } from "@/lib/records/fields"
-import { dayAndTimeOn, projectTimezoneOf } from "./clock"
+import { projectTimezoneOf } from "./clock"
+import { dayAndTimeOn } from "@/lib/format/clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
 

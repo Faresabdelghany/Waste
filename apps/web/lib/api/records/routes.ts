@@ -64,7 +64,7 @@ import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
-import { formatDistance, formatDuration } from "@/lib/map-planning/format"
+import { formatDistance, formatDuration, kilograms } from "@/lib/format/measures"
 import { ROUTE_ACTIVE_PLAN_KEY, ROUTES_MODULE, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
@@ -72,7 +72,7 @@ import { said, type Client, type MappingContext, type RecordCommand, type Record
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { hasPrefix, isLocalRefusal, ofKind, statusLabel, typed, typedFlag, webIdOf } from "@/lib/records/fields"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
-import { shownOn } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 import { containerAdapter } from "./containers"
 import { serviceProviderAdapter } from "./organisation"
 import { projectServerIdOf, referenced, refusal, unloadingStationAdapter, warehouseAdapter } from "./places"
@@ -534,7 +534,6 @@ const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
   baseline: "Generated order, not optimised",
 }
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /**
  * What a route's stops take and weigh (O10 of #290), as its facts say it: the

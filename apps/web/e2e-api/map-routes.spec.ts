@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test"
 import type { Plan, PlanDetail } from "@waste/contracts/plans"
 
-import { formatDistance, formatDuration } from "../lib/map-planning/format"
+import { formatDistance, formatDuration } from "@/lib/format/measures"
 import { addDays, dayIn } from "./dispatched-route"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"

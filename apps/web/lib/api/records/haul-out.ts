@@ -28,7 +28,8 @@ import { STATIONS_MODULE } from "@/lib/data/haul-out"
 import { get, listAll, post } from "../client"
 import { actionOf, type CommandInput, type MappingContext, type RecordAction } from "./adapter"
 import { type LocalRefusal } from "@/lib/records/fields"
-import { instantOn } from "./clock"
+import { kilograms as kg } from "@/lib/format/measures"
+import { instantOn } from "@/lib/format/clock"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 export const ADJUST_STOCK = "adjust-stock"
@@ -214,8 +215,6 @@ export function stationLoads(client: Parameters<typeof get>[0], serverId: string
   return listAll<OutboundLoad>(client, "/outbound-loads", { fromStationId: serverId }).then((loads) => [...loads].reverse())
 }
 
-/** Whole kilograms as a person reads them: 18,400 kg. */
-export const kg = (value: number): string => `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} kg`
 
 /** A stock row as its line reads: "6,000 kg on hand · in 27,500 kg · out 20,000 kg · adjusted -1,500 kg". */
 export function stockLine(row: Pick<MaterialStockRow, "inKg" | "outKg" | "adjustedKg" | "onHandKg" | "rejectedKg">): string {

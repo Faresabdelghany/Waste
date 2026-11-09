@@ -41,7 +41,7 @@ import { command, get, listAll } from "../client"
 import { said, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { ofKind, statusLabel, typed, webIdOf } from "@/lib/records/fields"
-import { shownOn, wallClockIn } from "./clock"
+import { shownOn, wallClockIn } from "@/lib/format/clock"
 import { LIVE_MODULE } from "./live"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 

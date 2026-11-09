@@ -38,7 +38,9 @@ import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 import { command, create, get, getFile, listAll, type ApiFile } from "../client"
 import { said, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
 import { typed, webIdOf } from "@/lib/records/fields"
-import { instantOn, projectTimezoneOf, shownOn } from "./clock"
+import { kilograms } from "@/lib/format/measures"
+import { projectTimezoneOf } from "./clock"
+import { instantOn, shownOn } from "@/lib/format/clock"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
 import { routesWindowFrom } from "./routes"
@@ -86,7 +88,6 @@ export type UnloadResource = Unload & { createdAt: string; updatedAt: string }
 const stamped = (unload: Unload): UnloadResource => ({ ...unload, createdAt: unload.recordedAt, updatedAt: unload.recordedAt })
 
 /** Whole kilograms as a person reads them: 8,240 kg; the weights list and a weight charge (O28 of #290) both spell them so. */
-export const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** A form's weight: undefined for blank, the whole kilograms of one, NaN for anything else. */
 function weightOf(input: CommandInput, key: string): number | undefined {

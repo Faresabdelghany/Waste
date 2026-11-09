@@ -19,7 +19,8 @@ import { command, create, get, listAll, patch, post, type ApiClient } from "../c
 import { putObject } from "../storage"
 import { type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isLocalRefusal, ofKind, typed, type LocalRefusal } from "@/lib/records/fields"
-import { projectTimezoneOf, shownOn } from "./clock"
+import { projectTimezoneOf } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 import { refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 

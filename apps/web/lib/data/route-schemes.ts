@@ -17,7 +17,7 @@ import { isNoMatchIssue, type SchemeValidationResult } from "@/lib/prototype/rou
 import { count } from "@waste/domain/text"
 
 import { typed } from "@/lib/records/fields"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"

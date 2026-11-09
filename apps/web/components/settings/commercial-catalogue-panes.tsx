@@ -35,7 +35,7 @@ import { useCommercialPickers } from "@/components/waste/commands/commercial-pic
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/platform/use-command-support"
 import { typed } from "@/lib/records/fields"
 import { indexPriceList } from "@/lib/api/records/indexation"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"

@@ -37,7 +37,7 @@ import { useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved 
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useServerNames } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
-import { dayIn } from "@/lib/api/records/clock"
+import { dayIn } from "@/lib/format/clock"
 import { BLOCK_CREDENTIAL, CREDENTIAL_LAST_DAY_KEY, CREDENTIAL_RECORD_KIND, UNBLOCK_CREDENTIAL } from "@/lib/api/records/site-access"
 import { VOID_VISIT } from "@/lib/api/records/site-visits"
 import { readFrequentVisitors } from "@/lib/api/site-visits"
