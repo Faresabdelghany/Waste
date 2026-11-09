@@ -55,18 +55,18 @@ import { invoiceDocumentInputOf } from "@waste/db/commands/invoice-document"
 import { billingRun, invoice, invoiceLine } from "@waste/db/schema/finance"
 import { invoiceDocumentOf } from "@waste/domain/finance/invoice-document"
 import { vatOf } from "@waste/domain/finance/money"
-import { and, asc, eq, gt, gte, inArray, lte, sum } from "drizzle-orm"
+import { and, eq, gte, inArray, lte, sum } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { issueInvoice, type LineDraft } from "@waste/db/commands/invoice-writes"
-import { invoiceColumns, invoiceDetailOf, invoiceOf, labelOf, linesOf, standingsOf, type InvoiceRow, type LineRow } from "@waste/db/shapes/invoices"
+import { invoiceDetailOf, invoiceOf, labelOf, linesOf, standingsOf, type InvoiceRow, type LineRow } from "@waste/db/shapes/invoices"
 import { lockRow } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { findInvoice, invoiceScope, noSuchInvoice } from "./billing-shapes"
+import { findInvoice, listInvoices, noSuchInvoice } from "./billing-shapes"
 import { requireCustomer } from "./references"
 
 const MODULE = "commercial.invoices"
@@ -195,31 +195,25 @@ export function invoiceRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, kind, customerId, billingRunId, creditsInvoiceId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (customerId !== undefined) await requireCustomer(tx, principal.companyId, customerId, "customerId", "query")
-        const rows = await tx
-          .select(invoiceColumns)
-          .from(invoice)
-          .where(
-            and(
-              invoiceScope(principal),
-              projectId === undefined ? undefined : eq(invoice.projectId, projectId),
-              kind === undefined ? undefined : eq(invoice.kind, kind),
-              customerId === undefined ? undefined : eq(invoice.customerId, customerId),
-              billingRunId === undefined ? undefined : eq(invoice.billingRunId, billingRunId),
-              creditsInvoiceId === undefined ? undefined : eq(invoice.creditsInvoiceId, creditsInvoiceId),
-              from === undefined ? undefined : gte(invoice.issuedOn, from),
-              to === undefined ? undefined : lte(invoice.issuedOn, to),
-              after === undefined ? undefined : gt(invoice.id, after),
-            ),
-          )
-          .orderBy(asc(invoice.id))
-          .limit(fetchLimit(limit))
-        const standing = await standings(tx, principal.companyId, rows)
-        return c.json(pageOf(rows.map((row) => invoiceOf(row, standing.get(row.id))), limit))
+        const page = await listInvoices(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(invoice.projectId, projectId),
+          kind === undefined ? undefined : eq(invoice.kind, kind),
+          customerId === undefined ? undefined : eq(invoice.customerId, customerId),
+          billingRunId === undefined ? undefined : eq(invoice.billingRunId, billingRunId),
+          creditsInvoiceId === undefined ? undefined : eq(invoice.creditsInvoiceId, creditsInvoiceId),
+          from === undefined ? undefined : gte(invoice.issuedOn, from),
+          to === undefined ? undefined : lte(invoice.issuedOn, to),
+        )
+        const standing = await standings(tx, principal.companyId, page.items)
+        return c.json(mapPage(page, (row) => invoiceOf(row, standing.get(row.id))))
       },
     )
     .get(

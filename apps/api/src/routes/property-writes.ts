@@ -193,7 +193,7 @@ const collisions = (values: { name?: string; registryId?: string | null }): Reco
   ...(values.registryId == null ? {} : { [REGISTRY_TAKEN]: registryTaken(values.registryId) }),
 })
 
-export const { scope: propertyScope, noSuch: noSuchProperty, find: findProperty } = scoped(property, { noun: "property", reach: "projects", columns: propertyColumns })
+export const { scope: propertyScope, noSuch: noSuchProperty, find: findProperty, list: listProperties } = scoped(property, { noun: "property", reach: "projects", columns: propertyColumns })
 
 /** Registers a property in one of the caller's projects, with the parties it starts with, each from the project's today on `now`; `found` is what the register said of the body's `addressId`. */
 export async function createProperty(tx: Tx, principal: Principal, body: PropertyCreate, now: () => Date, found?: Address | null): Promise<Property> {

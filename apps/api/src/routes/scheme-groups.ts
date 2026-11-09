@@ -374,7 +374,7 @@ export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow
 export const groupScope = (principal: Principal): SQL | undefined =>
   and(eq(collectionGroup.companyId, principal.companyId), inProjects(collectionGroup.projectId, principal))
 
-export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
+export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
 
 /** Every id a body names across its groups, by what it names: the rule's fractions, container types, vehicle type and planning area, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {

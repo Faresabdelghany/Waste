@@ -43,28 +43,16 @@ import { PlanningAreasAt, PlanningAreasAtQuery } from "@waste/contracts/planning
 import type { Tx } from "@waste/db/client"
 import { planningAreasAt } from "@waste/db/query/zones"
 import { property, propertyParty } from "@waste/db/schema/customers"
-import { and, asc, eq, exists, gt } from "drizzle-orm"
+import { and, eq, exists } from "drizzle-orm"
 import { projectToday } from "@waste/db/query/project-clock"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import { addressLookup, foundAddress } from "./addresses"
 import { areaOf } from "./planning-areas"
-import {
-  createProperty,
-  findProperty,
-  partiesOf,
-  partyInForce,
-  patchProperty,
-  propertyColumns as columns,
-  propertyOf,
-  propertyScope as scope,
-  propertyWithParties,
-  noSuchProperty,
-  setPropertyParties,
-} from "./property-writes"
+import { createProperty, findProperty, partiesOf, partyInForce, patchProperty, propertyOf, listProperties, propertyWithParties, noSuchProperty, setPropertyParties } from "./property-writes"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
@@ -107,26 +95,19 @@ export function propertyRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, customerId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(property)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(property.projectId, projectId),
-              customerId === undefined ? undefined : heldBy(tx, principal.companyId, customerId, now()),
-              after === undefined ? undefined : gt(property.id, after),
-            ),
-          )
-          .orderBy(asc(property.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is
         // not one of the properties whose parties are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listProperties(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(property.projectId, projectId),
+          customerId === undefined ? undefined : heldBy(tx, principal.companyId, customerId, now()),
+        )
         const held = await partiesOf(tx, principal.companyId, items.map((row) => row.id), now())
         return c.json({ items: items.map((row) => propertyOf(row, held.get(row.id) ?? [])), nextCursor })
       },

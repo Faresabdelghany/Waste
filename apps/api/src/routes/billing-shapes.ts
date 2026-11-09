@@ -30,6 +30,6 @@ export async function findEvent(tx: Tx, principal: Principal, id: string): Promi
   return row
 }
 
-export const { scope: runScope, noSuch: noSuchRun, find: findRun } = scoped(billingRun, { noun: "billing run", reach: "projects", columns: runColumns })
+export const { scope: runScope, noSuch: noSuchRun, find: findRun, list: listRuns } = scoped(billingRun, { noun: "billing run", reach: "projects", columns: runColumns })
 
-export const { scope: invoiceScope, noSuch: noSuchInvoice, find: findInvoice } = scoped(invoice, { noun: "invoice", reach: "projects", columns: invoiceColumns })
+export const { scope: invoiceScope, noSuch: noSuchInvoice, find: findInvoice, list: listInvoices } = scoped(invoice, { noun: "invoice", reach: "projects", columns: invoiceColumns })
