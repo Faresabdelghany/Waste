@@ -9,7 +9,6 @@
 // Pure date math — no UI, store, or fixture dependencies.
 import { addMonthsClamped } from "../days"
 
-/** What the cadence reads of an installation: the day it was last emptied, if ever, and its interval. */
 export type TankCadence = {
   /** The last emptying's day: a completed stop's, else the register's word for one before the platform; null for never. */
   lastEmptiedOn: string | null
@@ -24,7 +23,6 @@ export const tankDueOn = (cadence: TankCadence): string | null => (cadence.lastE
 /** The day a run judges, and the tanks with a stop held on an earlier date of it: a planned stop not yet completed, or one the run planned. */
 export type TankGate = { day: string; held: ReadonlySet<string> }
 
-/** Whether a container waits on the gate's day: a tank not yet due, or due with its stop already held on an earlier date. A container that is no tank never waits. */
 export function tankWaits(candidate: { containerId: string; tank: TankCadence | null }, gate: TankGate): boolean {
   if (candidate.tank === null) return false
   if (gate.held.has(candidate.containerId)) return true

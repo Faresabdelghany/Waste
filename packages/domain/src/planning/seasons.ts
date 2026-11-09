@@ -65,12 +65,10 @@ const MONTH_DAY_PATTERN = new RegExp(MONTH_DAY_SOURCE)
 /** What a month-day that is not a day every year has is told. */
 export const MONTH_DAY_SHAPE = "A day of the year, mm-dd, that every year has (29 February is not one)"
 
-/** A day every calendar year has, spelt `mm-dd`. */
 export function isMonthDay(value: string): boolean {
   return MONTH_DAY_PATTERN.test(value)
 }
 
-/** Whether the season runs over the new year: its end comes before its start in the calendar. */
 const wraps = (season: Pick<SchemeSeason, "startsOn" | "endsOn">): boolean => season.endsOn < season.startsOn
 
 /**
@@ -99,7 +97,6 @@ export function seasonStartOf(season: Pick<SchemeSeason, "startsOn" | "endsOn">,
 /** Every day of the year without a leap day, `mm-dd`, the walk an overlap is judged over. */
 const YEAR = MONTH_DAYS.flatMap((days, month) => Array.from({ length: days }, (_, day) => `${String(month + 1).padStart(2, "0")}-${String(day + 1).padStart(2, "0")}`))
 
-/** Whether two seasons share a day of the year. */
 export function seasonsOverlap(a: Pick<SchemeSeason, "startsOn" | "endsOn">, b: Pick<SchemeSeason, "startsOn" | "endsOn">): boolean {
   return YEAR.some((day) => seasonContains(a, `2001-${day}`) && seasonContains(b, `2001-${day}`))
 }

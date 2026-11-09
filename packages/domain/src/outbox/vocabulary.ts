@@ -47,7 +47,6 @@ export const OUTBOX_EVENTS = {
 } as const satisfies Record<string, string>
 
 export type OutboxKind = keyof typeof OUTBOX_EVENTS
-/** What an event of the kind is about. */
 export type AggregateOf<K extends OutboxKind> = (typeof OUTBOX_EVENTS)[K]
 export type OutboxAggregate = AggregateOf<OutboxKind>
 
@@ -56,14 +55,11 @@ export const OUTBOX_KINDS = Object.keys(OUTBOX_EVENTS) as [OutboxKind, ...Outbox
 /** Every aggregate, in the order the table first names it: what the outbox's aggregate column holds. */
 export const OUTBOX_AGGREGATES = [...new Set(Object.values(OUTBOX_EVENTS))] as [OutboxAggregate, ...OutboxAggregate[]]
 
-/** The aggregate an event of the kind is about. */
 export const aggregateOf = <K extends OutboxKind>(kind: K): AggregateOf<K> => OUTBOX_EVENTS[kind]
 
 /** An event's kind with the aggregate it is about and that aggregate's id: one row of the table. */
 export type OutboxSubject<K extends OutboxKind = OutboxKind> = K extends OutboxKind ? { kind: K; aggregate: AggregateOf<K>; aggregateId: string } : never
 
-/** The subject of an event of the kind: the kind, its aggregate, the aggregate's id. */
 export const subjectOf = <K extends OutboxKind>(kind: K, aggregateId: string): OutboxSubject<K> => ({ kind, aggregate: aggregateOf(kind), aggregateId }) as OutboxSubject<K>
 
-/** Every list of this module by its name. */
 export const OUTBOX_VOCABULARIES = { OUTBOX_KINDS, OUTBOX_AGGREGATES } as const satisfies Record<string, readonly [string, ...string[]]>

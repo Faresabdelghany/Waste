@@ -37,8 +37,6 @@ import type { SchemeRecurrence } from "./recurrence"
 import { planRoutes, skippedHoliday, type ExistingRoute, type GenerationGroup, type GenerationWindow } from "./generation"
 import type { CollectionDayStatus } from "./public-days"
 
-/** A period, half-open: `validTo` the first day out of force, null while it runs. */
-
 /**
  * A container a group collects at the property: its fraction's name, its
  * placement's period, and the pauses of the subscription it serves (#291),
@@ -57,7 +55,6 @@ export type ServingScheme = {
   existingRoutes: readonly ExistingRoute[]
 }
 
-/** One collection of the property: the day the truck comes, what it takes, and why the day moved where it did. */
 export type CollectionDay = {
   /** The route's identity, `<group>|<service date>`: stable across reads. */
   key: string
@@ -86,7 +83,6 @@ export const movedByOffice = (date: string): string => `Moved to ${formatShortDa
 
 const byName = (a: string, b: string): number => a.localeCompare(b)
 
-/** The fractions of a group's containers in force and not paused on the service date, by name, once each. */
 function fractionsOn(group: ServingGroup, serviceDate: string): string[] {
   const inForce = group.containers.filter((container) => inForceOn(container, serviceDate) && !(container.pauses ?? []).some((pause) => inForceOn(pause, serviceDate)))
   return [...new Set(inForce.map((container) => container.fraction))].sort(byName)
