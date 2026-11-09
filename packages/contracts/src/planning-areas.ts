@@ -111,7 +111,6 @@ export type PlanningAreaCreated = z.infer<typeof PlanningAreaCreated>
 export const PlanningAreaPatch = planningAreaBodies.patch
 export type PlanningAreaPatch = z.infer<typeof PlanningAreaPatch>
 
-/** A page of planning areas, from one project and of one purpose. */
 export const PlanningAreaListQuery = ProjectScopedListQuery.extend({
   purpose: PlanningAreaPurpose.optional(),
 })

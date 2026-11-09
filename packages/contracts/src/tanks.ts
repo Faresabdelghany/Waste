@@ -86,7 +86,6 @@ export type TankInstallationCreate = z.infer<typeof TankInstallationCreate>
 export const TankInstallationPatch = tankInstallationBodies.patch
 export type TankInstallationPatch = z.infer<typeof TankInstallationPatch>
 
-/** A page of installations: of one project, of one Property, of one Container, in force on one day. */
 export const TankInstallationListQuery = ProjectScopedListQuery.extend({
   propertyId: Id.optional(),
   containerId: Id.optional(),
@@ -103,7 +102,6 @@ export const TankInspection = z.object({
   findings: Paragraph.nullable(),
   /** When the tank is next to be inspected, where the inspector said. */
   nextInspectionOn: IsoDate.nullable(),
-  /** The account that recorded it. */
   recordedBy: Id,
 })
 export type TankInspection = z.infer<typeof TankInspection>

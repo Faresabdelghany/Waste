@@ -95,7 +95,6 @@ export const WeighbridgeTicket = z.object({
   /** The route and the Unload it was written as, once matched. */
   routeId: Id.nullable(),
   unloadId: Id.nullable(),
-  /** Why the office dismissed it. */
   dismissedNote: Paragraph.nullable(),
   /** The account that sent it. */
   receivedBy: Id,

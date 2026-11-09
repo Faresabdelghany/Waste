@@ -131,7 +131,6 @@ export type SensorPairingCreate = z.infer<typeof SensorPairingCreate>
 export const SensorPairingPatch = sensorPairingBodies.patch
 export type SensorPairingPatch = z.infer<typeof SensorPairingPatch>
 
-/** A page of sensors: one project's, in one status. */
 export const SensorListQuery = ProjectScopedListQuery.extend({
   status: SensorStatus.optional(),
 })

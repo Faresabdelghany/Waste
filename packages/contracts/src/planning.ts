@@ -35,11 +35,9 @@ import {
 import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
-/** One of the seven weekdays. */
 export const ServiceDay = z.enum(SERVICE_DAYS)
 export type ServiceDay = z.infer<typeof ServiceDay>
 
-/** How often a Route Scheme recurs. */
 export const RecurrenceFrequency = z.enum(RECURRENCE_FREQUENCIES)
 export type RecurrenceFrequency = z.infer<typeof RecurrenceFrequency>
 
@@ -59,7 +57,6 @@ export type HolidayPolicy = z.infer<typeof HolidayPolicy>
 export const SchemeEditPolicy = z.enum(SCHEME_EDIT_POLICIES)
 export type SchemeEditPolicy = z.infer<typeof SchemeEditPolicy>
 
-/** What kind of work a Route Scheme plans. */
 export const ServiceType = z.enum(SERVICE_TYPES)
 export type ServiceType = z.infer<typeof ServiceType>
 
@@ -71,7 +68,6 @@ export type StopSource = z.infer<typeof StopSource>
 export const RouteSchemeStatus = z.enum(ROUTE_SCHEME_STATUSES)
 export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
 
-/** Why a Planning Area exists. */
 export const PlanningAreaPurpose = z.enum(PLANNING_AREA_PURPOSES)
 export type PlanningAreaPurpose = z.infer<typeof PlanningAreaPurpose>
 
