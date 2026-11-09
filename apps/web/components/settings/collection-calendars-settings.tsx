@@ -23,7 +23,7 @@ import {
   sortByView,
   type AssetView,
 } from "@/components/settings/settings-pane-kit"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -44,6 +44,7 @@ import {
   whenSaved,
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
+import { useActorName } from "@/components/platform/shell-identity"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -68,11 +69,13 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { isHolidayListRecord } from "@/lib/prototype/route-schemes/holiday-list-records"
 import { calendarRowSummary } from "@/lib/prototype/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
-const ACTOR_NAME = "Olivia Larsen"
 
 export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
@@ -176,7 +179,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const handleCreate = (values: BusinessFormValues) => {
     const record = createCollectionCalendarRecord(values, {
       now: Date.now(),
-      actorName: ACTOR_NAME,
+      actorName,
       lookups,
     })
     whenSaved(upsertRecord(COLLECTION_CALENDARS_MODULE.workspaceId, COLLECTION_CALENDARS_MODULE.moduleId, record), () => {
@@ -198,15 +201,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
 
   // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = calendarRecords.length > 0
-  const emptyMessage = calendars.pending
-    ? "Reading the collection calendars from the API…"
-    : calendars.notGranted
-      ? "The collection calendars are not shown to your role."
-      : calendars.problem
-        ? `The collection calendars could not be read from the API: ${calendars.problem.detail ?? calendars.problem.title}`
-        : narrowed
-          ? "No collection calendars match this search."
-          : "No collection calendars yet."
+  const emptyMessage = moduleReadSentence(calendars, "collection calendars") ?? (narrowed ? "No collection calendars match this search." : "No collection calendars yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = calendars.notGranted ? calendars.problem?.detail : undefined
 

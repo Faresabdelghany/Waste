@@ -6,7 +6,6 @@ import type { SchemeRecurrence } from "../recurrence"
 import { collectionDaysOf, type ServingGroup, type ServingScheme } from "../collection-days"
 import type { ExistingRoute } from "../generation"
 
-/** Mondays and Thursdays, from October 2026, open-ended. */
 const weekly: SchemeRecurrence = { frequency: "weekly", serviceDays: ["monday", "thursday"], effectiveFrom: "2026-10-01", effectiveTo: "" }
 const restingWeekend: SchemeCalendar = { holidays: new Map(), weekend: ["saturday", "sunday"] }
 /** Thursday 2026-10-08 is a holiday. */

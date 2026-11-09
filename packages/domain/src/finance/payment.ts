@@ -25,10 +25,8 @@ export const DEFAULT_PAYMENT_TERMS_DAYS = 30
 /** The longest terms a project or a customer may set. */
 export const PAYMENT_TERMS_MAX = 365
 
-/** The terms an invoice is issued under: the customer's own where it has them, else its project's. */
 export const termsOf = (customerTerms: number | null, projectTerms: number): number => customerTerms ?? projectTerms
 
-/** The day an invoice issued on a day is due under its terms. */
 export const dueOn = (issuedOn: string, termsDays: number): string => addDays(issuedOn, termsDays)
 
 // The invoice identity's shapes, spelled once for the company table's CHECKs

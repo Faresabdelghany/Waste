@@ -203,7 +203,6 @@ export const driver = wms.table(
     timeWindow(t, "shift", [t.shiftStart, t.shiftEnd]),
     timeWindow(t, "break", [t.breakWindowStart, t.breakWindowEnd]),
     check(tableObjectName(t.id.table, "break_minutes_range", "driver"), sql`${t.breakMinutes} between ${sql.raw(String(BREAK_MINUTES.min))} and ${sql.raw(String(BREAK_MINUTES.max))}`),
-    // A break belongs to a shift, its window to its minutes, and the window lies within the shift.
     check(
       tableObjectName(t.id.table, "break_shape", "driver"),
       sql`(${t.breakMinutes} is null or ${t.shiftStart} is not null) and (${t.breakWindowStart} is null or (${t.breakMinutes} is not null and ${t.breakWindowStart} >= ${t.shiftStart} and ${t.breakWindowEnd} <= ${t.shiftEnd}))`,

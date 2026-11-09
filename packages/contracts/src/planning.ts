@@ -1,11 +1,9 @@
 // Planning's closed lists at the API boundary (Issue #97): each of
 // @waste/domain/planning/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because four modules
-// read them — `organisation.ts` for a project's weekend, `route-schemes.ts` for
-// nearly everything, `planning-areas.ts` for a purpose, `generation.ts` for a
-// run's trigger and status (part B) — and a list spelled in
-// one place is a list that cannot drift between them. The vehicle a rule asks
+// would refuse it as a 500 naming nothing. Shared here because several
+// modules read them, and a list spelled in one place is a list that cannot
+// drift between them. The vehicle a rule asks
 // for is not an enum since Resources (Issue #101): a vehicle type is a row of
 // the company's (`vehicle-types.ts`), and a Stop Matching Rule names it by id.
 //
@@ -35,11 +33,9 @@ import {
 import { eachOnce } from "@waste/domain/requests"
 import * as z from "zod"
 
-/** One of the seven weekdays. */
 export const ServiceDay = z.enum(SERVICE_DAYS)
 export type ServiceDay = z.infer<typeof ServiceDay>
 
-/** How often a Route Scheme recurs. */
 export const RecurrenceFrequency = z.enum(RECURRENCE_FREQUENCIES)
 export type RecurrenceFrequency = z.infer<typeof RecurrenceFrequency>
 
@@ -59,7 +55,6 @@ export type HolidayPolicy = z.infer<typeof HolidayPolicy>
 export const SchemeEditPolicy = z.enum(SCHEME_EDIT_POLICIES)
 export type SchemeEditPolicy = z.infer<typeof SchemeEditPolicy>
 
-/** What kind of work a Route Scheme plans. */
 export const ServiceType = z.enum(SERVICE_TYPES)
 export type ServiceType = z.infer<typeof ServiceType>
 
@@ -71,7 +66,6 @@ export type StopSource = z.infer<typeof StopSource>
 export const RouteSchemeStatus = z.enum(ROUTE_SCHEME_STATUSES)
 export type RouteSchemeStatus = z.infer<typeof RouteSchemeStatus>
 
-/** Why a Planning Area exists. */
 export const PlanningAreaPurpose = z.enum(PLANNING_AREA_PURPOSES)
 export type PlanningAreaPurpose = z.infer<typeof PlanningAreaPurpose>
 

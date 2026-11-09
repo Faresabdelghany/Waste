@@ -17,7 +17,6 @@ export const OPENROUTESERVICE_KEY_VARIABLE = "OPENROUTESERVICE_API_KEY"
 const NAMES = ["fake", "openrouteservice"] as const
 export type ProviderName = (typeof NAMES)[number]
 
-/** The provider the environment names, checked; the fake where it names none. */
 export function providerNameFromEnv(env: Readonly<Record<string, string | undefined>> = process.env): ProviderName {
   const name = env[ROUTING_PROVIDER_VARIABLE] || "fake"
   if ((NAMES as readonly string[]).includes(name)) return name as ProviderName

@@ -64,7 +64,6 @@ import type { DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMe
 /** A point as the device recorded it: `[longitude, latitude]`. */
 export type FlatPoint = { type: "Point"; coordinates: [number, number] }
 
-/** Where the device stood, and how well it knew. */
 export type Located = { location?: FlatPoint; accuracyM?: number }
 
 /** A code the driver read off the bin to confirm the stop's container (O19 of #290), and how it was read. */
@@ -95,7 +94,6 @@ export type CommandBodies = {
   "record-volume": { pickupId: string; volumeLitres: number }
 }
 
-/** One command as the device sent it: the envelope and the body its kind parsed. */
 export type Command<Kind extends DriverCommandKind = DriverCommandKind> = {
   [K in Kind]: {
     /** Minted by the device: the idempotency key, and the id of the row the command makes. */
@@ -162,7 +160,6 @@ export type Lookups = {
   identification?: { containerId: string | null; identifiedContainerIds: readonly string[] }
 }
 
-/** The request's clock and the two bounds a device's clock is held within. */
 export type Clock = {
   /** The request's instant, RFC 3339. */
   now: string
@@ -211,7 +208,6 @@ export type UnloadDraft = {
   refusalNote: string | null
 }
 
-/** One thing the applier writes. */
 export type Effect =
   /** The route `ready → active` at the instant, its actual assignment copied from the session opened with the command's id. */
   | { kind: "start-route"; sessionId: string; vehicleId: string; trailerId: string | null; appVersion: string | null; at: string }
@@ -232,17 +228,13 @@ export type Effect =
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxSubject<DriverEventKind> }
 
-/** The outbox events a driver's command writes: the route started or completed, a stop's outcome or problem, a problem on the route naming no stop, an unload. */
 export type DriverEventKind = "route-started" | "route-completed" | "route-problem-reported" | "pickup-completed" | "pickup-skipped" | "pickup-failed" | "pickup-problem-reported" | "unload-recorded"
 
 /** The effects to run — with a note for the log where applying nothing is the right answer — or the rejection to record. */
 export type Decision = { apply: Effect[]; note?: string } | { reject: Rejection }
 
-// The sentences of this module.
-
 /** A route the driver is not assigned to, or that is not there: one sentence, so the device learns nothing about rows it was not given. */
 export const noRouteAssigned = (routeId: string): string => `No route ${routeId} assigned to this driver`
-/** A pickup that is not on the route. */
 export const noPickupOnRoute = (pickupId: string, label: string): string => `No pickup ${pickupId} on route ${label}`
 /** `occurredAt` further ahead of the request's clock than a device's clock accounts for. */
 export const RECORDED_AFTER_IT_HAPPENED = "Recorded after it happened"
@@ -253,7 +245,6 @@ export const RECORDED_AFTER_IT_HAPPENED = "Recorded after it happened"
  * recorded before it happened.
  */
 export const OCCURRED_AT_SKEW_MS = 5 * 60_000
-/** The skew rule's verdict: whether the instant runs further ahead of the request's clock `at` than `OCCURRED_AT_SKEW_MS`. */
 export const aheadOfClock = (instant: Date, at: Date): boolean => instant.getTime() > at.getTime() + OCCURRED_AT_SKEW_MS
 /** `occurredAt` further behind the request's clock than the backdate bound: the day is over. */
 export const recordedTooLate = (backdateMs: number): string => `Recorded more than ${Math.round(backdateMs / 3_600_000)} hours after it happened`
@@ -261,17 +252,13 @@ export const recordedTooLate = (backdateMs: number): string => `Recorded more th
 export const BEFORE_THE_SESSION_STARTED = "Before the session started"
 /** A driver starting a second route. */
 export const alreadyOnRoute = (driver: string, label: string): string => `${driver} is already on route ${label}; end it first`
-/** A `start-route` naming a vehicle that is not a powered vehicle of the project. */
 export const NOT_A_POWERED_VEHICLE = "Not a powered vehicle of this project"
-/** A `start-route` naming a trailer that is not a trailer of the project. */
 export const NOT_A_TRAILER = "Not a trailer of this project"
 /** A `start-route` naming a vehicle or trailer that is not `active`: the fleet's status gate in the route's words, the status named since each is corrected differently. */
 export const notInService = (label: string, status: VehicleStatus, as: "vehicle" | "trailer"): string => `${label} is ${status}; a route needs a ${as} in service`
 /** A device ending a route the office cancelled meanwhile: applied as nothing, so the driver is not locked out, and the log says why. */
 export const ROUTE_CANCELLED_NOTHING_TO_END = "The route was cancelled; nothing to end"
-/** A `record-unload` naming a station that is not the company's. */
 export const NOT_A_STATION = "Not an unloading station of this company"
-/** A `record-unload` naming a fraction that is not the company's. */
 export const NOT_A_FRACTION = "Not a waste fraction of this company"
 /** An `objectKey` outside the command's own prefix. */
 export const OBJECT_KEY_NAMES_ANOTHER = "The object key names another route or another command"
@@ -291,17 +278,13 @@ export const assignedTo = (route: Pick<RouteState, "plannedDriverId" | "actualDr
 const reject = (status: Rejection["status"], detail: string, errors?: FieldError[]): Decision => ({ reject: errors ? { status, detail, errors } : { status, detail } })
 const invalid = (path: string, message: string): Decision => reject(400, message, [{ path, message }])
 
-/** The kinds that decide a pickup's outcome, by command. */
 const OUTCOME_COMMANDS: Readonly<Partial<Record<DriverCommandKind, PickupCommand>>> = { "complete-pickup": "complete", "skip-pickup": "skip", "fail-pickup": "fail" }
 
 /** The commands whose result is the proof `decide` appends under the command's id: an arrival, a stop's outcome, a problem and each kind of evidence. `start-route` and `end-route` append one too, but answer the session and the route. */
 export const PROOF_COMMAND_KINDS = ["arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-volume"] as const satisfies readonly DriverCommandKind[]
-/** The proof each outcome command appends. */
 const OUTCOME_PROOFS: Readonly<Record<PickupCommand, ProofKind>> = { complete: "completion", skip: "skip", fail: "failure" }
-/** The event each outcome is worth. */
 const OUTCOME_EVENTS = { completed: "pickup-completed", skipped: "pickup-skipped", failed: "pickup-failed" } as const satisfies Record<PickupOutcome, OutboxKind>
 
-/** A proof draft of the kind, with the command's id and instant, the columns the body did not give null. */
 function proof(command: Command, kind: ProofKind, fields: Partial<Omit<ProofDraft, "id" | "kind" | "occurredAt">> & Located): ProofDraft {
   return {
     id: command.id,

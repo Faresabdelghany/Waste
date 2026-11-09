@@ -31,19 +31,14 @@ export const TEAM_MODULE = moduleAt("service-providers.service-provider-workspac
 /** The provider `/me` names, as the shell reads it: null for an office account. */
 export type ProviderOfMe = { id: string; legalName: string }
 
-/** What the shell reads off `/me`: whose workspace it is, and who acts in it. What its role allows is `useGrants`'s. */
+/** What the shell reads off `/me`: whose workspace it is. Who acts in it is the shell's (`actorNameOf`), what its role allows `useGrants`'s. */
 export type ProviderWorkspace = {
   /** The provider's server id. */
   providerId: string
   legalName: string
-  /** The account's name, which the forms stamp as the actor. */
-  actorName: string
 }
 
-type MeOfProvider = {
-  user: { fullName: string }
-  serviceProvider: ProviderOfMe | null
-}
+type MeOfProvider = { serviceProvider: ProviderOfMe | null }
 
 /** The workspace `/me` describes, or null for an account that is no provider's. */
 export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null {
@@ -51,7 +46,6 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
   return {
     providerId: me.serviceProvider.id,
     legalName: me.serviceProvider.legalName,
-    actorName: me.user.fullName,
   }
 }
 

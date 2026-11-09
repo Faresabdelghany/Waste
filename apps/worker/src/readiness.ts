@@ -41,7 +41,6 @@ export async function countStale(count: () => Promise<number>, { timeoutMs = CHE
   )
 }
 
-/** What the boss probe reads: the instance, the queues the registry put on it, whether the process has it started right now, and, where the worker has one, the dead-letter queue whose waiting jobs a ready body carries as `deadLetters`. */
 export type BossProbe = {
   boss: Pick<PgBoss, "getQueues">
   queues: readonly string[]
@@ -54,7 +53,6 @@ export async function checkBoss({ boss, queues, isStarted, deadLetterQueue }: Bo
   if (!isStarted()) return { boss: "stopped" }
   return bounded<BossCheck>(
     Promise.resolve().then(async () => {
-      // One read: the registered queues and, where named, the dead-letter queue beside them (once, should a job ever list it among its own).
       const asked = deadLetterQueue === undefined || queues.includes(deadLetterQueue) ? [...queues] : [...queues, deadLetterQueue]
       const rows = await boss.getQueues(asked)
       const failedJobs = rows.filter((queue) => queues.includes(queue.name)).reduce((count, queue) => count + queue.failedCount, 0)

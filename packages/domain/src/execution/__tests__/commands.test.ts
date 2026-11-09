@@ -71,7 +71,6 @@ const pickup = (over: Partial<PickupState> = {}): PickupState => ({ id: PICKUP, 
 const truck: VehicleState = { id: VEHICLE, label: "WH-24", kind: "powered-vehicle", status: "active", requiredLicenceClass: "c" }
 const trailer: VehicleState = { id: TRAILER, label: "WH-T3", kind: "trailer", status: "active", requiredLicenceClass: "ce" }
 
-/** The rows an active route's driver sees, with the pickup planned. */
 const running = (over: Partial<Lookups> = {}): Lookups => ({
   companyId: COMPANY,
   route: route("active"),
@@ -84,7 +83,6 @@ const running = (over: Partial<Lookups> = {}): Lookups => ({
   fractionKnown: true,
   ...over,
 })
-/** The rows a ready route's driver sees before starting it. */
 const readyToStart = (over: Partial<Lookups> = {}): Lookups => running({ route: route("ready"), session: undefined, driverOpenOn: undefined, pickup: undefined, vehicle: truck, trailer, ...over })
 
 const command = <Kind extends Command["kind"]>(kind: Kind, body: Extract<Command, { kind: Kind }>["body"], occurredAt = EARLIER): Extract<Command, { kind: Kind }> =>
@@ -93,12 +91,10 @@ const command = <Kind extends Command["kind"]>(kind: Kind, body: Extract<Command
 const point = { type: "Point" as const, coordinates: [12.5951, 55.7089] as [number, number] }
 const KEY = objectKeyOf({ companyId: COMPANY, routeId: ROUTE, commandId: COMMAND }, "jpg")
 
-/** The rejection of a decision, or a failed assertion. */
 const rejected = (decision: Decision) => {
   assert.ok("reject" in decision, `applied: ${JSON.stringify(decision)}`)
   return decision.reject
 }
-/** The effects of a decision, or a failed assertion. */
 const applied = (decision: Decision) => {
   assert.ok("apply" in decision, `rejected: ${JSON.stringify(decision)}`)
   return decision.apply
@@ -251,7 +247,6 @@ describe("decide: every later command", () => {
     assert.deepEqual(decision, { apply: [], note: ROUTE_CANCELLED_NOTHING_TO_END })
     assert.equal(ROUTE_CANCELLED_NOTHING_TO_END, "The route was cancelled; nothing to end")
     assert.deepEqual(rejected(decide(command("end-route", {}), mads, running({ route: route("completed"), session: session({ endedAt: NOW }) }), clock)), { status: 409, detail: notActive("RC-1042") })
-    // Every other command on the cancelled route is still refused as not active.
     assert.deepEqual(rejected(decide(command("pause", {}), mads, cancelled, clock)), { status: 409, detail: notActive("RC-1042") })
     // And with the session ended by the cancellation, the driver starts the next route.
     assert.equal(routeCancellation("active").endsSession, true)
@@ -418,7 +413,6 @@ describe("decide: the body", () => {
 })
 
 describe("decide: record-positions (O8 of #290)", () => {
-  /** A fix that many seconds after the request's instant, at the harbour. */
   const fixAt = (ms: number): PositionFix => ({ at: shifted(ms), location: point, accuracyM: 12 })
   const positions = (...points: PositionFix[]) => command("record-positions", { points }, points.at(-1)?.at ?? EARLIER)
 

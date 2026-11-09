@@ -9,7 +9,8 @@
 //
 // A plan reads, for the project, every subscription whose product is sold by
 // the month, under an agreement with a cadence that was not called off
-// (`cancelled`; a draft's charge is blocked `agreement-draft`, as its pickups
+// (`manual` is billed by hand, `cancelled` not at all; a draft's charge is
+// blocked `agreement-draft`, as its pickups
 // are, until it is signed and repriced), in force on some day of the run's
 // window — the run's period and the day after it — with its agreement's
 // period and its pauses; for each charge period the run charges
@@ -170,5 +171,4 @@ export async function mintRecurringCharges(tx: Tx, scope: Scope, period: Billing
   return written
 }
 
-/** The charges one insert writes. */
 const MINT_CHUNK = 1000

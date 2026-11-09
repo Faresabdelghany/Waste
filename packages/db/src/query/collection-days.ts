@@ -37,13 +37,11 @@ import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeas
 import { readProjectCalendar } from "./project-clock"
 import { validOn } from "./valid-on"
 
-/** A project's property, as a search names it. */
 export type ScopedProject = { companyId: string; projectId: string }
 
 /** What the domain plans a property's days from: the project's calendar and the schemes whose groups collect its containers. */
 export type CollectionDayInputs = { calendar: SchemeCalendar; schemes: ServingScheme[] }
 
-/** The most addresses one search answers with. */
 export const ADDRESS_MATCHES_MAX = 10
 
 /**
@@ -139,7 +137,6 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
   if (placementsOf.size === 0) return { calendar, schemes: [] }
   const containerIds = [...placementsOf.keys()]
 
-  // Which groups collect which of the containers: a manual group by its list, a rule group by its latest match.
   const listed = await tx
     .select({ groupId: collectionGroupContainer.collectionGroupId, containerId: collectionGroupContainer.containerId })
     .from(collectionGroupContainer)

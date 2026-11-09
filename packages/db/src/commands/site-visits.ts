@@ -60,13 +60,11 @@ import { fractionsOf, siteVisitOf, visitColumns, type VisitRow } from "../shapes
 export const NOT_A_CENTRE = "Not a recycling centre of this project"
 /** What a fraction the site does not take is told, at its place in `wasteFractionIds`. */
 export const NOT_TAKEN_HERE = "The site does not take this fraction"
-/** What a Property that is not the project's is told. */
 export const NOT_A_PROPERTY = "Not a property of this project"
 /** What a gate's read is told whose external id an earlier read at another project or site already took. */
 export const EXTERNAL_ID_TAKEN = "This external id was already recorded for a visit at another site; a gate names each read once"
 /** `site_visit_external_id_idx`: a gate's read is one visit (ADR-0011). */
 const ONE_VISIT_PER_READ = "site_visit_external_id_idx"
-/** What a check-in at a site that is not open for visits is told. */
 export const siteNotActive = (status: string): string => `The recycling centre is ${status}; visits are checked in at an active one`
 
 /** The holder a visit's row names, as the domain reads it; null where it reached nobody. */
@@ -133,7 +131,6 @@ export async function visitRuleOn(tx: Tx, scope: Scope, day: string): Promise<Vi
   return ruleOn(rules, day)
 }
 
-/** Rules as the domain reads them, their ladders by position and their free fractions read beside them. */
 export async function visitRuleFactsOf(tx: Tx, companyId: string, rows: readonly (typeof visitRule.$inferSelect)[]): Promise<VisitRuleFacts[]> {
   const { ladders, freeFractions } = await ruleSetsOf(
     tx,
@@ -154,7 +151,6 @@ export async function visitRuleFactsOf(tx: Tx, companyId: string, rows: readonly
   }))
 }
 
-/** Each rule's ladder by position and its free fractions, by rule. */
 export async function ruleSetsOf(tx: Tx, companyId: string, ruleIds: readonly string[]): Promise<{ ladders: Map<string, string[]>; freeFractions: Map<string, string[]> }> {
   const ladders = new Map<string, string[]>()
   const freeFractions = new Map<string, string[]>()
@@ -174,7 +170,6 @@ export async function ruleSetsOf(tx: Tx, companyId: string, ruleIds: readonly st
   return { ladders, freeFractions }
 }
 
-/** The admitted visits not voided of a project matching `where`, as the domain reads them. */
 async function admittedVisits(tx: Tx, scope: Scope, where: ReturnType<typeof and>): Promise<VisitFacts[]> {
   const rows = await tx
     .select({ id: siteVisit.id, occurredAt: siteVisit.occurredAt, serviceDate: siteVisit.serviceDate, propertyId: siteVisit.propertyId, customerId: siteVisit.customerId, agreementId: siteVisit.agreementId })
@@ -301,7 +296,6 @@ async function siteStatusOf(tx: Tx, scope: Scope, siteId: string, fractionIds: r
   return site.status
 }
 
-/** The visit an earlier read of the gate recorded under its id, if any. */
 async function visitByExternalId(tx: Tx, companyId: string, source: SiteVisitSource, externalId: string): Promise<VisitRow | undefined> {
   const [row] = await tx
     .select(visitColumns)

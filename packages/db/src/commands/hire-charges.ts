@@ -196,5 +196,4 @@ export async function mintHireCharges(tx: Tx, scope: Scope, period: BillingPerio
   return written
 }
 
-/** The hires one insert writes. */
 const MINT_CHUNK = 1000

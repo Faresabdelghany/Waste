@@ -153,7 +153,6 @@ export type PriceListRowCreate = z.infer<typeof PriceListRowCreate>
 export const PriceListRowPatch = priceListRowBodies.patch
 export type PriceListRowPatch = z.infer<typeof PriceListRowPatch>
 
-/** A page of lists: one project's, in force on a day, the default one. */
 export const PriceListListQuery = ProjectScopedListQuery.extend({
   /** The day the period is read against; absent asks for every list, whenever it ran. */
   validOn: IsoDate.optional(),

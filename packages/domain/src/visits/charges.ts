@@ -250,7 +250,6 @@ export const oneHolder = (value: { customerId?: string | null; agreementId?: str
 /** What a credential with no holder, half a business's, or both is told, at the Property. */
 export const ONE_HOLDER = "A credential is a business's — its customer and the agreement its visits are charged to — or a household's Property, exactly one"
 
-/** The most fractions one visit brings. */
 export const VISIT_FRACTIONS_MAX = 50
 
 /** What a check-in's fractions naming one twice is told. */

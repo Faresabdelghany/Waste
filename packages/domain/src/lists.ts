@@ -4,7 +4,6 @@
 // non-empty tuple, which a database column (`text({ enum })`, its `oneOf`
 // check) and a wire enum (`z.enum`) read alike.
 
-/** Every value of `list` but `out`, in `list`'s order. */
 export function without<const List extends readonly [string, ...string[]], const Out extends List[number] = never>(list: List, ...out: readonly Out[]): readonly [Exclude<List[number], Out>, ...Exclude<List[number], Out>[]] {
   const kept = list.filter((value) => !(out as readonly string[]).includes(value))
   if (kept.length === 0) throw new Error(`a subset of ${list.join(", ")} keeps no value`)

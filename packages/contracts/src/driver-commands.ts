@@ -71,7 +71,6 @@ import { TankKind, TankOutlet } from "./tanks"
 import { Label, Paragraph } from "./text"
 import { bothGrossAndTare, netIsGrossLessTare, Unload, UnloadRefusal } from "./unloads"
 
-/** What every command says about itself: the device's id for it, the route, when, and which installation. */
 const envelope = {
   /** Minted by the device: the idempotency key, and the id of the row the command makes. */
   id: Id,
@@ -88,7 +87,6 @@ const located = {
   accuracyM: PositiveInt.optional(),
 }
 
-/** One command kind: the envelope with its literal kind and its body. */
 const commandOf = <Kind extends DriverCommandKind, Body extends z.ZodType>(kind: Kind, body: Body) => z.strictObject({ ...envelope, kind: z.literal(kind), body })
 
 /**
@@ -189,7 +187,6 @@ export const RecordFill = commandOf("record-fill", COMMAND_BODIES["record-fill"]
 
 export const RecordVolume = commandOf("record-volume", COMMAND_BODIES["record-volume"])
 
-/** One command of any kind: the envelope and the body its kind takes. */
 export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, RecordFill, RecordVolume])
 export type DriverCommand = z.infer<typeof DriverCommand>
 
@@ -283,7 +280,6 @@ export type DriverWasteFraction = z.infer<typeof DriverWasteFraction>
 /** `GET /driver/me`: the connected client's start screen, and what its commands pick from. */
 export const DriverMe = z.object({
   driver: Driver,
-  /** The session the driver is on, or null. */
   openSession: Session.nullable(),
   /** The routes assigned to the driver that are ready or active, or completed today. */
   routes: z.array(Route),
@@ -362,7 +358,6 @@ export const DriverRouteDetail = z
     pickups: z.array(DriverPickup),
     /** The active Plan's reading, or null: the driver door reads only the active Plan of a route assigned to them (#124 §5). */
     activePlan: ActivePlan.nullable(),
-    /** The open session, or null. */
     session: Session.nullable(),
     /** Every session, oldest first. */
     sessions: z.array(Session),

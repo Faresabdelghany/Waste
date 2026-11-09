@@ -40,7 +40,6 @@ export const WEIGHT_REVIEW_COLUMNS = {
   recordedAt: weightReview.recordedAt,
 }
 
-/** The alias the lookup joins under. */
 export const WEIGHT_REVIEW_STATE = "weight_review_state"
 
 /**

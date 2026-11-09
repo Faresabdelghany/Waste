@@ -48,7 +48,6 @@ describe("execution.purge-positions", { skip: roles.skip }, () => {
     withCompany(api.db, tenant.companyId, (tx) =>
       tx.insert(sessionPosition).values({ companyId: tenant.companyId, projectId: tenant.projectId, routeId: route.id, sessionId, driverId: tenant.driverId, fixedAt: daysAgo(days), location: POINT, accuracyM: 10 }),
     )
-  /** The days ago of every position left, oldest first. */
   const left = async (): Promise<number[]> => {
     const rows = await owner.db.select({ fixedAt: sessionPosition.fixedAt }).from(sessionPosition).orderBy(sessionPosition.fixedAt)
     return rows.map((row) => Math.round((NOW.getTime() - row.fixedAt.getTime()) / DAY_MS))

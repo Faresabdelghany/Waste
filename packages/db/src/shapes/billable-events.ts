@@ -12,9 +12,9 @@
 // precedent (query/asset-state.ts) — and the fold runs over the row in
 // `eventOf`, so a page, a single read, the answer to a command and the row a
 // write answers all say the same thing about where an event stands.
-// `statusIs` is the same fold as a `where`, the four readings as predicates
-// over the two subqueries and the two stamps, so a list filters by status in
-// SQL without a fifth way of saying what the columns say.
+// `statusIs` is the same fold as a `where`, the readings as predicates over
+// the two subqueries and the two stamps, so a list filters by status in SQL
+// without another way of saying what the columns say.
 //
 // Every kind, status and reason column is text with a CHECK in the database
 // and an enum on the wire, so the row's string is asserted to the
@@ -94,11 +94,9 @@ export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" 
   scaleTicketLineId: row.scaleTicketLineId,
 })
 
-/** The status the domain reads off a row and the two rows that may name it. */
 export const statusOf = (row: EventReading): BillableEventStatus =>
   billableEventStatus({ blockReason: row.blockReason, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null, heldAt: row.heldAt })
 
-/** The billable event on the wire, its status the fold over the reading. */
 export function eventOf(row: EventReading): BillableEvent {
   const status = statusOf(row)
   return {
@@ -120,7 +118,7 @@ export function eventOf(row: EventReading): BillableEvent {
     priceListRowId: row.priceListRowId,
     blockReason: row.blockReason,
     links: linksOf(row),
-    // The four are set together on a recurring charge and on nothing else (billable_event_charge_shape).
+    // The four are set together on a recurring charge and a hire, and on nothing else (billable_event_charge_shape).
     charge:
       row.chargePeriodFrom === null || row.chargePeriodTo === null || row.chargedDays === null || row.periodDays === null
         ? null
@@ -176,8 +174,8 @@ type Naming = Pick<ReturnType<typeof eventsFrom>, "line" | "reversing">
  * The reading as a `where`: the domain's fold with the later fact winning,
  * spelled over the two LATERAL columns and the two stamps — `reversed` is a
  * reversal naming it; `invoiced` a line and no reversal; `cancelled` the stamp
- * and neither; `blocked` the reason and none of those; `ready` none of the
- * four — so `GET /billable-events?status=` answers exactly the rows `eventOf`
+ * and neither; `blocked` the reason and none of those; `held` the hold and
+ * none of those; `ready` none of the five — so `GET /billable-events?status=` answers exactly the rows `eventOf`
  * would read as that status, and the consumer's "live event" is `blocked` or
  * `ready` spelled the same way.
  */

@@ -39,7 +39,6 @@ import { alias } from "drizzle-orm/pg-core"
 
 import { definePlanJob, positionOf, type Gathered } from "./plan-job"
 
-/** The first transaction: the trip's points in driving order, or the sentence that ends the Plan. */
 async function gather(tx: Tx, keys: { planId: string; companyId: string; provider: string }): Promise<Gathered<Position2D[]>> {
   const { planId } = keys
   const [found] = await tx.select({ status: plan.status, solver: plan.solver, trip: plan.trip, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId))

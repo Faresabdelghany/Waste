@@ -63,6 +63,7 @@ import {
   type BusinessViewOptions,
 } from "@/components/platform/business-view-options-popover"
 import { RecordSearchInput } from "@/components/platform/record-search-input"
+import { useActorName } from "@/components/platform/shell-identity"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
@@ -106,8 +107,8 @@ import { formatShortDay, isIsoDate } from "@waste/domain/days"
 import { count } from "@waste/domain/text"
 import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
-const ACTOR_NAME = "Olivia Larsen"
 
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"
@@ -157,6 +158,8 @@ type ListDialogState = { mode: "create"; country?: string } | { mode: "edit"; re
 
 export function HolidayListsSettings() {
   const { upsertRecord, sendAction, refreshModule } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const [openListId, setOpenListId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<ListDialogState | null>(null)
 
@@ -184,7 +187,7 @@ export function HolidayListsSettings() {
   const submitListDialog = (draft: HolidayListDraft, startWith: readonly HolidayEntry[]) => {
     if (!dialog) return
     if (dialog.mode === "create") {
-      const record = createHolidayListRecord(draft, startWith, { actorName: ACTOR_NAME })
+      const record = createHolidayListRecord(draft, startWith, { actorName })
       saveList(record, `${record.name} added`, (row) => {
         setDialog(null)
         setOpenListId(row.id)
@@ -217,14 +220,7 @@ export function HolidayListsSettings() {
 
   // The module whose problem the pane says, the projects first.
   const blocked = organisation.problem !== null ? organisation : calendars
-  const notReadyMessage =
-    organisation.pending || calendars.pending
-      ? "Reading the holiday lists from the API…"
-      : blocked.notGranted
-        ? "The holiday lists are not shown to your role."
-        : blocked.problem
-          ? `The holiday lists could not be read from the API: ${blocked.problem.detail ?? blocked.problem.title}`
-          : null
+  const notReadyMessage = moduleReadSentence({ pending: organisation.pending || calendars.pending, notGranted: blocked.notGranted, problem: blocked.problem }, "holiday lists")
   const notReadyHint = blocked.notGranted ? blocked.problem?.detail : undefined
   const listedCountries = new Set(lists.map((record) => holidayListCountry(record) ?? ""))
 

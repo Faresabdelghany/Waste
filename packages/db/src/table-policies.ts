@@ -75,7 +75,6 @@ export const AUDITED: readonly Audited[] = TABLES.flatMap((table) => {
   ]
 })
 
-/** The tables the log does not keep: a ledger in its own words or the ledger's, every other table as it declares. */
 export const EXEMPT: readonly Exempt[] = TABLES.flatMap((table) => {
   const why = declared(table)?.exempt ?? (isLedger(table) ? LEDGER : undefined)
   return why === undefined ? [] : [{ table, why }]
@@ -90,7 +89,6 @@ export const PUBLIC_DOOR_TABLES: readonly PublicDoorTable[] = TABLES.flatMap((ta
   return door === undefined ? [] : [{ table, ...door }]
 })
 
-/** The tables that carry document counters, and the counters. */
 export const COUNTERS: readonly { table: PgTable; counters: Counters }[] = TABLES.flatMap((table) => {
   const counters = declared(table)?.counters
   return counters === undefined ? [] : [{ table, counters }]

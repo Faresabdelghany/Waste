@@ -3,7 +3,7 @@
 // pickup statuses are #97 §2's, verbatim, since generation writes what these
 // rows read; the driver's reasons and the closing reasons are values of the
 // reason list and together with the two the system writes otherwise make the
-// whole of it; the ten proof kinds are five events, four kinds of evidence and
+// whole of it; the thirteen proof kinds are seven events, five kinds of evidence and
 // the correction; and every command kind is a kebab token the prototype's
 // action list can be mapped onto, less the two that are not commands.
 import assert from "node:assert/strict"

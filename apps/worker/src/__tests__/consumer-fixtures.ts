@@ -138,7 +138,6 @@ export async function seedConsumerTenant(pool: Database): Promise<ConsumerTenant
   return tenant
 }
 
-/** A route as a test names it: its id, its number and label, and its pickups in position order. */
 export type SeededRoute = { id: string; number: number; label: string; pickupIds: string[]; collectionGroupId: string }
 
 export type RouteSeed = {
@@ -153,7 +152,6 @@ export type RouteSeed = {
 /** One stop: a bin, or none for an address-only stop; generation's unless said, and an address-only one is always the office's. */
 export type StopSeed = { container: "bin1" | "bin2" | null; status: PickupStatus; reason?: PickupReason; note?: string; origin?: PickupOrigin }
 
-/** The place a stop is at: Parkvej for the first bin, Havnegade for the second and for an address-only stop. */
 const placeOf = (tenant: ConsumerTenant, container: StopSeed["container"]) => (container === "bin1" ? tenant.properties.parkvej : tenant.properties.havnegade)
 
 /** The stamps a status carries (`route_stamps_shape`) and the actual assignment (`route_actual_shape`): a started route has Mads on it, a cancelled one nobody. */

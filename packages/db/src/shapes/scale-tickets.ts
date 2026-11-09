@@ -89,7 +89,6 @@ export const scaleTicketOf = (row: ScaleTicketRow, lines: readonly ScaleLineRow[
   recordedBy: row.recordedBy,
 })
 
-/** The tickets with their lines, in position order, read in one statement. */
 export async function scaleTicketsOf(tx: Tx, companyId: string, rows: readonly ScaleTicketRow[]): Promise<ScaleTicket[]> {
   if (rows.length === 0) return []
   const lines = await tx

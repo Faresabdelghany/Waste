@@ -111,11 +111,9 @@ export function routeTransition(status: RouteStatus, command: RouteCommand, labe
   }
 }
 
-/** The driver's three ways of deciding a stop. */
 export const PICKUP_COMMANDS = ["complete", "skip", "fail"] as const
 export type PickupCommand = (typeof PICKUP_COMMANDS)[number]
 
-/** The status each driver command moves a planned pickup to. */
 export const PICKUP_OUTCOME_OF: Readonly<Record<PickupCommand, PickupOutcome>> = { complete: "completed", skip: "skipped", fail: "failed" }
 
 /** A second outcome for a pickup that has one: the first stands. */
@@ -123,7 +121,6 @@ export const alreadyDecided = (position: number, status: PickupOutcome): string 
 /** A correction of a pickup nobody has decided yet. */
 export const nothingToCorrect = (position: number): string => `Pickup ${position} has no outcome to correct`
 
-/** The pickup machine under the driver's commands: a planned pickup takes the outcome, any other keeps the one it has. */
 export function pickupTransition(status: PickupStatus, command: PickupCommand, position: number): Transition<PickupStatus> {
   if (status === "planned") return { kind: "move", to: PICKUP_OUTCOME_OF[command] }
   return { kind: "refuse", sentence: alreadyDecided(position, status) }
@@ -138,7 +135,6 @@ export function pickupCorrection(status: PickupStatus, outcome: PickupOutcome, p
 /** What a route's end or cancellation does to its open pickups: skipped, with the reason saying which. */
 export type PickupClosing = { status: "skipped"; reason: ClosingReason }
 
-/** The reason a route's end or cancellation writes on the pickups it closes. */
 export const closingReasonOf = (command: "end" | "cancel"): ClosingReason => (command === "end" ? CLOSING_REASONS[0] : CLOSING_REASONS[1])
 
 /**

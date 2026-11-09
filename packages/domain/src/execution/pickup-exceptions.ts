@@ -113,7 +113,6 @@ export function ruleFor(rules: readonly PickupExceptionRuleFacts[], stop: Pickup
     .sort((a, b) => specificity(b) - specificity(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0]
 }
 
-/** Whether `earlier` comes before `stop` in the ladder's order: by service date, then by id. */
 const before = (earlier: PickupExceptionStop, stop: PickupExceptionStop): boolean => earlier.serviceDate < stop.serviceDate || (earlier.serviceDate === stop.serviceDate && earlier.id < stop.id)
 
 /**

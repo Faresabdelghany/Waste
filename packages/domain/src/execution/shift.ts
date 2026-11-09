@@ -55,7 +55,6 @@ export function timeOfDay(seconds: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
 }
 
-/** Whether a window closes after it opens. */
 export const windowIsOrdered = (window: TimeWindow): boolean => secondsOfDay(window.to) > secondsOfDay(window.from)
 
 /** What is wrong with a shift, in the sentence the wire answers with, and the member it is about; null for a shift that holds. */
@@ -91,7 +90,6 @@ export function stopWindow(windows: readonly (TimeWindow | null)[]): TimeWindow 
 /** The seconds of the day a window spans, as the optimiser reads it. */
 export const windowSeconds = (window: TimeWindow): [number, number] => [secondsOfDay(window.from), secondsOfDay(window.to)]
 
-/** When a route leaves: its planned start, or its driver's shift's start without one; null where neither says. */
 export function departureOf(plannedStartTime: string | null, shift: DriverShift | null): string | null {
   if (plannedStartTime !== null) return timeOfDay(secondsOfDay(plannedStartTime))
   return shift === null ? null : shift.from

@@ -39,7 +39,6 @@ type PickupExceptionsRows = {
   contaminantCodeFractions: (typeof contaminantCodeFraction.$inferInsert)[]
 }
 
-/** How many rows the codes hold per table. */
 export type PickupExceptionsCounts = { [K in keyof PickupExceptionsRows]: number }
 
 function build(): { ids: PickupExceptionsIds; rows: PickupExceptionsRows } {
@@ -69,7 +68,6 @@ function build(): { ids: PickupExceptionsIds; rows: PickupExceptionsRows } {
 
 const built = build()
 
-/** Every contaminant-code id the seed writes. */
 export const PICKUP_EXCEPTIONS_IDS: PickupExceptionsIds = built.ids
 
 const PICKUP_EXCEPTIONS_ROWS: Readonly<PickupExceptionsRows> = built.rows

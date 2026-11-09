@@ -56,20 +56,13 @@ function resolverOf(rows: readonly [BusinessRecord, string][]): Resolver {
 const context = (resolve: Resolver): MappingContext => ({ resolve })
 
 describe("the shell reads /me", () => {
-  test("a provider's account is its provider's workspace, acted in by its name", () => {
-    const workspace = providerWorkspaceOf({
-      user: { fullName: "Lars Mikkelsen" },
-      serviceProvider: { id: providerId, legalName: "NordRen ApS" },
-    })
-    assert.deepEqual(workspace, {
-      providerId,
-      legalName: "NordRen ApS",
-      actorName: "Lars Mikkelsen",
-    })
+  test("a provider's account is its provider's workspace", () => {
+    const workspace = providerWorkspaceOf({ serviceProvider: { id: providerId, legalName: "NordRen ApS" } })
+    assert.deepEqual(workspace, { providerId, legalName: "NordRen ApS" })
   })
 
   test("an office account has no provider's workspace", () => {
-    assert.equal(providerWorkspaceOf({ user: { fullName: "Olivia Larsen" }, serviceProvider: null }), null)
+    assert.equal(providerWorkspaceOf({ serviceProvider: null }), null)
   })
 })
 

@@ -36,7 +36,6 @@ import { resolveKey } from "./key"
 const HELPER = "excludeOverlapping"
 /** The suffix of the constraint's name. */
 export const NO_OVERLAP = "no_overlap"
-/** The range this helper spells its constraint over. */
 const VALIDITY_RANGE = { columns: ["valid_from", "valid_to"], noun: "period", set: "validity" } as const
 
 /** The statement that adds the exclusion constraint for this business key, for the table's migration file. */

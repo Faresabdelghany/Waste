@@ -75,7 +75,6 @@ import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
 import { effectiveDated } from "./validity"
 
-/** A person or an organisation. */
 export const CustomerKind = z.enum(CUSTOMER_KINDS)
 export type CustomerKind = z.infer<typeof CustomerKind>
 
@@ -91,19 +90,15 @@ export type PropertyKind = z.infer<typeof PropertyKind>
 export const PropertyStatus = z.enum(PROPERTY_STATUSES)
 export type PropertyStatus = z.infer<typeof PropertyStatus>
 
-/** What a Customer is to a Property. */
 export const PropertyPartyRole = z.enum(PROPERTY_PARTY_ROLES)
 export type PropertyPartyRole = z.infer<typeof PropertyPartyRole>
 
-/** Why the Property Group exists. */
 export const PropertyGroupPurpose = z.enum(PROPERTY_GROUP_PURPOSES)
 export type PropertyGroupPurpose = z.infer<typeof PropertyGroupPurpose>
 
-/** Whether the Property Group is in use. */
 export const PropertyGroupStatus = z.enum(PROPERTY_GROUP_STATUSES)
 export type PropertyGroupStatus = z.infer<typeof PropertyGroupStatus>
 
-/** What a Property is to its Group. */
 export const PropertyGroupMemberRole = z.enum(PROPERTY_GROUP_MEMBER_ROLES)
 export type PropertyGroupMemberRole = z.infer<typeof PropertyGroupMemberRole>
 
@@ -127,18 +122,15 @@ export type SharedCollectionPointBillingMode = z.infer<typeof SharedCollectionPo
 export const SharedCollectionPointStatus = z.enum(SHARED_COLLECTION_POINT_STATUSES)
 export type SharedCollectionPointStatus = z.infer<typeof SharedCollectionPointStatus>
 
-/** What a Property is to the Shared Collection Point it is a member of. */
 export const SharedCollectionPointMemberRole = z.enum(SHARED_COLLECTION_POINT_MEMBER_ROLES)
 export type SharedCollectionPointMemberRole = z.infer<typeof SharedCollectionPointMemberRole>
 
 /** A distance in whole metres; zero is not a distance. */
 const Metres = PositiveInt
 
-
 export const Customer = z.object({
   ...stamped,
   kind: CustomerKind,
-  /** A person's name or an organisation's. */
   name: Label,
   /** A CVR number in Denmark; null where there is none, which is most people. */
   registrationNumber: Label.nullable(),
@@ -184,7 +176,6 @@ export type ContactRole = z.infer<typeof ContactRole>
 /** Whether the Contact Person still speaks for their Customer; one who has left is made inactive, never deleted. */
 export const ContactStatus = z.enum(CONTACT_STATUSES)
 export type ContactStatus = z.infer<typeof ContactStatus>
-
 
 /**
  * A Contact Person (#291 C14): a named person who speaks for an organisation
@@ -315,7 +306,6 @@ export type PropertyPatch = z.infer<typeof PropertyPatch>
 export const PropertyPartiesSet = z.strictObject({ parties: PartiesBody }).refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyPartiesSet = z.infer<typeof PropertyPartiesSet>
 
-/** A page of properties, from one project and of one customer's. */
 export const PropertyListQuery = ProjectScopedListQuery.extend({
   /** The properties this customer is a party to, in any role. */
   customerId: Id.optional(),

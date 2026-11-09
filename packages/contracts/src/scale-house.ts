@@ -201,7 +201,6 @@ export const ScaleTicketVoid = z
   .refine(voidSaysWhy, { message: VOID_SAYS_WHY, path: ["note"] })
 export type ScaleTicketVoid = z.infer<typeof ScaleTicketVoid>
 
-/** A page of tickets: one project's, one site's, one standing's, one party's, one customer's. */
 export const ScaleTicketListQuery = ProjectScopedListQuery.extend({
   status: ScaleTicketStatus.optional(),
   unloadingStationId: Id.optional(),

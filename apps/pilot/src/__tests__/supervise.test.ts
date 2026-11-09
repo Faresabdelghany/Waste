@@ -41,7 +41,6 @@ const restartDelays = (lines: string[]) => lines.filter((line) => line.includes(
 
 type Run = { out: ReturnType<typeof collector>; err: ReturnType<typeof collector>; signals: EventEmitter; done: Promise<number>; pids: ChildPids[] }
 
-/** Runs the supervisor over `options`, then `body`; whatever `body` does, SIGTERM goes out and the run is awaited, so no child outlives its test. Answers the exit code. */
 async function supervised(options: Pick<SuperviseOptions, "api" | "worker" | "spawn">, body: (run: Run) => Promise<void>): Promise<number> {
   const out = collector()
   const err = collector()
@@ -90,7 +89,6 @@ describe("supervise", () => {
     const spawn: typeof nodeSpawn = ((command: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
       if (options.env?.PILOT_ROLE !== "worker") return nodeSpawn(command, args, options)
       workerSpawns += 1
-      // The first two runs die at once; the third lives past healthyAfterMs; the fourth dies at once again.
       const script = workerSpawns === 3 ? SCRIPTS.healthyThenExits : SCRIPTS.exitsAtOnce
       return nodeSpawn(command, ["-e", script], options)
     }) as typeof nodeSpawn

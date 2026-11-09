@@ -103,7 +103,6 @@ const NO_SUBJECT = { routeId: null, vehicleId: null, driverId: null, containerId
 /** Whole kilograms as a person reads them: 18,400. */
 const kilograms = (kg: number): string => String(kg).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 
-/** The alert a rule raises for one occurrence. */
 export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
   switch (occurrence.rule) {
     case "route-not-started":

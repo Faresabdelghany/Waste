@@ -39,7 +39,6 @@ import { endsAfterItStarts } from "./validity"
 /** The end of a settlement's period, required: the sentence for a missing one, zod's own for a malformed day. */
 const SettlementEnd = z.iso.date({ error: (issue) => (issue.input === undefined || issue.input === null ? A_PERIOD_ENDS : undefined) })
 
-/** A settlement: the resource its detail extends, its period's rule with it. */
 export const Settlement = z
   .object({
     ...stamped,
@@ -121,7 +120,6 @@ export type SettlementClose = z.infer<typeof SettlementClose>
 export const SettlementReopen = z.strictObject({ reason: Paragraph })
 export type SettlementReopen = z.infer<typeof SettlementReopen>
 
-/** A page of settlements: one project's, one assignment's, one provider's, of one status, covering a day. */
 export const SettlementListQuery = ProjectScopedListQuery.extend({
   serviceAreaAssignmentId: Id.optional(),
   /** The settlements of every assignment naming this provider. */
@@ -132,7 +130,6 @@ export const SettlementListQuery = ProjectScopedListQuery.extend({
 })
 export type SettlementListQuery = z.infer<typeof SettlementListQuery>
 
-/** A page of one settlement's history: by kind. */
 export const SettlementEventListQuery = PageRequest.extend({
   kind: SettlementEventKind.optional(),
 })

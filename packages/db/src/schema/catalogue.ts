@@ -16,7 +16,7 @@
 // nullable, since a fraction is collected before anyone files it, and the
 // waste-data report names a fraction without one with a warning.
 //
-// `service_frequency` is the domain's `ServiceFrequencyDefinition` as a table,
+// `service_frequency` is @waste/fixtures' `ServiceFrequencyDefinition` as a table,
 // and `service_frequency_shape` is its rule: a null `collections_per_week` is
 // on demand, and then neither interval may be given; `weeks_between` says once
 // a week or less often, `days_between` more often than that, and never both.

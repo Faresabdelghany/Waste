@@ -50,7 +50,6 @@ export const notATransferStation = (name: string): string => `${name} is not a t
 /** A dispute or a cancellation without its reason. */
 export const SAY_WHY = "Say why"
 
-/** What `command` does to a load in `status`. */
 export function outboundLoadTransition(status: OutboundLoadStatus, command: OutboundLoadCommand): Transition<OutboundLoadStatus> {
   if (status === "reconciled") return command === "reconcile" ? { kind: "stay" } : { kind: "refuse", sentence: loadDoesNotChange("reconciled") }
   if (status === "cancelled") return command === "cancel" ? { kind: "stay" } : { kind: "refuse", sentence: loadDoesNotChange("cancelled") }
@@ -67,7 +66,6 @@ export function outboundLoadTransition(status: OutboundLoadStatus, command: Outb
   }
 }
 
-/** Whether a load in `status` carries the receiving site's ticket. */
 export const isReceived = (status: OutboundLoadStatus): boolean => (RECEIVED_LOAD_STATUSES as readonly OutboundLoadStatus[]).includes(status)
 
 /** The receiving site's net against our out-weighing: the difference in kilograms, in percent of ours to one decimal, and whether that is within the tolerance. */

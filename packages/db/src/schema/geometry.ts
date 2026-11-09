@@ -77,7 +77,6 @@ function fail(type: ShapeName, message: string): never {
   throw new Error(`geometry.${type.toLowerCase()}: ${message}`)
 }
 
-/** Finite ordinates only, a trailing undefined altitude dropped. */
 const cleanPosition = (type: ShapeName, position: Position): Position => {
   const kept = position.length === 3 && position[2] === undefined ? position.slice(0, 2) : position
   if (kept.length < 2 || kept.length > 3) fail(type, `a position has two or three ordinates, not ${kept.length}`)

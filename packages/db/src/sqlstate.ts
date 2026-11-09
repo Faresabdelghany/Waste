@@ -33,7 +33,6 @@ export function sqlstate(error: unknown): { code: string; constraint?: string } 
   return undefined
 }
 
-/** The constraint a failed statement names, when it failed this way and Postgres named one. */
 export function constraintOf(error: unknown, code: string): string | undefined {
   const failed = sqlstate(error)
   return failed?.code === code ? failed.constraint : undefined

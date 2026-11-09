@@ -72,6 +72,5 @@ export type VisitRuleCreate = z.infer<typeof VisitRuleCreate>
 export const VisitRulePatch = visitRuleBodies.patch
 export type VisitRulePatch = z.infer<typeof VisitRulePatch>
 
-/** A page of rules: one project's, in force on a day where `validOn` says. */
 export const VisitRuleListQuery = ProjectScopedListQuery.extend({ validOn: IsoDate.optional() })
 export type VisitRuleListQuery = z.infer<typeof VisitRuleListQuery>

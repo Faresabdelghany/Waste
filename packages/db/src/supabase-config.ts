@@ -43,7 +43,6 @@ export const postgresMajor = (file: string = SUPABASE_CONFIG_FILE): number => wh
 /** `[auth] minimum_password_length`: the shortest password Auth accepts. */
 export const minimumPasswordLength = (file: string = SUPABASE_CONFIG_FILE): number => wholeNumber("auth.minimum_password_length", file)
 
-/** `[auth] signing_keys_path`, resolved against the file's folder. */
 export const signingKeysPath = (file: string = SUPABASE_CONFIG_FILE): string => resolve(dirname(file), setting("auth.signing_keys_path", file))
 
 /** The volume the CLI keeps the local database in, named after `project_id`. */

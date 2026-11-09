@@ -150,7 +150,6 @@ export const SiteVisit = z.object({
 })
 export type SiteVisit = z.infer<typeof SiteVisit>
 
-/** The fractions a visit brought: each once. */
 const VisitFractionIds = z
   .array(Id)
   .max(VISIT_FRACTIONS_MAX)

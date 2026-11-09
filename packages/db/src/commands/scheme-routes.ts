@@ -35,7 +35,6 @@ export async function lockSchemeRoutes(tx: Tx, companyId: string, schemeId: stri
     .for("update")
 }
 
-/** The open stops of the planned routes, the office's among them. */
 export async function openStopsOf(tx: Tx, companyId: string, plannedRouteIds: readonly string[]): Promise<{ id: string; routeId: string; origin: string }[]> {
   if (plannedRouteIds.length === 0) return []
   return await tx
@@ -63,7 +62,6 @@ export async function cancelRoutesByGeneration(tx: Tx, companyId: string, routeI
     .where(and(eq(route.companyId, companyId), inArray(route.id, [...routeIds])))
 }
 
-/** Skips open stops the scheme no longer plans, by regeneration with the sentence. */
 export async function skipStopsByGeneration(tx: Tx, companyId: string, pickupIds: readonly string[], note: string, at: Date): Promise<void> {
   if (pickupIds.length === 0) return
   await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...pickupIds])))

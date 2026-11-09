@@ -1,5 +1,5 @@
 // The worker's alert rules (O4 of #290): every few minutes, across companies,
-// the four conditions — seven since O8, O26 and O20, below — the office should hear of without anyone raising them
+// the four conditions — eleven since O8, O26, O20 and M17, below — the office should hear of without anyone raising them
 // — a route still waiting half an hour after its planned start, a running
 // route's device silent for a quarter of an hour, an active driver's licence
 // within a month of running out or run out, and an open ticket past its due
@@ -25,7 +25,7 @@
 // the raise statements read only the occurrences no alert names yet,
 // and the clear statement only the open rule alerts whose condition no longer
 // holds, each with the few columns an alert or a resolution needs, so a quiet
-// tick reads eight empty results. They read across companies as `wms_worker`,
+// tick reads twelve empty results. They read across companies as `wms_worker`,
 // one after another, since the Pilot's worker pool is two connections the
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route
@@ -99,14 +99,6 @@
 //   judged: nothing says it was to tip.
 // Each is about its load, or its route, and our vehicle and driver where there
 // are any (@waste/domain/resolution/alert-rules).
-//
-// Each rule is one entry of `RULES`, spelled once for the raise and the
-// clear: its subject's rows (`from`, and how an alert names the subject), its
-// key at the tick, the condition its alert stands on (`holds`), and, for the
-// raise, when a condition that holds is news — a grace passed, inside the
-// lookback — and what its alert says. The raise reads where the condition
-// holds, it is news, and no alert holds the key; the clear reads the open
-// alerts whose subject no longer holds under the same key.
 import { routeLabel, ticketLabel } from "@waste/domain/numbering"
 import type { Database } from "@waste/db/client"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
@@ -126,13 +118,11 @@ export const ALERT_RULES_QUEUE = "resolution.alert-rules"
 export const ALERT_RULES_SCHEDULE = "*/5 * * * *"
 
 export type AlertRulesData = {
-  /** Where the tick came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
 /** One occurrence to raise, with the company and project its alert is of, and, for a filling whose pairing books one, the emptying to book on the project's today. */
 export type RaisedOccurrence = { companyId: string; projectId: string; ruleKey: string; occurrence: RuleOccurrence; books?: { containerId: string; today: string; note: string } }
-/** One rule alert to resolve. */
 export type ClearedAlert = { companyId: string; alertId: string; rule: AlertRule }
 
 const OPEN_TICKETS = sql.join(
@@ -142,9 +132,7 @@ const OPEN_TICKETS = sql.join(
 
 /** The project every rule's statement joins as `p`, whose clock its days and times are read on. */
 const PROJECT_ZONE = sql`p.timezone`
-/** The tick's instant as a day on the project's clock. */
 const todayOn = (now: SQL) => dayOnClock(now, PROJECT_ZONE)
-/** A route's planned start as an instant: its start on its operating date, on the project's clock. */
 const PLANNED_START = instantOnClock(sql`r.operating_date`, PROJECT_ZONE, sql`r.planned_start_time`)
 
 /** A session's newest fix, one backward probe into its track's index. */
@@ -154,11 +142,9 @@ const LAST_RESUME = sql`(select max(dc.occurred_at) from wms.driver_command dc w
 
 /** A pairing's newest reading's fill, one backward probe into its index. */
 const NEWEST_FILL = sql`(select fr.fill_percent from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id order by fr.measured_at desc limit 1)`
-/** When that newest reading was measured. */
 const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id)`
 /** The pairing's newest reading below its threshold: the last time the bin read low, which keys a filling. */
 const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
-/** A pairing in force on the project's today. */
 const pairingInForce = (now: SQL) => sql`sp.valid_from <= ${todayOn(now)} and (sp.valid_to is null or sp.valid_to > ${todayOn(now)})`
 /** A maintenance plan as `duePlans` names it, and its vehicle. */
 const PLAN = {
@@ -196,16 +182,12 @@ const duePlans = (now: SQL) => sql`(
 
 /** A received load whose receiving site's net differs from ours beyond its project's tolerance, on the kilograms: the domain's `receiptReading` as SQL. */
 const BEYOND_TOLERANCE = sql`abs(ol.received_net_kg - ol.net_kg) * 100 > p.weight_tolerance_percent * ol.net_kg`
-/** A load over its vehicle's rated payload, where the vehicle has one. */
 const OVER_PAYLOAD = sql`v.capacity_kg is not null and ol.net_kg > v.capacity_kg`
-/** A route that collected something and has no unload recorded, refused or accepted. */
 const UNTIPPED = sql`exists (select 1 from wms.pickup pk where pk.company_id = r.company_id and pk.route_id = r.id and pk.status = 'completed')
        and not exists (select 1 from wms.unload u where u.company_id = r.company_id and u.route_id = r.id)`
 
-/** What a raise reads of an occurrence, beside what the rule's own columns add. */
 type Keyed = { company_id: string; project_id: string; rule_key: string }
 
-/** An occurrence of the rule as its alert tells it, the rule itself aside. */
 type Told<R extends AlertRule> = Omit<Extract<RuleOccurrence, { rule: R }>, "rule">
 
 /**
@@ -232,7 +214,6 @@ type RuleSql<R extends AlertRule, Row> = {
   }
 }
 
-/** A rule as the tick runs it: the occurrences to raise, and when one of its open alerts is cleared. */
 type RuleSweep<R extends AlertRule> = {
   raises: (worker: Database, now: SQL, lookback: SQL) => Promise<{ companyId: string; projectId: string; ruleKey: string; told: Told<R>; books?: RaisedOccurrence["books"] }[]>
   clears: (now: SQL) => SQL
@@ -265,7 +246,6 @@ function sweep<R extends AlertRule, Row extends Record<string, unknown>>(rule: R
   }
 }
 
-/** A running session on an active route: the silent device's subject and the stale position's. */
 const RUNNING_SESSION = {
   from: () => sql`wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id`,
   company: sql`s.company_id`,
@@ -273,21 +253,17 @@ const RUNNING_SESSION = {
   subjectOf: sql`s.route_id = a.route_id and s.driver_id = a.driver_id`,
   holds: () => sql`s.ended_at is null and s.paused_at is null and r.status = 'active'`,
 }
-/** The session's driver, and the project whose clock a time is told on. */
 const SESSION_TOLD = sql`join wms.driver d on d.company_id = s.company_id and d.id = s.driver_id
           join wms.project p on p.company_id = s.company_id and p.id = s.project_id`
 
-/** An outbound load, the four reconciliation rules' subject. */
 const LOAD = {
   company: sql`ol.company_id`,
   project: sql`ol.project_id`,
   subjectOf: sql`ol.id = a.outbound_load_id`,
 }
 
-/** A container's filling as the raise reads it. */
 type FillRow = { container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }
 
-/** Every rule, in the order a tick raises them. */
 const RULES: { [R in AlertRule]: RuleSweep<R> } = {
   "route-not-started": sweep({
     from: () => sql`wms.route r`,
@@ -555,7 +531,6 @@ export async function alertsToClear(worker: JobContext["worker"], at: Date): Pro
   return rows.map((row) => ({ companyId: row.company_id, alertId: row.id, rule: row.rule }))
 }
 
-/** What a tick came to. */
 export type AlertRulesOutcome = { raised: number; cleared: number }
 
 const byCompany = <T extends { companyId: string }>(items: readonly T[]): Map<string, T[]> => {
@@ -568,7 +543,6 @@ const byCompany = <T extends { companyId: string }>(items: readonly T[]): Map<st
   return grouped
 }
 
-/** The note a cleared alert is resolved with, by its rule, in one statement. */
 const clearedNote = sql.join(
   [sql`case ${alert.rule}`, ...ALERT_RULES.map((rule) => sql`when ${rule} then ${CLEARED_NOTES[rule]}`), sql`end`],
   sql` `,
@@ -581,7 +555,6 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
   let raised = 0
   for (const [companyId, occurrences] of byCompany(toRaise)) {
     const rows = await withCompany(api.db, companyId, async (tx) => {
-      // A filling whose pairing books one has its emptying booked first, so its alert can say what that came to.
       const told: RuleOccurrence[] = []
       for (const { projectId, occurrence, books } of occurrences) {
         told.push(books === undefined || occurrence.rule !== "fill-threshold" ? occurrence : { ...occurrence, emptying: await bookFillEmptying(tx, { companyId, projectId }, books.containerId, books.today, books.note) })

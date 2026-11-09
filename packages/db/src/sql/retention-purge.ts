@@ -2,7 +2,7 @@
 // position is personal location data (#381), kept `POSITION_RETENTION_DAYS`
 // days and then removed by the worker's purge, which sweeps every company at
 // once. The worker's role reads across companies and writes nothing
-// (worker.ts, migration 0011); this grants it DELETE on the one ledger whose
+// (pgboss.ts, migration 0011); this grants it DELETE on the one ledger whose
 // retention it holds, and nothing else — not UPDATE, not INSERT, not another
 // table — hand-written into the file that creates the table, below its fence
 // and the revoke that keeps the API role from deleting the same rows:

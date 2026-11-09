@@ -18,6 +18,7 @@ import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { chargeSentence, exceptionSentence, historyReadable, historySummary, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
 import { placePickupExceptions } from "@/lib/api/property-details"
+import { readSentence } from "@/lib/api/read-state"
 
 const READS: Readonly<Record<ExceptionPlace, ReturnType<typeof placePickupExceptions>>> = {
   property: placePickupExceptions("property"),
@@ -37,12 +38,8 @@ export function PickupExceptionsSection({ record, module, place }: { record: Bus
   return (
     <section className="space-y-2" data-testid="pickup-exceptions" aria-label="Pickup exceptions">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pickup exceptions</h3>
-      {!readable ? (
-        <p className="text-sm text-muted-foreground">The pickup exceptions are not shown to your role.</p>
-      ) : history.problem !== null ? (
-        <p className="text-sm text-muted-foreground">The pickup exceptions could not be read from the API: {history.problem}</p>
-      ) : read === null ? (
-        <p className="text-sm text-muted-foreground">Reading the pickup exceptions from the API…</p>
+      {read === null || !readable || history.problem !== null ? (
+        <p className="text-sm text-muted-foreground">{readSentence({ viewed: readable, problem: history.problem, answered: read !== null }, "pickup exceptions")}</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{historySummary(read)}</p>

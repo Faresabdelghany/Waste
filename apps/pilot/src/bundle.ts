@@ -63,7 +63,6 @@ export async function bundleEntry({ entry, outfile, tsconfig, resolveFrom }: Bun
 /** The repository root: this file is apps/pilot/src/bundle.ts. */
 export const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "../../..")
 
-// The command line: `<app> <entry.ts> <outfile.mjs>`.
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
   const [app, entry, outfile] = process.argv.slice(2)
   if (app === undefined || entry === undefined || outfile === undefined) {

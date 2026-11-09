@@ -34,7 +34,6 @@ import { constants as osConstants } from "node:os"
 export type Timings = {
   /** The first restart delay after the worker exits. */
   backoffInitialMs: number
-  /** The delay's cap. */
   backoffMaxMs: number
   /** A worker run at least this long resets the delay to its initial value. */
   healthyAfterMs: number
@@ -58,7 +57,6 @@ export type ChildSpec = {
   env?: Readonly<Record<string, string | undefined>>
 }
 
-/** Where a line goes: process.stdout, or a test's collector. */
 export type Sink = { write(text: string): unknown }
 
 export type SuperviseOptions = {
@@ -77,7 +75,6 @@ export type SuperviseOptions = {
 
 type Exit = { code: number | null; signal: NodeJS.Signals | null }
 
-/** Relays a child's stream line by line under `[name] `; a partial last line is flushed on end. */
 function relay(stream: NodeJS.ReadableStream | null, name: string, target: Sink): void {
   if (stream === null) return
   let rest = ""
@@ -100,7 +97,6 @@ const hasExited = (child: ChildProcess): boolean => child.exitCode !== null || c
 /** A signalled process exits as the shell would report it: 128 + the signal's number. */
 const exitCodeOf = ({ code, signal }: Exit): number => code ?? (signal !== null ? 128 + (osConstants.signals[signal] ?? 0) : 1)
 
-/** A child as the supervisor holds it: the process, when it started, and the one promise that settles when it is over. */
 type Running = {
   child: ChildProcess
   startedAt: number
@@ -120,8 +116,7 @@ export type ChildPids = { api?: number; worker?: number }
 
 /**
  * Runs both children until the API exits or a signal arrives; resolves with
- * the code the container should exit with. `children`, where given, hears
- * the two pids whenever one starts or ends.
+ * the code the container should exit with.
  */
 export function supervise({
   api,
@@ -168,7 +163,6 @@ export function supervise({
       return { child, startedAt: now(), ended }
     }
 
-    /** Sends `signal`, escalates to SIGKILL after `killAfterMs`, answers the exit once the child is over and relayed; undefined for a worker never started. */
     const terminate = async (target: Running | undefined, name: string, signal: NodeJS.Signals): Promise<Exit | undefined> => {
       if (target === undefined) return undefined
       const { child, ended } = target

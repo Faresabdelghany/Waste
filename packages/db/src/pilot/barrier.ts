@@ -110,7 +110,6 @@ export function requireBarrierOpen(logins: Record<string, boolean>, alwaysLoggin
   if (!barrierOpen(logins, alwaysLoggingIn)) throw new Error(`${closedBarrier(alwaysLoggingIn)} A record taken now would record the closed state and restore nothing.`)
 }
 
-/** Holds a record to the run, the commit and the database it must be of. */
 export function checkRecord(record: LoginRecord, { identity, run, commit }: { identity: string; run: RunRef; commit?: string }): void {
   if (record.run.id !== run.id || record.run.attempt !== run.attempt) {
     throw new Error(`the login record is of run ${record.run.id} attempt ${record.run.attempt}, not run ${run.id} attempt ${run.attempt}`)
@@ -171,7 +170,6 @@ export async function closeBarrier(sql: Sql, roles: readonly string[] = BARRIER_
   }
 }
 
-/** Gives each role LOGIN again. */
 export async function openLogins(sql: Sql, roles: readonly string[]): Promise<void> {
   for (const role of plain(roles)) await sql`alter role ${sql(role)} login`
 }

@@ -21,7 +21,7 @@ import {
   sortByView,
   type AssetView,
 } from "@/components/settings/settings-pane-kit"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -47,6 +47,7 @@ import {
   whenSaved,
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
+import { useActorName } from "@/components/platform/shell-identity"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -69,15 +70,17 @@ import {
   type PlanningAreaLookups,
 } from "@/lib/data/planning-areas"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 import { todayIso } from "@waste/domain/planning/recurrence"
 
-const ACTOR_NAME = "Olivia Larsen"
 
 const isAreasModule = (location: ModuleLocation) =>
   location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
 
 export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
   const [statuses, setStatuses] = useState<string[]>([])
@@ -181,7 +184,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const handleCreate = (values: BusinessFormValues) => {
     const record = createPlanningAreaRecord(values, {
       now: Date.now(),
-      actorName: ACTOR_NAME,
+      actorName,
       lookups,
     })
     whenSaved(upsertRecord(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, record), () => {
@@ -203,15 +206,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
 
   // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = areaRecords.length > 0
-  const emptyMessage = areas.pending
-    ? "Reading the planning areas from the API…"
-    : areas.notGranted
-      ? "The planning areas are not shown to your role."
-      : areas.problem
-        ? `The planning areas could not be read from the API: ${areas.problem.detail ?? areas.problem.title}`
-        : narrowed
-          ? "No planning areas match this search."
-          : "No planning areas yet."
+  const emptyMessage = moduleReadSentence(areas, "planning areas") ?? (narrowed ? "No planning areas match this search." : "No planning areas yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = areas.notGranted ? areas.problem?.detail : undefined
 

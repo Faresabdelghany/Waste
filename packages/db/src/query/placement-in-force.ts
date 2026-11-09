@@ -43,7 +43,6 @@ export function inForceOn(day: string | SQLWrapper): { placement: SQL; subscript
   }
 }
 
-/** One container's placements of the project: what each reader below narrows to the day. */
 const ofContainer = (scope: PlacementScope, containerId: string) =>
   and(eq(containerServicePlacement.companyId, scope.companyId), eq(containerServicePlacement.projectId, scope.projectId), eq(containerServicePlacement.containerId, containerId))
 

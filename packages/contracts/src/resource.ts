@@ -29,7 +29,6 @@ import { Id } from "./ids"
 /** What the server owns on every resource: spread it first, so a resource reads id, stamps, then its own fields. */
 export const stamped = {
   id: Id,
-  /** When the row was made. */
   createdAt: IsoDateTime,
   /** When it last changed; the database keeps it, not the caller. */
   updatedAt: IsoDateTime,
@@ -42,7 +41,6 @@ export const recorded = {
   recordedAt: IsoDateTime,
 }
 
-/** What a refused empty patch says (@waste/domain/requests, `changesSomething`). */
 export const somethingToChange = { message: SOMETHING_TO_CHANGE }
 
 /**

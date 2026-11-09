@@ -10,9 +10,10 @@
 //
 // `type` is a URI reference that identifies the kind of problem. Every problem
 // is the generic one for its status, `about:blank` with the reason phrase as
-// its title, but one: `NO_ACTIVE_ACCOUNT` (Issue #150), the refusal a client
+// its title, but two: `NO_ACTIVE_ACCOUNT` (Issue #150), the refusal a client
 // must tell apart from every other 403, because it is the account that is
-// refused and not the request. A further type is a new URI and a paragraph in
+// refused and not the request, and `NO_PROOF_STORAGE` (O1 of #290), a
+// deployment with no Storage key. A further type is a new URI and a paragraph in
 // the document when a client needs one, never a change to this shape.
 import { PROBLEM_STATUS } from "@waste/domain/requests"
 import * as z from "zod"

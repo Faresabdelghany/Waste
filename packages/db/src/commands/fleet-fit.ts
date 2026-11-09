@@ -114,7 +114,6 @@ export const routeFitStops = (tx: Tx, companyId: string, routeId: string): Promi
 export const pickupFitStops = (tx: Tx, companyId: string, pickupIds: readonly string[]): Promise<FitStop[]> =>
   pickupIds.length === 0 ? Promise.resolve([]) : fitStops(tx, companyId, inArray(pickup.id, [...pickupIds]))
 
-/** The sentence of a misfit, its fraction's or its container type's name read for it. */
 async function sentenceOf(tx: Tx, companyId: string, fit: FitRow, misfit: Misfit, of: string | undefined): Promise<string> {
   if (misfit.kind === "container-type") {
     const [row] = await tx

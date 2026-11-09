@@ -67,7 +67,6 @@ export type DatedChild = {
   children: readonly DatedChild[]
 }
 
-/** The rows of `child` whose parent is one of `parentIds`. */
 const ofParents = (child: DatedChild, companyId: string, parentIds: readonly string[]): SQL | undefined => and(eq(child.table.companyId, companyId), inArray(child.parent, [...parentIds]))
 
 /** A row in force past `on`: open, or ending after it — what ending its parent on the day ends, and what keeps the parent running. */

@@ -63,7 +63,6 @@ import { SERVICE_DAYS } from "./vocabulary"
 /** A vehicle or a driver as the two-groups rule sees it: the id the groups are compared on, and the label a person reads in the sentence. */
 export type NamedResource = { id: string; label: string }
 
-/** One Collection Group as the structural rules see it: what it is called, when it runs, how it finds its stops, and how many of each it names. */
 export type GroupStructure = {
   name: string
   /** The weekdays the group runs on; a subset of the scheme's. */
@@ -96,10 +95,8 @@ export type SchemeStructure = {
 /** The sentence for the days no group runs on; the days are listed in weekday order, Monday first. */
 export const serviceDaysWithoutGroup = (days: readonly string[]): string => `Service days without a collection group: ${days.join(", ")}`
 
-/** The sentence for a rule group with nothing to match. */
 export const ruleWithoutFraction = (group: string): string => `Collection group ${group} matches by rule but names no waste fraction`
 
-/** The sentence for a manual group with nothing picked. */
 export const manualWithoutContainer = (group: string): string => `Collection group ${group} picks containers but names none`
 
 /** The sentence for a rule group with nowhere to match inside — no area of its own and none of the scheme's; said once, however many rule groups the scheme has. */
@@ -111,7 +108,6 @@ export const isParked = (days: readonly string[]): boolean => days.length === 0
 /** The group runs on at least one day — the predicate the API spells as `cardinality(days) > 0` when it counts the groups standing in a retirement's way. */
 export const groupRuns = (group: { days: readonly string[] }): boolean => !isParked(group.days)
 
-/** The days of `days` in weekday order, Monday first, each once; a day outside the seven keeps its place at the end. */
 function inWeekdayOrder(days: readonly string[]): string[] {
   const known = SERVICE_DAYS.filter((day) => days.includes(day))
   const unknown = [...new Set(days.filter((day) => !(SERVICE_DAYS as readonly string[]).includes(day)))]
@@ -168,11 +164,9 @@ export function vehicleTypesMismatched(groups: readonly GroupStructure[]): strin
   })
 }
 
-/** A count as a sentence spells it: "two collection groups"; past nine, digits. */
 const SPELLED = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 const spelled = (n: number): string => SPELLED[n] ?? String(n)
 
-/** The sentence for a vehicle or a driver two or more groups run with on one day, naming the groups in group order. */
 export const onTwoGroups = (kind: "Vehicle" | "Driver", label: string, day: string, groups: readonly string[]): string =>
   `${kind} ${label} is on ${spelled(groups.length)} collection groups that run on ${day}: ${groups.join(", ")}`
 
@@ -210,7 +204,6 @@ export function resourcesOnTwoGroups(groups: readonly GroupStructure[]): string[
   return issues
 }
 
-/** The day a group's driver is judged on, and what that day meant, for the sentence. */
 export type JudgedDay = { day: string; meaning: "the scheme starts" | "today" }
 
 /**
@@ -225,7 +218,6 @@ export function schemeLicenceDay(validFrom: string, today: string): JudgedDay {
   return validFrom >= today ? { day: validFrom, meaning: "the scheme starts" } : { day: today, meaning: "today" }
 }
 
-/** What the group's rule reads of the pair it holds together: the vehicle's class and label, the driver's licence and name. */
 export type GroupDriverCheck = {
   vehicle: { label: string; requiredLicenceClass: LicenceClass }
   driver: Licence & { name: string }
@@ -250,11 +242,9 @@ export type ContainerPick = {
   containerIds: readonly string[]
 }
 
-/** Which container of a list another group already picks, by which group and on which day. */
 export type PickedTwice = {
   /** The position of the container in the list that was held. */
   index: number
-  /** The group that already picks it. */
   group: string
   /** The first day, in weekday order, that both groups run on. */
   day: string

@@ -67,7 +67,6 @@ function holidaysOfYear(year: number): Map<string, string> {
   return names
 }
 
-/** The Danish public-holiday name for the date, or undefined for an ordinary day. */
 export function danishHolidayName(iso: string): string | undefined {
   const year = Number(iso.slice(0, 4))
   if (!Number.isInteger(year)) return undefined
@@ -85,7 +84,6 @@ const EGYPTIAN_FIXED_HOLIDAYS: Readonly<Record<string, string>> = {
   "10-06": "Armed Forces Day",
 }
 
-/** The Egyptian fixed-date holiday name for the date, or undefined. */
 export function egyptianHolidayName(iso: string): string | undefined {
   return EGYPTIAN_FIXED_HOLIDAYS[iso.slice(5)]
 }
@@ -122,7 +120,6 @@ export function holidayNamesForCountry(country: string | undefined): HolidayName
   return KNOWN_HOLIDAY_LISTS.find((list) => list.country === country)?.names ?? noNames
 }
 
-/** A lookup that answers the carried names first and falls back to another. */
 export function withCarriedNames(
   carried: ReadonlyMap<string, string>,
   fallback: HolidayNameLookup,

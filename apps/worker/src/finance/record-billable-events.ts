@@ -69,7 +69,7 @@
 // to the cap, each with pg-boss's jitter, five to ten minutes in all, longer
 // than an ordinary failover of the database, so a job that met one is retried
 // past it and not failed under it — the retention a week, written over the
-// relay's defaults on the three queues at every start.
+// relay's defaults on its queues at every start.
 import type { Tx } from "@waste/db/client"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, ONE_WEIGHT_CHARGE_PER_STOP, recordBillableEvent, reversalOfEvent, weightChargeBySource } from "@waste/db/commands/billable-writes"
 import { lockRow } from "@waste/db/commands/shared"
@@ -86,7 +86,6 @@ import { defineOutboxConsumer, payloadOf, type RelayedEvent } from "../runtime/o
 import type { JobContext } from "../runtime/definition"
 import { pickupFacts, pickupRow, scaleTicketFacts, ticketFacts, ticketRow, visitFacts, weightFacts } from "./facts"
 
-/** What one action came to. */
 export type Done = { did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }
 
 /** What one job answered, for the log and the job's output: its first action's outcome, or nothing, and every action's in order (a tagged collection's two, #293 M5). */
@@ -137,7 +136,6 @@ async function factsOf(tx: Tx, event: RelayedEvent<FinanceEventKind>) {
   }
 }
 
-/** Does one action the domain answered, in the event's company and project, and says what it did. */
 async function act(tx: Tx, event: RelayedEvent<FinanceEventKind>, action: BillableAction, live: readonly EventReading[]): Promise<Done> {
   if (action.action === "cancel") {
     // The live event was read under its lock a statement ago; the row is what the lock let through.
@@ -175,7 +173,6 @@ async function act(tx: Tx, event: RelayedEvent<FinanceEventKind>, action: Billab
   }
 }
 
-/** One event to what was done with it: the facts read and the write made in one fenced transaction as the tenant. */
 export async function recordBillableEventFor(event: RelayedEvent<FinanceEventKind>, { api, log }: Pick<JobContext, "api" | "log">): Promise<Recorded> {
   const outcome = await withCompany(api.db, event.companyId, async (tx): Promise<Recorded> => {
     const { facts, live } = await factsOf(tx, event)
@@ -189,10 +186,9 @@ export async function recordBillableEventFor(event: RelayedEvent<FinanceEventKin
   return outcome
 }
 
-/** The consumer's queue options: five retries backing off from ten seconds and capped at five minutes (five to ten minutes in all, past an ordinary failover), a finished job kept a week, written over the relay's defaults on the three queues at every start. */
+/** The consumer's queue options: five retries backing off from ten seconds and capped at five minutes (five to ten minutes in all, past an ordinary failover), a finished job kept a week, written over the relay's defaults on its queues at every start. */
 export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 5 * 60, deleteAfterSeconds: 60 * 60 * 24 * 7 } as const
 
-/** The three registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const recordBillableEvents = defineOutboxConsumer({
   name: "finance",
   kinds: FINANCE_EVENT_KINDS,

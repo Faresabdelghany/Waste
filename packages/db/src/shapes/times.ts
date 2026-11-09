@@ -2,12 +2,10 @@
 // that answers a row of its own: an instant is its ISO string, and a `time`
 // column is the contracts' `IsoTime`.
 
-/** The instants of a row, as the wire spells them. */
 export function stampsOf(row: { createdAt: Date; updatedAt: Date }): { createdAt: string; updatedAt: string } {
   return { createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }
 }
 
-/** The instant of a row's nullable column, as the wire spells it; null stays null. `stampsOf` is the same over the two stamps every record carries. */
 export const instantOf = (value: Date | null): string | null => (value === null ? null : value.toISOString())
 
 /** A `time` column as postgres.js hands it over: `HH:MM:SS`, with fractional seconds where the value carried them. */

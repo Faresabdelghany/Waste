@@ -39,7 +39,6 @@ export type CollectionCalendarCreate = z.infer<typeof CollectionCalendarCreate>
 export const CollectionCalendarPatch = collectionCalendarBodies.patch
 export type CollectionCalendarPatch = z.infer<typeof CollectionCalendarPatch>
 
-/** A page of calendars, from one project, in force on a day. */
 export const CollectionCalendarListQuery = ProjectScopedListQuery.extend({
   /** The day the period is read against; absent asks for every calendar, whenever it ran. */
   validOn: IsoDate.optional(),

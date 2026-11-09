@@ -49,7 +49,6 @@ describe("judgeObservation", () => {
 })
 
 describe("observeRelease", () => {
-  // A scripted API: each probe answers from the list, one entry per observation; a pinned clock the sleeps move.
   const scripted = (observations: { healthz: ReturnType<typeof answer> | "fail"; readyz: ReturnType<typeof answer> }[]) => {
     let clock = Date.UTC(2026, 8, 29, 9, 0, 0)
     let index = 0
@@ -80,7 +79,6 @@ describe("observeRelease", () => {
     let base = Date.UTC(2026, 8, 29, 9, 0, 0)
     const stamp = () => new Date(base).toISOString()
     const answers: { healthz: ReturnType<typeof answer> | "fail"; readyz: ReturnType<typeof answer> }[] = []
-    // good, good, old build (reset), good, good, good
     for (const commit of [COMMIT, COMMIT, OLD, COMMIT, COMMIT, COMMIT]) {
       answers.push({ healthz: healthy(stamp(), commit), readyz: ready })
       base += 10_000
@@ -127,7 +125,6 @@ describe("releaseToDeployBranch", () => {
   const P1 = "f9c3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5"
   const P2 = "0ad4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6"
   type Call = { url: string; method: string; headers: Record<string, string>; body: unknown }
-  /** A GitHub that answers each request from the script, in order, recording what it was asked; the token appears in no message. */
   const github = (script: { status: number; body?: unknown }[]) => {
     const calls: Call[] = []
     const fetch = async (input: URL | string, init?: RequestInit) => {

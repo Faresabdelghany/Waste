@@ -68,7 +68,6 @@ export type UnavailableResponse = z.infer<typeof UnavailableResponse>
 export const ReadinessResponse = z.discriminatedUnion("status", [ReadyResponse, UnavailableResponse])
 export type ReadinessResponse = z.infer<typeof ReadinessResponse>
 
-/** What the worker's database check answers. */
 export const WorkerDatabaseCheck = z.enum(["ok", "unreachable"])
 /** What the worker's pg-boss check answers: started and answering, not started, or started and not answering. */
 export const WorkerBossCheck = z.enum(["ok", "stopped", "unreachable"])

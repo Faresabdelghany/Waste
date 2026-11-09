@@ -26,7 +26,6 @@ import { PageRequest } from "./pagination"
 import { resourceBodies, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
 
-/** The stable key, `rear-loader`: the one key shape of text.ts, as a waste fraction's. */
 const VehicleTypeKey = Slug()
 
 const eachContainerTypeOnce = { message: EACH_CONTAINER_TYPE_ONCE, path: ["containerTypeIds"] }

@@ -14,11 +14,9 @@ export const REFUSED_URL = "postgresql://nobody:nobody@127.0.0.1:1/none"
 
 export type SilentServer = {
   url: string
-  /** Destroys every accepted connection and stops listening. */
   close: () => Promise<void>
 }
 
-/** A server that accepts connections and never answers them. */
 export async function silentServer(): Promise<SilentServer> {
   const sockets = new Set<net.Socket>()
   const server = net.createServer((socket) => {

@@ -37,7 +37,6 @@ import { WeightReview } from "./weight-control"
 export const OutboxKind = z.enum(OUTBOX_KINDS)
 export type OutboxKind = z.infer<typeof OutboxKind>
 
-/** What an outbox event is about. */
 export const OutboxAggregate = z.enum(OUTBOX_AGGREGATES)
 export type OutboxAggregate = z.infer<typeof OutboxAggregate>
 
@@ -46,7 +45,7 @@ export const OutboxEvent = z.object({
   projectId: Id,
   kind: OutboxKind,
   aggregateKind: OutboxAggregate,
-  /** The route, pickup, unload or command the event is about; a soft id. */
+  /** The aggregate the event is about; a soft id. */
   aggregateId: Id,
   /** The command's instant, not the request's. */
   occurredAt: IsoDateTime,
@@ -60,7 +59,6 @@ export type OutboxEvent = z.infer<typeof OutboxEvent>
 /** A route's fields as an event carries them: the hold arrived on the wire with #209 and the cancel's reason code with O5 of #290, so an event taken before either reads as a route the scheme's, cancelled for no code given. */
 const routeEventFields = { ...routeFields, heldAt: routeFields.heldAt.default(null), cancelReasonCode: routeFields.cancelReasonCode.default(null) }
 
-/** The `Route` as a route's event carries it. */
 export const RouteEvent = z.object(routeEventFields)
 export type RouteEvent = z.infer<typeof RouteEvent>
 

@@ -21,7 +21,6 @@ const REPOSITORY_ROOT = resolve(import.meta.dirname, "../../..")
 const withoutEmpty = (source: Readonly<Record<string, string | undefined>>) =>
   Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined && value !== ""))
 
-/** The stack's variables: the environment's when it names the API, else the CLI's status, read on this machine. */
 function stackEnv(): Record<string, string | undefined> {
   const env = withoutEmpty(process.env)
   if (env.API_URL && env.SECRET_KEY) return env

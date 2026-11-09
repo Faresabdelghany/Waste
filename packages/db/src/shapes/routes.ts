@@ -99,7 +99,6 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
   }
 }
 
-/** A count of zero for every pickup status, the vocabulary's. */
 const noneOfEach = (): Record<PickupStatus, number> => Object.fromEntries(PICKUP_STATUSES.map((status) => [status, 0])) as Record<PickupStatus, number>
 
 /**

@@ -11,10 +11,11 @@
 // days a route-day change asks the group to run on, or the vehicle and
 // driver a vehicle change asks it to run with, and the first day they apply;
 // an approved one names the scheme version its approval wrote. A compliance follow-up
-// names its due day, and a note nothing more. `activity_kind_shape` holds
-// each kind to its columns and `activity_status_shape` each kind to its
-// statuses; `activity_closed_shape` holds a closed row to who closed it and
-// when, a rejection to its reason, and an approval to the version it made.
+// names its due day, and a note nothing more.
+// `service_provider_activity_kind_shape` holds each kind to its columns and
+// `service_provider_activity_status_shape` each kind to its statuses;
+// `service_provider_activity_closed_shape` holds a closed row to who closed it
+// and when, a rejection to its reason, and an approval to the version it made.
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { PROPOSAL_KINDS } from "@waste/domain/service-providers/activities"
 import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES } from "@waste/domain/service-providers/vocabulary"
@@ -91,12 +92,10 @@ export const serviceProviderActivity = wms.table(
       tableObjectName(t.id.table, "kind_shape", "serviceProviderActivity"),
       sql`case ${t.kind} when 'route-day-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and cardinality(${t.serviceDays}) > 0 and ${t.effectiveFrom} is not null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'vehicle-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.vehicleId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null when 'waste-fraction-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'stop-set-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'compliance-follow-up' then ${t.dueOn} is not null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null else ${t.dueOn} is null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null end`,
     ),
-    // A proposal moves through its Approval's statuses, every other kind through open and closed.
     check(
       tableObjectName(t.id.table, "status_shape", "serviceProviderActivity"),
       sql`case when ${t.kind} in (${sql.raw(PROPOSAL_KINDS.map((kind) => `'${kind}'`).join(", "))}) then ${t.status} in ('pending-approval', 'approved', 'rejected', 'withdrawn') else ${t.status} in ('open', 'completed', 'cancelled') end`,
     ),
-    // A closed Activity says who closed it and when, a rejection why, and only an approval names the version it made.
     check(
       tableObjectName(t.id.table, "closed_shape", "serviceProviderActivity"),
       sql`(${t.status} in ('pending-approval', 'open')) = (${t.closedBy} is null and ${t.closedAt} is null) and (${t.status} <> 'rejected' or ${t.closeReason} is not null) and (${t.status} = 'approved') = (${t.successorSchemeId} is not null)`,

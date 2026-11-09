@@ -9,7 +9,6 @@ import type { MessagingProvider } from "./provider"
 
 export const MESSAGING_PROVIDER_VARIABLE = "MESSAGING_PROVIDER"
 
-/** The provider the environment names; the log-only sender where it names none. */
 export function messagingProviderFromEnv(name: string | undefined, log?: (line: string) => void): MessagingProvider {
   const named = name || LOG_ONLY_PROVIDER
   if (named === LOG_ONLY_PROVIDER) return new LogOnlyProvider(log)

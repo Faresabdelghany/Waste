@@ -31,7 +31,6 @@ export const BACKUP_ARTIFACT = "pilot-backup"
 export const LOGIN_STATE_ARTIFACT = "login-state"
 export type ArtifactKind = typeof BACKUP_ARTIFACT | typeof LOGIN_STATE_ARTIFACT
 
-/** An artifact's name: its kind, the run and the attempt that stored it. */
 export const artifactName = (kind: ArtifactKind, run: RunRef): string => `${kind}-${run.id}-${run.attempt}`
 
 /** A run's artifacts of one kind, the attempt captured: what `artifactName` writes, read back. */

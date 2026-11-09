@@ -9,8 +9,9 @@
 //
 // Pure, like everything here: the clock and the randomness are arguments, so
 // the layout can be proved bit by bit and a million ids can be walked with a
-// fixed clock. packages/db/src/ids.ts is the one place that supplies `Date.now`
-// and `crypto.getRandomValues`.
+// fixed clock. packages/db/src/ids.ts supplies `Date.now` and
+// `crypto.getRandomValues` on the server, and the driver app's
+// apps/web/lib/driver/commands.ts and route-messages.ts in the browser.
 //
 // The layout, RFC 9562 §5.7, over the sixteen bytes:
 //
@@ -69,7 +70,6 @@ function parse(id: string): Uint8Array {
   return bytes
 }
 
-/** The milliseconds in bytes 0..5. */
 function clockOf(bytes: Uint8Array): number {
   let millis = 0
   for (let i = 0; i < 6; i += 1) millis = millis * 256 + bytes[i]

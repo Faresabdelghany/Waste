@@ -31,16 +31,7 @@ import {
   Warning,
 } from "@phosphor-icons/react/dist/ssr"
 
-import type { SettingsPaneIcon, SettingsPaneId, SettingsParams } from "@/lib/modules/settings-panes"
-
-export type SettingsPaneProps = {
-  paneId: SettingsPaneId
-  /** The params of its own the address gives it. */
-  params: SettingsParams
-  /** Moves its params, in place in the address, or as a new entry Back returns from. */
-  onParamsChange: (params: SettingsParams, how?: "push" | "replace") => void
-  onOpenPane: (paneId: SettingsPaneId, params?: SettingsParams) => void
-}
+import type { SettingsPaneIcon, SettingsPaneId, SettingsPaneProps } from "@/lib/modules/settings-panes"
 
 export const SETTINGS_PANE_ICONS: Record<SettingsPaneIcon, ComponentType<{ className?: string }>> = {
   bell: Bell,

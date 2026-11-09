@@ -85,7 +85,6 @@ export const ServiceProviderPriceIndex = z.strictObject({
 })
 export type ServiceProviderPriceIndex = z.infer<typeof ServiceProviderPriceIndex>
 
-/** A page of prices: one project's, one assignment's, one provider's, one product's, in force on a day. */
 export const ServiceProviderPriceListQuery = ProjectScopedListQuery.extend({
   serviceAreaAssignmentId: Id.optional(),
   /** The prices under every assignment naming this provider. */

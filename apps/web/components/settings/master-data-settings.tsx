@@ -36,9 +36,10 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useActorName } from "@/components/platform/shell-identity"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
@@ -69,8 +70,8 @@ import {
   type MasterDataLookups,
 } from "@/lib/data/master-data"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
-const ACTOR_NAME = "Olivia Larsen"
 const STATUS_OPTIONS = ["Effective"] as const
 
 /** What the table's detail column says of a row: the fact its kind is known by. */
@@ -93,6 +94,8 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
 
 export function MasterDataSettings({ params }: SettingsPaneProps) {
   const { upsertRecord } = useBusinessRecordStore()
+  // Who saves: the account on the Pilot, the persona in fixture mode.
+  const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(params.kind) ? params.kind : "waste-fraction")
   const [query, setQuery] = useState("")
@@ -175,7 +178,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
 
   const handleCreate = (values: BusinessFormValues) => {
     if (saving) return
-    const record = createMasterDataRecord(kind, values, { now: Date.now(), actorName: ACTOR_NAME, lookups })
+    const record = createMasterDataRecord(kind, values, { now: Date.now(), actorName, lookups })
     setSaving(true)
     whenSaved(
       upsertRecord(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, record),
@@ -207,15 +210,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   // A frequency names a project, so its create waits for the projects too; the other kinds need only their own module.
   const canCreate = master.ready && !saving && (kind !== "service-frequency" || organisation.ready)
 
-  const emptyMessage = master.pending
-    ? "Reading the master data from the API…"
-    : master.notGranted
-      ? "The master data is not shown to your role."
-      : master.problem
-        ? `The master data could not be read from the API: ${master.problem.detail ?? master.problem.title}`
-        : ofKind.length === 0
-          ? `No ${details.plural.toLowerCase()} yet.`
-          : `No ${details.plural.toLowerCase()} match this search.`
+  const emptyMessage = moduleReadSentence(master, "master data", { is: true }) ?? (ofKind.length === 0 ? `No ${details.plural.toLowerCase()} yet.` : `No ${details.plural.toLowerCase()} match this search.`)
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = master.notGranted ? master.problem?.detail : undefined
 

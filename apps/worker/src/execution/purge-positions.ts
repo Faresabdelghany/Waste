@@ -27,14 +27,11 @@ export const PURGE_BATCH = 5_000
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export type PurgePositionsData = {
-  /** Where the purge came from: the schedule, or a caller who sent one by hand. */
   source: "schedule" | "manual"
 }
 
-/** What a night came to: the positions removed, and the days they were older than. */
 export type PurgePositionsOutcome = { removed: number; days: number }
 
-/** Deletes one batch of positions fixed before the instant, oldest first, across companies, as the worker role; answers how many went. */
 async function deleteBatch(worker: JobContext["worker"], before: string): Promise<number> {
   const rows = await worker.db.execute<{ id: string }>(sql`
     delete from wms.session_position

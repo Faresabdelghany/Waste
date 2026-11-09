@@ -42,7 +42,6 @@ export const sourceRunNamed = (context: Context): void => {
   if (!/^\d+$/.test(context.env.SOURCE_RUN_ID ?? "")) throw new Refusal("source_run_id names no run")
 }
 
-/** Every admission of an operation, in order. */
 export const admitting =
   (...checks: readonly ((context: Context) => void)[]) =>
   (context: Context): void => {

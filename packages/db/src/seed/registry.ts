@@ -170,8 +170,6 @@ const REGISTRY_PROJECTS = ["copenhagen", "harbor"] as const
 export type RegistryProject = (typeof REGISTRY_PROJECTS)[number]
 const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[project]
 
-/* ------------------------------ the catalogue ------------------------------ */
-
 // The seven fractions the seeded containers rotate through, then the two only
 // the explicit containers carry (BIN-66420 takes "Residual · Mixed", BIN-11862
 // wastewater). The key is the container form's option value where the form
@@ -348,8 +346,6 @@ const PRODUCT_BY_FRACTION: Partial<Record<WasteFractionKey, string>> = {
   glass: "product-glass-igloo",
 }
 
-/* ----------------------------- who and where ------------------------------ */
-
 const round6 = (value: number): number => Math.round(value * 1e6) / 1e6
 
 /** Where the map places an address, as the point the column stores; null off the gazetteer. */
@@ -465,7 +461,7 @@ const SUNDBYVEJ_91: PropertySpec = {
 
 const EXPLICIT_PROPERTIES: readonly PropertySpec[] = [PARKVEJ_18, DOCK_4, SUNDBYVEJ_91]
 
-// The seeded properties, read from @waste/domain's generator: the type the
+// The seeded properties, read from @waste/fixtures' generator: the type the
 // prototype shows is the kind by name, and a status is read as "Statuses and
 // kinds" above says — Active is active, Prospect and On hold inactive.
 const SEEDED_PROPERTY_KINDS = {
@@ -495,7 +491,6 @@ function seededPropertySpec(index: number): PropertySpec {
   }
 }
 
-/** The explicit properties, then the fifty seeded ones: `PROPERTIES[EXPLICIT_PROPERTIES.length + index]` is `seededPropertySpec(index)`. */
 /** The first day every seeded party holds its role (#374): the seeded agreements' year. */
 const PARTIES_FROM = "2026-01-01"
 
@@ -505,7 +500,6 @@ const SEEDED_PROPERTIES: readonly PropertySpec[] = PROPERTIES.slice(EXPLICIT_PRO
 /** The person a `Private` owner is: one Customer per privately owned property. */
 const privateOwnerKey = (propertySpec: PropertySpec): string => `owner-${propertySpec.key}`
 
-/** The customer key a property's Owner or Payer label resolves to. */
 function customerKeyOf(label: string, of: PropertySpec): string {
   if (label === PRIVATE) return privateOwnerKey(of)
   const key = CUSTOMER_BY_LABEL[label]
@@ -520,12 +514,9 @@ const CUSTOMERS: readonly CustomerSpec[] = [
   ),
 ]
 
-/* ------------------------ groups and shared points ------------------------ */
-
 /** A group or point: its rule for the properties of its own project. */
 type Gathering = { project: RegistryProject; members: (spec: PropertySpec) => boolean }
 
-/** Whether a property is a member: in the gathering's project and named by its rule. */
 const memberOf = (gathering: Gathering, spec: PropertySpec): boolean => spec.project === gathering.project && gathering.members(spec)
 
 type GroupSpec = Gathering & {
@@ -609,8 +600,6 @@ const POINTS: readonly PointSpec[] = [
   },
 ]
 
-/* ------------------------------ agreements -------------------------------- */
-
 type AgreementSpec = {
   number: string
   project: RegistryProject
@@ -648,8 +637,6 @@ const EXPLICIT_SUBSCRIPTIONS: readonly { agreement: string; product: string; pro
   { agreement: "AGR-2408", product: "product-res-240", property: PARKVEJ_18.key },
   { agreement: "AGR-2408", product: "product-card-660", property: PARKVEJ_18.key },
 ]
-
-/* ------------------------------- containers ------------------------------- */
 
 type StandsSpec = {
   property: string
@@ -772,7 +759,7 @@ const EXPLICIT_CONTAINERS: readonly ContainerSpec[] = [
   },
 ]
 
-// The seeded containers, read from @waste/domain's generator: the property
+// The seeded containers, read from @waste/fixtures' generator: the property
 // it stands at and that property's agreement, its fraction and type found by
 // the names the catalogue above spells, its ownership, its frequency promise,
 // whether the prototype's status cycle puts it in storage (unplaced, off the
@@ -783,14 +770,12 @@ const SEEDED_OWNERSHIPS = {
   "Customer owned": "customer",
 } as const satisfies Record<SeededOwnership, ContainerOwnership>
 
-/** A waste fraction's key by the name the catalogue spells: `Residual` is `residual`. */
 function wasteFractionKeyNamed(name: string): WasteFractionKey {
   const found = WASTE_FRACTIONS.find(([, fractionName]) => fractionName === name)
   if (!found) throw new Error(`registry seed: no waste fraction is named ${name}`)
   return found[0]
 }
 
-/** A container type's key by the name the catalogue spells: `Two-wheel bin · 140 L` is `two-wheel-140`. */
 function containerTypeKeyNamed(name: string): ContainerTypeKey {
   const key = CONTAINER_TYPE_KEYS[name]
   if (!key) throw new Error(`registry seed: no container type is named ${name}`)
@@ -824,10 +809,7 @@ function seededContainerSpec(index: number): ContainerSpec {
 
 const CONTAINERS: readonly ContainerSpec[] = [...EXPLICIT_CONTAINERS, ...Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => seededContainerSpec(index))]
 
-/** The day a placement the prototype marks Future starts. */
 const FUTURE_PLACEMENT_FROM = "2026-10-01"
-
-/* --------------------------------- rows ----------------------------------- */
 
 /** The spec keyed `key`, or this file's own sentence: never a TypeError from a Map. */
 function requiredSpec<T>(specs: ReadonlyMap<string, T>, key: string, what: string): T {
@@ -879,7 +861,6 @@ type RegistryRows = {
   containerServicePlacements: (typeof containerServicePlacement.$inferInsert)[]
 }
 
-/** How many rows the Registry seed holds per table. */
 export type RegistryCounts = { [K in keyof RegistryRows]: number }
 
 function build(): { ids: RegistryIds; rows: RegistryRows } {
@@ -1037,8 +1018,6 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     containerServicePlacements: [],
   }
 
-  // Parties: the owner, the payer where there is one, the tenant where there
-  // is one, and the service contact of the Østerbro East portfolio.
   type Party = { property: string; customer: string; role: PropertyPartyRole }
   const parties: Party[] = []
   for (const spec of PROPERTIES) {
@@ -1056,11 +1035,9 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     propertyId: propertyId(party.property),
     customerId: customerId(party.customer),
     role: party.role,
-    // Every seeded party holds its role from the seeded year's first day, the agreements' own.
     validFrom: PARTIES_FROM,
   }))
 
-  // Members, by each group's and point's rule over the properties of its project.
   type Membership = { of: string; property: string }
   const memberKey = (membership: Membership): string => `${membership.of}:${membership.property}`
   const gathered = (gatherings: readonly (Gathering & { key: string })[]): Membership[] =>
@@ -1086,11 +1063,6 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
     role: "service-member",
   }))
 
-  // Subscriptions and placements. A subscription is one product at one
-  // property under one agreement, for the agreement's period; a container in
-  // service whose fraction a product collects is placed under it, inside that
-  // period, and the subscription's quantity counts the containers so placed,
-  // at least one.
   type SubscriptionKey = { agreement: string; product: string; property: string }
   type Subscribed = { key: SubscriptionKey; placed: number }
   const subscriptionKey = (key: SubscriptionKey): string => `${key.agreement}:${key.product}:${key.property}`
@@ -1190,7 +1162,6 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
 
 const built = build()
 
-/** Every Registry id the seed writes, keyed by the prototype's record id. */
 export const REGISTRY_IDS: RegistryIds = built.ids
 
 /** The rows themselves, for a test that wants to read what the seed proposes. */

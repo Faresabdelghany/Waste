@@ -36,7 +36,6 @@ export const alertColumns = {
 
 export type AlertRow = Pick<typeof alert.$inferSelect, keyof typeof alertColumns>
 
-/** The alert on the wire. */
 export function alertOf(row: AlertRow): Alert {
   return {
     id: row.id,

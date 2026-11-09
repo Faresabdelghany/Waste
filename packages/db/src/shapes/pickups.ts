@@ -39,7 +39,6 @@ export const pickupColumns = {
 
 export type PickupRow = Pick<typeof pickup.$inferSelect, keyof typeof pickupColumns>
 
-/** The pickup on the wire. */
 export function pickupOf(row: PickupRow): Pickup {
   return {
     id: row.id,
@@ -68,7 +67,6 @@ export function pickupOf(row: PickupRow): Pickup {
   }
 }
 
-/** One route's pickups, by position and then by id: the stop list in order. */
 export async function pickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<PickupRow[]> {
   return await tx
     .select(pickupColumns)

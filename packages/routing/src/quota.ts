@@ -98,7 +98,6 @@ export type QuotaState = RoutingQuotaStanding & {
   observedAt: Date | null
 }
 
-/** What a job's request came to. */
 export type Outcome<Result> =
   | { kind: "answered"; result: Result }
   /** Not now: the family is exhausted, a batch job would cross the reserve, the job needs more calls than the day has left, or — for an engine that does not wait — the minute's allowance is spent. No call was made after the refusal, and none is to be made before `until`. */
@@ -224,7 +223,6 @@ export class QuotaEngine {
     return { kind: "answered", result: { legs, provenance: provenance ?? { engineVersion: null, graphDate: null } } }
   }
 
-  /** Orders and measures a stop set in one optimisation request. */
   async optimise(request: OptimiseRequest, { class: jobClass }: { class: RoutingJobClass }): Promise<Outcome<OptimiseResult>> {
     const { refusal, taken } = this.admit("optimisation", jobClass, 1)
     if (refusal !== null) return refusal
@@ -281,7 +279,6 @@ export class QuotaEngine {
     return { refusal: null, taken: wanted }
   }
 
-  /** The family's calls within the last minute, oldest first, the older ones let go. */
   private window(family: QuotaFamily): number[] {
     const calls = this.families[family].calls
     const now = this.now().getTime()
@@ -289,7 +286,6 @@ export class QuotaEngine {
     return calls
   }
 
-  /** The day's rules: the key, the family's exhaustion, the reserve. */
   private admitDay(family: QuotaFamily, jobClass: RoutingJobClass, calls: number): Outcome<never> | null {
     const { state, keyRefusedHere } = this.families[family]
     const now = this.now().getTime()
@@ -380,7 +376,6 @@ export class QuotaEngine {
     return reset !== undefined && reset > now && reset <= now + DAY_MS ? reset : now + UNREAD_WINDOW_MS
   }
 
-  /** An instant plus the jitter. */
   private after(instant: number): Date {
     return new Date(instant + Math.floor(this.random() * JITTER_MS))
   }

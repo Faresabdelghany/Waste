@@ -21,7 +21,7 @@
 // scheme and group, and whose run Execution's `route` names back, which is
 // an import in execution.ts and no reordering here. What is exported here is
 // what `pnpm db:generate` sees — the CSV import's run and its rows (#291
-// slice 12, migration 0018), then the Pickup Exceptions' codes and rules (M5
+// slice 12, migration 0020), then the Pickup Exceptions' codes and rules (M5
 // of #293), which Execution's pickup and proof name back — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger. The Drop-off Points (Issue #293, M3) come
@@ -51,29 +51,17 @@ export * from "./audit"
 export * from "./imports"
 export * from "./drop-off-points"
 export * from "./pickup-exceptions"
-// Bulky-waste booking (O11 of #290): the schedules of an area's collection days and the bookings that take a slot of one.
 export * from "./bulky"
-// A customer's Applications and the office's Decisions on them (M7 of #293).
 export * from "./applications"
-// Recycling-centre visits (M4 of #293): the register, the ledger and the Visit Rules.
 export * from "./site-visits"
-// The coordination between the office and a Service Provider: proposals, follow-ups and notes (#474).
 export * from "./service-provider-activities"
-// Messaging (#291 C15): the office's templates and the delivery log.
 export * from "./messaging"
-// A staff member's notification preferences (O16 of #290).
 export * from "./notifications"
-// A weighbridge's tickets (O27 of #290): read automatically, matched to a route and written as its Unload, or left for the office.
 export * from "./weighbridge"
-// Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"
-// Vehicle maintenance (O20 of #290): a vehicle's service plans and the Maintenance Orders that do them.
 export * from "./maintenance"
-// The scale house (M16a of #293): the tare register and the window's tickets with their lines.
 export * from "./scale-house"
 export * from "./route-messages"
-// Field inspections (M23 of #293): an inspector's visits to containers and properties, and their photos.
 export * from "./inspections"
-// Septic-tank emptying (M11 of #293): the register of tank installations and their inspections.
 export * from "./tanks"
 export * from "./haul-out"

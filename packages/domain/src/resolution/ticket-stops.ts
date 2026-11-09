@@ -27,7 +27,6 @@ const ANSWERED_BY = {
 
 export type StopTicketKind = keyof typeof ANSWERED_BY
 
-/** Whether a stop answers tickets of this kind. */
 export const isStopTicketKind = (kind: TicketKind): kind is StopTicketKind => Object.hasOwn(ANSWERED_BY, kind)
 
 /** The services a stop for a ticket of this kind may be booked as; none for a kind no stop answers. */

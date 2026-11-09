@@ -77,7 +77,7 @@ describe("simulateOccurrences — the horizon", () => {
   })
 
   test("a draft that started last year simulates from today, not from its start", () => {
-    // Mon–Fri weekly since 4 Jan 2026; today is Mon 21 Dec 2026. The next ten
+    // Mon–Fri weekly since 5 Jan 2026; today is Mon 21 Dec 2026. The next ten
     // collections run from today — the four winter holidays are skipped, so
     // the tenth is Thu 7 Jan 2027, exactly as for a draft that starts today.
     const sinceLastYear = { ...weekdays, effectiveFrom: "2026-01-05" }

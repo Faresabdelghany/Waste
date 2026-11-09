@@ -158,7 +158,7 @@ export type ContainerServicePlacementCreate = z.infer<typeof ContainerServicePla
 export const ContainerServicePlacementPatch = placementBodies.patch
 export type ContainerServicePlacementPatch = z.infer<typeof ContainerServicePlacementPatch>
 
-/** A page of containers: one project's, of one type, in one asset state, standing in one warehouse. The unrecorded — no movement, a null state — are not askable for; that is a later read. */
+/** The unrecorded — no movement, a null state — are not askable for; that is a later read. */
 export const ContainerListQuery = ProjectScopedListQuery.extend({
   containerTypeId: Id.optional(),
   assetStatus: AssetStatus.optional(),

@@ -31,7 +31,6 @@ import { NonNegativeInt, stamped } from "./resource"
 export const GenerationRequest = requiredDayWindow(z.strictObject({}), { maxDays: { days: OCCURRENCE_WINDOW_MAX_DAYS, tooLong: WINDOW_AT_MOST_A_YEAR } })
 export type GenerationRequest = z.infer<typeof GenerationRequest>
 
-/** A count of what a run did: whole, zero or more. */
 const Count = NonNegativeInt
 
 /** One run of generation over one scheme and one window, as the job leaves it at each step. */

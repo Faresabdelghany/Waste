@@ -42,7 +42,6 @@ import { until } from "./until"
 
 const roles = rolesUnderTest()
 
-/** Where the registry's relay sends each kind. */
 const ROUTES = routesOf(CONSUMERS)
 
 /** A uuidv7-shaped id of this file's own: a nibble for the company, a counter for the row, so id order is the order they are spelled in. */
@@ -50,7 +49,6 @@ const id = (n: number, tenant = 0) => `01a0d3a5-e5e0-7000-8000-00000000${tenant.
 
 type Tenant = { companyId: string; projectId: string }
 
-/** A job row of pg-boss's table, as this file reads it back. */
 type JobRow = { id: string; name: string; state: string; data: unknown; start_after: string; output: unknown }
 
 describe("execution.relay-outbox", { skip: roles.skip }, () => {
@@ -63,7 +61,6 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   let running: Boss | undefined
   const lines: string[] = []
   const errors: string[] = []
-  /** Every id the context's `send` was asked to enqueue, in order, keyed by the queue. */
   const sent: { queue: string; id: string }[] = []
   let sequence = 0
 
@@ -112,13 +109,10 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     return eventId
   }
 
-  /** Every row of the outbox, across companies, as the worker role sees it. */
   const outbox = () => worker.db.select({ id: outboxEvent.id, companyId: outboxEvent.companyId, kind: outboxEvent.kind, publishedAt: outboxEvent.publishedAt, updatedAt: outboxEvent.updatedAt }).from(outboxEvent).orderBy(asc(outboxEvent.id))
 
-  /** The jobs on the outbox's queues — the kinds' own, the consumers' and the dead letters — oldest first. */
   const outboxJobs = async (): Promise<JobRow[]> => owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' order by created_on, id`)
 
-  /** The jobs on the relay's own queue, oldest first. */
   const relayJobs = async (): Promise<JobRow[]> => owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = '${RELAY_QUEUE}' order by created_on, id`)
 
   /** The consumer of this file: takes `pickup-failed` under Resolution's name, so the relay's route for the kind (`outbox.pickup-failed.resolution`, #339) reaches it, records what it got, and fails at once on a wrong kind so the refusal shows within the test. */

@@ -68,10 +68,8 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { definePlanJob, legsWithin, positionOf, type Gathered } from "./plan-job"
 
-/** What the optimiser is asked: the request, and the pickups its stops are. */
 type Request = { request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; warnings: Map<number, PlanStopWarning>; unloadingStationId: string | null }
 
-/** The first transaction: the request, or the sentence that ends the Plan. */
 async function gather(tx: Tx, keys: { planId: string; companyId: string; provider: string }): Promise<Gathered<Request>> {
   const { planId } = keys
   const [found] = await tx.select({ status: plan.status, solver: plan.solver, trip: plan.trip, routeId: plan.routeId }).from(plan).where(eq(plan.id, planId))

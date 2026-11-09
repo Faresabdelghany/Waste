@@ -38,7 +38,6 @@ export type WorkerContext = JobContext & PollingKnob & RoutingEngine & Messaging
 /** Every outbox consumer's entries, one per kind it takes: Resolution's, Finance's, the staff notices' and the customer notices' (O16 of #290), the Registry's granted pauses (M11 of #293), then the counting rules' count (#547 of #544). */
 export const CONSUMERS: readonly AnyJob<WorkerContext>[] = [...openTickets, ...recordBillableEvents, ...notifyStaff, ...noticeCustomers, ...applyPauseGrants, ...countEmptyings]
 
-/** The relay, sending each kind to the consumers above that take it. */
 export const relay = relayOutbox(CONSUMERS)
 
 export const JOBS: readonly AnyJob<WorkerContext>[] = [

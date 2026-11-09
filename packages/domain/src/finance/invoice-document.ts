@@ -42,7 +42,7 @@ export type InvoiceDocumentLine = {
 /** The rows a document is made of: the invoice's own columns, its lines in position order, and its parties. */
 export type InvoiceDocumentInput = {
   kind: "invoice" | "credit-note"
-  /** `INV-26007188`, `CN-26007189`: the contracts' `invoiceLabel`. */
+  /** `INV-26007188`, `CN-26007189`: `invoiceLabel` (../numbering). */
   label: string
   language: DocumentLanguage
   currency: string
@@ -151,7 +151,6 @@ export function documentAmount(minor: number, currency: string, language: Docume
   return digits === 0 ? `${sign}${whole}` : `${sign}${whole}${decimal}${units.slice(-digits)}`
 }
 
-/** A newline-separated address as its lines, blanks dropped. */
 const linesOf = (address: string | null): string[] =>
   (address ?? "")
     .split(/\r?\n/)
@@ -220,7 +219,6 @@ export function invoiceDocumentOf(input: InvoiceDocumentInput): InvoiceDocument 
   return encoded(document)
 }
 
-/** The document with every string WinAnsi. */
 function encoded(document: InvoiceDocument): InvoiceDocument {
   const pair = ([a, b]: [string, string]): [string, string] => [winAnsi(a), winAnsi(b)]
   return {

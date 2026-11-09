@@ -97,7 +97,6 @@ export const MODULE_KEYS = [
   "configure.calendars",
 ] as const
 
-/** A surface a grant can name. */
 export type ModuleKey = (typeof MODULE_KEYS)[number]
 
 /** The workspace half of a module key. Read off the keys themselves, so the two can never disagree. */
@@ -121,5 +120,4 @@ export function modulesOf(workspace: WorkspaceKey): ModuleKey[] {
 /** What a grant allows on a module. `view` is implied by the other three (grants.ts). */
 export const ACTIONS = ["view", "edit", "create", "delete"] as const
 
-/** One of the four things a grant allows. */
 export type Action = (typeof ACTIONS)[number]

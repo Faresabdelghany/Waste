@@ -75,7 +75,6 @@ export const noAddress = (who: string, channel: MessageChannel) => `${who} has n
 export const CONTACT_NOT_THE_CUSTOMERS = "Pick a contact person of this customer"
 export const contactInactive = (name: string) => `${name} is inactive: they no longer speak for this customer`
 
-/** The message as written: its id and what it was queued as. */
 export type QueuedMessage = { id: string; projectId: string; channel: MessageChannel; purpose: MessagePurpose; recipient: string }
 
 /** What queueing a draft came to: the message as written, or why it was not — a refusal judged before anything was written. */

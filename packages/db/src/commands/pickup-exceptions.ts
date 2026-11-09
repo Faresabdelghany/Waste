@@ -15,7 +15,6 @@ import type { Tx } from "../client"
 import { pickup, proofOfService, route } from "../schema/execution"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 
-/** Each rule's ladder by position, for the rules named. */
 export async function laddersOf(tx: Tx, companyId: string, ruleIds: readonly string[]): Promise<Map<string, string[]>> {
   const ladders = new Map<string, string[]>()
   if (ruleIds.length === 0) return ladders

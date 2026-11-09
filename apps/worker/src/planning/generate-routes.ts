@@ -155,10 +155,8 @@ export type GenerationCounts = {
 /** A draft plans nothing: said on the run rather than thrown, since it is the scheme's state and not a failure. */
 export const DRAFT_GENERATES_NOTHING = "The scheme is a draft; a draft generates nothing"
 
-/** What a run's transaction came to: the counts and the routes it created or reshaped, or that the run was already done. */
 type Generated = { kind: "succeeded"; counts: GenerationCounts; projectId: string; reshaped: ReshapedRoute[] } | { kind: "already-done"; status: string }
 
-/** What a run came to: the counts and the Plans the horizon asked for its routes (../routing/horizon.ts), or that the run was already done. */
 type Outcome = { kind: "succeeded"; counts: GenerationCounts; horizon: HorizonAsks } | { kind: "already-done"; status: string }
 
 /** A route of the scheme as the walk reads it: generated, so it names its group (`route_scheme_shape` holds a route with a scheme to one). */
@@ -167,7 +165,6 @@ const groupOfRoute = (row: { id: string; collectionGroupId: string | null }): st
   return row.collectionGroupId
 }
 
-/** The stop as a pickup row's columns. */
 const pickupColumnsOf = (stop: PlannedStop) => ({
   containerId: stop.containerId,
   position: stop.position,
@@ -176,7 +173,6 @@ const pickupColumnsOf = (stop: PlannedStop) => ({
   wasteFractionId: stop.wasteFractionId,
 })
 
-/** The generation over one run, inside the fenced transaction. */
 async function generate(tx: Tx, runId: string, companyId: string, at: Date): Promise<Generated> {
   const [run] = await tx.select().from(generationRun).where(and(eq(generationRun.companyId, companyId), eq(generationRun.id, runId))).for("update")
   if (run === undefined) throw new Error(`no generation run ${runId} in company ${companyId}`)
@@ -188,14 +184,12 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   if (scheme === undefined) throw new Error(`no route scheme ${run.routeSchemeId} for generation run ${run.id}`)
 
   const counts: GenerationCounts = { routesCreated: 0, routesRefreshed: 0, routesCancelled: 0, pickupsWritten: 0, holidaysSkipped: 0, unlocated: 0, warnings: [] }
-  // The routes whose stops or ends this run wrote: the horizon's to ask a Plan for, once the transaction has committed.
   const reshaped: ReshapedRoute[] = []
   if (scheme.status !== "validated") {
     counts.warnings.push(DRAFT_GENERATES_NOTHING)
     return { kind: "succeeded", counts, projectId: run.projectId, reshaped }
   }
 
-  // The scheme's groups by position, ties by id, with their rule sets and picked containers.
   const groups = await tx
     .select()
     .from(collectionGroup)
@@ -281,7 +275,6 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   })
   counts.holidaysSkipped = plan.holidaysSkipped
 
-  // The stop candidates of every day the run writes stops for, and of the walk's first day for the stamp, in one statement.
   const writing = plan.decisions.filter((decision): decision is Extract<RouteDecision, { kind: "create" | "refresh" }> => decision.kind === "create" || decision.kind === "refresh")
   const days = [...new Set([...writing.map((decision) => decision.serviceDate), plan.walk.from])].sort()
   const rules = stopGroups.flatMap((group) => (group.rule === null ? [] : [{ group, rule: group.rule }]))
@@ -333,7 +326,6 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   }
   counts.unlocated = unlocated.size
 
-  // The existing pickups of the routes a refresh may touch, once.
   const refreshing = plan.decisions
     .filter((decision): decision is Extract<RouteDecision, { kind: "refresh" | "cancel" | "trim" }> => decision.kind === "refresh" || decision.kind === "cancel" || decision.kind === "trim")
     .map((decision) => decision.routeId)
@@ -355,7 +347,6 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
       }))
   const existingRouteOf = new Map(existingRoutes.map((row) => [row.id, row]))
 
-  // The Planned Assignment a create copies and a refresh copies afresh while planned: the group's vehicle, driver and provider, the scheme's start, depot and station.
   const assignmentOf = (groupId: string) => {
     const group = groupOf.get(groupId)!
     return {
@@ -453,7 +444,6 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     // A planned bulky collection is booked for the route's day (O11 of #347): the route keeps it, held or not.
     const carriesBooking = pickupsOf(decision.routeId).some((row) => row.service === "bulky" && row.status === "planned")
     const operatingDate = held || carriesBooking ? current.operatingDate : decision.operatingDate
-    // The crew on its day: an unheld route's the group's less whoever is away, a held one's the office's as it stands, each with the run's warning.
     const kept = held ? keptAssignmentOf(current) : assignment
     const crew = crewOnRoute(held ? { ...kept, plannedTrailerId: current.plannedTrailerId } : kept, operatingDate, routeLabel(current.number), held)
     counts.warnings.push(...crew.warnings)
@@ -559,7 +549,6 @@ async function awayPeriods(
 /** A crew as a route carries it; generation writes no trailer, so only a held route's has one. */
 type RouteCrew = { plannedDriverId: string | null; plannedVehicleId: string | null; plannedTrailerId?: string | null }
 
-/** The crew a route is written with on its day, and the run's warnings about it. */
 type CrewWritten = { driverId: string | null; vehicleId: string | null; warnings: string[] }
 
 /**

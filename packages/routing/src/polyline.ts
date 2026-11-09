@@ -15,7 +15,6 @@ export function decodePolyline(encoded: string): Position2D[] {
   let at = 0
   let latitude = 0
   let longitude = 0
-  /** One zig-zag signed delta, read from `at`. */
   const nextDelta = (): number => {
     let result = 0
     let shift = 0

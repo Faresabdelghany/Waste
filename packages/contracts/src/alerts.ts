@@ -38,7 +38,6 @@ export const Alert = z.object({
   status: AlertStatus,
   title: Label,
   details: Paragraph,
-  /** When the condition was seen. */
   detectedAt: IsoDateTime,
   /** What the alert is about: at least one of the four, or the ticket a rule's alert is about. */
   routeId: Id.nullable(),
@@ -96,7 +95,6 @@ export type AlertResolve = z.infer<typeof AlertResolve>
 export const AlertLinkTicket = z.strictObject({ ticketId: Id })
 export type AlertLinkTicket = z.infer<typeof AlertLinkTicket>
 
-/** A page of alerts: one project's, of one status, severity or kind, about one route, vehicle, driver or container, linked to one ticket. */
 export const AlertListQuery = ProjectScopedListQuery.extend({
   status: AlertStatus.optional(),
   /** The alerts one of the worker's rules raised. */

@@ -30,7 +30,6 @@ import { Paragraph } from "./text"
 /** What a period whose last day comes before its first is refused with, at the end, the bound a caller can move. */
 export const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
 
-/** A count of what a run did: zero or more. */
 const Count = NonNegativeInt
 
 /** A run's fields, spelled once for the two resources that carry them; each refines `periodOrdered` again, since spreading takes the fields and not the rule. */
@@ -67,7 +66,6 @@ export const BillingRunExclusion = z.object({
 })
 export type BillingRunExclusion = z.infer<typeof BillingRunExclusion>
 
-/** A run with its exclusions and the ids of the invoices it issued. */
 export const BillingRunDetail = z
   .object({
     ...billingRunFields,
@@ -106,7 +104,6 @@ export const BillingRunCatchUpLine = z.object({
 })
 export type BillingRunCatchUpLine = z.infer<typeof BillingRunCatchUpLine>
 
-/** What a preview answers: the counts, the totals per currency, and the payers a run would exclude. */
 export const BillingRunPreview = z.object({
   eventCount: Count,
   invoiceCount: Count,

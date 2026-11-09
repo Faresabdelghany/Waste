@@ -26,7 +26,6 @@ export const WEIGHBRIDGE_BATCHES_PER_MINUTE = 120
 /** A plate as the match reads it: letters and digits alone, upper case, so `cn 42-018` is the vehicle registered `CN 42 018`. */
 export const plateKey = (plate: string): string => plate.normalize("NFC").toUpperCase().replace(/[^\p{L}\p{N}]/gu, "")
 
-/** A fraction as the match may name it. */
 export type FractionCandidate = { id: string; key: string; wasteCode: string | null }
 
 /**
@@ -61,7 +60,6 @@ export type MatchFacts = {
 /** What a ticket comes to: a route and a fraction to write its Unload on, or the first reason it found none. */
 export type MatchDecision = { kind: "matched"; routeId: string; wasteFractionId: string } | { kind: "unmatched"; reason: WeighbridgeUnmatchedReason }
 
-/** The one route a set names, the reason where it names none or several. */
 function oneRoute(routeIds: readonly string[]): { routeId: string } | { reason: "no-route" | "several-routes" } {
   const distinct = [...new Set(routeIds)]
   if (distinct.length === 1) return { routeId: distinct[0] }

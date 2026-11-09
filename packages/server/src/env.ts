@@ -19,7 +19,6 @@ export const Host = z
 /** A string of decimal digits read as a number; `what` completes the refusal's "must be a whole number". */
 const digits = (what: string) => z.string().regex(/^\d+$/, { error: `must be a whole number${what}` }).transform(Number)
 
-/** A TCP port, 1..65535, `fallback` unless set. */
 export const Port = (fallback: number) => digits("").pipe(z.int().min(1).max(65535)).default(fallback)
 
 /** A whole number of at least `min`, absent unless set; `what` names its unit, as " of seconds, at least 1". */

@@ -29,6 +29,7 @@ import { dayIn } from "@/lib/format/clock"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { containersAtProperty, dueSentence, inspectionBodyOf, lastEmptyingSentence, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankBodyOf, tanksEditable, tanksReadable, tankSummary, type InspectionTyped, type TankTyped } from "@/lib/data/tanks"
 import { inspectionsOf, recordInspection, registerTank, tanksOfProperty } from "@/lib/api/property-details"
+import { readSentence } from "@/lib/api/read-state"
 
 export function TanksSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()
@@ -47,12 +48,8 @@ export function TanksSection({ record, module }: { record: BusinessRecord; modul
   return (
     <section className="space-y-2" data-testid="property-tanks" aria-label="Tanks">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tanks</h3>
-      {!readable ? (
-        <p className="text-sm text-muted-foreground">The tanks are not shown to your role.</p>
-      ) : tanks.problem !== null ? (
-        <p className="text-sm text-muted-foreground">The tanks could not be read from the API: {tanks.problem}</p>
-      ) : tanks.rows === null ? (
-        <p className="text-sm text-muted-foreground">Reading the tanks from the API…</p>
+      {tanks.rows === null || !readable || tanks.problem !== null ? (
+        <p className="text-sm text-muted-foreground">{readSentence({ viewed: readable, problem: tanks.problem, answered: tanks.rows !== null }, "tanks")}</p>
       ) : (
         <>
           {tanks.rows.length === 0 ? (

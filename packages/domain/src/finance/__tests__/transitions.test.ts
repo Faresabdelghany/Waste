@@ -13,7 +13,6 @@ const NOT_ENDED = "Settlement NordRen · July 2026 has not ended; close it after
 
 /** July 2026, by its first and last day in. */
 const JULY = { label: LABEL, firstDay: "2026-07-01", lastDay: "2026-07-31" }
-/** The project's days the machine is asked on: before the period, its first day, its last day, and the day after it. */
 const BEFORE = "2026-06-30"
 const FIRST = "2026-07-01"
 const LAST = "2026-07-31"
@@ -109,7 +108,6 @@ describe("a provider price's indexation", () => {
 const CORRECTION = "018f7c34-a000-7000-8000-0000000000c1"
 const CORRECTED = "This unload was corrected by unload 018f7c34-a000-7000-8000-0000000000c1; review that one"
 
-/** The review machine spelled out. */
 const reviewTable: Record<WeightReviewStatus, Record<WeightReviewDecision, Transition<WeightReviewStatus>>> = {
   captured: {
     approved: { kind: "move", to: "approved" },

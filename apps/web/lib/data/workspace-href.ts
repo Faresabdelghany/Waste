@@ -7,7 +7,7 @@
 import { CONTROL_CENTER_TWIN } from "@/lib/modules/keys"
 import { WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
 
-import { DEFAULT_SETTINGS_PANE, settingsHref } from "@/lib/modules/settings-panes"
+import { DEFAULT_SETTINGS_PANE, settingsAddressHref, settingsHref } from "@/lib/modules/settings-panes"
 
 /** The params that name a module, and a record in it, on the page showing them: `params` kept beside them. */
 export function moduleParams(moduleId: string, recordId?: string, params?: URLSearchParams): URLSearchParams {
@@ -30,7 +30,11 @@ export function workspaceHref(location: ModuleLocation, recordId?: string, { pag
   // An app of its own opens itself, reading no `?module=` (the Driver App, Issue #145); a module shown elsewhere keeps its workspace's address.
   if (spec?.shown === "app" && spec.deepLink !== undefined) return spec.deepLink
   const shown = spec?.shown
-  if (typeof shown === "object") return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
+  if (typeof shown === "object") {
+    const opened = recordId === undefined ? undefined : shown.opens?.(recordId)
+    if (opened !== undefined) return settingsAddressHref(opened)
+    return settingsHref(shown.pane === "default" ? DEFAULT_SETTINGS_PANE : shown.pane, { record: recordId })
+  }
   // Configure's one module with no pane, Control Center, opens its twin.
   if (workspaceId === "configure") return workspaceHref(CONTROL_CENTER_TWIN, recordId)
   return `${WORKSPACES[workspaceId].path}?${params.toString()}`

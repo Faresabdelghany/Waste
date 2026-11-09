@@ -35,7 +35,6 @@ import { NO_OVERLAP } from "./exclude-overlapping"
 import { resolveKey } from "./key"
 
 const HELPER = "excludeOverlappingWindow"
-/** The range this helper spells its constraint over. */
 const WINDOW_COLUMNS = { columns: ["planned_from", "planned_to"], noun: "window", set: "window" } as const
 /** The range as the constraint spells it, the part every window constraint carries whatever its key and predicate; the gate (hand-written.ts) reads it from here. */
 export const WINDOW_RANGE = `tstzrange(${quoted("planned_from")}, ${quoted("planned_to")}, '[)') WITH &&`

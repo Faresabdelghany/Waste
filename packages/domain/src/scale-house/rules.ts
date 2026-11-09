@@ -13,7 +13,6 @@ import { plateKey } from "../execution/weighbridge"
 import { FOUR_DIGITS_PATTERN } from "../registry/address"
 import type { ScaleTicketParty, ScaleTicketVoidReason } from "./vocabulary"
 
-/** The lines one ticket may be split into. */
 export const SCALE_TICKET_LINES_MAX = 20
 
 /** An account ticket names its customer and agreement, a walk-in's neither: the ticket table's `party_shape`. */

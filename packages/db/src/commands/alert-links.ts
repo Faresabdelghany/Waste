@@ -54,7 +54,6 @@ import { alertColumns, type AlertRow } from "../shapes/alerts"
 /** The tenant and the project a statement is bounded by: what `openTicket` and the link command both know. */
 export type Scope = { companyId: string; projectId: string }
 
-/** What a body naming an alert that is not the project's is told. */
 export const NOT_AN_ALERT = "Not an alert of this project"
 
 /** What linking an alert that already names another ticket is told: the ticket it names, by its label. */

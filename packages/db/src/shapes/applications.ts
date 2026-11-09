@@ -68,7 +68,6 @@ export const applicationOf = (row: ApplicationRow, decision: DecisionRow | undef
   ...stampsOf(row),
 })
 
-/** Each Application's latest Decision, by application id, in one statement. */
 export async function latestDecisions(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, DecisionRow>> {
   if (ids.length === 0) return new Map()
   const rows = await tx

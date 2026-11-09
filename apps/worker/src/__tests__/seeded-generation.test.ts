@@ -70,7 +70,6 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
     }
   })
 
-  /** The run the sweep wrote for a scheme, run to its end as the job runs it, and the row it leaves. */
   const generated = async (schemeId: string) => {
     const [queued] = await ownerPool.db.select().from(generationRun).where(eq(generationRun.routeSchemeId, schemeId))
     const outcome = await runGeneration({ generationRunId: queued.id, companyId: DEMO_IDS.company }, null, context())

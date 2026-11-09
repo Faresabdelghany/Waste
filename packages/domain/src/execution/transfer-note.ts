@@ -129,7 +129,6 @@ export function documentKilograms(kg: number, language: DocumentLanguage): strin
   return `${String(kg).replace(/\B(?=(\d{3})+(?!\d))/g, group)} kg`
 }
 
-/** A newline-separated address as one line, its parts joined by commas. */
 const oneLine = (address: string): string =>
   address
     .split(/\r?\n/)
@@ -137,7 +136,6 @@ const oneLine = (address: string): string =>
     .filter((line) => line !== "")
     .join(", ")
 
-/** The model of an unload's transfer note. */
 export function transferNoteOf(input: TransferNoteInput): TransferNoteDocument {
   const label = LABELS[input.language]
   const kg = (value: number) => documentKilograms(value, input.language)

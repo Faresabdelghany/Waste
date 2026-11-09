@@ -21,12 +21,12 @@
 // and the relay groups by company under `withCompany` as `wms_api`, whose
 // fence needs the tenant on every row.
 //
-// It lived in apps/api/src/outbox.ts until the worker became the second
-// process that writes the outbox (Issue #109 part B and #112 part B) —
-// Resolution's consumer opens a ticket from an event with no request in hand
-// and emits `ticket-opened` like the office's create does, and Finance's
+// The worker is the second process that writes the outbox (Issue #109 part
+// B and #112 part B) — Resolution's consumer opens a ticket from an event with
+// no request in hand and emits `ticket-opened` like the office's create does,
+// and Finance's
 // billing run issues invoices on a schedule and emits `invoice-issued` — so it
-// moved to the package both processes consume, beside the write statements
+// lives in the package both processes consume, beside the write statements
 // that call it (`commands/open-ticket.ts`, `commands/invoice-writes.ts`), and
 // the API's routes import it from here. It
 // takes the tenant it needs and nothing more, `{ companyId }`, which a
@@ -50,7 +50,6 @@ export type OutboxEventDraft<K extends OutboxKind = OutboxKind> = K extends Outb
       /** The id of what the event is about; a soft id, joined by nobody. */
       aggregateId: string
       payload: OutboxPayloadInput<K>
-      /** The project the aggregate belongs to. */
       projectId: string
       /** The command's instant, not the request's. */
       occurredAt: Date

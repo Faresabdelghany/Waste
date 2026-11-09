@@ -57,7 +57,6 @@ const database = databaseUnderTest()
 const owner = ownerUnderTest()
 const skip = database.skip || owner.skip
 
-/** The instant the suite's clock stands at. */
 const NOON = new Date("2026-10-06T12:00:00Z")
 
 describe("finance.record-billable-events against Postgres", { skip }, () => {
@@ -114,7 +113,6 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     proofs: [],
   })
 
-  /** A ticket's payload as `Ticket` spells it, from the row seeded. */
   const ticketPayload = (ticketId: string, number: number, resolution: string, closedAt: Date, links: { agreementId?: string | null; routeId?: string | null; pickupId?: string | null } = {}) => ({
     id: ticketId,
     createdAt: NOON.toISOString(),
@@ -139,7 +137,6 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     closedAt: closedAt.toISOString(),
   })
 
-  /** The registry entry that works Finance's queue of the kind: the seam's one job per kind. */
   const consumerOf = (kind: OutboxKind) => {
     const found = recordBillableEvents.find((job) => job.queue === consumerQueue(kind, "finance"))
     assert.ok(found, `${kind}: no entry of Finance's consumer works ${consumerQueue(kind, "finance")}`)
@@ -159,11 +156,9 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     return { event: event.id, kind: event.kind as Recorded["kind"], ...actions[0], actions: actions[0]?.did === "nothing" ? [] : actions }
   }
 
-  /** The billable events of a pickup, as the API reads them, oldest first. */
   const eventsOfPickup = (pickupId: string): Promise<BillableEvent[]> =>
     withCompany(pool.db, tenant.companyId, async (tx) => (await eventsFrom(tx, tenant.companyId).query.where(and(eq(billableEvent.companyId, tenant.companyId), eq(billableEvent.pickupId, pickupId))).orderBy(asc(billableEvent.id))).map(eventOf))
 
-  /** Every billable event the tenant holds, oldest first. */
   const allEvents = (): Promise<BillableEvent[]> => withCompany(pool.db, tenant.companyId, async (tx) => (await eventsFrom(tx, tenant.companyId).query.where(eq(billableEvent.companyId, tenant.companyId)).orderBy(asc(billableEvent.id))).map(eventOf))
 
   /** Puts an event on an invoice line the way a run does, so its reading is `invoiced`: a run row and one document through the commands' door. */
@@ -694,7 +689,6 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     }
   }
 
-  /** The exception charges of a pickup, oldest first. */
   const chargesOf = async (pickupId: string) => (await eventsOfPickup(pickupId)).filter((event) => event.kind === "pickup-exception")
 
   test("a stop missed for a reason the customer caused is charged at its rule's step once the free count is spent, its proof the evidence, once however often delivered (#293 M5)", () =>

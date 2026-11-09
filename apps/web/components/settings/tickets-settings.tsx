@@ -14,7 +14,7 @@
 import { useState } from "react"
 
 import { CountingRulesSettings } from "@/components/settings/counting-rules-settings"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { TicketDefaultTeamsSettings } from "@/components/settings/ticket-teams-settings"

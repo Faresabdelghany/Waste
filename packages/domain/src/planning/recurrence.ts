@@ -11,7 +11,7 @@
 //     once-a-month → dayOfMonth(date) <= 7 (the first occurrence of each
 //                    selected weekday in the month)
 //     the cadence is the season's in force on the date, if any (seasons.ts)
-//   Route identity = (schemeId, serviceDate) — deterministic, so
+//   Route identity = (schemeId, collectionGroupId, serviceDate) — deterministic, so
 //   regeneration can upsert instead of duplicating.
 //
 // The closed lists live in ../planning/vocabulary since Issue #97, where the
@@ -134,11 +134,9 @@ export type CadenceOn = {
   weekRotation?: WeekRotation
   /** The day an every-3/4-weeks count starts from; empty where there is none. */
   anchor: string
-  /** The season in force on the date, if any. */
   season?: SchemeSeason
 }
 
-/** The cadence the recurrence runs at on the date: the season's in force there, or the scheme's own. */
 export function cadenceOn(recurrence: SchemeRecurrence, iso: string): CadenceOn {
   const season = seasonOn(recurrence.seasons, iso)
   if (season === undefined) {

@@ -26,10 +26,8 @@ export const OPENING_EXCEPTIONS_MAX = 366
 /** How many days of opening the public map carries for a point: this week, from today on the project's clock. */
 export const DROP_OFF_WEEK_DAYS = 7
 
-/** One opening window on a day. */
 export type OpeningWindow = { opensAt: string; closesAt: string }
 
-/** A weekday's window. */
 export type WeeklyWindow = OpeningWindow & { weekday: ServiceDay }
 
 /** A dated exception: its window, or both times null for closed all day. */

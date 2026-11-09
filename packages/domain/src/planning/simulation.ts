@@ -91,14 +91,8 @@ const collects = (row: Occurrence | null): row is Occurrence =>
 const later = (a: string, b: string) => (a > b ? a : b)
 const earlier = (a: string, b: string) => (a < b ? a : b)
 
-/**
- * One side's preview from the window's start — its rows over the effective
- * window, or PREVIEW_HORIZON_MONTHS from there when open-ended — walked once;
- * the window's `to` reads the Nth collection and the horizon from it.
- */
 type Side = { input: OccurrencePreviewInput; preview: OccurrencePreview }
 
-/** The recurrence date of the side's Nth collection, or null when it makes fewer. */
 function nthPlannedDate(side: Side | null, count: number): string | null {
   if (!side) return null
   const dates = side.preview.rows

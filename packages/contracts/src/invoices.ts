@@ -60,7 +60,7 @@ const invoiceFields = {
   /** One per document; a payer with agreements in two currencies gets two invoices. */
   currency: Currency,
   issuedOn: IsoDate,
-  /** Thirty days on for an invoice; the day of issue for a credit note. */
+  /** The payer's terms on for an invoice — its own, else the project's (#291 C4); the day of issue for a credit note. */
   dueOn: IsoDate,
   /** The run's period on an invoice; null on a credit note. */
   periodFrom: IsoDate.nullable(),

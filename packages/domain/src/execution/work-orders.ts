@@ -59,7 +59,6 @@ export function takenContainerOf(stop: { service: PickupService; status: PickupS
   return stop.status === "planned" && (stop.service === "remove" || stop.service === "swap") ? stop.containerId : null
 }
 
-/** What the work is, where: the facts every ticket about it names. */
 type Work = { service: LedgerService; containerLabel: string; replacementLabel: string | null; address: string | null }
 
 /** The work as a subject spells it: "Delivery of BIN-7 to Parkvej 18", "Swap of BIN-1 for BIN-7 at Parkvej 18". */

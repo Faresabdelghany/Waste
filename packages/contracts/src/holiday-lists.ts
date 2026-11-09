@@ -21,8 +21,6 @@ import { PageRequest } from "./pagination"
 import { resourceBodies, stamped } from "./resource"
 import { Label } from "./text"
 
-
-/** One day of a list: the day, and what it is called where somebody said. */
 export const HolidayListHoliday = z.strictObject({
   day: IsoDate,
   /** `Grundlovsdag`; null where nobody named it. */
@@ -33,7 +31,6 @@ export type HolidayListHoliday = z.infer<typeof HolidayListHoliday>
 const Holidays = z.array(HolidayListHoliday)
 const HolidaysBody = Holidays.max(HOLIDAYS_MAX)
 
-/** What a set with one day twice is told, and where. */
 const oneHolidayPerDay = { message: ONE_LISTED_HOLIDAY_PER_DAY, path: ["holidays"] }
 const noRepeatedDay = (holidays: readonly { day: string }[]): boolean => eachOnce(holidays, (holiday) => holiday.day)
 
@@ -70,6 +67,5 @@ export type HolidayListPatch = z.infer<typeof HolidayListPatch>
 export const HolidayListHolidaysSet = z.strictObject({ holidays: HolidaysBody }).refine((body) => noRepeatedDay(body.holidays), oneHolidayPerDay)
 export type HolidayListHolidaysSet = z.infer<typeof HolidayListHolidaysSet>
 
-/** A page of the company's lists. */
 export const HolidayListListQuery = PageRequest
 export type HolidayListListQuery = z.infer<typeof HolidayListListQuery>

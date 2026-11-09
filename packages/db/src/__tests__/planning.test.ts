@@ -10,8 +10,8 @@
 // ring validity refuse what they should, the project's working week defaults
 // and is checked, and the fence shows the API role exactly its company's rows
 // in each of the eight still standing (the ninth, the calendars' holidays,
-// was dropped on 2026-11-05: calendar-holidays-dropped.test.ts). Every test runs as the owner in a transaction that is
-// rolled back, so nothing needs cleaning up.
+// was dropped on 2026-11-05). Every test runs as the owner in a transaction
+// that is rolled back, so nothing needs cleaning up.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -210,7 +210,7 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
     })
 
   test("0006 created the nine tables in wms, the eight still standing each fenced (row-level security enabled and forced, one policy for the API role) and with its updated_at trigger", async () => {
-    // The API role's policies alone: the public door's own (0018) are public-door.test.ts's question.
+    // The API role's policies alone: the public door's own (0017) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
     assert.equal(names.length, 8)
     const [{ dropped }] = await owner.sql<{ dropped: string | null }[]>`select to_regclass('wms.collection_calendar_holiday')::text as dropped`

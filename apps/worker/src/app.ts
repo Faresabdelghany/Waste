@@ -33,7 +33,6 @@ import { checkBoss, countStale, type BossProbe } from "./readiness"
 export type AppOptions = {
   /** The pool /readyz probes, as the API role: main.ts builds it from probePoolOptions; a test hands whatever it wants probed. */
   probe: Database
-  /** pg-boss as started, the registered queues and whether it is started right now. */
   boss: BossProbe
   /** The server's clock; injected so a test can pin it. */
   now?: () => Date

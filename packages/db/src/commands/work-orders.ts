@@ -61,7 +61,6 @@ type CompletedStop = {
   sharedCollectionPointId: string | null
 }
 
-/** A container as the ledger's commands name it: its id, its project and its label. */
 async function containerRef(tx: Tx, companyId: string, id: string): Promise<ContainerRef> {
   const [row] = await tx
     .select({ id: container.id, projectId: container.projectId, label: container.label })

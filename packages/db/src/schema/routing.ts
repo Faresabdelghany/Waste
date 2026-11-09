@@ -87,7 +87,6 @@ export const plan = wms.table(
     oneOf(t.solver),
     oneOf(t.status),
     oneOf(t.trip),
-    // Totals belong to `ready` alone, whole and non-negative there, absent otherwise.
     check(
       tableObjectName(t.id.table, "totals_shape", "plan"),
       sql`case ${t.status} when 'ready' then ${t.distanceMetres} is not null and ${t.distanceMetres} >= 0 and ${t.durationSeconds} is not null and ${t.durationSeconds} >= 0 else ${t.distanceMetres} is null and ${t.durationSeconds} is null end`,
@@ -125,7 +124,6 @@ export const planStop = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.routeId], route),
-    // Carries the route both ways: a stop names a plan of the route it names, and a pickup of that same route.
     projectReference(t, [t.routeId, t.planId], plan, [plan.routeId, plan.id]),
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     tenantReference(t, [t.unloadingStationId], unloadingStation),
@@ -134,7 +132,6 @@ export const planStop = wms.table(
     positive(t.position),
     oneOf(t.kind),
     oneOf(t.windowWarning),
-    // A pickup names its pickup, an unload visit its station, and only a pickup has a window to warn of.
     check(
       tableObjectName(t.id.table, "kind_shape", "planStop"),
       sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.unloadingStationId} is null else ${t.pickupId} is null and ${t.unloadingStationId} is not null and ${t.windowWarning} is null end`,

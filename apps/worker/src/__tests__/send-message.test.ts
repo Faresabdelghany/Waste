@@ -30,7 +30,6 @@ import { databaseUnderTest, ownerUnderTest } from "./database"
 const api = databaseUnderTest()
 const owner = ownerUnderTest()
 
-/** A provider that records what it was handed and answers as told. */
 function scripted(answers: Array<"ok" | Error>): MessagingProvider & { handed: OutgoingMessage[] } {
   const handed: OutgoingMessage[] = []
   return {

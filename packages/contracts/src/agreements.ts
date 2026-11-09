@@ -45,7 +45,6 @@ import { effectiveDated, effectiveDatedBodies } from "./validity"
 export const AgreementStatus = z.enum(AGREEMENT_STATUSES)
 export type AgreementStatus = z.infer<typeof AgreementStatus>
 
-/** How often the Agreement is billed. */
 export const BillingCadence = z.enum(BILLING_CADENCES)
 export type BillingCadence = z.infer<typeof BillingCadence>
 
@@ -250,7 +249,6 @@ export const SubscriptionPauseListQuery = ProjectScopedListQuery.extend({
 })
 export type SubscriptionPauseListQuery = z.infer<typeof SubscriptionPauseListQuery>
 
-/** A page of agreements: one project's, one customer's, by the number a person quoted, valid on a day. */
 export const AgreementListQuery = ProjectScopedListQuery.extend({
   /** The agreements this customer holds; a payer's are found the same way. */
   customerId: Id.optional(),

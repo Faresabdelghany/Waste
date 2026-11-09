@@ -15,7 +15,6 @@ export type StoredSchemeSeason = {
   weekRotation: WeekRotation | null
 }
 
-/** The domain's seasons from the stored ones, the null rotation left out. */
 export const schemeSeasonsOf = (stored: readonly StoredSchemeSeason[]): SchemeSeason[] =>
   stored.map(({ weekRotation, ...season }) => ({ ...season, ...(weekRotation === null ? {} : { weekRotation }) }))
 

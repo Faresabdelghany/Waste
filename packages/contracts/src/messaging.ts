@@ -39,7 +39,6 @@ export type MessageTemplateStatus = z.infer<typeof MessageTemplateStatus>
 /** A template's body: room for an e-mail of a few paragraphs; a text message's own bound is the channel's rule. */
 const TemplateBody = z.string().min(1).max(TEMPLATE_BODY_MAX).refine((text) => text.trim().length > 0, { message: SAY_SOMETHING })
 
-/** The placeholders of the subject and the body, held to the ones a message fills, each refused at its own field. */
 function placeholdersIssues(template: { subject?: string | null; body?: string }, context: z.RefinementCtx): void {
   for (const [path, text] of Object.entries({ subject: template.subject, body: template.body })) {
     if (typeof text !== "string") continue

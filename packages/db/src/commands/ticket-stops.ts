@@ -98,7 +98,6 @@ export async function bookingTicket(tx: Tx, companyId: string, pickupId: string)
   return row
 }
 
-/** A comment of the office's eyes alone, recorded by the actor, the ticket's status and assignee as they stand. */
 const comment = (row: TicketRow, body: string, actor: Actor) => ({
   kind: "comment" as const,
   status: row.status,

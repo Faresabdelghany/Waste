@@ -261,6 +261,7 @@ import {
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import { useGrants } from "@/components/platform/use-grants"
+import { useActorName } from "@/components/platform/shell-identity"
 import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
@@ -285,8 +286,6 @@ type BusinessWorkspaceProps = {
    * provider itself (#291 C24), so the scope filters only the rest.
    */
   serviceProviderScopeId?: string
-  /** Name written as owner/actor on audit events and created records. */
-  actorName?: string
 }
 
 // The modules the workspace reads besides the one shown, by key.
@@ -810,8 +809,9 @@ export function BusinessWorkspace({
   showFilters = true,
   navigationBasePath,
   serviceProviderScopeId,
-  actorName = "Olivia Larsen",
 }: BusinessWorkspaceProps) {
+  // Who acts here: the account on the Pilot, the shell's persona in fixture mode.
+  const actorName = useActorName()
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()
   // Whether a guided scheme's zero match is evidence: the API's containers placed (#207).

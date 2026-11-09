@@ -76,7 +76,6 @@ type Row = {
   tank_last_emptied_on: string | null
 }
 
-/** The later of two days, either of which may be absent. */
 const later = (a: string | null, b: string | null): string | null => (a === null ? b : b === null ? a : a > b ? a : b)
 
 /**

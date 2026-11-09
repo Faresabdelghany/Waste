@@ -2,10 +2,7 @@
 // @waste/domain/execution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
 // would refuse it as a 500 naming nothing. Shared here because several modules
-// read them — `routes.ts` the route status and its cancel's reason codes, `pickups.ts` the pickup's status,
-// origin and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
-// `driver-commands.ts` the command kinds, the outcomes and the driver's
-// reasons — and a list spelled in one place is a list that cannot drift
+// read them, and a list spelled in one place is a list that cannot drift
 // between them.
 //
 // A photo's or a signature's Storage object lives under an agreed key,
@@ -35,7 +32,6 @@ import {
 import { PROOF_KEY_PATTERN, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 import * as z from "zod"
 
-/** Where a dated Route stands. */
 export const RouteStatus = z.enum(ROUTE_STATUSES)
 export type RouteStatus = z.infer<typeof RouteStatus>
 
@@ -83,7 +79,6 @@ export type ProofKind = z.infer<typeof ProofKind>
 export const ExecutionSource = z.enum(EXECUTION_SOURCES)
 export type ExecutionSource = z.infer<typeof ExecutionSource>
 
-/** What a driver's device may say. */
 export const DriverCommandKind = z.enum(DRIVER_COMMAND_KINDS)
 export type DriverCommandKind = z.infer<typeof DriverCommandKind>
 

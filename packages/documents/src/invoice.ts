@@ -121,7 +121,6 @@ export async function renderInvoiceDocument(document: InvoiceDocument): Promise<
     return top - ROW - 4
   }
 
-  /** The VAT per rate, the totals, how to pay and the FIK line, from `top` down. */
   const closing = (page: Page, top: number) => {
     let y = top - 6
     rule(page, y + 10)
