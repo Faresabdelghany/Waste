@@ -37,7 +37,7 @@ import { notActive } from "@waste/domain/execution/transitions"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { labelOf } from "@waste/db/shapes/routes"
 
-import { resolveDriver } from "../auth/driver"
+import { NO_DRIVER_PROFILE, resolveDriver } from "../auth/driver"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
@@ -91,9 +91,9 @@ export function proofObjectRoutes(deps: RouteDeps) {
         transaction: false,
         body: ProofUploadRequest,
         invalid: ["the body is not a route id, a command id and one of the bucket's formats"],
+        forbidden: NO_DRIVER_PROFILE,
         responses: {
           200: describeJson("The key, and where to put the bytes or that they are there.", ProofUpload),
-          403: describeProblem("No active account here, or no active driver profile is bound to this login."),
           404: describeProblem("The route is not assigned to this driver, or not there."),
           409: describeProblem("The route is not active: the door would reject the command the object is for."),
           502: describeProblem(STORAGE_SILENT),

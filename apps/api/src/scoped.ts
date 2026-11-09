@@ -6,8 +6,9 @@
 // caller works in (auth/projects.ts): a row outside either is the family's 404,
 // in the one sentence every family has used — "No depot <id> in the projects
 // this account works in", or "… in this company" for a company-wide one. A
-// family whose reach is something else (a fleet a Service Provider runs, the
-// rows a provider is assigned) names its own fence and keeps the sentence.
+// family whose reach is something else — the fleet an office's projects or a
+// Service Provider's own admit (`reachesFleet`) — names its fence in place of
+// the projects' and keeps their sentence.
 //
 // A page is the list rule of pagination.ts applied once: the rows after the
 // cursor in `id` order, one more than the page asked for to see whether there

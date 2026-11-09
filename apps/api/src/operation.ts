@@ -93,6 +93,8 @@ export type Operation = {
   body?: z.ZodType
   /** The route's own 400 clauses, after those the path's id and the page rule make: "the body is missing a field". */
   invalid?: readonly string[]
+  /** What else refuses the caller beside the grant, as the 403 says it: "no active driver profile is bound to this login". */
+  forbidden?: string
   responses: Responses
 }
 
@@ -117,14 +119,18 @@ export type Guards = {
 
 const NO_TOKEN = "No usable token (see WWW-Authenticate)."
 
-/** The 403 a grant earns, in the words every route has used: the account, or the role's grant of the action on the module (and of the second). */
-function forbidden(module: ModuleKey, action: Action, also?: readonly [ModuleKey, Action]): string {
-  const second = also === undefined ? "" : ` and \`${also[1]}\` on \`${also[0]}\``
-  return `No active account here, or the caller's role does not allow \`${action}\` on \`${module}\`${second}.`
+/**
+ * The 403 a route earns, in the words every route has used: the account; the
+ * role's grant of the action on the module, and of the second where it asks
+ * one (the same action named once); and what else refuses the caller.
+ */
+function forbiddenSentence({ operationId, module, action, also, forbidden }: Operation): string {
+  if (typeof module === "function") throw new Error(`${operationId}: a grant the account chooses states its own 403`)
+  if (module === undefined || action === undefined) return forbidden === undefined ? "No active account here." : `No active account here, or ${forbidden}.`
+  const second = also === undefined ? "" : also[1] === action ? ` and on \`${also[0]}\`` : ` and \`${also[1]}\` on \`${also[0]}\``
+  const grant = `the caller's role does not allow \`${action}\` on \`${module}\`${second}`
+  return forbidden === undefined ? `No active account here, or ${grant}.` : `No active account here, ${grant}, or ${forbidden}.`
 }
-
-/** The 403 of a route the guard alone admits. */
-const NO_ACCOUNT = "No active account here."
 
 const PATH_ID = "the path does not hold an id"
 const PAGE = [`the page size is outside 1..${PAGE_LIMIT_MAX}`, "the cursor is not one this API wrote"]
@@ -146,7 +152,7 @@ export function refusalSentence(clauses: readonly string[]): string {
 
 /** The description the document carries: the route's own, with the 401, 403 and 400 derived where the route does not state them. */
 function documented(operation: Operation): Parameters<typeof describeRoute>[0] {
-  const { operationId, summary, description, module, action, also } = operation
+  const { operationId, summary, description } = operation
   const responses: Responses = { ...operation.responses }
   const clauses = [...(operation.params === IdParam ? [PATH_ID] : []), ...(isPaged(operation.query) ? PAGE : []), ...(operation.invalid ?? [])]
   if (clauses.length > 0) {
@@ -155,10 +161,7 @@ function documented(operation: Operation): Parameters<typeof describeRoute>[0] {
   }
   if (operation.door !== undefined) return { operationId, summary, description, responses }
   responses[401] ??= describeProblem(NO_TOKEN)
-  if (responses[403] === undefined) {
-    if (typeof module === "function") throw new Error(`${operationId}: a grant the account chooses states its own 403`)
-    responses[403] = describeProblem(module === undefined || action === undefined ? NO_ACCOUNT : forbidden(module, action, also))
-  }
+  if (responses[403] === undefined) responses[403] = describeProblem(forbiddenSentence(operation))
   return { operationId, summary, description, security: BEARER_SECURITY, responses }
 }
 

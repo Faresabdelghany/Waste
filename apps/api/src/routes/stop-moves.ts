@@ -194,10 +194,7 @@ const STATES =
 const MOVE =
   "Each stop moved is taken off where it stood — `skipped` with the reason `removed-by-dispatcher`, its note naming the route it went to, `pickup-skipped` written — and the office's own stop of the same work is added to the other route as `POST /routes/{id}/pickups` adds one, after its last position, in the order the stops stood: judged on that route's service date (a container with no placement then, a bulky booking for another day, a work order's container no longer where its move takes it from, the same work planned there already are each a 409 in Add stop's words), and booked for the open ticket the stop answered, where it answered one. An emptying is refused onto a route that empties the container already (409, `Route RC-1043 empties container BIN-7 already; take one of the two stops off instead`), and a stop the route's planned vehicle cannot serve (O7 of #290) — a fraction none of its compartments carries, a container its type does not lift, a stop heavier than one trip of its fraction — is refused (409, `WH-24 has no compartment for Glass, which 2 stops of route RC-1042 collect`). Generation never brings back the stop taken off nor skips or doubles the office's, so the move outlives the next run with no hold. A refusal rolls back the whole move. Under both routes' row locks, taken in id order; both routes' `updatedAt` move."
 
-const problems = (grants: string) => ({
-  403: describeProblem(`No active account here, or the caller's role does not allow ${grants}.`),
-  404: describeProblem("No route with that id in the projects this account works in: a Service Provider's account moves no stop."),
-})
+const NO_SUCH_ROUTE = describeProblem("No route with that id in the projects this account works in: a Service Provider's account moves no stop.")
 
 export function stopMoveRoutes(deps: RouteDeps) {
   const { now } = deps
@@ -215,7 +212,7 @@ export function stopMoveRoutes(deps: RouteDeps) {
         invalid: ["the body names no stop, one twice, an id that is not an open stop of the route, a member the command does not take, or no other route of its project"],
         responses: {
           200: describeJson("The route the stops left, as it now stands.", RouteDetail),
-          ...problems(`\`edit\` on \`${PICKUPS}\``),
+          404: NO_SUCH_ROUTE,
           409: describeProblem("A route is active, completed or cancelled, or a stop is refused where it would go; the detail says which."),
         },
       },
@@ -256,7 +253,7 @@ export function stopMoveRoutes(deps: RouteDeps) {
         invalid: ["the body names no stop, one twice, an id that is not an open stop of the route, every open stop of it, a member the command does not take, or a vehicle or driver the rules of `POST /routes` refuse — each at its field"],
         responses: {
           201: describeCreated("The new route, planned, with the stops moved onto it.", RouteDetail),
-          ...problems(`\`create\` on \`${ROUTES}\` and \`edit\` on \`${PICKUPS}\``),
+          404: NO_SUCH_ROUTE,
           409: describeProblem("The route is active, completed or cancelled; a vehicle or driver named is out of service or away on the day; or a stop is refused on the new route; the detail says which."),
         },
       },
@@ -309,7 +306,7 @@ export function stopMoveRoutes(deps: RouteDeps) {
         invalid: ["the body names no route, a member the command does not take, or no other route of this route's project"],
         responses: {
           200: describeJson("This route, as it now stands with the stops merged onto it.", RouteDetail),
-          ...problems(`\`edit\` on \`${ROUTES}\` and on \`${PICKUPS}\``),
+          404: NO_SUCH_ROUTE,
           409: describeProblem("A route is active, completed or cancelled, or a stop is refused here; the detail says which."),
         },
       },

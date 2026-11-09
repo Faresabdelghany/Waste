@@ -181,7 +181,6 @@ export function rightSizingRoutes(deps: RouteDeps) {
         invalid: ["a size's approve names no day or a day outside the subscription", "a product that is not the project's", "a frequency's names either"],
         responses: {
           200: describeJson("The proposal as it now stands.", RightSizingProposal),
-          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\` and on \`${AGREEMENTS}\`.`),
           404: describeProblem("No proposal with that id in the projects this account works in."),
           409: describeProblem(`The proposal is decided; ${STALE_EVIDENCE}; or the subscription's change refuses (a placement beginning later, a product not offered, the product already subscribed there).`),
         },

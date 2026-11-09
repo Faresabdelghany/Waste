@@ -290,11 +290,8 @@ const commandProblems = (action: Action) => ({
 
 const CLOSED = "A completed or rejected ticket is refused (409, `Ticket T-8831 is completed; reopen it first`)."
 
-/** A status command's problems: the grant's, and the ticket's type naming the roles that may give it (#545 of #544). */
-const statusCommandProblems = () => ({
-  ...commandProblems("edit"),
-  403: describeProblem(`No active account here, the caller's role does not allow \`edit\` on \`${MODULE}\`, or the ticket's type names the roles that may give this command and the caller's is not one of them (\`Only Case handler may complete a ticket of type Bulky waste collection\`).`),
-})
+/** What else refuses a status command beside the grant: the ticket's type naming the roles that may give it (#545 of #544). */
+const TYPE_ROLE_REFUSED = `the ticket's type names the roles that may give this command and the caller's is not one of them (\`Only Case handler may complete a ticket of type Bulky waste collection\`)`
 
 /** What every status command says of the ticket's type (#545 of #544). */
 const TYPE_ROLES = " Where the ticket's type names the roles that may give the command (`PUT /ticket-types/{id}/permissions`), a caller of another role is refused (403, naming them), after the machine's own 409."
@@ -608,9 +605,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketStart,
         invalid: ["the body names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, in progress.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -633,9 +631,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketWait,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, pending.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -658,9 +657,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketHold,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, on hold.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected; reopen it first."),
         },
       },
@@ -688,9 +688,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketComplete,
         invalid: ["the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, a re-collection stop without its route, a route that is not the project's or a stop that is not that route's, or a product with a resolution nothing is charged for, a product that is not the project's or one sold by the month"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, completed.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected already, leaves a field its type requires empty, the re-collection route has ended, the re-collection stop was missed, or the product is not offered; the detail says which."),
         },
       },
@@ -727,9 +728,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReject,
         invalid: ["the body has no reason or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, rejected.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket is completed or rejected already; reopen it first."),
         },
       },
@@ -755,9 +757,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReopen,
         invalid: ["the body has no note or names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           200: describeJson("The ticket, open again.", Ticket),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
         },
       },
       async (c) => {
@@ -804,9 +807,10 @@ export function ticketRoutes(deps: RouteDeps) {
         params: IdParam,
         body: TicketReplyWithEvidence,
         invalid: ["the body names a member the command does not take"],
+        forbidden: TYPE_ROLE_REFUSED,
         responses: {
           201: describeJson("The ticket with its history, the reply its last comment.", TicketDetail),
-          ...statusCommandProblems(),
+          ...commandProblems("edit"),
           409: describeProblem("The ticket names no stop, or, with `complete`, it is completed or rejected already or leaves a field its type requires empty."),
         },
       },
