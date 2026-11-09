@@ -15,7 +15,8 @@ import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 
 import { create, get, patch } from "../client"
-import type { CommandInput, LocalRefusal, RecordAction } from "./adapter"
+import type { CommandInput, RecordAction } from "./adapter"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { ActionOutcome, SendAction } from "./server-records"
 
 /** The customer's action that registers a contact person under it. */

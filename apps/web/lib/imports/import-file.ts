@@ -15,7 +15,7 @@ import { planningAreaRows } from "@waste/domain/imports/geojson"
 import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 
-import { allows, type Grants } from "@/lib/api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 
 /** Each kind as the screen offers it: its label, the module its rows are written to, and whether a file of it is a project's. */
 export const IMPORT_KIND_OPTIONS = [

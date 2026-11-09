@@ -58,27 +58,26 @@ import { DISPATCH_MANY_MAX } from "@waste/domain/execution/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
+import { count } from "@waste/domain/text"
 
-import { moduleAt } from "@/lib/modules/keys"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
-import { formatDistance, formatDuration } from "@/lib/map-planning/format"
-import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
+import { formatDistance, formatDuration, kilograms } from "@/lib/format/measures"
+import { ROUTE_ACTIVE_PLAN_KEY, ROUTES_MODULE, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
-import { hasPrefix, isLocalRefusal, moduleKeyOf, ofKind, said, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { said, type Client, type MappingContext, type RecordCommand, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { hasPrefix, isLocalRefusal, ofKind, statusLabel, typed, typedFlag, webIdOf } from "@/lib/records/fields"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
-import { shownOn } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 import { containerAdapter } from "./containers"
 import { serviceProviderAdapter } from "./organisation"
 import { projectServerIdOf, referenced, refusal, unloadingStationAdapter, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 import { shiftFact } from "./time-windows"
-
-/** The workspace module the routes are the rows of. */
-export const ROUTES_MODULE = moduleAt("route-studio.routes")
 
 /**
  * How far back the routes and their stops are read: a window from this many
@@ -144,7 +143,7 @@ export function assignmentOf(context: MappingContext, { driverId, vehicleId, tra
 
 /** "3 stops", "1 stop", "2/3 stops" once any stop is decided: the map counts a route's stops off the first. */
 function stopsValue({ planned, total }: Route["progress"]): string {
-  if (planned === total) return `${total} ${total === 1 ? "stop" : "stops"}`
+  if (planned === total) return `${count(total, "stop")}`
   return `${total - planned}/${total} stops`
 }
 
@@ -535,7 +534,6 @@ const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
   baseline: "Generated order, not optimised",
 }
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /**
  * What a route's stops take and weigh (O10 of #290), as its facts say it: the
@@ -551,14 +549,14 @@ export function workloadFacts(workload: RouteWorkload, unloadsOnTheWay = 0): Rec
   if (workload.expectedKg !== null) {
     const against = workload.capacityKg === null ? kilograms(workload.expectedKg) : `${kilograms(workload.expectedKg)} of ${kilograms(workload.capacityKg)}`
     const over = workload.overCapacityKg !== null && workload.overCapacityKg > 0 ? `: over by ${kilograms(workload.overCapacityKg)}, ${unloadsOnTheWay > 0 ? "so its Plan unloads on the way" : "plan a tip"}` : ""
-    const uncounted = workload.unexpectedStops > 0 ? `, ${workload.unexpectedStops} ${workload.unexpectedStops === 1 ? "stop" : "stops"} not counted` : ""
+    const uncounted = workload.unexpectedStops > 0 ? `, ${count(workload.unexpectedStops, "stop")} not counted` : ""
     facts["Expected load"] = `${against}${over}${uncounted}`
   }
   return facts
 }
 
 /** The unload visits a route's Plan makes on the way (O15 of #290), as its facts say them: where the vehicle is full before its last stop, it empties and goes on. */
-export const unloadsFact = (visits: number): string => `${visits} ${visits === 1 ? "visit" : "visits"} to the unloading station before the last stop, where the vehicle is full`
+export const unloadsFact = (visits: number): string => `${count(visits, "visit")} to the unloading station before the last stop, where the vehicle is full`
 
 /** What the office is told of a stop its Plan holds outside its Service Window (O14 of #290): planned all the same, and the record or the route to look at. */
 export const STOP_WARNING_SENTENCES: Readonly<Record<PlanStopWarning, string>> = {

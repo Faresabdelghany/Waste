@@ -23,7 +23,7 @@ import { useModuleRecords } from "@/components/platform/business-record-store"
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useProjectTimezone, useRowHistory } from "@/components/platform/use-command-support"
-import { dayAndTimeOn, wallClockIn } from "@/lib/api/records/clock"
+import { dayAndTimeOn, wallClockIn } from "@/lib/format/clock"
 import { CHANGE_PAIRING, PAIR_SENSOR, readingLine, sensorReadings, SENSORS_MODULE } from "@/lib/api/records/sensors"
 import { changeDraft, pairableContainers, pairDraft, pairOffered } from "@/lib/data/sensors"
 

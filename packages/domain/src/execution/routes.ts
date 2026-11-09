@@ -3,7 +3,9 @@
 // dispatch names each route once and at most fifty, each a savepoint of the
 // request's transaction, below the 64 subtransactions Postgres caches per
 // transaction, as the CSV import's batch; a stop order names each open stop
-// once, and a day's route of any length fits it.
+// once, and a day's route of any length fits it. A stop is driven in its
+// active Plan's `sequence` where it has one, its generated `position`
+// otherwise.
 import { eachOnceSentence } from "../requests"
 
 /** What a route whose label is not its number is told. */
@@ -20,3 +22,11 @@ export const PICKUP_ORDER_MAX = 500
 
 /** What an order naming a stop twice is told. */
 export const EACH_PICKUP_ONCE = eachOnceSentence("pickup", "a stop has one place in the order")
+
+/** A stop's place in the order: its `sequence` where it has one, its `position` otherwise. */
+export const stopNumber = (stop: { readonly position: number; readonly sequence?: number | null }): number => stop.sequence ?? stop.position
+
+/** The stops in the order they are driven, a tie broken by position. */
+export function stopsInOrder<Stop extends { readonly position: number; readonly sequence?: number | null }>(stops: readonly Stop[]): Stop[] {
+  return [...stops].sort((a, b) => stopNumber(a) - stopNumber(b) || a.position - b.position)
+}

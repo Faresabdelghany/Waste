@@ -21,7 +21,7 @@ import { useApiClient } from "@/components/platform/api-session-store"
 import { useServerModuleState } from "@/components/platform/business-record-store"
 import { useRecordsByServerId } from "@/components/platform/use-command-support"
 import type { RouteMapPoint, RouteMapStopState } from "@/components/waste/route-map-canvas"
-import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { planDetail } from "@/lib/api/routing"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
@@ -32,6 +32,7 @@ import { roadGeometryOfLegs, type RoadGeometry } from "@/lib/map-planning/road-g
 import { containerLocation, placeLocation } from "@/lib/prototype/map-planning/positions"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { PlanDetail } from "@waste/contracts/plans"
+import { stopNumber, stopsInOrder } from "@waste/domain/execution/routes"
 
 const RouteMapCanvas = dynamic(() => import("./route-map-canvas").then((module) => module.RouteMapCanvas), {
   ssr: false,
@@ -70,10 +71,9 @@ function useRoutePlaces(record: BusinessRecord, pickups: readonly Pickup[] | und
   const depot = placeOf(record.submittedValues?.depotId)
   const depotAt = depot === undefined ? null : placeLocation(depot, FIXTURE_GAZETTEER)
   if (depot !== undefined && depotAt !== null) points.push({ kind: "depot", key: "depot", at: depotAt, title: `Depot · ${depot.name}` })
-  const ordered = [...(pickups ?? [])].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position))
-  for (const pickup of ordered) {
+  for (const pickup of stopsInOrder(pickups ?? [])) {
     const at = located(pickup)
-    const number = pickup.sequence ?? pickup.position
+    const number = stopNumber(pickup)
     if (at === null) unplaced.push(`${number}. ${stopName(pickup)}`)
     else points.push({ kind: "stop", key: pickup.id, at, number, title: `${number}. ${stopName(pickup)}`, state: STATE_OF[pickup.status] })
   }

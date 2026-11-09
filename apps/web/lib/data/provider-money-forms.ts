@@ -19,8 +19,9 @@ import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { INDEX_BASES } from "@waste/domain/finance/vocabulary"
 import type { ServiceAreaSeed } from "@/lib/prototype/map-planning/service-areas"
 
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { REFUSAL_LABELS, REVIEW_LABELS, type WeightReviewCommand } from "@/lib/api/records/weights"
+import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
+import { REVIEW_LABELS, type WeightReviewCommand } from "@/lib/data/provider-money"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, WorkspaceId } from "./business-modules"

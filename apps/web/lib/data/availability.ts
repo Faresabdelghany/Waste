@@ -6,10 +6,12 @@
 // to the wire.
 import { DRIVER_ABSENCE_REASONS, VEHICLE_UNAVAILABILITY_REASONS } from "@waste/domain/resources/vocabulary"
 
-import { statusLabel } from "@/lib/api/records/adapter"
-import { LAST_DAY_ON_OR_AFTER } from "@/lib/api/records/availability"
+import { statusLabel } from "@/lib/records/fields"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValidationRule } from "./business-form-types"
+
+/** What the last day is told when it comes before the first. */
+export const LAST_DAY_ON_OR_AFTER = "The last day away is on or after the first"
 
 const reasonOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((token) => ({ value: token, label: statusLabel(token) }))
 

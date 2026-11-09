@@ -31,7 +31,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { moduleAt } from "@/lib/modules/keys"
+import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { ChipOverflow } from "@/components/chip-overflow"
 import { RecordPageHeader, TableCard } from "@/components/page-layout"
 import { AssetPanelShell } from "@/components/settings/settings-pane-kit"
@@ -108,9 +108,6 @@ import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 
 const ACTOR_NAME = "Olivia Larsen"
-
-/** Where the projects and the company live — the module resolveProjectCalendar reads a project's list name from. */
-const ORGANISATION_MODULE = moduleAt("configure.organization")
 
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"

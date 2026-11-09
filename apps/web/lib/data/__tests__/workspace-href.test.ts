@@ -19,6 +19,7 @@ describe("workspaceHref", () => {
 
   test("opens the Driver App on its own surface, and a Settings module on its pane", () => {
     assert.equal(workspaceHref({ workspaceId: "operate", moduleId: "driver-app" }), "/driver")
+    assert.equal(workspaceHref({ workspaceId: "operate", moduleId: "driver-app" }, "route-1"), "/driver", "a record of it opens the app too, which reads no ?module=")
     assert.equal(workspaceHref({ workspaceId: "configure", moduleId: "areas" }, "area-1"), "/settings?pane=areas&record=area-1")
   })
 })

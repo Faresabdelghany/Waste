@@ -18,7 +18,7 @@ import { AssetPanelShell, RecordsSection } from "@/components/settings/settings-
 import { useReport } from "@/components/platform/use-report"
 import { Button } from "@/components/ui/button"
 import { useApiSession } from "@/components/platform/api-session-store"
-import { allows } from "@/lib/api/grants"
+import { allows } from "@/lib/modules/grants"
 import { recentImportRuns } from "@/lib/api/imports"
 import { deploymentIntegrations } from "@/lib/api/integrations"
 import { problemSentence } from "@/lib/api/problem"

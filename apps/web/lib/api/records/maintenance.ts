@@ -17,7 +17,8 @@ import { isIsoDate } from "@waste/domain/days"
 import { moduleAt } from "@/lib/modules/keys"
 
 import { command, create, listAll, patch } from "../client"
-import { actionOf, said, type Client, type CommandInput, type LocalRefusal, type RecordAction } from "./adapter"
+import { actionOf, said, type Client, type CommandInput, type RecordAction } from "./adapter"
+import { type LocalRefusal } from "@/lib/records/fields"
 import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 

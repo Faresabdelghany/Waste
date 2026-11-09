@@ -12,7 +12,7 @@ import {
 } from "react"
 
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { migrateLegacyState } from "@/lib/data/legacy-ids"
 import type { ActiveRouteSummary } from "@/lib/data/sidebar"

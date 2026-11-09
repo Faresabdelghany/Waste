@@ -34,7 +34,9 @@ import { ASSIGNMENT_PREFIX, ASSIGNMENT_RECORD_KIND, isAssignmentRecord, isServic
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
 import { create, get, listAll, patch, put } from "../client"
-import { isLocalRefusal, moduleKeyOf, PartialWrite, patchOf, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { PartialWrite, patchOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { isLocalRefusal, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { serviceProviderAdapter } from "./organisation"
 import { planningAreaAdapter } from "./planning"
 import { projectDay } from "./pricing"

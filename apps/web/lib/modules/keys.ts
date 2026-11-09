@@ -19,6 +19,9 @@ export type ModuleLocation = {
   moduleId: string
 }
 
+/** `${workspaceId}.${moduleId}`, the key every store, link and relation uses. */
+export const moduleKeyOf = (workspaceId: WorkspaceId, moduleId: string): ModuleKey => `${workspaceId}.${moduleId}` as ModuleKey
+
 /** A key's location, its two halves typed as the key spells them. */
 export type LocationOf<Key extends ModuleKey> = Key extends `${infer Workspace}.${infer Module}` ? { readonly workspaceId: Workspace; readonly moduleId: Module } : never
 

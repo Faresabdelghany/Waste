@@ -25,7 +25,7 @@
 // chip — `product-<uuid>`, or the bare id — and `referencedId` is the one
 // reading of a chip.
 import { moduleAt } from "@/lib/modules/keys"
-import { ofKind } from "@/lib/api/records/adapter"
+import { ofKind } from "@/lib/records/fields"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormSection, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"

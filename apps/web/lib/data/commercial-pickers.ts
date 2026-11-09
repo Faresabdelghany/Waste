@@ -9,13 +9,13 @@
 // the dialog names: through its price list, its agreement or its project
 // field, else the surface's own — each project keeps a catalogue of its own
 // under the same names, and a row of another project is one the API refuses.
-import { planningAreaAdapter } from "@/lib/api/records/planning"
 
 import { isAgreementRecord } from "./agreements"
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { isInvoiceDocument, isPriceListRecord } from "./commercial"
 import { masterDataKindOf } from "./master-data-kinds"
+import { isPlanningAreaRecord } from "./planning-areas"
 import { isAssignmentRecord, isServiceAreaRecord } from "./provider-money"
 
 /** The rows the store holds of the modules the chain's dialogs pick from. */
@@ -57,7 +57,7 @@ export function commercialRowsFor(fieldId: string, values: BusinessFormValues, r
       return rows.products.filter(ofProject(projectOf(values, rows, projectId)))
     case "planningAreaId":
     case "zoneIds":
-      return rows.areas.filter(planningAreaAdapter.owns).filter(ofProject(projectOf(values, rows, projectId)))
+      return rows.areas.filter(isPlanningAreaRecord).filter(ofProject(projectOf(values, rows, projectId)))
     case "serviceProviderId":
       return rows.providers ?? []
     case "wasteFractionIds":

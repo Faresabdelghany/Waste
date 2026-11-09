@@ -10,7 +10,8 @@ import {
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/planning/occurrences"
 import type { GuidedSchemeData } from "@/lib/prototype/route-schemes/quick-create"
 import { SCHEME_SERVICE_TYPES } from "@/lib/prototype/route-schemes/scope"
-import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, isRecurrenceFrequency, isoWeekRotation, todayIso, type RecurrenceFrequency } from "@waste/domain/planning/recurrence"
+import { OFFERED_RECURRENCE_FREQUENCIES, RECURRENCE_FREQUENCY_LABELS, isRecurrenceFrequency, isoWeekRotation, todayIso } from "@waste/domain/planning/recurrence"
+import type { RecurrenceFrequency } from "@waste/domain/planning/vocabulary"
 import { isIsoDate, SERVICE_DAYS } from "@waste/domain/days"
 
 import type { SelectOption } from "./wizard-fields"

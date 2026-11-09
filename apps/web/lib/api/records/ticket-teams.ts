@@ -14,13 +14,14 @@
 // a ticket's team as its id chip.
 import type { Team, TeamCreate, TeamPatch } from "@waste/contracts/ticket-teams"
 
-import { splitMultiValue } from "@/lib/data/business-form-records"
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 import { TICKET_TEAMS_MODULE, TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 
 import { create, listAll, patch, put } from "../client"
-import { ofKind, patchOf, statusLabel, statusToken, typed, type LocalRefusal, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
+import { ofKind, statusLabel, statusToken, typed, type LocalRefusal } from "@/lib/records/fields"
+import { splitList } from "@/lib/prototype/record-values"
 import { userAdapter } from "./organisation"
 import { sameSet } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
@@ -32,7 +33,7 @@ export const isTicketTeamRecord = ofKind(TICKET_TEAM_PREFIX, ["Ticket team"])
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 /** The members a form names, by web id, as its multiselect keeps them, the picker's None left out. */
-export const memberWebIdsOf = (record: Pick<BusinessRecord, "submittedValues">): string[] => splitMultiValue(typed(record, "memberUserAccountIds") ?? "").filter((id) => id !== NO_ONE)
+export const memberWebIdsOf = (record: Pick<BusinessRecord, "submittedValues">): string[] => splitList(typed(record, "memberUserAccountIds") ?? "").filter((id) => id !== NO_ONE)
 
 /** The members as server ids, each an account the API holds; a refusal at the field for one it does not. */
 function memberServerIds(record: BusinessRecord, context: MappingContext): string[] | LocalRefusal {

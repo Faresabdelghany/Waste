@@ -18,7 +18,7 @@
  * very same object in that case so callers can detect "nothing changed" by
  * reference.
  */
-import { settingsHref, type SettingsPaneId } from "./settings-panes"
+import { settingsHref, type SettingsPaneId } from "@/lib/modules/settings-panes"
 
 export const LEGACY_WORKSPACE_IDS: Readonly<Record<string, string>> = {
   contractors: "service-providers",

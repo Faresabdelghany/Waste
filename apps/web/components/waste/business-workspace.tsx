@@ -117,7 +117,7 @@ import type {
 import { isSoftDeleted, softDeletedRecord } from "@/lib/prototype/record-visibility"
 import { resolveBusinessRelation } from "@/lib/data/business-links"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { moduleAt } from "@/lib/modules/keys"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
 import { moduleSpecOfKey, moduleSpecOf, type ProviderForm } from "@/lib/modules/manifest"
 import {
   agreementFormSchemaOnApi,
@@ -247,7 +247,7 @@ import { MapPlanningView } from "@/components/waste/map-planning/map-planning-vi
 import { SERVICE_AREAS_MODULE } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
-import { settingsHref } from "@/lib/data/settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { exportShownRows } from "@/lib/data/workspace-export"
 import {
   isInProjectScope,
@@ -261,8 +261,7 @@ import {
 import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import { useGrants } from "@/components/platform/use-grants"
-import { mayOn } from "@/lib/api/grants"
-import { moduleKeyOf } from "@/lib/api/records/adapter"
+import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type BusinessWorkspaceProps = {

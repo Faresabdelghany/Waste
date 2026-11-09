@@ -12,26 +12,38 @@
 // token, shown as a person reads it.
 import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { pickupMissed } from "@waste/domain/execution/vocabulary"
-import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
+import { BILLABLE_RESOLUTIONS, OFFICE_TICKET_SOURCES, OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
-import { statusLabel, statusToken } from "../api/records/adapter"
-import { CONTAINERS_MODULE } from "../api/records/containers"
-import { accessModule } from "../api/records/organisation"
-import { PICKUPS_MODULE } from "../api/records/pickups"
-import { ROUTES_MODULE } from "../api/records/routes"
-import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "../api/records/tickets"
+import { moduleAt } from "@/lib/modules/keys"
+import { statusLabel, statusToken } from "@/lib/records/fields"
 import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import type { BusinessRecord } from "./business-modules"
 import { PRODUCTS_MODULE } from "./commercial"
-import { mintedRecord, ORGANISATION_MODULE } from "./containers"
+import { CONTAINERS_MODULE, mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "./routes"
 import { TICKET_TEAMS_MODULE } from "./ticket-teams"
 import { ticketTypeFormFields, TICKET_TYPES_MODULE } from "./ticket-types"
 
 /** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
-export const ACCESS_MODULE: ModuleLocation = { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId }
+export const ACCESS_MODULE = moduleAt("configure.access")
+
+/** The workspace module the tickets are the rows of. */
+export const TICKETS_MODULE = moduleAt("operate.tickets")
+
+/** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
+export const TICKET_NUMBER_FACT = "Number"
+
+/** The fact a ticket record carries what its due date reads as under (O4 of #290), the list's SLA category. */
+export const TICKET_SLA_FACT = "SLA"
+
+/** The submitted value a ticket record carries its assignee's server id under, for the list's "Mine" (`/me`'s account). */
+export const ASSIGNEE_ACCOUNT_KEY = "assigneeAccountId"
+
+/** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
+export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)
 
 /** A closed list as a select offers it: the wire's token, the words a person reads. The alerts' forms read it too. */
 export const tokenOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((value) => ({ value, label: statusLabel(value) }))

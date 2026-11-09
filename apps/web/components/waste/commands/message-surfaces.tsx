@@ -22,11 +22,11 @@ import { useBusinessRecordStore } from "@/components/platform/business-record-st
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
-import { allows } from "@/lib/api/grants"
+import { allows } from "@/lib/modules/grants"
 import { problemSentence } from "@/lib/api/problem"
 import { customerContacts } from "@/lib/api/records/customer-contacts"
 import { activeTemplates, customerMessages, MESSAGE_STATUS_LABELS, messageLine, recipientOptions, sendMessage, type MessageDraft } from "@/lib/api/records/messages"
-import { typed } from "@/lib/api/records/adapter"
+import { typed } from "@/lib/records/fields"
 import { CHANNEL_LABELS } from "@/lib/data/message-templates"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 

@@ -8,7 +8,7 @@ import { workspaceHref } from "../workspace-href"
 import { MODULES } from "@/lib/modules/manifest"
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
 import { getBusinessFormSchema } from "../business-form-schemas"
-import { settingsHref } from "../settings-panes"
+import { settingsHref } from "@/lib/modules/settings-panes"
 import { WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 
 import {

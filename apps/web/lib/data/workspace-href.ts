@@ -7,7 +7,7 @@
 import { CONTROL_CENTER_TWIN } from "@/lib/modules/keys"
 import { WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/manifest"
 
-import { DEFAULT_SETTINGS_PANE, settingsHref } from "./settings-panes"
+import { DEFAULT_SETTINGS_PANE, settingsHref } from "@/lib/modules/settings-panes"
 
 /** The params that name a module, and a record in it, on the page showing them: `params` kept beside them. */
 export function moduleParams(moduleId: string, recordId?: string, params?: URLSearchParams): URLSearchParams {

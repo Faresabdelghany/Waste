@@ -27,36 +27,8 @@ import { driverAdapter, vehicleAdapter } from "../records/fleet"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { depotAdapter, unloadingStationAdapter } from "../records/places"
-import {
-  ADD_STOP,
-  addedStopBody,
-  ASSIGN_ROUTE,
-  CANCEL_ROUTE,
-  applyBalance,
-  balanceMoveLine,
-  dayLoadLine,
-  DISPATCH_ROUTE,
-  dispatchRoutes,
-  previewBalance,
-  isHeldRoute,
-  MADE_BY_THE_OFFICE,
-  OPTIMISE_ROUTE,
-  planLine,
-  RELEASE_HOLD,
-  REORDER_ROUTE,
-  MOVE_STOPS,
-  SPLIT_ROUTE,
-  MERGE_ROUTE,
-  RESCHEDULE_ROUTE,
-  ROUTES_MODULE,
-  ROUTES_WINDOW_DAYS,
-  routeAdapter,
-  routeCommandLog,
-  routeDetail,
-  routePlans,
-  routesModule,
-  routesWindowFrom,
-} from "../records/routes"
+import { ADD_STOP, addedStopBody, ASSIGN_ROUTE, CANCEL_ROUTE, applyBalance, balanceMoveLine, dayLoadLine, DISPATCH_ROUTE, dispatchRoutes, previewBalance, isHeldRoute, MADE_BY_THE_OFFICE, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, MOVE_STOPS, SPLIT_ROUTE, MERGE_ROUTE, RESCHEDULE_ROUTE, ROUTES_WINDOW_DAYS, routeAdapter, routeCommandLog, routeDetail, routePlans, routesModule, routesWindowFrom } from "../records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { commandRecord, keptRefusal, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 

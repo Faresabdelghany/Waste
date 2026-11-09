@@ -1,6 +1,6 @@
 import { ACTIONS, WORKSPACE_KEYS, type Action } from "@waste/domain/access/modules"
 
-import { charterOf } from "@/lib/api/grants"
+import { charterOf } from "@/lib/modules/grants"
 import {
   businessWorkspaces,
   type WorkspaceId,

@@ -46,7 +46,7 @@ import {
 } from "./auth"
 import { get, UNREACHABLE_STATUS, type ApiClient } from "./client"
 import type { ApiConfig, AuthConfig } from "./config"
-import { ApiProblem, genericProblem, isAccountRefusal, problemSentence, type Problem } from "./problem"
+import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, problemSentence, type Problem } from "./problem"
 import { readStoredSession, writeStoredSession } from "./session-storage"
 
 /**
@@ -297,7 +297,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
         },
         (error: unknown) => {
           // The account's refusal ends the session (`refused`); anything else leaves the grants unknown, and says why.
-          const problem = error instanceof ApiProblem ? error.problem : genericProblem(UNREACHABLE_STATUS, error instanceof Error ? error.message : "The request failed")
+          const problem = problemOfError(error)
           if (!isAccountRefusal(problem)) store.set((state) => (state.session !== null && whoOf(state.session) === who ? { ...state, meProblem: problem } : state))
           throw error
         },

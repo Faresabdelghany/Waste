@@ -17,10 +17,10 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { statusLabel } from "@/lib/api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 import { reportKey, serviceReport, ticketReport, type ReportWindowQuery } from "@/lib/api/reports"
 import { csvFileName, csvOf, downloadCsv } from "@/lib/data/csv"
-import { pickupReasonLabel } from "@/lib/data/routes"
+import { pickupReasonLabel } from "@/lib/data/route-labels"
 import {
   countChange,
   countedOf,

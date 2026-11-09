@@ -21,7 +21,8 @@ import { formatShortDay } from "@waste/domain/days"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
 import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
-import { ROUTE_STATUS_LABELS, routeActions, routesInDayOrder, waitingOn } from "@/lib/driver/route-view"
+import { routeActions, routesInDayOrder, waitingOn } from "@/lib/driver/route-view"
+import { ROUTE_STATUS_LABELS } from "@/lib/data/route-labels"
 
 export function DriverStartScreen() {
   useEffect(() => void keepShell(window, SHELL_ENABLED), [])

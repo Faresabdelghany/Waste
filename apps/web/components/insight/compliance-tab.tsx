@@ -23,9 +23,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useApiClient } from "@/components/platform/api-session-store"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
-import { wasteDataFile, wasteDataKey, wasteDataReport, type FileSeparator, type WasteDataQuery } from "@/lib/api/reports"
+import { wasteDataFile, wasteDataKey, wasteDataReport } from "@/lib/api/reports"
 import { downloadBlob } from "@/lib/data/csv"
-import { COMPLIANCE_PERIODS, DEFAULT_PERIOD, periodLabel, periodOf, periodRefusal, SEPARATORS, wasteDataFileName, type CompliancePeriodId } from "@/lib/insight/compliance"
+import { COMPLIANCE_PERIODS, DEFAULT_PERIOD, periodLabel, periodOf, periodRefusal, SEPARATORS, wasteDataFileName, type CompliancePeriodId, type FileSeparator, type WasteDataQuery } from "@/lib/insight/compliance"
 import { countedOf, countOf, WEIGHTS_MODULE, weightOf, type DayWindow } from "@/lib/insight/dashboard"
 
 import { ReportCard, ReportNotice } from "./report-card"

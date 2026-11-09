@@ -22,7 +22,7 @@ import { savedRow, useBusinessRecordStore, useServerModuleState, whenSaved } fro
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
 import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/platform/use-command-support"
 import { useCommandOffered, useProviderWebId } from "@/components/platform/provider-account"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
@@ -40,7 +40,7 @@ import {
 } from "@/lib/data/provider-activities"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { SERVICE_PROVIDERS_MODULE, serviceAreaKindOf } from "@/lib/data/provider-money"
-import { PATCH_RECORD } from "@/lib/data/provider-workspace"
+import { PATCH_RECORD } from "@/lib/api/provider-workspace"
 import type { ServiceProviderActivityKind } from "@waste/domain/service-providers/vocabulary"
 import type { ActivitySide } from "@waste/domain/service-providers/activities"
 

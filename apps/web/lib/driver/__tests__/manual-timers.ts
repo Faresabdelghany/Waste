@@ -1,7 +1,7 @@
 // Timers a test moves by hand: `advance` runs, in order of when they fall due,
 // the callbacks the given milliseconds bring due, the way the browser's clock
 // would, and `pending` says what is still set.
-import type { Timers } from "../timers"
+import type { Timers } from "../../timers"
 
 export type ManualTimers = Timers & {
   advance: (ms: number) => void

@@ -8,6 +8,7 @@
 import { schemeFrequencyReconciliationWarnings, type SchemeFrequencyReconciliationInput } from "@waste/domain/planning/frequency-reconciliation"
 import { sortServiceDays } from "@waste/domain/planning/recurrence"
 import { addDays, isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "@waste/domain/days"
+import { capitalised } from "@/lib/format/words"
 
 /** Container selection carried by the wizard: one shared list, or one per day. */
 export type SchemeDayPlans = {
@@ -254,8 +255,6 @@ export function isNoMatchIssue(issue: string): boolean {
 
 const namesOf = (groups: ReadonlyArray<{ name: string }>): string =>
   groups.map((group) => group.name).join(", ")
-
-const capitalize = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1)
 
 /**
  * Groups sharing one planned assignment (vehicle + driver). A legacy scheme's
@@ -596,7 +595,7 @@ export function validateScheme(
     const subject = (resource: "vehicle" | "driver") =>
       oneAssignment
         ? `Default ${resource} is already the default on`
-        : `${capitalize(resource)} of ${namesOf(cluster.groups)} is already planned on`
+        : `${capitalised(resource)} of ${namesOf(cluster.groups)} is already planned on`
     for (const other of otherSchemes) {
       if (effectivePeriodsDisjoint(input, other)) continue
       const sharedDays = cluster.days.filter((day) => other.serviceDays.includes(day))
@@ -626,7 +625,7 @@ export function validateScheme(
     const subject = (resource: "vehicle" | "driver") =>
       oneAssignment
         ? `Default ${resource}`
-        : `${capitalize(resource)} of ${namesOf(cluster.groups)}`
+        : `${capitalised(resource)} of ${namesOf(cluster.groups)}`
     for (const allocation of allocations) {
       // Released allocations returned their capacity; a scheme-scoped
       // allocation is this scheme's own planned capacity, not a competitor.

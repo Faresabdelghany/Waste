@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 
-import type { Grants } from "../grants"
+import type { Grants } from "@/lib/modules/grants"
 import { afterSignIn, carriesNext, gateOf, landingOf, returnPath, signInTarget, type GateState } from "../landing"
 
 const NORDREN = { id: "01a0d2a4-a280-7003-8000-000000000001", legalName: "NordRen ApS" }

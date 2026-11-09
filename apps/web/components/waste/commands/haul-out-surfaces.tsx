@@ -22,7 +22,7 @@ import { useBusinessRecordStore, useModuleRecords } from "@/components/platform/
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useModuleReady, useRecordsByServerId, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
-import { dayAndTimeOn, wallClockIn } from "@/lib/api/records/clock"
+import { dayAndTimeOn, wallClockIn } from "@/lib/format/clock"
 import { actOnStation, ADJUST_STOCK, CANCEL_LOAD, DISPUTE_LOAD, loadLine, RECEIVE_LOAD, RECONCILE_LOAD, SEND_LOAD, stationLoads, stationStock, stockLine } from "@/lib/api/records/haul-out"
 import type { BusinessFormOption } from "@/lib/data/business-form-types"
 import { VEHICLES_MODULE } from "@/lib/data/allocations"

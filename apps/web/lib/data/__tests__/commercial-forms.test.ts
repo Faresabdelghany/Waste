@@ -14,7 +14,8 @@ import { CreditNoteCreate, type Invoice, type InvoiceDetail } from "@waste/contr
 import type { Project } from "@waste/contracts/organisation"
 import { PriceListCreate, PriceListPatch, PriceListRowCreate, PriceListRowPatch, PriceResolveQuery, type PriceList } from "@waste/contracts/price-lists"
 
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type CommandInput, type MappingContext } from "../../api/records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type CommandInput, type MappingContext } from "../../api/records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { agreementAdapter } from "../../api/records/agreements"
 import { billableEventAdapter, billingRunAdapter, billingRunBody, invoiceAdapter } from "../../api/records/billing"
 import { containerTypeAdapter, wasteFractionAdapter } from "../../api/records/master-data"

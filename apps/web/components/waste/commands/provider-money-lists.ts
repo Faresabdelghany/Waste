@@ -7,8 +7,7 @@
 import { singleFilterValue, splitFilterValues } from "@/lib/prototype/business-filters"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { isServiceAreaRecord } from "@/lib/data/provider-money"
-import { REVIEW_LABELS } from "@/lib/api/records/weights"
+import { isServiceAreaRecord, REVIEW_LABELS } from "@/lib/data/provider-money"
 import { TICKET_STATUS_LABELS } from "@/lib/data/weighbridge"
 
 import type { ModuleList } from "./command-surfaces"

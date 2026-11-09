@@ -21,9 +21,6 @@ import { addDays, daysBetween, isoWeek, mondayOf, SERVICE_DAY_SHORT_LABELS, SERV
 import { RECURRENCE_FREQUENCIES, type RecurrenceFrequency, type WeekRotation } from "./vocabulary"
 import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
 
-// The web's forms still read the two types here.
-export type { RecurrenceFrequency, WeekRotation } from "./vocabulary"
-
 /**
  * daily (2026-09-16): every date in the effective window — the scheme serves
  * all seven weekdays, so its stored service days are always the full week.

@@ -32,6 +32,8 @@ import { MASTER_DATA_MODULE } from "./master-data"
 export const ORGANISATION_MODULE = moduleAt("configure.organization")
 /** Where the warehouses a command names live (slice 5a). */
 export const WAREHOUSES_MODULE = moduleAt("resources.warehouses")
+/** The workspace module the containers are the rows of. */
+export const CONTAINERS_MODULE = moduleAt("resources.containers")
 
 /** The container's commands as the dialogs offer them, in the ledger's order: into stock, into service, back, between places, out, and the correction door. */
 export const CONTAINER_COMMANDS_OFFERED = ["receive", "issue", "return", "transfer", "decommission", "adjust"] as const

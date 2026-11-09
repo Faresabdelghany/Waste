@@ -17,7 +17,7 @@ import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory } from "@/components/platform/use-command-support"
 import { allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, VEHICLE_PLANNING_MODULE } from "@/lib/api/records/allocations"
-import { shownOn } from "@/lib/api/records/clock"
+import { shownOn } from "@/lib/format/clock"
 import { ALLOCATE_FORM, allocationChangeForm, allocationFormValues, changedAllocationRecord, createAllocationRecord, RELEASE_FORM } from "@/lib/data/allocations"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 

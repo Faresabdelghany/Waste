@@ -8,6 +8,7 @@
 // service areas come from @waste/domain/map-planning/{areas,routes,service-areas};
 // the map draws the ones that are on.
 
+import { count } from "@waste/domain/text"
 import { Check, Crosshair, Stack } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
@@ -195,7 +196,7 @@ export function LayersPanel({
                 {coverage.unservable > 0
                   ? ` · ${coverage.unservable} scheme ${coverage.unservable === 1 ? "stop" : "stops"} cannot be served`
                   : ""}
-                {` · ${coverage.schemes} ${coverage.schemes === 1 ? "scheme" : "schemes"} counted`}
+                {` · ${count(coverage.schemes, "scheme")} counted`}
               </span>
             </label>
           </div>

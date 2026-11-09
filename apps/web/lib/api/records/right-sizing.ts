@@ -14,7 +14,8 @@ import { DIRECTION_LABELS, evidenceSentence, RIGHT_SIZING_MODULE, RIGHT_SIZING_P
 
 import { command, get, listAll, post, type ApiClient } from "../client"
 import { said, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"
-import { projectTimezoneOf, shownOn } from "./clock"
+import { projectTimezoneOf } from "./clock"
+import { shownOn } from "@/lib/format/clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
 

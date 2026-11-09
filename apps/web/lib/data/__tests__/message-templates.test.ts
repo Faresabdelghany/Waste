@@ -9,7 +9,7 @@ import { MessageTemplateCreate, MessageTemplatePatch, type MessageTemplate } fro
 import { unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
 import { NEW_TEMPLATE, templateCreateBody, templateDraftOf, templateLine, templatePatchBody, templatesAccessOf } from "../message-templates"
-import { settingsPane, settingsPaneDrawnWithoutApi } from "../settings-panes"
+import { settingsPane, settingsPaneDrawnWithoutApi } from "@/lib/modules/settings-panes"
 
 const PROJECT = "01a0d2a4-a280-7002-8000-000000000001"
 const stored: MessageTemplate = {

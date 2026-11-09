@@ -56,7 +56,8 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-da
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, isLocalRefusal, ofKind, patchOf, statusLabel, typed, typedFlag, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { patchOf, type Client, type CommandInput, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, isLocalRefusal, ofKind, statusLabel, typed, typedFlag, type LocalRefusal } from "@/lib/records/fields"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { VEHICLE_MAINTENANCE_ACTIONS } from "./maintenance"
 import { userAdapter } from "./organisation"

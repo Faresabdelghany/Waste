@@ -1,9 +1,6 @@
-// Display formatting for the Selected area panel (2026-09-16): areas,
-// weights, volumes, and the long dates the quantities range reads in. Month
-// names are hand-rolled like the rest of the prototype so SSR and the
-// browser agree. Pure functions.
-import { MONTH_LABELS, MONTH_SHORT_LABELS } from "@waste/domain/days"
-
+// How a quantity reads: an area, a weight, a volume, a distance, a duration.
+// Hand-rolled in en-US digits like the rest of the prototype so the server's
+// render and the browser's agree. Pure functions.
 const enUS = (value: number, fractionDigits = 0) =>
   value.toLocaleString("en-US", {
     minimumFractionDigits: fractionDigits,
@@ -23,29 +20,13 @@ export function formatWeight(kilograms: number): string {
   return `${enUS(kilograms / 1000, 1)} t`
 }
 
+/** Whole kilograms as a weighing reads them, with thousands separators: "12,480 kg". */
+export const kilograms = (value: number): string => `${new Intl.NumberFormat("en").format(value)} kg`
+
 /** Litres → cubic metres with one decimal. */
 export function formatVolume(litres: number): string {
   if (litres === 0) return "0 m³"
   return `${enUS(litres / 1000, 1)} m³`
-}
-
-/** "2026-09-16" → "September 16, 2026". */
-export function formatLongDate(iso: string): string {
-  const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
-  const monthName = MONTH_LABELS[(month ?? 1) - 1] ?? MONTH_LABELS[0]
-  return `${monthName} ${day}, ${year}`
-}
-
-/** Inclusive range as "September 16, 2026 – September 22, 2026"; one day reads once. */
-export function formatDateRange(range: { from: string; to: string }): string {
-  if (range.from === range.to) return formatLongDate(range.from)
-  return `${formatLongDate(range.from)} – ${formatLongDate(range.to)}`
-}
-
-/** "2026-09-18" → "18 Sep 2026", the registry's own date shape. */
-export function formatShortDate(iso: string): string {
-  const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
-  return `${day} ${MONTH_SHORT_LABELS[(month ?? 1) - 1] ?? MONTH_SHORT_LABELS[0]} ${year}`
 }
 
 /** "850 m" under a kilometre, "12.4 km" above. */

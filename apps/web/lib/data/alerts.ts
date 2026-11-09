@@ -8,9 +8,9 @@
 import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { ALERT_KINDS, ALERT_SEVERITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
-import { CONTAINERS_MODULE } from "../api/records/containers"
-import { ROUTES_MODULE } from "../api/records/routes"
-import { TICKETS_MODULE } from "../api/records/tickets"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
+import { ROUTES_MODULE } from "@/lib/data/routes"
+import { TICKETS_MODULE } from "@/lib/data/tickets"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"

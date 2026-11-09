@@ -17,8 +17,8 @@ import { PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EX
 import { PICKUP_EXCEPTION_REASONS, type PickupOutcome } from "@waste/domain/execution/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 
 /** The reason and code pickers' value for any: the wire's null. */
 export const ANY = "any"

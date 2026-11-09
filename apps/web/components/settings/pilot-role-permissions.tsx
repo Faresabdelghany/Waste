@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { REPLACE_ROLE_GRANTS } from "@/lib/api/records/organisation"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import type { RoleAccessMap } from "@/lib/data/role-permissions"
-import { accessChanged, roleMatrixOf } from "@/lib/data/users-roles"
+import { accessChanged, roleMatrixOf } from "@/lib/api/users-roles"
 
 export function PilotRolePermissionsPanel({ record, onBack }: { record: BusinessRecord | undefined; onBack: () => void }) {
   if (record === undefined) return <RoleGone onBack={onBack} />

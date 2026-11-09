@@ -2,7 +2,7 @@ import { WORKSPACE_KEYS, type WorkspaceKey } from "@waste/domain/access/modules"
 
 import { WORKSPACES } from "@/lib/modules/manifest"
 
-import type { SettingsPaneId } from "./settings-panes"
+import type { SettingsPaneId } from "@/lib/modules/settings-panes"
 
 /** A workspace the sidebar lists: every one but Configure, whose modules are Settings'. */
 export type NavItemId = Exclude<WorkspaceKey, "configure">

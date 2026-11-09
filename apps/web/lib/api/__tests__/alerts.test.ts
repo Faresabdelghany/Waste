@@ -18,7 +18,7 @@ import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, rereadRecord, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
-import { TICKET_NUMBER_FACT } from "../records/tickets"
+import { TICKET_NUMBER_FACT } from "@/lib/data/tickets"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-01T10:00:00Z")

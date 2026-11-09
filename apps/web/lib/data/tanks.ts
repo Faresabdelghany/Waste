@@ -1,18 +1,18 @@
 // A Property's tanks on the Pilot (M11 of #293): the register the API keeps
 // at `/tank-installations` — each tank the Container that stands for it in the
-// plan — read and written from the Property's details, and the inspections
-// the office records under each. Nothing is reckoned here: the last emptying
+// plan — read and written from the Property's details through
+// lib/api/property-details.ts, and the inspections the office records under
+// each. Nothing is reckoned here: the last emptying
 // and the day the next is due are the API's answer (`lastEmptying`, `dueOn`,
 // the reading generation plans from), told in these sentences. The Driver
 // App says a stop's tank in `tankSummary` and takes its litres through
 // `litresOf`.
-import type { TankEmptying, TankInspection, TankInspectionCreate, TankInstallation, TankInstallationCreate, TankInstallationPatch } from "@waste/contracts/tanks"
+import type { TankEmptying, TankInspectionCreate, TankInstallation, TankInstallationCreate } from "@waste/contracts/tanks"
 import { TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import type { TankInspectionOutcome, TankKind, TankOutlet } from "@waste/domain/registry/vocabulary"
 
-import { command, create, listAll, patch, type ApiClient } from "../api/client"
-import { allows, type Grants } from "../api/grants"
-import type { LocalRefusal } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessRecord } from "./business-modules"
 import { thousands } from "./tank-words"
 
@@ -82,18 +82,6 @@ export function inspectionBodyOf(typed: InspectionTyped): TankInspectionCreate |
     ...(typed.nextInspectionOn === "" ? {} : { nextInspectionOn: typed.nextInspectionOn }),
   }
 }
-
-/** A Property's tanks, every one, oldest first: a property has a handful. */
-export const tanksOfProperty = (client: ApiClient, propertyServerId: string): Promise<TankInstallation[]> => listAll<TankInstallation>(client, "/tank-installations", { propertyId: propertyServerId })
-
-/** A tank's inspections, oldest first. */
-export const inspectionsOf = (client: ApiClient, tankId: string): Promise<TankInspection[]> => listAll<TankInspection>(client, `/tank-installations/${tankId}/inspections`)
-
-export const registerTank = async (client: ApiClient, body: TankInstallationCreate): Promise<TankInstallation> => (await create<TankInstallation>(client, "/tank-installations", body)).body
-
-export const changeTank = (client: ApiClient, tankId: string, body: TankInstallationPatch): Promise<TankInstallation> => patch<TankInstallation>(client, `/tank-installations/${tankId}`, body)
-
-export const recordInspection = (client: ApiClient, tankId: string, body: TankInspectionCreate): Promise<TankInspection> => command<TankInspection>(client, `/tank-installations/${tankId}/inspections`, body)
 
 /**
  * The containers a tank at the Property may name: those whose record says

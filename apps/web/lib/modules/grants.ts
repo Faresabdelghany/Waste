@@ -5,8 +5,7 @@ import type { Grant } from "@waste/domain/access/grants"
 import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 
-import type { ModuleLocation } from "../data/business-modules"
-import { moduleKeyOf } from "./records/adapter"
+import { moduleKeyOf, type ModuleLocation } from "./keys"
 
 /** A role's grants as /me answers them. */
 export type Grants = readonly Grant[]

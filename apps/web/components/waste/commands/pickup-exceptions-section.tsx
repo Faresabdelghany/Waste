@@ -11,12 +11,13 @@ import Link from "next/link"
 import { useServerModuleState } from "@/components/platform/business-record-store"
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useRowHistory, useServerNames } from "@/components/platform/use-command-support"
-import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
+import { PICKUPS_MODULE } from "@/lib/data/routes"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
-import { chargeSentence, exceptionSentence, historyReadable, historySummary, placePickupExceptions, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
+import { chargeSentence, exceptionSentence, historyReadable, historySummary, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
+import { placePickupExceptions } from "@/lib/api/property-details"
 
 const READS: Readonly<Record<ExceptionPlace, ReturnType<typeof placePickupExceptions>>> = {
   property: placePickupExceptions("property"),

@@ -9,6 +9,8 @@
 // itself — a set row's parent — left out, since the whole history is the
 // row's.
 import type { AuditEvent } from "@waste/contracts/audit"
+import { capitalised } from "@/lib/format/words"
+import { statusLabel } from "@/lib/records/fields"
 
 /** A column that moved: its label, and its value before and after in words, null where it had none. */
 export type HistoryChange = { label: string; before: string | null; after: string | null }
@@ -29,21 +31,15 @@ const tableWords = (table: string): string => table.replaceAll("_", " ")
 
 /** `payer_customer_id` → "Payer customer": the database's spelling in words, a reference by what it names. */
 function labelOf(column: string): string {
-  const words = column.replace(/_id$/, "").replaceAll("_", " ")
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
-
-/** `in-progress` → "In progress": a status token as the lifecycle reads it. */
-function statusOf(token: string): string {
-  const words = token.replaceAll("-", " ")
-  return words.charAt(0).toUpperCase() + words.slice(1)
+  return capitalised(column.replace(/_id$/, "").replaceAll("_", " "))
 }
 
 function valueOf(column: string, value: unknown, nameOf: HistoryReading["nameOf"]): string | null {
   if (value === null || value === undefined) return null
   if (typeof value === "string") {
     if (column.endsWith("_id")) return nameOf(value) ?? value
-    return column === "status" ? statusOf(value) : value
+    // `in-progress` → "In progress": a status token as the lifecycle reads it.
+    return column === "status" ? statusLabel(value) : value
   }
   if (typeof value === "boolean") return value ? "Yes" : "No"
   if (typeof value === "number") return String(value)

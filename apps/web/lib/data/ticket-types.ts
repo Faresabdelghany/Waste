@@ -23,12 +23,13 @@ import { ACTION_KIND_WORDS, actionIssue, plannedService, TRIGGER_WORDS } from "@
 import { fieldKeyOf, TICKET_COMMAND_VERBS } from "@waste/domain/resolution/ticket-types"
 import { isClosedTicketStatus, TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_COMMANDS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_KINDS, TICKET_MESSAGE_RECIPIENTS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, type TicketActionKind, type TicketActionTrigger, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "../api/grants"
-import { statusLabel } from "../api/records/adapter"
+import { allows, type Grants } from "@/lib/modules/grants"
+import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormFieldType, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
 import { TICKET_TEAMS_MODULE } from "./ticket-teams"
+import { capitalised } from "@/lib/format/words"
 
 /** The module the types are records of: the teams', the API's grant for both being `configure.templates`. */
 export const TICKET_TYPES_MODULE: ModuleLocation = TICKET_TEAMS_MODULE
@@ -54,7 +55,7 @@ export const FIELD_INPUT_LABELS: Readonly<Record<TicketFieldInput, string>> = { 
 export const FIELD_REQUIREMENT_LABELS: Readonly<Record<TicketFieldRequirement, string>> = { optional: "Optional", "to-open": "To open", "to-complete": "To complete" }
 
 /** The commands a type names roles for, in the machine's order, as a column heads them. */
-export const COMMAND_HEADINGS: readonly { command: TicketCommand; heading: string }[] = TICKET_COMMANDS.map((command) => ({ command, heading: `${TICKET_COMMAND_VERBS[command][0].toUpperCase()}${TICKET_COMMAND_VERBS[command].slice(1)}` }))
+export const COMMAND_HEADINGS: readonly { command: TicketCommand; heading: string }[] = TICKET_COMMANDS.map((command) => ({ command, heading: capitalised(TICKET_COMMAND_VERBS[command]) }))
 
 /** New ticket type: its name, its kind, what it is for, and whether it is its kind's default. Its fields and permissions are set once it exists. */
 export const TICKET_TYPE_FORM: BusinessFormSchema = {
@@ -121,9 +122,6 @@ export function typeActionsOf(record: Pick<BusinessRecord, "submittedValues">): 
     return []
   }
 }
-
-/** A sentence's opening word capitalised: "on opening" heads its section as "On opening". */
-const capitalised = (words: string): string => `${words[0].toUpperCase()}${words.slice(1)}`
 
 /** Each trigger as its section heads it. */
 export const TRIGGER_HEADINGS: Readonly<Record<TicketActionTrigger, string>> = Object.fromEntries(Object.entries(TRIGGER_WORDS).map(([trigger, words]) => [trigger, capitalised(words)])) as Record<TicketActionTrigger, string>

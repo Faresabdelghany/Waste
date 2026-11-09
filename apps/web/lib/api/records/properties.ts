@@ -35,6 +35,7 @@
 // no key on the wire, so every row is `<prefix>-<uuid>` from the start.
 import type { Property, PropertyGroup, PropertyGroupMember, PropertyParty, PropertyPartyHeld, SharedCollectionPoint, SharedCollectionPointMember } from "@waste/contracts/customers"
 import { splitList } from "@/lib/prototype/record-values"
+import { periodOn } from "@waste/domain/periods"
 import { SET_MAX } from "@waste/domain/requests"
 import {
   PROPERTY_GROUP_MEMBER_ROLES,
@@ -82,7 +83,8 @@ import {
 } from "@/lib/data/properties"
 
 import { create, get, listAll, patch, put } from "../client"
-import { isLocalRefusal, PartialWrite, patchOf, statusLabel, typed, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { PartialWrite, patchOf, type Client, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, statusLabel, typed, type LocalRefusal } from "@/lib/records/fields"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { todayIn } from "./clock"
@@ -173,8 +175,8 @@ const ROLE_WORDS: Readonly<Record<PropertyParty["role"], string>> = { owner: "ow
  */
 function bookedAhead(parties: readonly PropertyPartyHeld[], today: string, context: MappingContext): string | undefined {
   const changes = parties.flatMap((party) => [
-    ...(party.validFrom > today ? [{ day: party.validFrom, party, verb: "joins" }] : []),
-    ...(party.validFrom <= today && party.validTo !== null ? [{ day: party.validTo, party, verb: "leaves" }] : []),
+    ...(periodOn(party, today) === "upcoming" ? [{ day: party.validFrom, party, verb: "joins" }] : []),
+    ...(periodOn(party, today) !== "upcoming" && party.validTo !== null ? [{ day: party.validTo, party, verb: "leaves" }] : []),
   ])
   if (changes.length === 0) return undefined
   changes.sort((left, right) => (left.day === right.day ? (left.verb < right.verb ? 1 : -1) : left.day < right.day ? -1 : 1))
@@ -234,7 +236,7 @@ export const propertyAdapter: ResourceAdapter<Property, unknown, PropertyWrite> 
     // The record's parties are today's on the project's clock (#374): a move booked ahead is not yet the set a form edits, nor what `PUT …/parties` sends back.
     const projectRow = context.resolve.byServerId(property.projectId)
     const today = todayIn(context, projectRow === undefined ? undefined : typed(projectRow, "timezone"))
-    const parties = entriesOf(property.parties.filter((party) => party.validFrom <= today).map((party) => ({ id: party.customerId, role: party.role })), CUSTOMER_CHIP, context)
+    const parties = entriesOf(property.parties.filter((party) => periodOn(party, today) !== "upcoming").map((party) => ({ id: party.customerId, role: party.role })), CUSTOMER_CHIP, context)
     const holders = (role: PropertyParty["role"]) => parties.filter((party) => party.role === role).map((party) => party.name ?? party.webId)
     const owners = holders("owner").join(", ")
     const payers = holders("payer").join(", ")

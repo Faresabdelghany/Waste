@@ -17,7 +17,7 @@ import type { Me } from "@waste/contracts/me"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
 
-import { webIdOf } from "./adapter"
+import { webIdOf } from "@/lib/records/fields"
 import type { ModuleState, ServerRecordsState } from "./server-records"
 
 /** Where the store files the person's `/me` projects: a key no module has. */

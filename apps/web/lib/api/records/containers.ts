@@ -44,25 +44,24 @@ import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-stat
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek } from "@waste/domain/planning/frequency-reconciliation"
-import { moduleAt } from "@/lib/modules/keys"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
 import { PROMISED_RATE_KEY } from "@/lib/prototype/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { type BusinessRecord } from "@/lib/data/business-modules"
-import { OWNERSHIP_LABELS, SERVED_PUBLICLY } from "@/lib/data/containers"
+import { CONTAINERS_MODULE, OWNERSHIP_LABELS, SERVED_PUBLICLY } from "@/lib/data/containers"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { isSharedPointRecord } from "@/lib/data/properties"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
-import { isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { instantOn, projectTimezoneOf, shownOn, todayIn } from "./clock"
+import { patchOf, said, type Client, type CommandInput, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { isLocalRefusal, ofKind, statusLabel, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
+import { projectTimezoneOf, todayIn } from "./clock"
+import { instantOn, shownOn } from "@/lib/format/clock"
 import { containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
-
-/** The workspace module the containers are the rows of. */
-export const CONTAINERS_MODULE = moduleAt("resources.containers")
 
 /** The workspace module the ledger is the rows of: the movements the containers' commands append. */
 export const INVENTORY_MODULE = moduleAt("resources.inventory")

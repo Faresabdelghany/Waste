@@ -9,7 +9,8 @@ import { ScaleTicketComplete, ScaleTicketCreate, ScaleTicketVoid, VehicleTareCre
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND } from "../../data/scale-house"
-import { isLocalRefusal, recordFrom, type MappingContext } from "../records/adapter"
+import { recordFrom, type MappingContext } from "../records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { isServerBacked } from "../records/modules"
 import {
   COMPLETE_TICKET,

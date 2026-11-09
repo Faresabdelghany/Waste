@@ -12,7 +12,7 @@
 import type { TicketCharges, TicketChargesSet } from "@waste/contracts/tickets"
 import { TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
 
-import type { LocalRefusal } from "@/lib/api/records/adapter"
+import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessFormOption } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"

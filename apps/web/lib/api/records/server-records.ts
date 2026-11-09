@@ -80,8 +80,10 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, problemOfError, type Problem } from "../problem"
-import { isLocalRefusal, moduleKeyOf, PartialWrite, recordFrom, statusToken, webIdOf, type CommandInput, type LocalRefusal, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
-import { dayIn } from "./clock"
+import { PartialWrite, recordFrom, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
+import { moduleKeyOf } from "@/lib/modules/keys"
+import { isLocalRefusal, statusToken, webIdOf, type LocalRefusal } from "@/lib/records/fields"
+import { dayIn } from "@/lib/format/clock"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed" | "kept-on-api"
 

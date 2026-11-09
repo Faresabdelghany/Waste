@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 import { CountingRuleCreate, CountingRulePatch, CountingSimulationBody, type CountingRule } from "@waste/contracts/counting-rules"
 import { SIMULATION_DAYS_MAX, windowDays } from "@waste/domain/resolution/counting-rules"
 
-import type { Grants } from "../../api/grants"
+import type { Grants } from "@/lib/modules/grants"
 import {
   countingRuleBodyOf,
   countingRuleDraftOf,

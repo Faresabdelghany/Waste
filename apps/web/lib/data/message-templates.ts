@@ -9,18 +9,15 @@
 // sentence (@waste/domain/messaging/template, which the contracts read too).
 import type { ModuleKey } from "@waste/domain/access/modules"
 import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
-import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
+import { channelShapeIssue, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
-import { allows, type Grants } from "../api/grants"
+import { allows, type Grants } from "@/lib/modules/grants"
 
 /** The module the templates are granted under: Tickets & communication's. */
 export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates" satisfies ModuleKey
 
 export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email: "E-mail", sms: "Text message" }
 export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }
-
-/** The placeholders a text may name, as a person types them. */
-export const PLACEHOLDERS = MESSAGE_VARIABLES.map((name) => `{{${name}}}`)
 
 /** What a role may do in the pane. */
 export const templatesAccessOf = (grants: Grants | undefined) => ({

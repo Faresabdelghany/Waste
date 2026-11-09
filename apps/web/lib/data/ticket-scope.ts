@@ -9,7 +9,7 @@ import type { TicketType } from "@waste/contracts/ticket-types"
 import { kindOrTypeKey } from "@waste/domain/resolution/ticket-types"
 import type { TicketKind } from "@waste/domain/resolution/vocabulary"
 
-import { statusLabel } from "../api/records/adapter"
+import { statusLabel } from "@/lib/records/fields"
 
 /** A ticket type as the settings by type list it: its server id, its name, its kind, whether it takes new tickets, and whether it is its kind's default, whose setting is its kind's row. */
 export type TypeChoice = Pick<TicketType, "id" | "name" | "status"> & { kind: TicketType["kind"] | null; isDefault?: boolean }

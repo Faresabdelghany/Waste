@@ -35,7 +35,7 @@ import {
   emptyBusinessFilters,
   type BusinessFilters,
 } from "@/lib/prototype/business-filters"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { workspaceHref } from "@/lib/data/workspace-href"
@@ -55,7 +55,7 @@ import { serviceAreasForSelection } from "@/lib/prototype/map-planning/coverage"
 import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@/lib/prototype/map-planning/coverage-gaps"
 import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@/lib/prototype/map-planning/scheme-compare"
 import { mapFilterReaders } from "@/lib/prototype/map-planning/filters"
-import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
+import { formatDateRange, formatShortDate } from "@/lib/format/dates"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
 import { containerPoints, type MapPoint } from "@/lib/prototype/map-planning/points"
 import { containerLocation } from "@/lib/prototype/map-planning/positions"

@@ -18,7 +18,8 @@ import { COMMAND_SURFACES, genericEditOffered } from "@/components/waste/command
 
 import { applicationCommandsOffered, decideBodyOf, decisionLetterHref, decisionLetterOf, LAST_DAY_SENTENCE, letterOffered, NOT_A_DAY, recordedDecisionOf } from "../../data/applications"
 import { type BusinessRecord } from "../../data/business-modules"
-import { isLocalRefusal, NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
+import { isLocalRefusal } from "@/lib/records/fields"
 import { applicationAdapter, toApplicationCreateBody, toApplicationPatchBody } from "../records/applications"
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"

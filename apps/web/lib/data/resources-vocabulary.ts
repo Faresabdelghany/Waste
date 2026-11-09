@@ -7,9 +7,7 @@
 import { FUEL_TYPES, VEHICLE_STATUSES, WAREHOUSE_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import type { BusinessFormOption } from "./business-form-types"
-
-/** `active` → `Active`: a token as a person reads it. */
-const capitalised = (token: string) => token.charAt(0).toUpperCase() + token.slice(1)
+import { capitalised } from "@/lib/format/words"
 
 /** `HVO` as the fixtures spell it, the other fuels as words. */
 export const fuelLabel = (fuel: string): string => (fuel === "hvo" ? "HVO" : capitalised(fuel))

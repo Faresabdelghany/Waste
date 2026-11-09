@@ -15,7 +15,7 @@ import { useModuleRecords, useServerModuleState } from "@/components/platform/bu
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ranRoutes } from "@/components/waste/commands/provider-money-surfaces"
 import { useCommandRunner, useModuleReady } from "@/components/platform/use-command-support"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ROUTES_MODULE } from "@/lib/data/routes"
 import { DISMISS_TICKET, MATCH_TICKET, ticketCommandsOffered } from "@/lib/api/records/weighbridge"
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"

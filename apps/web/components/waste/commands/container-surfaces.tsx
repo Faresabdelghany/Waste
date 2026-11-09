@@ -18,8 +18,9 @@ import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
-import { shownOn } from "@/lib/api/records/clock"
-import { CONTAINERS_MODULE, containerMovements } from "@/lib/api/records/containers"
+import { shownOn } from "@/lib/format/clock"
+import { containerMovements } from "@/lib/api/records/containers"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import {
