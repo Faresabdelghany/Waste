@@ -15,10 +15,8 @@
 import { lastDayIn } from "../periods"
 import { UNDECIDED_APPLICATION_STATUSES, type ApplicationKind, type ApplicationStatus, type DecisionOutcome } from "./vocabulary"
 
-/** The commands that move an Application. */
 export type ApplicationCommand = "review" | "decide" | "withdraw" | "reopen"
 
-/** What each command moves an Application from, and to. */
 export const APPLICATION_MOVES: Readonly<Record<ApplicationCommand, { from: readonly ApplicationStatus[]; to: ApplicationStatus }>> = {
   review: { from: ["received"], to: "in-review" },
   decide: { from: UNDECIDED_APPLICATION_STATUSES, to: "decided" },

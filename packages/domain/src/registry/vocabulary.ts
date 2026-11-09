@@ -64,7 +64,6 @@ export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item", 
 
 /** Where the Agreement stands; "expiring", "expired" and "terminated" are readings of `valid_to` (ADR-0005), never stored. */
 export const AGREEMENT_STATUSES = ["draft", "active", "cancelled"] as const
-/** How often the Agreement is billed. */
 export const BILLING_CADENCES = ["monthly", "quarterly", "annual", "manual"] as const
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
@@ -77,7 +76,6 @@ export const APPLICATION_KINDS = ["exemption", "pause", "longer-interval", "home
 export const APPLICATION_STATUSES = ["received", "in-review", "decided", "withdrawn"] as const
 /** How the Application reached the office. */
 export const APPLICATION_CHANNELS = ["phone", "email", "letter", "counter", "portal"] as const
-/** A Decision's outcome. */
 export const DECISION_OUTCOMES = ["granted", "partly-granted", "refused"] as const
 /** What a Tank Installation is (M11 of #293): a septic tank that settles sludge before an outlet, a holding tank with no outlet that is emptied whole, a small treatment plant, or a grease separator. */
 export const TANK_KINDS = ["septic-tank", "holding-tank", "small-treatment-plant", "grease-separator"] as const
