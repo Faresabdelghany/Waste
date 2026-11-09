@@ -48,7 +48,7 @@ export const FUEL_TYPES = ["diesel", "hvo", "biogas", "electric", "hybrid", "oth
 /** The licence classes a driver may hold and a vehicle may require, lowest first: `ce` covers `c` covers `b`. */
 export const LICENCE_CLASSES = ["b", "c", "ce"] as const
 export const EMPLOYMENT_TYPES = ["employee", "service-provider", "temporary"] as const
-/** The driver's lifecycle; "invited" is the account's and "absent" a dated window, which arrives later. */
+/** The driver's lifecycle; "invited" is the account's and "absent" a dated window. */
 export const DRIVER_STATUSES = ["active", "inactive", "suspended"] as const
 /** Whether the warehouse takes and issues stock. */
 export const WAREHOUSE_STATUSES = ["draft", "active", "restricted", "closed"] as const

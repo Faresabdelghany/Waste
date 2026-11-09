@@ -1,10 +1,11 @@
 // billableFor over the table of §3: every outbox kind, every pickup outcome,
 // every ticket resolution and every product unit — a completed pickup under a
 // per-pickup product is a priced event or a blocked one with the actionable
-// reason, under a month product nothing; a corrected pickup cancels an
+// reason, under a month, a day or a tonne product nothing; a corrected pickup cancels an
 // uninvoiced event and reverses an invoiced one; a completed ticket with a
-// billable resolution and a reachable agreement is a no-product event on the
-// day it closed, and everything else is nothing.
+// billable resolution and a reachable agreement is an event on the
+// day it closed, priced at its product or blocked no-product, and every other kind but a
+// Site Visit's, a weight review's and a Scale Ticket's is nothing.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
