@@ -151,7 +151,7 @@ const asStored = (body: ServiceFrequencyShape): ServiceFrequencyShape => ({
 
 const oneCadence = { message: ONE_CADENCE }
 
-/** The cadence a project offers, the domain's `ServiceFrequencyDefinition` as a row. */
+/** The cadence a project offers, @waste/fixtures' `ServiceFrequencyDefinition` as a row. */
 export const ServiceFrequency = z
   .object({
     ...stamped,

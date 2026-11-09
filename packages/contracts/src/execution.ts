@@ -2,10 +2,7 @@
 // @waste/domain/execution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
 // would refuse it as a 500 naming nothing. Shared here because several modules
-// read them — `routes.ts` the route status and its cancel's reason codes, `pickups.ts` the pickup's status,
-// origin and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
-// `driver-commands.ts` the command kinds, the outcomes and the driver's
-// reasons — and a list spelled in one place is a list that cannot drift
+// read them, and a list spelled in one place is a list that cannot drift
 // between them.
 //
 // A photo's or a signature's Storage object lives under an agreed key,

@@ -45,7 +45,7 @@ export const OutboxEvent = z.object({
   projectId: Id,
   kind: OutboxKind,
   aggregateKind: OutboxAggregate,
-  /** The route, pickup, unload or command the event is about; a soft id. */
+  /** The aggregate the event is about; a soft id. */
   aggregateId: Id,
   /** The command's instant, not the request's. */
   occurredAt: IsoDateTime,

@@ -1,14 +1,9 @@
 // Finance & Contracting's closed lists at the API boundary (Issue #112): each
 // of @waste/domain/finance/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because eight modules
-// read them — `price-lists.ts` none but the Registry's customer kind,
-// `service-provider-prices.ts` the index base, `billable-events.ts` the kind,
-// the block and cancel reasons and the status, `billing.ts` the run's status
-// and the exclusion reason, `invoices.ts` the kind and the credit reason,
-// `settlements.ts` the settlement's status and its history's kind,
-// `weight-control.ts` the decision and the status — and a list spelled in one
-// place is a list that cannot drift between them.
+// would refuse it as a 500 naming nothing. Shared here because several modules
+// read them, and a list spelled in one place is a list that cannot drift
+// between them.
 //
 // An Unload's review status travels beside every `Unload` as
 // `WeightReviewState` — the reading, the latest review's id and the
