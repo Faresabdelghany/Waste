@@ -94,11 +94,9 @@ export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" 
   scaleTicketLineId: row.scaleTicketLineId,
 })
 
-/** The status the domain reads off a row and the two rows that may name it. */
 export const statusOf = (row: EventReading): BillableEventStatus =>
   billableEventStatus({ blockReason: row.blockReason, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null, heldAt: row.heldAt })
 
-/** The billable event on the wire, its status the fold over the reading. */
 export function eventOf(row: EventReading): BillableEvent {
   const status = statusOf(row)
   return {

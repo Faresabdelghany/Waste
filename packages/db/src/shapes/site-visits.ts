@@ -40,7 +40,6 @@ export const visitColumns = {
 
 export type VisitRow = Pick<typeof siteVisit.$inferSelect, keyof typeof visitColumns>
 
-/** A visit on the wire, with the fractions it brought. */
 export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]): SiteVisit {
   return {
     id: row.id,
@@ -73,7 +72,6 @@ export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]):
 export const quotedOf = (row: Pick<VisitRow, "chargeBasis" | "chargeN" | "chargeProductId">): VisitChargeQuoted | null =>
   row.chargeBasis === null ? null : { basis: row.chargeBasis, n: row.chargeN, productId: row.chargeProductId }
 
-/** The fractions of each visit asked, by visit, in the order they were written. */
 export async function fractionsOf(tx: Tx, companyId: string, visitIds: readonly string[]): Promise<Map<string, string[]>> {
   const fractions = new Map<string, string[]>()
   if (visitIds.length === 0) return fractions
@@ -86,7 +84,6 @@ export async function fractionsOf(tx: Tx, companyId: string, visitIds: readonly 
   return fractions
 }
 
-/** One visit of the company with its fractions, or undefined. */
 export async function visitById(tx: Tx, companyId: string, id: string): Promise<{ row: VisitRow; visit: SiteVisit } | undefined> {
   const [row] = await tx
     .select(visitColumns)

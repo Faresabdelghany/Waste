@@ -65,7 +65,6 @@ export type TicketRow = Pick<typeof ticket.$inferSelect, keyof typeof ticketColu
 /** How every sentence names a ticket: `T-8831`. */
 export const labelOf = (row: { number: number }): string => ticketLabel(row.number)
 
-/** The nine links as the wire carries them, off the row's nine columns. */
 export const linksOf = (row: Pick<TicketRow, keyof TicketLinks>): TicketLinks => ({
   routeId: row.routeId,
   pickupId: row.pickupId,
@@ -81,7 +80,6 @@ export const linksOf = (row: Pick<TicketRow, keyof TicketLinks>): TicketLinks =>
 /** The nine links, none named: what a writer spreads its own links over. */
 export const NO_TICKET_LINKS: TicketLinks = { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
 
-/** The ticket on the wire. */
 export function ticketOf(row: TicketRow): Ticket {
   return {
     id: row.id,
@@ -133,7 +131,6 @@ export const eventColumns = {
 
 export type TicketEventRow = Pick<typeof ticketEvent.$inferSelect, keyof typeof eventColumns>
 
-/** The history row on the wire. */
 export function eventOf(row: TicketEventRow): TicketEvent {
   return {
     id: row.id,

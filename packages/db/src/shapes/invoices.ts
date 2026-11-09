@@ -134,7 +134,6 @@ export const lineColumns = {
 
 export type LineRow = Pick<typeof invoiceLine.$inferSelect, keyof typeof lineColumns>
 
-/** The line on the wire. */
 export function lineOf(row: LineRow): InvoiceLine {
   return {
     id: row.id,
@@ -154,7 +153,6 @@ export function lineOf(row: LineRow): InvoiceLine {
   }
 }
 
-/** One document's lines, by position. */
 export async function linesOf(tx: Tx, companyId: string, invoiceId: string): Promise<LineRow[]> {
   return await tx
     .select(lineColumns)
