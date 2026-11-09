@@ -71,8 +71,8 @@ type Options = {
   place?: string
 }
 
-/** The row: its columns, read off the table, or a read of the family's own. */
-type Source<Columns extends SelectedFields, Row> = { columns: Columns; read?: undefined } | { read: Read<Row>; columns?: undefined }
+/** The row: its columns, read off the table, or a read of the family's own; either way it carries its id, which a page's cursor is. */
+type Source<Columns extends SelectedFields, Row> = { columns: Columns & { id: PgColumn }; read?: undefined } | { read: Read<Row & { id: string }>; columns?: undefined }
 
 type ProjectTable = TenantTable & { projectId: PgColumn }
 
