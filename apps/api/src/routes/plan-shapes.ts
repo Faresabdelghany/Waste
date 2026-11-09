@@ -70,7 +70,7 @@ export function planOf(row: PlanRow): Plan {
 /** The plans of this company the caller reads: its projects' for an office account, the Plans of the routes its provider serves for a Service Provider's (`reachesThroughRoute`, #291 slice 23). */
 export const planReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(plan.companyId, principal.companyId), reachesThroughRoute(tx, principal, plan))
 
-export const { scope: planScope, noSuch: noSuchPlan, find: findPlan } = scoped(plan, { noun: "plan", reach: "projects", columns: planColumns })
+export const { noSuch: noSuchPlan, find: findPlan } = scoped(plan, { noun: "plan", reach: "projects", columns: planColumns })
 
 /** One plan of this company by id that the caller reads (`planReach`); undefined when it is not one. */
 export async function findReachedPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {
