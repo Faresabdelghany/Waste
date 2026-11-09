@@ -11,9 +11,9 @@ import { Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
-import { useModuleReady, useOpenRecord, useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useBusinessRecordStore, whenSaved } from "@/components/platform/business-record-store"
+import { useModuleReady, useOpenRecord, useRelationPickers, type RelationPickers } from "@/components/platform/use-command-support"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 

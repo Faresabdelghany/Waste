@@ -32,12 +32,12 @@ import {
   Truck,
   Buildings,
 } from "@phosphor-icons/react/dist/ssr"
-import { useApiSession } from "@/components/waste/api-session-store"
-import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useBusinessRecordStore, useServerModuleState } from "@/components/platform/business-record-store"
 import {
   resolveActiveRouteSummaries,
   useActiveRoutes,
-} from "@/components/waste/active-routes-store"
+} from "@/components/platform/active-routes-store"
 import { projectScopeOfMe, projectWebIdOf } from "@/lib/api/records/me-projects"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"

@@ -38,13 +38,13 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
   useModuleRecords,
   whenSaved,
-} from "@/components/waste/business-record-store"
+} from "@/components/platform/business-record-store"
 import type {
   BusinessFormField,
   BusinessFormOption,

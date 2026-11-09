@@ -37,8 +37,8 @@ import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/
 import { moduleParams } from "@/lib/data/workspace-href"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
-import { useApiClient } from "../api-session-store"
-import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved, type SavedOutcome } from "../business-record-store"
+import { useApiClient } from "@/components/platform/api-session-store"
+import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved, type SavedOutcome } from "@/components/platform/business-record-store"
 import type { CommandInput } from "@/lib/api/records/adapter"
 
 /** What a command the API took answers: the row as the API now holds it. */

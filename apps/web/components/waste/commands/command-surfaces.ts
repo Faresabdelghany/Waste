@@ -25,6 +25,7 @@ import type { ComponentType } from "react"
 import { AlertCommandsSurface, NewTicketSurface, RaiseAlertSurface } from "@/components/tickets/resolution-surfaces"
 import { mayTake, type Grants, type ModuleAction } from "@/lib/api/grants"
 import type { BusinessRecord, ModuleLocation, WorkspaceId } from "@/lib/data/business-modules"
+import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/platform/surface-props"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked, type SwitchedModuleKey } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
@@ -61,11 +62,6 @@ import { WarehouseStockSurface } from "./stock-surfaces"
 import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
 
-/** What a primary surface is handed: the label the module's primary action carries. */
-export type PrimarySurfaceProps = { label: string }
-
-/** What a row surface is handed: the row whose details are open. */
-export type RowSurfaceProps = { record: BusinessRecord }
 
 export type CommandSurface = {
   /**

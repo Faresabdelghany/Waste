@@ -8,9 +8,9 @@
 // lib/data/pickup-exception-history.ts'.
 import Link from "next/link"
 
-import { useServerModuleState } from "@/components/waste/business-record-store"
-import { useApiSession } from "@/components/waste/api-session-store"
-import { useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useServerModuleState } from "@/components/platform/business-record-store"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { workspaceHref } from "@/lib/data/workspace-href"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"

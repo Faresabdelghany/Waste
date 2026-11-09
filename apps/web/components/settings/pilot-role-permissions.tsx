@@ -11,7 +11,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { RoleGone, RolePermissionsMatrix } from "@/components/settings/role-permissions"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import { Button } from "@/components/ui/button"
 import { REPLACE_ROLE_GRANTS } from "@/lib/api/records/organisation"
 import type { BusinessRecord } from "@/lib/data/business-modules"

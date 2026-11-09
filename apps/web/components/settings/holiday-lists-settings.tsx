@@ -51,9 +51,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
-import { savedRow, useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
-import { RecordActionsMenu } from "@/components/waste/business-record-views"
+import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
+import { savedRow, useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/platform/business-record-store"
+import { RecordActionsMenu } from "@/components/platform/business-record-views"
 import {
   BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
@@ -61,8 +61,8 @@ import {
   type BusinessGroupOption,
   type BusinessOrderingOption,
   type BusinessViewOptions,
-} from "@/components/waste/business-view-options-popover"
-import { RecordSearchInput } from "@/components/waste/record-search-input"
+} from "@/components/platform/business-view-options-popover"
+import { RecordSearchInput } from "@/components/platform/record-search-input"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"

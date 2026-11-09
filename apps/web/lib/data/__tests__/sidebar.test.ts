@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { resolveActiveRouteSummaries } from "@/components/waste/active-routes-store"
+import { resolveActiveRouteSummaries } from "@/components/platform/active-routes-store"
 
 import type { BusinessRecord } from "../business-modules"
 import { navBadgeOf, navItemActive, navItems, type NavItem } from "../sidebar"

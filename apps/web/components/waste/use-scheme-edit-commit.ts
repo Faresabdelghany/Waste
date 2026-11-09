@@ -28,7 +28,7 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
-import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"

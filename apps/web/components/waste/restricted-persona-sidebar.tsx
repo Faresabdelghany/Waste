@@ -30,16 +30,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProgressCircle } from "@/components/progress-circle"
-import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
-import { useProviderWorkspace } from "@/components/waste/provider-account"
+import { useApiConfigured } from "@/components/platform/api-session-store"
+import { useBusinessRecordStore } from "@/components/platform/business-record-store"
+import { useProviderWorkspace } from "@/components/platform/provider-account"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { PROVIDER_PAGES, PROVIDER_WORKSPACE_PATH } from "@/lib/modules/provider-pages"
 import type { ProviderPageId } from "@/lib/modules/manifest"
 import {
   resolveActiveRouteSummaries,
   useActiveRoutes,
-} from "@/components/waste/active-routes-store"
+} from "@/components/platform/active-routes-store"
 
 export type RestrictedPersona = "citizen" | "service-provider"
 

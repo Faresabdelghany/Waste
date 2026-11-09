@@ -38,7 +38,7 @@ import {
 import { ReportCard, ReportNotice } from "./report-card"
 import { comparisonOf, StatRow, StatTile } from "./stat-tile"
 import { ThroughputChart } from "./throughput-chart"
-import { useReport } from "./use-report"
+import { useReport } from "@/components/platform/use-report"
 
 export type TabProps = {
   /** The window asked for, and the period before it. */

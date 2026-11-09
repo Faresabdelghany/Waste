@@ -44,7 +44,7 @@ import {
 import { persistedStore } from "@/lib/persisted-store"
 import { BUSINESS_RECORDS_STORAGE_KEY } from "@/lib/storage-keys"
 
-import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "./api-session-store"
+import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } from "@/components/platform/api-session-store"
 
 /**
  * Key renames specific to this store's records, on top of the shared map in

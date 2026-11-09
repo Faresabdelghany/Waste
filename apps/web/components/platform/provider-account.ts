@@ -11,8 +11,8 @@ import { webIdVia } from "@/lib/api/records/references"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { commandOffered, providerWorkspaceOf, type ProviderWorkspace } from "@/lib/data/provider-workspace"
 
-import { useApiSession } from "./api-session-store"
-import { useServerResolver } from "./business-record-store"
+import { useApiSession } from "@/components/platform/api-session-store"
+import { useServerResolver } from "@/components/platform/business-record-store"
 
 /** What `/me` says of the provider's workspace: null in fixture mode, before `/me` answers, and for an office account. */
 export function useProviderWorkspace(): ProviderWorkspace | null {

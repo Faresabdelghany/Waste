@@ -15,7 +15,7 @@ import { Plus } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
 import { CreateModeChooser, type CreateMode } from "@/components/waste/create-mode-chooser"
-import { whenSaved } from "@/components/waste/business-record-store"
+import { whenSaved } from "@/components/platform/business-record-store"
 import type { WriteOutcome } from "@/lib/api/records/server-records"
 import { SchemeWizard } from "@/components/waste/scheme-wizard/scheme-wizard"
 import {

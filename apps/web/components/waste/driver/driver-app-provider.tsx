@@ -20,7 +20,7 @@
 // #290), so the app opens and reads the day with no signal.
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
 
-import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
 import { whoOf } from "@/lib/api/session"
 import { registerShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
 import { APP_VERSION } from "@/lib/driver/app-version"

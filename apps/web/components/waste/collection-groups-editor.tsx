@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useModuleRecords } from "@/components/waste/business-record-store"
+import { useModuleRecords } from "@/components/platform/business-record-store"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"

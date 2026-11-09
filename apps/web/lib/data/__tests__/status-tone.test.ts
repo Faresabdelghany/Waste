@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { recordStatusTone } from "@/components/waste/business-record-views"
+import { recordStatusTone } from "@/components/platform/business-record-views"
 
 describe("recordStatusTone", () => {
   test("an issued invoice is a good state, as an active or published row is", () => {

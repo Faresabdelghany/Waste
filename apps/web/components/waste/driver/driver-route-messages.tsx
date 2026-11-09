@@ -13,7 +13,7 @@ import { ChatText, PaperPlaneRight } from "@phosphor-icons/react/dist/ssr"
 import type { RouteMessage } from "@waste/contracts/route-messages"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { authorLine, mintMessageId, readDriverRouteMessages, sendable, sendDriverRouteMessage } from "@/lib/driver/route-messages"
 

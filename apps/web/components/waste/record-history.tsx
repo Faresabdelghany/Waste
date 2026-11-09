@@ -10,8 +10,8 @@
 
 import type { AuditEvent } from "@waste/contracts/audit"
 
-import { useServerModuleState, useServerResolver } from "@/components/waste/business-record-store"
-import { useReport } from "@/components/insight/use-report"
+import { useServerModuleState, useServerResolver } from "@/components/platform/business-record-store"
+import { useReport } from "@/components/platform/use-report"
 import { problemSentence } from "@/lib/api/problem"
 import { typed } from "@/lib/api/records/adapter"
 import { historyPage, historySubjectOf } from "@/lib/api/records/audit"

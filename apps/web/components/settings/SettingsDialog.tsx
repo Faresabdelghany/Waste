@@ -16,7 +16,7 @@ import { SETTINGS_PANE_ICONS, SETTINGS_PANE_VIEWS } from "@/components/settings/
 import { ReportNotice } from "@/components/insight/report-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiConfigured } from "@/components/platform/api-session-store"
 import { keptOnApi } from "@/lib/api/records/server-records"
 import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, settingsPaneDrawnWithoutApi, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/data/settings-panes"
 import { cn } from "@/lib/utils"

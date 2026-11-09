@@ -14,13 +14,13 @@ import { toast } from "sonner"
 import type { RouteMessage } from "@waste/contracts/route-messages"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient } from "@/components/waste/api-session-store"
-import { useRowHistory } from "@/components/waste/commands/use-command-support"
+import { useApiClient } from "@/components/platform/api-session-store"
+import { useRowHistory } from "@/components/platform/use-command-support"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { draftRefusal, messageLine, routeMessages, sendRouteMessage } from "@/lib/api/records/route-messages"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { useServerModuleState } from "@/components/waste/business-record-store"
+import { useServerModuleState } from "@/components/platform/business-record-store"
 
 /** How often an open thread is read again. */
 const THREAD_POLL_MS = 30_000

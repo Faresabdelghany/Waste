@@ -10,14 +10,14 @@ import {
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import { useApiSession } from "@/components/waste/api-session-store"
+import { useApiSession } from "@/components/platform/api-session-store"
 import {
   useBusinessRecordStore,
   useModuleRecords,
   useServerModuleState,
   whenSaved,
-} from "@/components/waste/business-record-store"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
+} from "@/components/platform/business-record-store"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
 import { NewRoleDialog } from "@/components/settings/new-role-dialog"

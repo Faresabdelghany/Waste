@@ -7,7 +7,7 @@
 // neither lists no type, and a setting naming one says so (`unknownTypeName`),
 // as it says a read that failed.
 import type { TicketType } from "@waste/contracts/ticket-types"
-import { useReport } from "@/components/insight/use-report"
+import { useReport } from "@/components/platform/use-report"
 import { listAll } from "@/lib/api/client"
 import { problemOfError } from "@/lib/api/problem"
 import type { TypeChoice, TypeChoices } from "@/lib/data/ticket-scope"

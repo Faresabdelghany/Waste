@@ -13,11 +13,11 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
-import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
+import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
+import { useBusinessRecordStore } from "@/components/platform/business-record-store"
+import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useModuleReady, useRowHistory } from "@/components/waste/commands/use-command-support"
+import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import {
   awayLine,
