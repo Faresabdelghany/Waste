@@ -8,6 +8,9 @@ export const SERVICE_PROVIDERS = workspaceSpec("service-providers", {
   modules: {
     "service-providers": {
       shown: "tab",
+      details: "provider-page",
+      filters: "service-providers",
+      providerOperated: true,
       label: "Service Providers",
       title: "Service Providers",
       description:
@@ -25,6 +28,7 @@ export const SERVICE_PROVIDERS = workspaceSpec("service-providers", {
     },
     "service-areas": {
       shown: "tab",
+      providerOperated: true,
       label: "Service Areas",
       title: "Service Areas",
       description:
@@ -61,10 +65,22 @@ export const SERVICE_PROVIDERS = workspaceSpec("service-providers", {
     },
     "service-provider-workspace": {
       shown: "elsewhere",
+      layout: "accounts",
+      filters: "service-provider-users",
+      writes: "account",
+      providerOperated: true,
+      // A provider's own workspace already knows which provider, project, service
+      // area and signed-in manager an invite belongs to, so its form asks none of
+      // them: all four are stamped from the account and its fixed scope at submit
+      // time, leaving only the person's own details.
+      providerForm: {
+        description: "Add a user with access limited to your service provider.",
+        hides: ["serviceProviderId", "projectId", "serviceAreaId", "invitedBy"],
+      },
       providerPage: "team",
       // Full name, Email, Phone number, Role, Status and Updated as a fixed
       // column set; the rich view still gives it edit and delete.
-      view: { seededFactColumns: [], offersFactColumns: false },
+      view: { seededFactColumns: [], offersFactColumns: false, groupBy: ["Role"] },
       label: "Service Provider Workspace",
       title: "Users",
       description: "Service provider-scoped company, fleet, users, route lists, proposals, performance, complaints, and manager-only commercial views.",

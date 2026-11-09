@@ -508,6 +508,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     submitLabel: "Create party",
     nameField: "displayName",
     contextFieldIds: ["partyType", "projectScope", "relationshipRole"],
+    validationRules: [{ type: "filled", fields: ["email", "phone"], when: { fieldId: "partyType", oneOf: ["person"] }, at: ["email"], message: "A person needs an email address or phone number." }],
     sections: [
       {
         id: "scope-source",

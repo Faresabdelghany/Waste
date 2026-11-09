@@ -7,6 +7,16 @@ export const FLEET = workspaceSpec("fleet", {
   modules: {
     vehicles: {
       shown: "tab",
+      providerOperated: true,
+      picked: {
+        // A trailer is a vehicle of the fleet: a trailer field offers the trailers alone, a vehicle field the rest.
+        offers: (fieldId, record) => {
+          const isTrailer = record.submittedValues?.resourceKind === "trailer" || record.id.startsWith("trailer-")
+          return fieldId === "trailerId" ? isTrailer : fieldId === "vehicleId" ? !isTrailer : true
+        },
+        // A vehicle's name carries its registration plate; its facts show the callsign.
+        named: (record) => record.name.split(" · ")[0],
+      },
       providerPage: "fleet",
       // The rich view for its edit and delete paths: a service provider manager keeps its own fleet.
       view: { seededFactColumns: ["Ownership", "Capacity", "Fractions", "Fuel"] },
@@ -26,6 +36,7 @@ export const FLEET = workspaceSpec("fleet", {
     },
     drivers: {
       shown: "tab",
+      providerOperated: true,
       providerPage: "fleet",
       // The rich view for its edit and delete paths: a service provider manager keeps its own fleet.
       view: { seededFactColumns: ["Licence", "AppAccess", "Employer"] },
@@ -45,6 +56,7 @@ export const FLEET = workspaceSpec("fleet", {
     },
     "vehicle-planning": {
       shown: "tab",
+      layout: "allocations",
       label: "Vehicle Planning",
       title: "Vehicle and Workforce Planning",
       description: "Time-based allocation, capacity, compatibility, availability, and absence planning.",

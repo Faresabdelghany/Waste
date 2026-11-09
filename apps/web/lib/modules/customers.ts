@@ -56,6 +56,16 @@ export const CUSTOMERS = workspaceSpec("customers", {
     },
     contacts: {
       shown: "more",
+      picked: {
+        // A customer field names a Customer in the glossary's sense — a person or
+        // an organisation alike (the seed's private owners hold agreements and own
+        // properties) — so it offers both; a contact field names a person.
+        offers: (fieldId, record) => !(fieldId === "recipientContactId" || /ContactId$/i.test(fieldId)) || record.id.startsWith("contact-") || record.submittedValues?.partyType === "person",
+        // A picker hides no row by status (#79: a status gates a new reference,
+        // never an existing one, and the API's 409 says so); a customer's shows a
+        // row's status beside its name, so a person sees the refusal coming.
+        label: (record) => (record.status !== "Active" ? `${record.name} · ${record.status}` : record.name),
+      },
       label: "Contacts & Companies",
       title: "Contacts, Companies, and Relationships",
       description: "People and organizations connected to properties through explicit customer roles.",

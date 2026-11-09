@@ -14,6 +14,7 @@ export const PLAN = workspaceSpec("plan", {
     // permissions, and links; components/waste/map-planning renders it.
     "map-planning": {
       shown: "tab",
+      layout: "map-planning",
       label: "Map Planning",
       title: "Map Planning",
       description:

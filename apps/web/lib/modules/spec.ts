@@ -41,6 +41,10 @@ export type RichModuleTable = {
    * and details view rather than generic row Edit/Delete.
    */
   rowActions?: boolean
+  /** The facts the rows may be grouped by besides their status and their fact columns. */
+  groupBy?: readonly string[]
+  /** The view options list the fact columns as the table draws them, not as chips. */
+  columnsShown?: "display"
 }
 
 /**
@@ -51,6 +55,48 @@ export type RichModuleTable = {
  */
 export type ModuleView = "queue" | RichModuleTable
 
+/**
+ * A module's list where it is laid out its own way: Map Planning's map in
+ * place of a list, the containers' asset register, the routes' (a star that
+ * pins a route day, Project and Area columns), a provider's accounts (Full
+ * name, Email, Phone number, Role), the schemes' and the calendars' rows
+ * derived from their typed values, and the vehicle plan's timeline.
+ */
+export type ModuleLayout = "map-planning" | "containers" | "routes" | "accounts" | "schemes" | "calendars" | "allocations"
+
+/** What a record of the module opens as, in place of its details sheet. */
+export type ModuleDetails = "scheme-page" | "route-page" | "provider-page" | "ticket-dialog"
+
+/**
+ * How the generic form's write is shaped for the module beyond the record it
+ * derives: a route's system-issued name and its generation keys, a scheme's
+ * draft, edit policy and licence rule, a container's issued name, and an
+ * account's name from its parts and its provider's stamps.
+ */
+export type ModuleWrites = "route" | "scheme" | "container" | "account"
+
+/** The categories the module's filter offers where they are not the default ones. */
+export type ModuleFilters = "containers" | "service-providers" | "service-provider-users" | "tickets"
+
+/** How a form shown to a service provider's own account differs from the office's. */
+export type ProviderForm = {
+  description: string
+  /** The fields the account's own scope answers, which the form does not ask. */
+  hides: readonly string[]
+  /** A field of references the account uploads instead, as its Attachments. */
+  uploads?: string
+}
+
+/** How a form's picker offers the module's rows, where it is not every row of the project. */
+export type ModulePicked = {
+  /** Whether a field of that id is offered the row. */
+  offers?: (fieldId: string, record: BusinessRecord) => boolean
+  /** The label the row is offered under. */
+  label?: (record: BusinessRecord) => string
+  /** The name a fact gives the row once picked. */
+  named?: (record: BusinessRecord) => string
+}
+
 export type ModuleSpec = {
   shown: ModulePlacement
   /** False for a module the form registry holds no schema for: a Settings pane's own forms, or a surface's. */
@@ -58,6 +104,19 @@ export type ModuleSpec = {
   /** The service provider's workspace page it is shown on, besides the office's. */
   providerPage?: ProviderPageId
   view?: ModuleView
+  layout?: ModuleLayout
+  details?: ModuleDetails
+  writes?: ModuleWrites
+  filters?: ModuleFilters
+  /** Its rows are a party's own (a provider's fleet, routes, awards, money): a provider's scope offers its own alone, never the unattributed ones. */
+  providerOperated?: true
+  /** Its form as a service provider's account is shown it. */
+  providerForm?: ProviderForm
+  picked?: ModulePicked
+  /** A receive, transfer, reserve, adjust, release or issue appends a movement to its ledger rather than changing the row. */
+  movements?: true
+  /** What deleting a row of it also does, said in the delete dialog. */
+  deletes?: string
   label: string
   title: string
   description: string

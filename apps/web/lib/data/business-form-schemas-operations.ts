@@ -1884,6 +1884,16 @@ export const operationsBusinessFormSchemas = [
     submitLabel: "Review allocation",
     nameField: "allocationAction",
     contextFieldIds: ["projectId", "allocationAction", "plannedStart", "plannedEnd"],
+    validationRules: [
+      {
+        type: "filled",
+        fields: ["routeId", "schemeId"],
+        exactly: true,
+        when: { fieldId: "allocationAction", oneOf: ["allocate", "change"] },
+        at: ["routeId", "schemeId"],
+        message: "Select either one route or one route scheme.",
+      },
+    ],
     sections: [
       {
         id: "target-period",

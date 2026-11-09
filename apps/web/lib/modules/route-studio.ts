@@ -26,6 +26,11 @@ export const ROUTE_STUDIO = workspaceSpec("route-studio", {
     },
     schemes: {
       shown: "tab",
+      layout: "schemes",
+      details: "scheme-page",
+      writes: "scheme",
+      deletes:
+        "Deleting a route scheme stops Plan Ahead and future generation and cancels its future planned routes (kept as records). Executed, active and completed routes and their stops are preserved as operational history.",
       // The five artboard-1 columns (issue #30, D15): Recurrence and Holiday
       // list render as derived cells, so no fact columns are seeded; a person
       // can still add others through the view options.
@@ -53,11 +58,16 @@ export const ROUTE_STUDIO = workspaceSpec("route-studio", {
     },
     routes: {
       shown: "tab",
+      layout: "routes",
+      details: "route-page",
+      writes: "route",
+      providerOperated: true,
       providerPage: "routes",
       view: {
         seededFactColumns: ["Vehicle", "Driver", "Distance", "Duration"],
         // Project and Area are dedicated table columns.
         excludedColumnFacts: new Set(["Project", "Area"]),
+        groupBy: ["Project", "Area"],
       },
       label: "Routes",
       title: "Routes",
@@ -76,7 +86,7 @@ export const ROUTE_STUDIO = workspaceSpec("route-studio", {
     pickups: {
       shown: "tab",
       providerPage: "routes",
-      view: { seededFactColumns: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"] },
+      view: { seededFactColumns: ["Address", "Container ID", "Container Type", "Waste fraction", "Weight"], columnsShown: "display" },
       label: "Pickups",
       title: "Pickups",
       description: "Every stop generated for a dated Route, from planned service through outcome and proof.",

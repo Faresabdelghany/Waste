@@ -112,6 +112,7 @@ export const COMMERCIAL = workspaceSpec("commercial", {
     },
     "service-provider-prices": {
       shown: "more",
+      providerOperated: true,
       label: "Service Provider Prices",
       title: "Service Provider Prices",
       description:
@@ -129,6 +130,7 @@ export const COMMERCIAL = workspaceSpec("commercial", {
     },
     settlements: {
       shown: "more",
+      providerOperated: true,
       label: "Settlements",
       title: "Settlements",
       description: "Confidential service provider compensation, period calculation, provisional inputs, and frozen closeout.",

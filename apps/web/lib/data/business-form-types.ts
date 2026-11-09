@@ -98,6 +98,18 @@ export type BusinessFormValidationRule =
       allowSame?: boolean
     }
   | {
+      /**
+       * Of `fields`, at least one holds a value — exactly one with `exactly` —
+       * where the `when` field holds one of its values: told at each of `at`.
+       */
+      type: "filled"
+      fields: readonly string[]
+      exactly?: true
+      when: { fieldId: string; oneOf: readonly string[] }
+      at: readonly string[]
+      message: string
+    }
+  | {
       type: "different-values"
       firstField: string
       secondField: string
