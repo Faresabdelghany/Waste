@@ -88,7 +88,7 @@ import { createCommandIds, pickupIdOf, type ObjectKind, type PilotBody, type Pil
 import { lookupFix } from "./location"
 import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
 import { identifyOnRoute, outOfReach, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
-import { BROWSER_TIMERS, type Timers } from "./timers"
+import { BROWSER_TIMERS, type Timers } from "../timers"
 
 /** How long the queue waits before trying again while anything waits. */
 export const DRAIN_RETRY_MS = 30_000

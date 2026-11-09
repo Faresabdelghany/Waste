@@ -66,15 +66,6 @@ export type FormRecordDerivation = {
   nameValue: string
 }
 
-/**
- * A multiselect stores its picks as one comma-separated string, read through
- * the domain list reader so a comma inside a number ("Igloo · 2,500 L") is
- * not a separator here either (issue #43).
- */
-export function splitMultiValue(value: string): string[] {
-  return splitList(value)
-}
-
 /** What a submitted value reads as in facts and context. */
 export function displayFormValue(
   field: BusinessFormField,
@@ -88,7 +79,7 @@ export function displayFormValue(
     field.options?.find((option) => option.value === item)?.label ??
     item
   return field.type === "multiselect"
-    ? splitMultiValue(value).map(label).join(" · ")
+    ? splitList(value).map(label).join(" · ")
     : label(value)
 }
 
@@ -140,7 +131,7 @@ export function deriveFormRecord(
 
     if (field.relation && typeof value === "string") {
       const target = resolvers.resolveRelationTarget?.(field.relation) ?? field.relation
-      const recordIds = field.type === "multiselect" ? splitMultiValue(value) : [value]
+      const recordIds = field.type === "multiselect" ? splitList(value) : [value]
       for (const recordId of recordIds) {
         relationRefs.push({
           fieldId: field.id,

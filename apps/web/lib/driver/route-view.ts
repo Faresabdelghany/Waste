@@ -18,6 +18,7 @@ import type { Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import { extraEmptyings } from "@waste/domain/execution/services"
 import { count } from "@waste/domain/text"
+import { stopsInOrder } from "@waste/domain/execution/routes"
 
 import { itemsSentence, PICKUP_SERVICE_LABELS } from "../data/pickup-services"
 import type { QueueEntry } from "./command-queue"
@@ -31,11 +32,6 @@ export function waitingOn(waiting: readonly QueueEntry[], routeId: string): Queu
 }
 
 const waits = (waiting: readonly QueueEntry[], routeId: string, kinds: readonly PilotCommandKind[]): boolean => waitingOn(waiting, routeId).some((entry) => kinds.includes(entry.command.kind))
-
-/** The stops in the order they are driven: the active Plan's `sequence` where the read carries one, the generated `position` otherwise. */
-export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "sequence">>(pickups: readonly Stop[]): Stop[] {
-  return [...pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position) || a.position - b.position)
-}
 
 /** One entry of the route screen's list: a stop, or an unload visit the active Plan makes on the way (O15 of #290). */
 export type RouteEntry<Stop> = { kind: "stop"; stop: Stop } | { kind: "unload"; unloadingStationId: string }

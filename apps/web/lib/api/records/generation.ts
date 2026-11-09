@@ -17,6 +17,7 @@ import { count } from "@waste/domain/text"
 
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
+import { BROWSER_TIMERS, type Timers } from "@/lib/timers"
 
 import { get, listPage, type ApiClient } from "../client"
 import { problemOfError, type Problem } from "../problem"
@@ -86,10 +87,6 @@ export function modulesAfterRun(run: Pick<GenerationRun, "status">): readonly Mo
   return run.status === "succeeded" ? [ROUTES_MODULE, PICKUPS_MODULE] : []
 }
 
-/** The timer a watch waits on; a test hands one it fires by hand. */
-export type RunTimer = { set: (fire: () => void, ms: number) => unknown; clear: (handle: unknown) => void }
-
-const TIMER: RunTimer = { set: (fire, ms) => setTimeout(fire, ms), clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>) }
 
 export type RunWatch = {
   /** The run's read, cut short when the watch stops. */
@@ -100,7 +97,8 @@ export type RunWatch = {
   onProblem?: (problem: Problem, ended: boolean) => void
   /** The run is open and past fifteen minutes since its last update: no longer read. */
   onUnreported?: (run: GenerationRun) => void
-  timer?: RunTimer
+  /** The timer a watch waits on; a test hands one it fires by hand. */
+  timer?: Timers
   now?: () => number
 }
 
@@ -111,7 +109,7 @@ export type RunWatch = {
  * interval. Answers the stop, which clears the timer and drops a read in
  * flight — for the page that unmounts.
  */
-export function watchGenerationRun(run: GenerationRun, { read, onRun, onProblem, onUnreported, timer = TIMER, now = Date.now }: RunWatch): () => void {
+export function watchGenerationRun(run: GenerationRun, { read, onRun, onProblem, onUnreported, timer = BROWSER_TIMERS, now = Date.now }: RunWatch): () => void {
   const controller = new AbortController()
   let latest = run
   let handle: unknown

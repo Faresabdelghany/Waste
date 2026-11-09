@@ -30,6 +30,7 @@ import type { ProofObjectLink, ProofObjectLinks } from "@waste/contracts/proof-o
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { CODE_WITH_CONTAMINATION, REASON_WITH_A_MISS } from "@waste/domain/execution/office-stops"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
+import { stopNumber } from "@waste/domain/execution/routes"
 
 import { FILL_LABELS } from "@/lib/data/fill-levels"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
@@ -90,7 +91,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): RecordF
   const byTheOffice = pickup.origin === "office"
   // An API from before the service sends none: every stop then emptied its container.
   const service = pickup.service ?? "empty"
-  const stop = pickup.sequence ?? pickup.position
+  const stop = stopNumber(pickup)
   const status = statusLabel(pickup.status)
   const facts: Record<string, string> = {
     Route: route?.name ?? routeWebId,

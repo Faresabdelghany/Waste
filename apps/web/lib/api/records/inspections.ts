@@ -11,7 +11,6 @@ import { FIELD_INSPECTION_OUTCOMES, INSPECTION_FINDINGS, type FieldInspectionOut
 import type { ImageExtension } from "@waste/domain/storage-objects"
 
 import { PROPERTY_PREFIX } from "@/lib/data/agreements"
-import { splitMultiValue } from "@/lib/data/business-form-records"
 import { FINDING_LABELS, INSPECTION_PREFIX, INSPECTION_RECORD_KIND, INSPECTIONS_MODULE, OUTCOME_LABELS, STATUS_LABELS } from "@/lib/data/inspections"
 import { isPropertyRecord } from "@/lib/data/properties"
 
@@ -21,6 +20,7 @@ import { type MappingContext, type RecordFields, type ResourceAdapter, type Serv
 import { isLocalRefusal, ofKind, typed, type LocalRefusal } from "@/lib/records/fields"
 import { projectTimezoneOf } from "./clock"
 import { shownOn } from "@/lib/format/clock"
+import { splitList } from "@/lib/prototype/record-values"
 import { refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 
@@ -36,7 +36,7 @@ const isOutcome = (value: string | undefined): value is FieldInspectionOutcome =
 
 /** The findings the form's multiselect holds, each one of the list; a value off the list is a refusal. */
 function findingsOf(record: Parameters<typeof typed>[0]): InspectionFinding[] | LocalRefusal {
-  const picked = splitMultiValue(typed(record, "findings") ?? "")
+  const picked = splitList(typed(record, "findings") ?? "")
   const off = picked.find((value) => !INSPECTION_FINDINGS.includes(value as InspectionFinding))
   return off === undefined ? (picked as InspectionFinding[]) : refusal("findings", `${off} is not a finding`)
 }
@@ -110,7 +110,7 @@ export function toInspectionPatchBody(before: Parameters<typeof typed>[0], after
   }
   const findings = findingsOf(after)
   if (isLocalRefusal(findings)) return findings
-  if (findings.join(", ") !== splitMultiValue(typed(before, "findings") ?? "").join(", ")) body.findings = findings
+  if (findings.join(", ") !== splitList(typed(before, "findings") ?? "").join(", ")) body.findings = findings
   const note = typed(after, "note") ?? null
   if (note !== (typed(before, "note") ?? null)) body.note = note
   return Object.keys(body).length === 0 ? null : body

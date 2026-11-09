@@ -47,9 +47,9 @@ import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/regist
 import { KEY_MAX, SLUG_PATTERN } from "@waste/domain/text"
 
 import { moduleAt } from "@/lib/modules/keys"
+import { splitList } from "@/lib/prototype/record-values"
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import { splitMultiValue } from "./business-form-records"
 import { type BusinessRecord } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
 
@@ -215,12 +215,12 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
         name,
         key: text(values, "key") ?? "",
         description: text(values, "description") ?? null,
-        containerTypeIds: ids === undefined ? [] : splitMultiValue(ids),
+        containerTypeIds: ids === undefined ? [] : splitList(ids),
       }
     }
     case "contaminant-code": {
       const ids = text(values, "wasteFractionIds")
-      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitMultiValue(ids) }
+      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitList(ids) }
     }
     case "decommission-reason":
       return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active" }

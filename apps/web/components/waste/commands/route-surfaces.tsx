@@ -83,6 +83,7 @@ import type { Pickup } from "@waste/contracts/pickups"
 import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
+import { stopNumber } from "@waste/domain/execution/routes"
 
 /** The route's own read, as a one-row history the surface reads again after each command. */
 const readRoute = (client: ApiClient, serverId: string) => routeDetail(client, serverId).then((detail): RouteDetail[] => [detail])
@@ -552,7 +553,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   const stopNote = (pickup: Pickup) =>
     [pickup.reason === null ? null : pickupReasonLabel(pickup.reason), pickup.movedFromPickupId != null ? "Moved here" : pickup.origin === "office" ? "Added by the office" : null].filter(Boolean).join(" · ")
   const stopLine = (pickup: Pickup & { sequence?: number }) =>
-    `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
+    `${stopNumber(pickup)}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
 
   // The page's own: the stops' search and filter, and which panel stands open beside them.
   const [stopSearch, setStopSearch] = useState("")
@@ -773,7 +774,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
                               const note = stopNote(pickup)
                               return (
                                 <TableRow key={pickup.id} className="hover:bg-muted/60">
-                                  <TableCell className="py-3 pl-4 text-sm tabular-nums text-muted-foreground">{pickup.sequence ?? pickup.position}</TableCell>
+                                  <TableCell className="py-3 pl-4 text-sm tabular-nums text-muted-foreground">{stopNumber(pickup)}</TableCell>
                                   <TableCell className="min-w-[180px] py-3">
                                     <p className="text-sm font-medium text-foreground">{stopName(pickup)}</p>
                                     {note !== "" && <p className="text-xs text-muted-foreground">{note}</p>}

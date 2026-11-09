@@ -7,9 +7,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { stopsInOrder } from "@waste/domain/execution/routes"
+
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, entriesInOrder, keptNotice, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, entriesInOrder, keptNotice, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
