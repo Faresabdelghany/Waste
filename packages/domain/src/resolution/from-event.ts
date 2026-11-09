@@ -212,6 +212,18 @@ const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDr
   agreementId: facts.agreementId,
 })
 
+/** The route's links, with the driver given, and the stop where the event names one: nothing of a container, a place or a customer, which an event about the route does not know. */
+const routeLinks = (routeId: string | null, driverId: string | null, pickupId: string | null = null): TicketDraftLinks => ({
+  routeId,
+  pickupId,
+  containerId: null,
+  propertyId: null,
+  sharedCollectionPointId: null,
+  driverId,
+  customerId: null,
+  agreementId: null,
+})
+
 /** A problem the driver reported, on a stop or on the route: medium, the device's, with the problem's reason and note. */
 const reportedProblem = (problem: { reason: PickupReason | null; note: string | null }, subject: string, links: TicketDraftLinks): TicketDraft => ({
   kind: "reported-problem",
@@ -248,7 +260,7 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
     case "pickup-problem-reported":
       return reportedProblem(event, reportedProblemSubject(event.reason, event.containerLabel, event.address), pickupLinks(event, event.actualDriverId))
     case "route-problem-reported":
-      return reportedProblem(event, reportedProblemSubject(event.reason, null, null), { routeId: event.routeId, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: event.actualDriverId, customerId: null, agreementId: null })
+      return reportedProblem(event, reportedProblemSubject(event.reason, null, null), routeLinks(event.routeId, event.actualDriverId))
     case "command-rejected":
       return {
         kind: "rejected-command",
@@ -256,7 +268,7 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
         source: "driver-app",
         subject: rejectedCommandSubject(event.detail),
         description: describe("The driver's device sent a command the server refused", null, event.detail),
-        links: { routeId: event.routeId, pickupId: event.pickupId, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: event.driverId, customerId: null, agreementId: null },
+        links: routeLinks(event.routeId, event.driverId, event.pickupId),
       }
     default:
       return undefined

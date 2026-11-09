@@ -204,6 +204,9 @@ export type MissedPickupStatus = (typeof MISSED_PICKUP_STATUSES)[number]
 /** Whether a stop in this status was missed: skipped or failed. Takes a status read as text too, as a form's value is. */
 export const pickupMissed = (status: string): status is MissedPickupStatus => isOneOf(status, MISSED_PICKUP_STATUSES)
 
+/** A stop not missed: planned or completed, so a Bulky Booking's stop in one of them is its live stop — one per booking, which the database holds too. A value of `PICKUP_STATUSES`, not a vocabulary. */
+export const LIVE_STOP_STATUSES = without(PICKUP_STATUSES, ...MISSED_PICKUP_STATUSES)
+
 /** The statuses a contaminant code is named by a new tag or a new rule in (`@waste/domain/status-gates`); a stop tagged before keeps its tag. */
 export const ACTIVE_CONTAMINANT_CODE_STATUSES = ["active"] as const satisfies readonly ContaminantCodeStatus[]
 

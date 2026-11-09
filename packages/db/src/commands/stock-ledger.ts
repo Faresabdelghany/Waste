@@ -325,7 +325,6 @@ async function endPlacement(tx: Tx, companyId: string, subject: ContainerRef, va
         sharedCollectionPointId: containerServicePlacement.sharedCollectionPointId,
         validFrom: containerServicePlacement.validFrom,
         validTo: containerServicePlacement.validTo,
-        subscriptionValidFrom: subscription.validFrom,
         subscriptionValidTo: subscription.validTo,
       })
       .from(containerServicePlacement)

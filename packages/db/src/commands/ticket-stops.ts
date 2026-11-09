@@ -22,7 +22,7 @@
 // commands/ticket-automation.ts) book through the one write.
 import { routeLabel } from "@waste/domain/numbering"
 import { correctedAway, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/resolution/ticket-stops"
-import type { PickupService } from "@waste/domain/execution/vocabulary"
+import { pickupMissed, type MissedPickupStatus, type PickupService } from "@waste/domain/execution/vocabulary"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { and, eq, inArray, type SQL } from "drizzle-orm"
 
@@ -141,7 +141,7 @@ export async function serveBookedTicket(tx: Tx, actor: Actor, current: TicketRow
  * names, or the correction alone otherwise (a ticket the office closed or
  * reopened by hand, or one another of its stops serviced, #422).
  */
-export async function bookedStopUncompleted(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop & { outcome: "skipped" | "failed"; note: string }, mint: IdMinter = newId): Promise<void> {
+export async function bookedStopUncompleted(tx: Tx, actor: Actor, current: TicketRow, stop: BookedStop & { outcome: MissedPickupStatus; note: string }, mint: IdMinter = newId): Promise<void> {
   const where = { position: stop.position, route: stop.routeLabel }
   const serviced = current.status === "completed" && current.resolution === "serviced" && current.bookedPickupId === stop.pickupId
   const body = serviced ? correctedAway({ ...where, service: stop.service, outcome: stop.outcome, note: stop.note }) : stopCorrected({ ...where, outcome: stop.outcome, note: stop.note })
@@ -170,7 +170,7 @@ async function bookedStop(tx: Tx, companyId: string, pickupId: string): Promise<
  */
 export async function ticketHearsOfStop(tx: Tx, actor: Actor, send: Send, pickupId: string, outcome: { from: string; to: string; note?: string }, at: Date): Promise<void> {
   const completes = outcome.to === "completed" && outcome.from !== "completed"
-  const uncompletes = outcome.from === "completed" && (outcome.to === "skipped" || outcome.to === "failed")
+  const uncompletes = outcome.from === "completed" && pickupMissed(outcome.to)
   if (!completes && !uncompletes) return
   const booking = await bookingTicket(tx, actor.companyId, pickupId)
   if (booking === undefined) return
@@ -180,5 +180,5 @@ export async function ticketHearsOfStop(tx: Tx, actor: Actor, send: Send, pickup
     await serveBookedTicket(tx, actor, booking, stop, at, { send, by: actor.userAccountId }, since?.status === "planned" ? { position: since.position, route: since.routeLabel } : undefined)
     return
   }
-  await bookedStopUncompleted(tx, actor, booking, { ...stop, outcome: outcome.to as "skipped" | "failed", note: outcome.note ?? "" })
+  await bookedStopUncompleted(tx, actor, booking, { ...stop, outcome: outcome.to as MissedPickupStatus, note: outcome.note ?? "" })
 }

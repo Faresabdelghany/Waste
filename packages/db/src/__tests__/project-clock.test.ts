@@ -6,7 +6,7 @@ import { addDays } from "@waste/domain/days"
 import { sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
-import { dayOnClock, instantAt, instantOnClock, shownOnClock, timeOnClock, todayOnClock } from "../query/project-clock"
+import { dayOnClock, instantAt, instantOnClock, shownOnClock, timeOnClock, todayOnClock, utcInstantText } from "../query/project-clock"
 import { databaseUnderTest } from "./database"
 
 const database = databaseUnderTest()
@@ -95,5 +95,26 @@ describe("the project's clock in SQL is the domain's", { skip: database.skip }, 
   test("a day given as a value is read as that day", async () => {
     const [row] = await pool.db.execute<{ instant: string }>(sql`select ${ISO(instantOnClock("2026-10-25", sql`${"Europe/Copenhagen"}`, sql`${"02:30:00"}::time`))} as instant`)
     assert.equal(row.instant, instantOnDay("2026-10-25", 2.5 * 3600, "Europe/Copenhagen").toISOString(), "the hour the clocks repeat is read once, as the domain reads it")
+  })
+
+  test("an instant as UTC text is toISOString's with the microseconds, read back as the same instant, whatever the session's timezone", async () => {
+    const mismatches: string[] = []
+    for (const zone of ZONES) {
+      const rows = await pool.db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('timezone', ${zone}, true)`)
+        return await tx.execute<{ at: string; text: string; micro: string }>(sql`
+          select t.at, ${utcInstantText(sql`t.at::timestamptz`)} as text, ${utcInstantText(sql`t.at::timestamptz + interval '7 microseconds'`)} as micro
+            from (values ${sql.join(
+              INSTANTS.map((instant) => sql`(${instant.toISOString()})`),
+              sql`, `,
+            )}) as t(at)
+        `)
+      })
+      for (const row of rows) {
+        const expected = new Date(row.at).toISOString().replace(/Z$/, "000Z")
+        if (row.text !== expected || Date.parse(row.text) !== Date.parse(row.at) || row.micro !== expected.replace(/000Z$/, "007Z")) mismatches.push(`${row.at} under ${zone}: ${row.text}, ${row.micro}`)
+      }
+    }
+    assert.deepEqual(mismatches, [])
   })
 })

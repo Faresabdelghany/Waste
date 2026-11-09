@@ -11,7 +11,7 @@
 // code with the wrong waste (`pickup_reason_shape`,
 // `pickup_contaminant_code_shape`).
 import { BOOKED_WITH, type BookedField } from "./work-orders"
-import { PICKUP_SERVICES, type PickupService } from "./vocabulary"
+import { PICKUP_SERVICES, pickupMissed, type PickupService } from "./vocabulary"
 
 /** What a stop of each service takes its place and fraction from: its booking alone, its subscription, its container, or its container or one address. */
 export const ADDED_STOP_PLACES = {
@@ -117,7 +117,7 @@ export function addedStopIssues(stop: AddedStop): AddedStopIssue[] {
 export const REASON_WITH_A_MISS = "Give a reason with skipped or failed, and none with completed"
 
 /** A reason goes with a skip or a failure and not with a completion. */
-export const reasonWithOutcome = (value: { outcome: string; reason?: string | null }): boolean => (value.outcome === "skipped" || value.outcome === "failed") === (value.reason != null)
+export const reasonWithOutcome = (value: { outcome: string; reason?: string | null }): boolean => pickupMissed(value.outcome) === (value.reason != null)
 
 /** What a code given with an outcome it does not tag is told (M5 of #293). */
 export const CODE_WITH_CONTAMINATION = "A contaminant code goes with contamination, or with a collection made all the same"

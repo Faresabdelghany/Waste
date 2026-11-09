@@ -43,7 +43,7 @@
 // command holds it to the project before it calls.
 import { ticketLabel } from "@waste/domain/numbering"
 import { Refused } from "@waste/domain/refusal"
-import { ALERT_DOES_NOT_CHANGE } from "@waste/domain/resolution/transitions"
+import { alertLinkRefusal } from "@waste/domain/resolution/transitions"
 import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -79,7 +79,8 @@ export async function linkAlert(tx: Tx, scope: Scope, alertId: string, ticketId:
   await lockRow(tx, alert, { companyId: scope.companyId, id: alertId })
   const found = await findAlert(tx, scope, alertId)
   if (found === undefined) throw Refused.invalid("alertId", NOT_AN_ALERT)
-  if (found.status === "resolved") throw Refused.conflict(ALERT_DOES_NOT_CHANGE)
+  const refused = alertLinkRefusal(found.status)
+  if (refused !== undefined) throw Refused.conflict(refused)
   if (found.ticketId === ticketId) return found
   if (found.ticketId !== null) throw Refused.conflict(linkedToAnother(await labelOf(tx, scope.companyId, found.ticketId)))
   const [linked] = await tx

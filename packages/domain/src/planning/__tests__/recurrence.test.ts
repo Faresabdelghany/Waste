@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { RECURRENCE_WEEKLY_RATES, matchesRecurrence, occurrencesPerWeek, recurrenceCadenceLabel, serviceDaysRangeLabel, weeksFromEffectiveFrom, type RecurrenceFrequency } from "../recurrence"
+import { RECURRENCE_WEEKLY_RATES, matchesRecurrence, occurrencesPerWeek, recurrenceCadenceLabel, serviceDaysRangeLabel, weeksFromEffectiveFrom } from "../recurrence"
+import type { RecurrenceFrequency } from "../vocabulary"
 import { addDays, mondayOf, SERVICE_DAYS, type ServiceDay, serviceDayOf } from "../../days"
 
 describe("serviceDaysRangeLabel", () => {

@@ -28,7 +28,7 @@ import { role, roleGrant, userAccount } from "../schema/access"
 import { auditEvent } from "../schema/audit"
 import { customer } from "../schema/customers"
 import { company, project } from "../schema/organisation"
-import { AUDIT_ROW_FUNCTION, AUDIT_TRAIL, auditTrail } from "../sql/audit-trail"
+import { AUDIT_ROW_FUNCTION, AUDIT_TRAIL, auditTrail, replaceAuditTrail } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { AUDITED, EXEMPT, TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
@@ -84,6 +84,12 @@ describe("the audit trail in the migrations", () => {
     assert.deepEqual(missing, [], `paste these into the migration:\n${missing.join("\n")}`)
     const onExempt = EXEMPT.filter((entry) => [...statements].some((statement) => statement.startsWith(`CREATE TRIGGER "${nameOf(entry.table)}_${AUDIT_TRAIL}"`)))
     assert.deepEqual(onExempt.map((entry) => nameOf(entry.table)), [])
+  })
+
+  test("a later change to a trigger's arguments drops it and adds it again as auditTrail spells it", () => {
+    const entry = AUDITED.find((audited) => audited.table === company)
+    assert.ok(entry)
+    assert.deepEqual(replaceAuditTrail(entry), [`DROP TRIGGER "company_${AUDIT_TRAIL}" ON "wms"."company";`, ...auditTrail(entry)])
   })
 })
 

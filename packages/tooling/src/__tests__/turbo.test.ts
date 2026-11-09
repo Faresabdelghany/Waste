@@ -25,6 +25,6 @@ describe("turboTaskEnv", () => {
   })
 
   test("reads the repository's own file by default", () => {
-    assert.ok(turboTaskEnv("@waste/web#build").includes("NEXT_PUBLIC_SUPABASE_URL"))
+    assert.ok(turboTaskEnv("@waste/web#build").includes("WASTE_API_ORIGIN"))
   })
 })

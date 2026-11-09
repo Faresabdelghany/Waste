@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
-  KNOWN_HOLIDAY_LIST_NAMES,
   danishHolidayName,
   easterSunday,
   holidayLabel,
@@ -12,9 +11,8 @@ import {
 } from "../holiday-names"
 
 describe("the lists this module knows, and carried names in front of them", () => {
-  test("the known list names are the ones holidayNamesFor answers for", () => {
-    assert.deepEqual(KNOWN_HOLIDAY_LIST_NAMES, ["Danish public holidays", "Egyptian public holidays"])
-    for (const name of KNOWN_HOLIDAY_LIST_NAMES) {
+  test("holidayNamesFor answers for the Danish and the Egyptian lists, and for no other", () => {
+    for (const name of ["Danish public holidays", "Egyptian public holidays"]) {
       assert.notEqual(holidayNamesFor(name), holidayNamesFor("Somewhere else"))
     }
   })

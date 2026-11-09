@@ -59,7 +59,7 @@ export function planLocalBootstrap(env: Readonly<Record<string, string | undefin
   if (missing.length > 0 || adminUrl === undefined) throw new Error(`${missing.join(" and ")} must be set (see .env.example at the repository root)`)
   if (!isLocalHost(adminUrl)) {
     throw new Error(
-      `bootstrap is for the local stack; ${OWNER.urls.local} points at ${new URL(adminUrl).hostname}. On a hosted project run ALTER ROLE ... WITH LOGIN PASSWORD ... by hand for ${GRANTED_ROLES.map((role) => role.name).join(" and ")}.`,
+      `bootstrap is for the local stack; ${OWNER.urls.local} points at ${new URL(adminUrl).hostname}. The Pilot's logins for ${GRANTED_ROLES.map((role) => role.name).join(" and ")} are the Pilot database workflow's grant-logins operation (supabase/README.md).`,
     )
   }
   const plan: LocalBootstrapPlan = { adminUrl, logins: [], unset: [] }

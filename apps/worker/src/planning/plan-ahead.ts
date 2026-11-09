@@ -33,6 +33,7 @@
 import { startGenerationRun } from "@waste/db/commands/generation"
 import { todayOnClock } from "@waste/db/query/project-clock"
 import { loggable } from "@waste/db/sqlstate"
+import { sweepEach } from "@waste/db/sweeps"
 import { withCompany } from "@waste/db/tenant"
 import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
 import { sql } from "drizzle-orm"
@@ -85,21 +86,18 @@ export async function planAhead({ api, worker, now, log, send }: JobContext, job
   const at = now()
   const schemes = await eligibleSchemes(worker, at)
   const outcome: PlanAheadOutcome = { eligible: schemes.length, queued: [], alreadyQueued: [], failed: [] }
-  for (const scheme of schemes) {
-    try {
+  const failed = await sweepEach(
+    schemes,
+    async (scheme) => {
       const window = planAheadRunWindow(scheme.today, scheme.planAheadDays)
       const runId = await withCompany(api.db, scheme.companyId, (tx) => startGenerationRun(tx, send, { companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", window }))
-      if (runId === null) {
-        // A job of this scheme is queued or active: no run is written, and that run covers the week.
-        outcome.alreadyQueued.push(scheme.routeSchemeId)
-        continue
-      }
-      outcome.queued.push(runId)
-    } catch (error) {
-      log(`${PLAN_AHEAD_QUEUE}: company ${scheme.companyId}, scheme ${scheme.routeSchemeId} failed: ${JSON.stringify(loggable(error))}`)
-      outcome.failed.push(scheme.routeSchemeId)
-    }
-  }
+      // A job of this scheme is queued or active: no run is written, and that run covers the week.
+      if (runId === null) outcome.alreadyQueued.push(scheme.routeSchemeId)
+      else outcome.queued.push(runId)
+    },
+    (scheme, error) => log(`${PLAN_AHEAD_QUEUE}: company ${scheme.companyId}, scheme ${scheme.routeSchemeId} failed: ${JSON.stringify(loggable(error))}`),
+  )
+  outcome.failed.push(...failed.map((scheme) => scheme.routeSchemeId))
   log(`${PLAN_AHEAD_QUEUE}: ${at.toISOString()} swept ${outcome.eligible} eligible ${outcome.eligible === 1 ? "scheme" : "schemes"}: ${outcome.queued.length} queued, ${outcome.alreadyQueued.length} already queued, ${outcome.failed.length} failed${jobId === null ? "" : ` (job ${jobId})`}`)
   return outcome
 }

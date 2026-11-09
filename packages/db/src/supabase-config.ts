@@ -34,6 +34,9 @@ function wholeNumber(key: string, file: string): number {
   return value
 }
 
+/** `[db] port`: where the local stack's Postgres listens, which every local URL names. */
+export const databasePort = (file: string = SUPABASE_CONFIG_FILE): number => wholeNumber("db.port", file)
+
 /** `[db] major_version`: the local stack's Postgres major, the hosted project's, and the client's the backup, the restore and their rehearsal require. */
 export const postgresMajor = (file: string = SUPABASE_CONFIG_FILE): number => wholeNumber("db.major_version", file)
 

@@ -117,7 +117,7 @@ import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { ACTION_PARAMETER_KEYS, ACTION_PARAMETERS, PLAN_DAYS_AHEAD_MAX, type TicketActionParameters } from "@waste/domain/resolution/automation"
 import { COUNTING_LIMIT_MAX } from "@waste/domain/resolution/counting-rules"
 import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, COUNTING_PERIODS, COUNTING_RULE_STATUSES, TEAM_STATUSES, TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_ACTION_TRIGGERS, TICKET_COMMANDS, TICKET_EVENT_KINDS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_KINDS, TICKET_MESSAGE_RECIPIENTS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_TYPE_STATUSES, TICKET_VISIBILITIES, type TicketActionKind } from "@waste/domain/resolution/vocabulary"
-import { sql, type SQL } from "drizzle-orm"
+import { sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
@@ -666,6 +666,14 @@ export const ticketBooking = wms.table(
   ],
 )
 
+/**
+ * An alert that holds its rule key: any but one the worker itself cleared,
+ * resolved with no account — the predicate of the key's unique index, which a
+ * raise names as its conflict's target and a rule's tick asks of an alert
+ * already there. Over the alert's columns, or an alias's.
+ */
+export const holdsItsRuleKey = (columns: { status: SQLWrapper; resolvedBy: SQLWrapper }): SQL => sql`(${columns.status} <> 'resolved' or ${columns.resolvedBy} is not null)`
+
 export const alert = wms.table(
   "alert",
   {
@@ -754,7 +762,7 @@ export const alert = wms.table(
     // One alert per occurrence, whatever its status, but for one the worker cleared: a condition that comes back is raised again, while a person's resolve holds.
     uniqueIndex(tableObjectName(t.id.table, "rule_key_idx", "alert"))
       .on(t.companyId, t.ruleKey)
-      .where(sql`${t.ruleKey} is not null and (${t.status} <> 'resolved' or ${t.resolvedBy} is not null)`),
+      .where(sql`${t.ruleKey} is not null and ${holdsItsRuleKey(t)}`),
   ],
 )
 

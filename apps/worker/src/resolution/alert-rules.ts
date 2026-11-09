@@ -111,10 +111,11 @@ import { routeLabel, ticketLabel } from "@waste/domain/numbering"
 import type { Database } from "@waste/db/client"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { raiseAlerts } from "@waste/db/commands/alerts"
-import { dayOnClock, instantAt, instantOnClock, shownOnClock, timeOnClock } from "@waste/db/query/project-clock"
-import { alert } from "@waste/db/schema/resolution"
+import { maintenanceDueState, nextDue } from "@waste/db/query/maintenance-due"
+import { dayOnClock, instantAt, instantOnClock, shownOnClock, timeOnClock, utcInstantText } from "@waste/db/query/project-clock"
+import { alert, holdsItsRuleKey } from "@waste/db/schema/resolution"
+import { vehicleLabelOf } from "@waste/db/shapes/vehicles"
 import { withCompany } from "@waste/db/tenant"
-import { MAINTENANCE_WARNING_DAYS, MAINTENANCE_WARNING_HOURS, MAINTENANCE_WARNING_KM } from "@waste/domain/resources/maintenance"
 import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, ROUTE_TIP_GRACE_HOURS, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
@@ -139,9 +140,6 @@ const OPEN_TICKETS = sql.join(
   sql`, `,
 )
 
-/** An instant as a key spells it: UTC, to the microsecond, as Postgres holds it. */
-const keyInstant = (column: SQL) => sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
-
 /** The project every rule's statement joins as `p`, whose clock its days and times are read on. */
 const PROJECT_ZONE = sql`p.timezone`
 /** The tick's instant as a day on the project's clock. */
@@ -162,34 +160,37 @@ const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr
 const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
 /** A pairing in force on the project's today. */
 const pairingInForce = (now: SQL) => sql`sp.valid_from <= ${todayOn(now)} and (sp.valid_to is null or sp.valid_to > ${todayOn(now)})`
+/** A maintenance plan as `duePlans` names it, and its vehicle. */
+const PLAN = {
+  intervalDays: sql`m.interval_days`,
+  intervalKm: sql`m.interval_km`,
+  intervalHours: sql`m.interval_hours`,
+  lastDoneOn: sql`m.last_done_on`,
+  lastDoneKm: sql`m.last_done_km`,
+  lastDoneHours: sql`m.last_done_hours`,
+}
+const NEXT_DUE = nextDue(PLAN)
+const VEHICLE = { registration: sql`v.registration`, callsign: sql`v.callsign` }
+
 /**
  * The active plans of vehicles not retired, each judged at the tick's
- * instant: its next limits, the readings it is judged on — the last
- * service's — whether it is past a limit or within the margins of one, and
- * its key. As `mp`.
+ * instant on the last service's readings (@waste/db/query/maintenance-due):
+ * its next limits, whether it is past a limit or within the margins of one,
+ * and its key. As `mp`.
  */
 const duePlans = (now: SQL) => sql`(
-  select j.*,
+  select j.*, j.state = 'overdue' as overdue, j.state <> 'ok' as due,
          'maintenance-due:' || j.plan_id || ':' || to_char(j.last_done_on, 'YYYY-MM-DD') || '/' || coalesce(j.last_done_km::text, '-') || '/' || coalesce(j.last_done_hours::text, '-')
-           || case when j.overdue then ':overdue' else '' end as rule_key
+           || case when j.state = 'overdue' then ':overdue' else '' end as rule_key
     from (
-      select r.*,
-             coalesce(r.today >= r.next_on or r.odometer_km >= r.next_km or r.engine_hours >= r.next_hours, false) as overdue,
-             coalesce(r.today >= r.next_on - ${MAINTENANCE_WARNING_DAYS}::int or r.odometer_km >= r.next_km - ${MAINTENANCE_WARNING_KM}::int or r.engine_hours >= r.next_hours - ${MAINTENANCE_WARNING_HOURS}::int, false) as due
-        from (
-          select m.company_id, m.project_id, m.id as plan_id, m.vehicle_id, m.name, coalesce(v.callsign, v.registration) as vehicle_label,
-                 m.last_done_on, m.last_done_km, m.last_done_hours,
-                 ${todayOn(now)} as today,
-                 m.last_done_on + m.interval_days as next_on,
-                 m.last_done_km + m.interval_km as next_km,
-                 m.last_done_hours + m.interval_hours as next_hours,
-                 m.last_done_km as odometer_km,
-                 m.last_done_hours as engine_hours
-            from wms.vehicle_maintenance_plan m
-            join wms.vehicle v on v.company_id = m.company_id and v.id = m.vehicle_id
-            join wms.project p on p.company_id = m.company_id and p.id = m.project_id
-           where m.status = 'active' and v.status <> 'retired'
-        ) r
+      select m.company_id, m.project_id, m.id as plan_id, m.vehicle_id, m.name, ${vehicleLabelOf(VEHICLE)} as vehicle_label,
+             m.last_done_on, m.last_done_km, m.last_done_hours,
+             ${NEXT_DUE.on} as next_on, ${NEXT_DUE.km} as next_km, ${NEXT_DUE.hours} as next_hours,
+             ${maintenanceDueState(PLAN, todayOn(now))} as state
+        from wms.vehicle_maintenance_plan m
+        join wms.vehicle v on v.company_id = m.company_id and v.id = m.vehicle_id
+        join wms.project p on p.company_id = m.company_id and p.id = m.project_id
+       where m.status = 'active' and v.status <> 'retired'
     ) j
 ) mp`
 
@@ -237,8 +238,8 @@ type RuleSweep<R extends AlertRule> = {
   clears: (now: SQL) => SQL
 }
 
-/** An alert that holds its key: any but one the worker itself cleared — `alert_rule_key_idx`'s predicate. */
-const HOLDS_ITS_KEY = sql`(a.status <> 'resolved' or a.resolved_by is not null)`
+/** An alert `a` that holds its key: `alert_rule_key_idx`'s predicate. */
+const HOLDS_ITS_KEY = holdsItsRuleKey({ status: sql`a.status`, resolvedBy: sql`a.resolved_by` })
 
 const noAlertWith = (key: SQL, companyColumn: SQL) => sql`not exists (select 1 from wms.alert a where a.company_id = ${companyColumn} and a.rule_key = ${key} and ${HOLDS_ITS_KEY})`
 
@@ -317,7 +318,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
   }),
   "session-silent": sweep({
     ...RUNNING_SESSION,
-    key: () => sql`'session-silent:' || s.id || ':' || ${keyInstant(sql`s.last_seen_at`)}`,
+    key: () => sql`'session-silent:' || s.id || ':' || ${utcInstantText(sql`s.last_seen_at`)}`,
     raise: {
       joins: SESSION_TOLD,
       when: (now, lookback) => sql`s.last_seen_at <= ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES}) and s.last_seen_at > ${lookback}`,
@@ -335,7 +336,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
   "position-stale": sweep({
     ...RUNNING_SESSION,
     /** The session and its newest fix: a fix that comes in is a new occurrence, its predecessor cleared. */
-    key: () => sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
+    key: () => sql`'position-stale:' || s.id || ':' || coalesce(${utcInstantText(NEWEST_FIX)}, 'none')`,
     raise: {
       joins: SESSION_TOLD,
       // Heard from: a device not heard from at all is the silent session's alert.
@@ -370,7 +371,7 @@ const RULES: { [R in AlertRule]: RuleSweep<R> } = {
     company: sql`t.company_id`,
     project: sql`t.project_id`,
     subjectOf: sql`t.id = a.ticket_id`,
-    key: () => sql`'ticket-overdue:' || t.id || ':' || ${keyInstant(sql`t.due_at`)}`,
+    key: () => sql`'ticket-overdue:' || t.id || ':' || ${utcInstantText(sql`t.due_at`)}`,
     holds: (now) => sql`t.status in (${OPEN_TICKETS}) and t.due_at < ${now}`,
     raise: {
       joins: sql`join wms.project p on p.company_id = t.company_id and p.id = t.project_id`,

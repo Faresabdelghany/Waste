@@ -25,7 +25,7 @@
 // (`stop-outcomes.ts`).
 import { dayInTimezone, timeInTimezone } from "@waste/domain/clock"
 import { isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, type LedgerService } from "@waste/domain/execution/work-orders"
-import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
+import { pickupMissed, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
 import { Refused } from "@waste/domain/refusal"
 import { and, desc, eq } from "drizzle-orm"
 
@@ -168,7 +168,7 @@ export async function ledgerHearsOfStop(tx: Tx, actor: Actor, send: Send, pickup
     await recordLedgerWork(tx, actor, send, pickupId, outcome.occurredAt, at, outcome.by)
     return
   }
-  if (outcome.from !== "completed" || (outcome.to !== "skipped" && outcome.to !== "failed")) return
+  if (outcome.from !== "completed" || !pickupMissed(outcome.to)) return
   const work = await ledgerStop(tx, actor.companyId, pickupId)
   if (work === undefined) return
   const words = ledgerMovedThenCorrected({ ...(await workFacts(tx, actor.companyId, work)), outcome: outcome.to, correctedAt: timeInTimezone(at, work.timezone) })

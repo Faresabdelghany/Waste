@@ -13,6 +13,7 @@
 // subscription and a later one needs newer evidence.
 import { company, project } from "@waste/db/schema/organisation"
 import { proposeRightSizing } from "@waste/db/commands/right-sizing"
+import { sweepEach } from "@waste/db/sweeps"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
@@ -45,14 +46,14 @@ export const proposeRightSizingJob = defineJob<ProposeRightSizingData>({
   handler: async (jobs: Job<ProposeRightSizingData>[], context: JobContext) => {
     const failed: string[] = []
     for (const job of jobs) {
-      for (const companyId of await companiesToRun(context)) {
-        try {
+      await sweepEach(
+        await companiesToRun(context),
+        async (companyId) => {
           const { proposed } = await withCompany(context.api.db, companyId, (tx) => proposeRightSizing(tx, companyId, context.now()))
           if (proposed.length > 0) context.log(`customers.propose-right-sizing: company ${companyId} → ${proposed.length} proposals (job ${job.id})`)
-        } catch (error) {
-          failed.push(`${companyId} (${error instanceof Error ? error.message : String(error)})`)
-        }
-      }
+        },
+        (companyId, error) => failed.push(`${companyId} (${error instanceof Error ? error.message : String(error)})`),
+      )
     }
     if (failed.length > 0) throw new Error(`customers.propose-right-sizing: ${failed.length} companies failed: ${failed.join("; ")}`)
   },

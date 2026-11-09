@@ -13,12 +13,12 @@
 // the schedule sends, `{ projectId: null, on: null }`, is the sweep.
 //
 // The sweep is the one statement here that reads across tenants — which
-// active projects there are — and it runs on the worker role's pool
-// (`wms_worker`, BYPASSRLS, the precedent #97's plan-ahead and #104's relay
-// set). Everything else is one company's: per project, under `withCompany` on
-// the API role's pool, the day is read on the project's clock
-// (`dayInTimezone`), the period is the calendar month before it
-// (`monthBefore`, the domain's), and `runBilling` — the same command
+// active projects there are, each with today on its clock
+// (`projectsWithToday`, @waste/db/sweeps) — and it runs on the worker role's
+// pool (`wms_worker`, BYPASSRLS, the precedent #97's plan-ahead and #104's
+// relay set). Everything else is one company's: per project, under
+// `withCompany` on the API role's pool, the period is the calendar month before
+// that day (`monthBefore`, the domain's), and `runBilling` — the same command
 // `POST /billing-runs` runs in a request — runs it with `null` for the person,
 // which is what `billing_run.requested_by` and `invoice.issued_by` are
 // nullable for. A run goes a batch of payers at a time (#329), each batch a
@@ -50,11 +50,11 @@
 // record that the month was looked at.
 import type { Tx } from "@waste/db/client"
 import { runBilling, type Transact } from "@waste/db/commands/billing-runs"
-import { dayInTimezone } from "@waste/domain/clock"
 import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { billingRun } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
+import { projectsWithToday, type ProjectToday } from "@waste/db/sweeps"
 import { withCompany } from "@waste/db/tenant"
 import { monthBefore } from "@waste/domain/finance/periods"
 import { and, asc, eq, isNull } from "drizzle-orm"
@@ -72,15 +72,6 @@ export type RunBillingData = {
 /** What one project's run came to, for the log and the job's output: completed with its counts, skipped because the schedule already ran over the period (`already-run`, the earlier run named), or failed with the reason. */
 export type ProjectRun = { companyId: string; projectId: string; periodFrom: string; periodTo: string } & ({ outcome: "completed"; runId: string; eventCount: number; invoiceCount: number } | { outcome: "already-run"; runId: string } | { outcome: "failed"; reason: string })
 
-/** The active projects to bill, across every company, in id order: the one cross-tenant read, on the worker role's pool. */
-async function projectsToBill({ worker }: JobContext, projectId: string | null): Promise<{ companyId: string; id: string; timezone: string }[]> {
-  return await worker.db
-    .select({ companyId: project.companyId, id: project.id, timezone: project.timezone })
-    .from(project)
-    .where(and(eq(project.status, "active"), projectId === null ? undefined : eq(project.id, projectId)))
-    .orderBy(asc(project.id))
-}
-
 /** The schedule's own completed run over exactly this period, if it has one: `requested_by` null, since a person's run over the month is theirs and not the schedule's record. Read under the project's lock, the one each of `runBilling`'s transactions takes, so a sweep sees another's finished row; two sweeps racing past it meet at the run's start, where the second resumes the first's `requested` run over the month rather than starting its own. */
 async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: string; periodFrom: string; periodTo: string }): Promise<{ id: string } | undefined> {
   await lockRow(tx, project, { companyId: scope.companyId, id: scope.projectId })
@@ -94,10 +85,10 @@ async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: s
 }
 
 /** One project's run: the day on its clock, the month before, the schedule's earlier run over it if any, else `runBilling` a batch at a time under the company's fence; what it came to either way. */
-async function runOne(context: JobContext, found: { companyId: string; id: string; timezone: string }, on: string | null): Promise<ProjectRun> {
-  const where = { companyId: found.companyId, projectId: found.id }
+async function runOne(context: JobContext, found: ProjectToday, on: string | null): Promise<ProjectRun> {
+  const where = { companyId: found.companyId, projectId: found.projectId }
   try {
-    const day = on ?? dayInTimezone(context.now(), found.timezone)
+    const day = on ?? found.today()
     const scope = { ...where, ...monthBefore(day) }
     const before = await withCompany(context.api.db, found.companyId, (tx) => scheduledRunOver(tx, scope))
     if (before !== undefined) return { ...scope, outcome: "already-run", runId: before.id }
@@ -123,7 +114,8 @@ export const runScheduledBilling = defineJob<RunBillingData>({
     const runs: ProjectRun[] = []
     for (const job of jobs) {
       const { projectId, on } = job.data
-      for (const found of await projectsToBill(context, projectId)) {
+      // The one cross-tenant read, on the worker role's pool.
+      for (const found of await projectsWithToday(context.worker, context.now(), projectId)) {
         const outcome = await runOne(context, found, on)
         runs.push(outcome)
         context.log(

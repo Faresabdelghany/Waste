@@ -20,7 +20,7 @@
 // The reply's words are English until M21. The time it quotes is given
 // already written on the project's clock, since this module reads no clock
 // and formats no date: the caller does, as every date rule here leaves it.
-import type { PickupReason, PickupService, PickupStatus, ProofKind } from "../execution/vocabulary"
+import { pickupMissed, type PickupReason, type PickupService, type PickupStatus, type ProofKind } from "../execution/vocabulary"
 import type { TicketKind } from "./vocabulary"
 
 /** A coordinate pair, longitude first, as the wire's points are. */
@@ -60,7 +60,7 @@ export const answeredByRecord = (kind: TicketKind, evidence: StopEvidence): bool
   kind === "missed-collection" &&
   evidence.service === "empty" &&
   !evidence.corrected &&
-  (evidence.outcome === "failed" || evidence.outcome === "skipped") &&
+  pickupMissed(evidence.outcome) &&
   evidence.reason === "not-presented"
 
 /** What happened at a stop the driver reached and did not serve, as a resident reads it. */

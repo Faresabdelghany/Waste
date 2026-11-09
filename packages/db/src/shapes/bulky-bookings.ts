@@ -3,8 +3,8 @@
 // the office's reads answer and `bulky-booking-booked` and
 // `bulky-booking-cancelled` carry.
 import type { BulkyBooking, BulkyStop } from "@waste/contracts/bulky"
-import { bulkyBookingStatus, LIVE_STOP_STATUSES } from "@waste/domain/execution/bulky"
-import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
+import { bulkyBookingStatus } from "@waste/domain/execution/bulky"
+import { LIVE_STOP_STATUSES, type BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
