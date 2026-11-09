@@ -69,7 +69,6 @@ function bearingOffset(point: LngLat, metres: number, bearing: number): LngLat {
   return offsetMetres(point, Math.sin(rad) * metres, Math.cos(rad) * metres)
 }
 
-/** A stable point inside the Copenhagen bounds for anything the gazetteer misses. */
 function hashedLocation(seed: string): LngLat {
   const hash = avalancheHash(seed)
   const u = (hash % 9973) / 9973

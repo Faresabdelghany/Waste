@@ -1,22 +1,16 @@
 // The generated half of the demo registry (moved here 2026-09-30 by issue
 // #99): the fifty seeded properties and the hundred seeded containers beside
-// the explicit fixture records. Two readers build from this one spelling —
-// the web prototype's fixture registry (`apps/web/lib/data/business-modules.ts`)
-// shapes each into a record, and `pnpm db:seed`
+// the explicit fixture records. `pnpm db:seed`
 // (`packages/db/src/seed/registry.ts`) reads each into the Registry's
-// columns — so `property-seed-101` is Ryesgade 3 in the browser and on the
-// server alike, and `asset-seed-91001` is BIN-91001 standing at it.
+// columns — so `property-seed-101` is Ryesgade 3, and `asset-seed-91001` is
+// BIN-91001 standing at it.
 //
-// What lives here is what both readers need: the counts, the street, owner,
-// type and fraction tables, the rotations and moduli over the index, and the
-// ids and numbers derived from it. The values are spelled the way the
-// prototype shows them ("Mixed use", "Two-wheel bin · 140 L", "Customer
-// owned"); the seed states beside its own tables how it reads each into a
-// column. What only the prototype shows (update labels, sensors, fill
-// levels, calendars, route schemes) stays with the web's record shaping.
+// The values are spelled the way the prototype showed them ("Mixed use",
+// "Two-wheel bin · 140 L", "Customer owned"); the seed states beside its own
+// tables how it reads each into a column.
 //
 // Places go through `FIXTURE_GAZETTEER` (./gazetteer), which anchors every
-// street here; ./__tests__ pins the rows both readers have shown.
+// street here; ./__tests__ pins the rows the prototype and the seed have shown.
 
 import type { FixtureContainerType } from "./taxonomy"
 
@@ -95,7 +89,6 @@ export type SeededContainerType = (typeof SEEDED_CONTAINER_TYPES)[number]
 export type SeededContainerStatus = "Available" | "Defect" | "Future" | "On hold" | "In storage"
 export type SeededOwnership = "Company owned" | "Customer owned"
 
-/** A planning area of the fixtures: its record id and its name. */
 export type SeededPlanningArea = { id: string; name: string }
 
 // Planning-area links for declarative stop matching (issue #19): every
@@ -169,7 +162,6 @@ export function seededProperty(index: number): SeededProperty {
   }
 }
 
-/** The status a container's place in the cycle of twenty gives it. */
 function containerStatus(cycle: number): SeededContainerStatus {
   if (cycle === 5) return "Defect"
   if (cycle === 8) return "Future"
