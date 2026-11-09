@@ -194,7 +194,7 @@ import { proofColumns, proofOf } from "@waste/db/shapes/proofs"
 import { receiptColumns, receiptOf, type ReceiptRow } from "@waste/db/shapes/driver-commands"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { unloadAnswered, unloadsFrom } from "@waste/db/shapes/unloads"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 
 import { resolveDriver, type DriverProfile } from "../auth/driver"

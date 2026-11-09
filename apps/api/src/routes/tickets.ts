@@ -65,7 +65,7 @@ import { mergedFieldValues, type TicketFieldValues } from "@waste/domain/resolut
 import { PICKUP_WITH_ITS_ROUTE } from "@waste/domain/resolution/tickets"
 import { closedTicket, ticketTransition } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketCommand } from "@waste/domain/resolution/vocabulary"
-import { OPEN_ROUTE_STATUSES, pickupMissed } from "@waste/domain/execution/vocabulary"
+import { OPEN_ROUTE_STATUSES, pickupMissed, type MissedPickupStatus } from "@waste/domain/execution/vocabulary"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
@@ -156,7 +156,7 @@ async function requireProviderTicket(tx: Tx, principal: Principal, body: TicketC
 export const routeHasEnded = (label: string, status: "completed" | "cancelled"): string => `Route ${label} is ${status}; a re-collection rides on a route that has not ended`
 
 /** What a re-collection naming a stop that was missed is told: the re-collection is a stop still to be collected, or one collected. */
-export const stopWasMissed = (position: number, route: string, status: "skipped" | "failed"): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
+export const stopWasMissed = (position: number, route: string, status: MissedPickupStatus): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
 
 /** What a re-collection naming a work order is told, at `recollectionPickupId`: a repair or a wash collects nothing (O3 of #290). */
 export const NOT_AN_EMPTYING = "A re-collection names a stop that empties its container, not a repair or a wash"

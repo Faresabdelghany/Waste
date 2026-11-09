@@ -55,7 +55,7 @@ import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
-import { ALERT_DOES_NOT_CHANGE, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
+import { alertLinkRefusal, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
@@ -329,7 +329,8 @@ export function alertRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const current = await lockedAlert(tx, principal, id)
         // The alert's own state first — the machine's sentence, as `acknowledge` answers it through `judged` — then the body's 400, then the link's own 409 under the same lock: the order every command here and in routes/tickets.ts keeps.
-        if (current.status === "resolved") throw problem(409, { detail: ALERT_DOES_NOT_CHANGE })
+        const refused = alertLinkRefusal(current.status)
+        if (refused !== undefined) throw problem(409, { detail: refused })
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         await requireTicket(tx, scope, ticketId)
         return c.json(alertOf(await linkAlert(tx, scope, current.id, ticketId)))

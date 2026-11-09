@@ -39,7 +39,7 @@ import { and, asc, eq, gt } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import { lockRow } from "@waste/db/commands/shared"
-import { vehicleLabel } from "@waste/db/commands/fleet-fit"
+import { vehicleLabel } from "@waste/db/shapes/vehicles"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
