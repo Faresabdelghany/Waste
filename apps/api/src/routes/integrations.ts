@@ -8,8 +8,7 @@
 import { Integrations } from "@waste/contracts/integrations"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { describeJson } from "./shared"
+import { describeJson, routes } from "../operation"
 
 const MODULE: ModuleKey = "configure.integrations"
 

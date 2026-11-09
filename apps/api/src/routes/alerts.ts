@@ -66,12 +66,12 @@ import { lockRow } from "@waste/db/commands/shared"
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
 import { alertScope, noSuchAlert } from "./resolution-shapes"
-import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
+import { requireNotAhead } from "./shared"
 
 /** The grant every route here runs under: the exceptions board's. */
 const MODULE = "operate.exceptions"
@@ -91,7 +91,7 @@ async function findAlert(tx: Tx, principal: Principal, id: string): Promise<Aler
 /**
  * The alert the path names, locked and read: every command holds a rule the
  * API rather than the database holds — the machine, the one link — so it
- * takes the row lock first and reads afterwards (routes/shared.ts), and two
+ * takes the row lock first and reads afterwards (`@waste/db/commands/shared`), and two
  * commands on one alert take turns.
  */
 async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow> {

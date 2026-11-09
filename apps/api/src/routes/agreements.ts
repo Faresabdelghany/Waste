@@ -98,12 +98,12 @@ import { stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requirePriceList, requireProduct, requireProperty, requireSharedCollectionPoint, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { askRuns, stopsLeft } from "./service-ends"
 import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
@@ -196,25 +196,13 @@ const PLACE_SUBSCRIBED_SENTENCE = "The agreement already subscribes to that prod
 /** What a bound outside the parent's period is told, on the create and on the patch alike. */
 const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 
-const noSuchAgreement = (id: string) => problem(404, { detail: `No agreement ${id} in the projects this account works in` })
 const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every agreement statement is bounded by. */
-const scope = (principal: Principal) => and(eq(agreement.companyId, principal.companyId), inProjects(agreement.projectId, principal))
 
 /** The same for a subscription, which carries the project its agreement is in. */
 const subscriptionScope = (principal: Principal) =>
   and(eq(subscription.companyId, principal.companyId), inProjects(subscription.projectId, principal))
 
-/** One agreement of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findAgreement(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(agreement)
-    .where(and(scope(principal), eq(agreement.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchAgreement, find: findAgreement, get: getAgreement, locked: lockedAgreement, list: listAgreements } = scoped(agreement, { noun: "agreement", reach: "projects", columns })
 
 /** One agreement of the caller's projects as the wire carries it; undefined for one they do not reach. */
 export async function readAgreement(tx: Tx, principal: Principal, id: string): Promise<Agreement | undefined> {
@@ -327,10 +315,8 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, b
   const { serviceWindow, ...patch } = body
   // The row this patch counts children against, locked before it is
   // read: a shortening and a subscription being added to it are the
-  // two halves of one rule, and they serialise here (routes/shared.ts).
-  await lockRow(tx, agreement, { companyId: principal.companyId, id })
-  const current = await findAgreement(tx, principal, id)
-  if (current === undefined) throw noSuchAgreement(id)
+  // two halves of one rule, and they serialise here (`@waste/db/commands/shared`).
+  const current = await lockedAgreement(tx, principal, id)
   const parties = await partyStatuses(
     tx,
     principal.companyId,
@@ -363,9 +349,7 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, b
 export async function createSubscription(tx: Tx, principal: Principal, id: string, values: SubscriptionCreate): Promise<Subscription> {
   // The agreement this subscription is held inside, locked before it
   // is read, so a patch shortening it cannot commit between the two.
-  await lockRow(tx, agreement, { companyId: principal.companyId, id })
-  const parent = await findAgreement(tx, principal, id)
-  if (parent === undefined) throw noSuchAgreement(id)
+  const parent = await lockedAgreement(tx, principal, id)
   const within = { companyId: principal.companyId, projectId: parent.projectId }
   const productStatus = await requireProduct(tx, within, values.productId)
   const propertyStatus = await requireProperty(tx, within, values.propertyId)
@@ -544,26 +528,11 @@ export function agreementRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, customerId, number, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(agreement)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(agreement.projectId, projectId),
-              customerId === undefined ? undefined : or(eq(agreement.customerId, customerId), eq(agreement.payerCustomerId, customerId)),
-              number === undefined ? undefined : eq(agreement.number, number),
-              day === undefined ? undefined : validOn(agreement, day),
-              after === undefined ? undefined : gt(agreement.id, after),
-            ),
-          )
-          .orderBy(asc(agreement.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(agreementOf), limit))
+        const page = await listAgreements(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(agreement.projectId, projectId), customerId === undefined ? undefined : or(eq(agreement.customerId, customerId), eq(agreement.payerCustomerId, customerId)), number === undefined ? undefined : eq(agreement.number, number), day === undefined ? undefined : validOn(agreement, day))
+        return c.json(mapPage(page, agreementOf))
       },
     )
     .post(
@@ -601,8 +570,7 @@ export function agreementRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findAgreement(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchAgreement(id)
+        const row = await getAgreement(c.get("tx"), c.get("principal"), id)
         return c.json(agreementOf(row))
       },
     )
@@ -812,8 +780,7 @@ export function agreementRoutes(deps: RouteDeps) {
         const { companyId } = principal
 
         await lockRow(tx, agreement, { companyId, id })
-        const current = await findAgreement(tx, principal, id)
-        if (current === undefined) throw noSuchAgreement(id)
+        const current = await getAgreement(tx, principal, id)
         requireStrictlyInside(current, on, INSIDE_AGREEMENT)
 
         // Everything the agreement holds ends on the day, refused (409) where a subscription, a placement, a pause or a credential

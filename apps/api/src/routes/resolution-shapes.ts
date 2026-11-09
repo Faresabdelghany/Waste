@@ -17,22 +17,11 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { providerIdOf, reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
+import { scoped } from "../scoped"
 
-export const noSuchTicket = (id: string) => problem(404, { detail: `No ticket ${id} in the projects this account works in` })
 export const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id} in the projects this account works in` })
 
-/** The tickets of this company, in the projects the caller works in: what every ticket statement is bounded by. */
-export const ticketScope = (principal: Principal): SQL | undefined => and(eq(ticket.companyId, principal.companyId), inProjects(ticket.projectId, principal))
-
-/** One ticket of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
-export async function findTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
-  const [row] = await tx
-    .select(ticketColumns)
-    .from(ticket)
-    .where(and(ticketScope(principal), eq(ticket.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: ticketScope, noSuch: noSuchTicket, find: findTicket } = scoped(ticket, { noun: "ticket", reach: "projects", columns: ticketColumns })
 
 /**
  * The tickets of this company the caller reads (#291 slice 23b): its

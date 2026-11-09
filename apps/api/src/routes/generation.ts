@@ -70,11 +70,10 @@ import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, WORKER_QUEUE_MISSING } from "../problem"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
-import { describeJson, IdParam } from "./shared"
 
 const GenerationRunPage = Page(GenerationRun)
 

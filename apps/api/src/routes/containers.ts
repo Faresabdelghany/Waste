@@ -115,7 +115,7 @@ import { stampsOf } from "@waste/db/shapes/times"
 import { actorOf, type Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { namedByCode } from "./container-identity"
@@ -123,7 +123,6 @@ import { containerOf, containersFrom, createContainer, findContainer, patchConta
 import { containerScope, noSuchContainer } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireServiceFrequency, requireWarehouse, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.containers"
 const ContainerPage = Page(Container)

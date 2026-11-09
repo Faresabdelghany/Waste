@@ -21,10 +21,9 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
 import { inProjects } from "../auth/projects"
 import { requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem } from "../problem"
-import { describeJson } from "./shared"
 
 const AuditPage = Page(AuditEvent)
 

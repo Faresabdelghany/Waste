@@ -35,22 +35,22 @@ import type { Tx } from "@waste/db/client"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { alreadyAbsent, alreadyUnavailable } from "@waste/domain/resources/availability"
-import { and, asc, eq, gt, isNull, lte, or, type SQL } from "drizzle-orm"
+import { and, eq, gt, isNull, lte, or, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { awayOver, driverName, vehicleName } from "./availability-rules"
 import { periodAfter, periodOf, requireOrdered } from "./periods"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const DRIVERS = "fleet.drivers"
 const VEHICLES = "fleet.vehicles"
@@ -62,9 +62,6 @@ export const NOT_A_VEHICLE_HERE = "Not a vehicle of a project this account works
 /** What the exclusion constraint answers a race with, where the route's own read did not see the period first. */
 const DRIVER_AWAY_ALREADY = "This driver is already absent on one of those days; one absence covers a day"
 const VEHICLE_AWAY_ALREADY = "This vehicle is already unavailable on one of those days; one period covers a day"
-
-const noSuchAbsence = (id: string) => problem(404, { detail: `No driver absence ${id} in the projects this account works in` })
-const noSuchUnavailability = (id: string) => problem(404, { detail: `No vehicle unavailability ${id} in the projects this account works in` })
 
 const DriverAbsencePage = Page(DriverAbsence)
 const VehicleUnavailabilityPage = Page(VehicleUnavailability)
@@ -105,12 +102,7 @@ const absenceOf = (row: AbsenceRow): DriverAbsence => ({
   ...stampsOf(row),
 })
 
-const absenceScope = (principal: Principal) => and(eq(driverAbsence.companyId, principal.companyId), inProjects(driverAbsence.projectId, principal))
-
-async function findAbsence(tx: Tx, principal: Principal, id: string): Promise<AbsenceRow | undefined> {
-  const [row] = await tx.select(absenceColumns).from(driverAbsence).where(and(absenceScope(principal), eq(driverAbsence.id, id))).limit(1)
-  return row
-}
+const { scope: absenceScope, noSuch: noSuchAbsence, get: getAbsence, locked: lockedAbsence, list: listAbsences } = scoped(driverAbsence, { noun: "driver absence", reach: "projects", columns: absenceColumns })
 
 /** The driver a body names, of a project the caller works in: its name for a sentence and its project for the row. */
 async function driverHere(tx: Tx, principal: Principal, id: string): Promise<{ id: string; name: string; projectId: string }> {
@@ -151,12 +143,7 @@ const unavailabilityOf = (row: UnavailabilityRow): VehicleUnavailability => ({
   ...stampsOf(row),
 })
 
-const unavailabilityScope = (principal: Principal) => and(eq(vehicleUnavailability.companyId, principal.companyId), inProjects(vehicleUnavailability.projectId, principal))
-
-async function findUnavailability(tx: Tx, principal: Principal, id: string): Promise<UnavailabilityRow | undefined> {
-  const [row] = await tx.select(unavailabilityColumns).from(vehicleUnavailability).where(and(unavailabilityScope(principal), eq(vehicleUnavailability.id, id))).limit(1)
-  return row
-}
+const { scope: unavailabilityScope, noSuch: noSuchUnavailability, get: getUnavailability, locked: lockedUnavailability, list: listUnavailabilities } = scoped(vehicleUnavailability, { noun: "vehicle unavailability", reach: "projects", columns: unavailabilityColumns })
 
 /** The vehicle or trailer a body names, of a project the caller works in: its label for a sentence and its project for the row. */
 async function vehicleHere(tx: Tx, principal: Principal, id: string): Promise<{ id: string; label: string; projectId: string }> {
@@ -191,25 +178,10 @@ export function availabilityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, driverId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(absenceColumns)
-          .from(driverAbsence)
-          .where(
-            and(
-              absenceScope(principal),
-              projectId === undefined ? undefined : eq(driverAbsence.projectId, projectId),
-              driverId === undefined ? undefined : eq(driverAbsence.driverId, driverId),
-              touching(driverAbsence.validFrom, driverAbsence.validTo, from, to),
-              after === undefined ? undefined : gt(driverAbsence.id, after),
-            ),
-          )
-          .orderBy(asc(driverAbsence.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listAbsences(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(driverAbsence.projectId, projectId), driverId === undefined ? undefined : eq(driverAbsence.driverId, driverId), touching(driverAbsence.validFrom, driverAbsence.validTo, from, to))
         return c.json({ items: items.map(absenceOf), nextCursor })
       },
     )
@@ -258,8 +230,7 @@ export function availabilityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findAbsence(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchAbsence(id)
+        const row = await getAbsence(c.get("tx"), c.get("principal"), id)
         return c.json(absenceOf(row))
       },
     )
@@ -285,9 +256,7 @@ export function availabilityRoutes(deps: RouteDeps) {
         const body = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, driverAbsence, { companyId: principal.companyId, id })
-        const current = await findAbsence(tx, principal, id)
-        if (current === undefined) throw noSuchAbsence(id)
+        const current = await lockedAbsence(tx, principal, id)
         const period = periodAfter(current, body)
         requireOrdered(period)
         const scope = { companyId: principal.companyId, projectId: current.projectId }
@@ -339,25 +308,10 @@ export function availabilityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(unavailabilityColumns)
-          .from(vehicleUnavailability)
-          .where(
-            and(
-              unavailabilityScope(principal),
-              projectId === undefined ? undefined : eq(vehicleUnavailability.projectId, projectId),
-              vehicleId === undefined ? undefined : eq(vehicleUnavailability.vehicleId, vehicleId),
-              touching(vehicleUnavailability.validFrom, vehicleUnavailability.validTo, from, to),
-              after === undefined ? undefined : gt(vehicleUnavailability.id, after),
-            ),
-          )
-          .orderBy(asc(vehicleUnavailability.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listUnavailabilities(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(vehicleUnavailability.projectId, projectId), vehicleId === undefined ? undefined : eq(vehicleUnavailability.vehicleId, vehicleId), touching(vehicleUnavailability.validFrom, vehicleUnavailability.validTo, from, to))
         return c.json({ items: items.map(unavailabilityOf), nextCursor })
       },
     )
@@ -406,8 +360,7 @@ export function availabilityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findUnavailability(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchUnavailability(id)
+        const row = await getUnavailability(c.get("tx"), c.get("principal"), id)
         return c.json(unavailabilityOf(row))
       },
     )
@@ -433,9 +386,7 @@ export function availabilityRoutes(deps: RouteDeps) {
         const body = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, vehicleUnavailability, { companyId: principal.companyId, id })
-        const current = await findUnavailability(tx, principal, id)
-        if (current === undefined) throw noSuchUnavailability(id)
+        const current = await lockedUnavailability(tx, principal, id)
         const period = periodAfter(current, body)
         requireOrdered(period)
         const scope = { companyId: principal.companyId, projectId: current.projectId }

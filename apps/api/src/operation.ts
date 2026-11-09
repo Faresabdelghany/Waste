@@ -15,18 +15,59 @@
 // `identify`, and it opens short ones of its own: `c.get("transact")` for rows
 // the audit keeps, `c.get("fenced")` for the rest.
 // A public route names its `door` (ADR-0010) and takes no token.
+import { Id } from "@waste/contracts/ids"
 import { PageRequest } from "@waste/contracts/pagination"
 import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import { PAGE_LIMIT_MAX } from "@waste/domain/requests"
-import { Hono, type Handler, type MiddlewareHandler } from "hono"
-import { describeRoute } from "hono-openapi"
-import type * as z from "zod"
+import { Hono, type Context, type Handler, type MiddlewareHandler } from "hono"
+import { describeRoute, resolver } from "hono-openapi"
+import * as z from "zod"
 
 import { BEARER_SECURITY, type AuthEnv, type IdentifiedEnv, type Principal } from "./auth/principal"
 import type { PublicEnv } from "./auth/public-door"
 import { requireGrant, requireGrantOf } from "./auth/require"
 import { describeProblem, validate } from "./problem"
-import { IdParam } from "./routes/shared"
+
+/** The path parameter of every `/<resource>/:id` route. */
+export const IdParam = z.object({ id: Id })
+
+type Schema = Parameters<typeof resolver>[0]
+
+/** What a route says about a JSON body in its OpenAPI description. */
+export function describeJson(description: string, schema: Schema) {
+  return { description, content: { "application/json": { schema: resolver(schema) } } }
+}
+
+/** The one header a create answers beside its body, as the document declares it on every 201. */
+const LOCATION_HEADER = {
+  Location: {
+    description: "Where the resource is now read: the path of its own single-row GET, relative to the API's origin.",
+    schema: { type: "string" as const },
+  },
+}
+
+/** What a route says about the 201 a create answers: the body, and `Location` naming where the row is now read. */
+export function describeCreated(description: string, schema: Schema) {
+  return { ...describeJson(description, schema), headers: LOCATION_HEADER }
+}
+
+/**
+ * The 201 a create answers (Issue #74): the body, and `Location` naming the
+ * row's own single-row GET — `collection` under the id the server minted,
+ * relative to the API's origin and never with a host, since the API does not
+ * know the name it is reached by. The path is root-relative because the API
+ * is served at its origin's root and mounts under no prefix — its own host,
+ * as docs/architecture/backend-architecture.md deploys it — so `/projects/<id>`
+ * resolves against any origin it is reached by; a base path would be a
+ * change here, not in every route. `collection` is where the row is read, not
+ * where it was posted: a subscription made under `/agreements/:id/subscriptions`
+ * is at `/subscriptions/<id>`. A command (`deactivate`, `reactivate`,
+ * `make-primary-administrator`) and a set replacement answer 200 and carry
+ * no header, since nothing new is anywhere.
+ */
+export function created<Body extends { id: string }>(c: Context, collection: `/${string}`, body: Body) {
+  return c.json(body, 201, { location: `${collection}/${body.id}` })
+}
 
 type Responses = NonNullable<NonNullable<Parameters<typeof describeRoute>[0]>["responses"]>
 

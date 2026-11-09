@@ -112,6 +112,7 @@ import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { invalidRequest, problem, refusalProblem } from "../problem"
+import { scoped } from "../scoped"
 import { driverColumns, findDriver, findVehicle, vehicleColumns, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import {
   requireContainer,
@@ -141,7 +142,6 @@ export const SCHEME_NAME_IN_FORCE_SENTENCE = "A route scheme of this name is alr
 export const GROUP_NAME_TAKEN = "collection_group_route_scheme_id_name_key"
 export const groupNameTaken = (name: string): string => `This scheme already has a collection group called ${JSON.stringify(name)}`
 
-export const noSuchScheme = (id: string) => problem(404, { detail: `No route scheme ${id} in the projects this account works in` })
 /** What a write to an archived scheme, or to one of its groups, is told (O21 of #290): archived is for good, and the next version of its name is a new scheme. */
 export const schemeArchived = (name: string): string => `Route scheme ${JSON.stringify(name)} is archived: it plans nothing more and is not changed; write a new scheme of its name instead`
 
@@ -370,23 +370,11 @@ export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow
   return scheme
 }
 
-/** The rows of this company, in the projects the caller works in: what every scheme statement is bounded by. */
-export const schemeScope = (principal: Principal): SQL | undefined =>
-  and(eq(routeScheme.companyId, principal.companyId), inProjects(routeScheme.projectId, principal))
-
 /** The same for a group, which carries the project its scheme is in. */
 export const groupScope = (principal: Principal): SQL | undefined =>
   and(eq(collectionGroup.companyId, principal.companyId), inProjects(collectionGroup.projectId, principal))
 
-/** One scheme of this company by id, inside the caller's projects; undefined when it is neither. */
-export async function findScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow | undefined> {
-  const [row] = await tx
-    .select(schemeColumns)
-    .from(routeScheme)
-    .where(and(schemeScope(principal), eq(routeScheme.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
 
 /** Every id a body names across its groups, by what it names: the rule's fractions, container types, vehicle type and planning area, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {

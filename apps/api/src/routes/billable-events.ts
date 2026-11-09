@@ -76,12 +76,11 @@ import { lockRow } from "@waste/db/commands/shared"
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { eventScope, findEvent, noSuchEvent } from "./billing-shapes"
 import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 
 const MODULE = "commercial.events"
@@ -215,7 +214,7 @@ const payerIs = (tx: Tx, companyId: string, customerId: string) =>
       .where(and(eq(agreement.companyId, companyId), eq(agreement.id, billableEvent.agreementId), eq(agreement.payerCustomerId, customerId))),
   )
 
-/** The event the path names, locked and read with its reading: both commands hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */
+/** The event the path names, locked and read with its reading: both commands hold a rule the API holds, so they take the row lock first and read afterwards (`@waste/db/commands/shared`). */
 async function lockedEvent(tx: Tx, principal: Principal, id: string): Promise<EventReading> {
   await lockRow(tx, billableEvent, { companyId: principal.companyId, id })
   const current = await findEvent(tx, principal, id)

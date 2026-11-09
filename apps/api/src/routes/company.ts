@@ -19,9 +19,8 @@ import { and, asc, eq, ne } from "drizzle-orm"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
-import { describeJson } from "./shared"
 
 const MODULE = "configure.organization"
 

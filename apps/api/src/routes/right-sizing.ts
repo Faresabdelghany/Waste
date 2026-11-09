@@ -23,18 +23,17 @@ import { proposeRightSizing } from "@waste/db/commands/right-sizing"
 import { subscription } from "@waste/db/schema/agreements"
 import { rightSizingProposal } from "@waste/db/schema/inspections"
 import { changesTheProduct } from "@waste/domain/inspections/right-sizing"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
-import { lockRow } from "@waste/db/commands/shared"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { changeSubscription } from "./agreements"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.right-sizing"
 /** The grant a subscription's change asks, which an approve of a size asks too. */
@@ -50,8 +49,6 @@ export const STALE_EVIDENCE = "The subscription changed since the proposal was m
 export const A_DAY_FOR_THE_CHANGE = "Say the day the change takes effect"
 /** What a frequency's approve naming a day or a product is told. */
 export const A_FREQUENCY_CHANGES_NO_PRODUCT = "A frequency's approval changes no product and takes no day: the office moves the container between collection groups itself"
-
-const noSuchProposal = (id: string) => problem(404, { detail: `No right-sizing proposal ${id} in the projects this account works in` })
 
 const columns = {
   id: rightSizingProposal.id,
@@ -95,22 +92,11 @@ function proposalOf(row: Row): RightSizingProposal {
   }
 }
 
-const proposalScope = (principal: Principal) => and(eq(rightSizingProposal.companyId, principal.companyId), inProjects(rightSizingProposal.projectId, principal))
-
-async function findProposal(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(rightSizingProposal)
-    .where(and(proposalScope(principal), eq(rightSizingProposal.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: proposalScope, get: getProposal, locked: lockedProposal, list: listProposals } = scoped(rightSizingProposal, { noun: "right-sizing proposal", reach: "projects", columns })
 
 /** An open proposal, locked: the path's row (404), then its state (409). */
 async function openProposal(tx: Tx, principal: Principal, id: string): Promise<Row> {
-  await lockRow(tx, rightSizingProposal, { companyId: principal.companyId, id })
-  const current = await findProposal(tx, principal, id)
-  if (current === undefined) throw noSuchProposal(id)
+  const current = await lockedProposal(tx, principal, id)
   if (current.status !== "open") throw problem(409, { detail: alreadyDecided(current.status) })
   return current
 }
@@ -134,25 +120,11 @@ export function rightSizingRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, subscriptionId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(rightSizingProposal)
-          .where(
-            and(
-              proposalScope(principal),
-              projectId === undefined ? undefined : eq(rightSizingProposal.projectId, projectId),
-              subscriptionId === undefined ? undefined : eq(rightSizingProposal.subscriptionId, subscriptionId),
-              status === undefined ? undefined : eq(rightSizingProposal.status, status),
-              after === undefined ? undefined : gt(rightSizingProposal.id, after),
-            ),
-          )
-          .orderBy(asc(rightSizingProposal.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listProposals(tx, principal, at, projectId === undefined ? undefined : eq(rightSizingProposal.projectId, projectId), subscriptionId === undefined ? undefined : eq(rightSizingProposal.subscriptionId, subscriptionId), status === undefined ? undefined : eq(rightSizingProposal.status, status))
         return c.json({ ...page, items: page.items.map(proposalOf) })
       },
     )
@@ -191,8 +163,7 @@ export function rightSizingRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findProposal(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchProposal(id)
+        const row = await getProposal(c.get("tx"), c.get("principal"), id)
         return c.json(proposalOf(row))
       },
     )

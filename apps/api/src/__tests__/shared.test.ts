@@ -1,4 +1,4 @@
-// The pure helpers of routes/shared.ts that need no request: how a row's
+// The pure helpers the routes share that need no request: how a row's
 // stamps and a `time` column are spelled on the wire (Issue #97), the
 // whole-day window a pair of days makes and the skew check (Issue #109). No
 // database.
@@ -15,7 +15,10 @@ import { PgDialect } from "drizzle-orm/pg-core"
 import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
 
 import { ProblemError } from "../problem"
-import { COMMAND_BACKDATE_MS, dayWindow, endOfDayExclusive, primaryKeyOf, providerShapeIssue, requireNotAhead, requireProviderShape } from "../routes/shared"
+import { COMMAND_BACKDATE_MS, primaryKeyOf } from "../routes/driver"
+import { providerShapeIssue, requireProviderShape } from "../routes/place-rules"
+import { requireNotAhead } from "../routes/shared"
+import { dayWindow, endOfDayExclusive } from "../routes/tickets"
 
 describe("timeOf", () => {
   test("drops the seconds Postgres spells a time with, so the value is the contracts' IsoTime", () => {

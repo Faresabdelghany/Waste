@@ -36,20 +36,19 @@ import { CUBIC_METRE_UNIT, soldAtTheWindow } from "@waste/domain/finance/window"
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { linesIssue, netOf, registeredTare, tareKeyOf } from "@waste/domain/scale-house/rules"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { scaleLineColumns, scaleTicketColumns, scaleTicketOf, scaleTicketsOf, type ScaleTicketRow } from "@waste/db/shapes/scale-tickets"
+import { scaleLineColumns, scaleTicketColumns, scaleTicketOf, scaleTicketsOf } from "@waste/db/shapes/scale-tickets"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireAgreement, requireCustomer, requireProduct, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
+import { requireNotAhead } from "./shared"
 import { routesOf } from "./weighbridge"
 
 const MODULE = "operate.scale-house"
@@ -90,10 +89,6 @@ const tareOf = (row: TareRow): VehicleTare => ({
   status: row.status,
 })
 
-const tareScope = (principal: Principal) => and(eq(vehicleTare.companyId, principal.companyId), inProjects(vehicleTare.projectId, principal))
-
-const noSuchTare = (id: string) => problem(404, { detail: `No registered tare ${id} in the projects this account works in` })
-
 /** What a second active tare of one plate, trailer and container is told. */
 export const TARE_TAKEN = "An active tare is registered for this plate, trailer and container already: re-weigh that one, or retire it first"
 
@@ -114,29 +109,11 @@ function tareKeys(body: { plate: string; trailerPlate?: string | null; container
   return keys as { plate: string; trailerPlate: string | null; containerRef: string | null }
 }
 
-async function findTare(tx: Tx, principal: Principal, id: string): Promise<TareRow | undefined> {
-  const [row] = await tx
-    .select(tareColumns)
-    .from(vehicleTare)
-    .where(and(tareScope(principal), eq(vehicleTare.id, id)))
-    .limit(1)
-  return row
-}
+const { noSuch: noSuchTare, find: findTare, get: getTare, list: listTares } = scoped(vehicleTare, { noun: "registered tare", reach: "projects", columns: tareColumns })
 
 // --- The tickets -------------------------------------------------------------
 
-const ticketScope = (principal: Principal) => and(eq(scaleTicket.companyId, principal.companyId), inProjects(scaleTicket.projectId, principal))
-
-const noSuchTicket = (id: string) => problem(404, { detail: `No scale ticket ${id} in the projects this account works in` })
-
-async function findTicket(tx: Tx, principal: Principal, id: string): Promise<ScaleTicketRow | undefined> {
-  const [row] = await tx
-    .select(scaleTicketColumns)
-    .from(scaleTicket)
-    .where(and(ticketScope(principal), eq(scaleTicket.id, id)))
-    .limit(1)
-  return row
-}
+const { get: getTicket, locked: lockedTicket, list: listTickets } = scoped(scaleTicket, { noun: "scale ticket", reach: "projects", columns: scaleTicketColumns })
 
 /** What a station a ticket names is told where it is not one of our own in use with a weighbridge. */
 export const NOT_A_SITE = "Not one of our own stations in use with a weighbridge"
@@ -228,23 +205,8 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const { limit, cursor, projectId, plate, status } = c.req.valid("query")
           const principal = c.get("principal")
           if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-          const after = afterCursor(cursor)
-          const rows = await c
-            .get("tx")
-            .select(tareColumns)
-            .from(vehicleTare)
-            .where(
-              and(
-                tareScope(principal),
-                projectId === undefined ? undefined : eq(vehicleTare.projectId, projectId),
-                plate === undefined ? undefined : eq(vehicleTare.plate, tareKeyOf(plate) ?? ""),
-                status === undefined ? undefined : eq(vehicleTare.status, status),
-                after === undefined ? undefined : gt(vehicleTare.id, after),
-              ),
-            )
-            .orderBy(asc(vehicleTare.id))
-            .limit(fetchLimit(limit))
-          const page = pageOf(rows, limit)
+          const at = pageAt({ cursor, limit })
+          const page = await listTares(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(vehicleTare.projectId, projectId), plate === undefined ? undefined : eq(vehicleTare.plate, tareKeyOf(plate) ?? ""), status === undefined ? undefined : eq(vehicleTare.status, status))
           return c.json({ ...page, items: page.items.map(tareOf) })
         },
       )
@@ -306,8 +268,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
         },
         async (c) => {
           const { id } = c.req.valid("param")
-          const row = await findTare(c.get("tx"), c.get("principal"), id)
-          if (row === undefined) throw noSuchTare(id)
+          const row = await getTare(c.get("tx"), c.get("principal"), id)
           return c.json(tareOf(row))
         },
       )
@@ -367,25 +328,9 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const { limit, cursor, projectId, unloadingStationId, status, party, customerId } = c.req.valid("query")
           const principal = c.get("principal")
           if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-          const after = afterCursor(cursor)
+          const at = pageAt({ cursor, limit })
           const tx = c.get("tx")
-          const rows = await tx
-            .select(scaleTicketColumns)
-            .from(scaleTicket)
-            .where(
-              and(
-                ticketScope(principal),
-                projectId === undefined ? undefined : eq(scaleTicket.projectId, projectId),
-                unloadingStationId === undefined ? undefined : eq(scaleTicket.unloadingStationId, unloadingStationId),
-                status === undefined ? undefined : eq(scaleTicket.status, status),
-                party === undefined ? undefined : eq(scaleTicket.party, party),
-                customerId === undefined ? undefined : eq(scaleTicket.customerId, customerId),
-                after === undefined ? undefined : gt(scaleTicket.id, after),
-              ),
-            )
-            .orderBy(asc(scaleTicket.id))
-            .limit(fetchLimit(limit))
-          const page = pageOf(rows, limit)
+          const page = await listTickets(tx, principal, at, projectId === undefined ? undefined : eq(scaleTicket.projectId, projectId), unloadingStationId === undefined ? undefined : eq(scaleTicket.unloadingStationId, unloadingStationId), status === undefined ? undefined : eq(scaleTicket.status, status), party === undefined ? undefined : eq(scaleTicket.party, party), customerId === undefined ? undefined : eq(scaleTicket.customerId, customerId))
           return c.json({ ...page, items: await scaleTicketsOf(tx, principal.companyId, page.items) })
         },
       )
@@ -469,8 +414,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const { id } = c.req.valid("param")
           const principal = c.get("principal")
           const tx = c.get("tx")
-          const row = await findTicket(tx, principal, id)
-          if (row === undefined) throw noSuchTicket(id)
+          const row = await getTicket(tx, principal, id)
           const [answer] = await scaleTicketsOf(tx, principal.companyId, [row])
           return c.json(answer!)
         },
@@ -497,9 +441,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const patch = c.req.valid("json")
           const principal = c.get("principal")
           const tx = c.get("tx")
-          await lockRow(tx, scaleTicket, { companyId: principal.companyId, id })
-          const ticket = await findTicket(tx, principal, id)
-          if (ticket === undefined) throw noSuchTicket(id)
+          const ticket = await lockedTicket(tx, principal, id)
           if (ticket.status !== "open") throw problem(409, { detail: notOpen(ticket.number, ticket.status, "corrected") })
           if (ticket.party === "account" && patch.visitorName != null) throw invalidRequest("body", [{ path: "visitorName", message: ACCOUNT_HAS_NO_VISITOR }])
           const [row] = await tx
@@ -533,9 +475,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const body = c.req.valid("json")
           const principal = c.get("principal")
           const tx = c.get("tx")
-          await lockRow(tx, scaleTicket, { companyId: principal.companyId, id })
-          const ticket = await findTicket(tx, principal, id)
-          if (ticket === undefined) throw noSuchTicket(id)
+          const ticket = await lockedTicket(tx, principal, id)
           if (ticket.status !== "open") throw problem(409, { detail: notOpen(ticket.number, ticket.status, "completed") })
 
           // The body's fields, each at its own.
@@ -657,9 +597,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const body = c.req.valid("json")
           const principal = c.get("principal")
           const tx = c.get("tx")
-          await lockRow(tx, scaleTicket, { companyId: principal.companyId, id })
-          const ticket = await findTicket(tx, principal, id)
-          if (ticket === undefined) throw noSuchTicket(id)
+          const ticket = await lockedTicket(tx, principal, id)
           if (ticket.status === "voided") throw problem(409, { detail: `Ticket ${scaleTicketLabel(ticket.number)} is voided already` })
           if (ticket.routeId !== null) {
             const [ran] = await tx
@@ -699,8 +637,7 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const { id } = c.req.valid("param")
           const principal = c.get("principal")
           const tx = c.get("tx")
-          const ticket = await findTicket(tx, principal, id)
-          if (ticket === undefined) throw noSuchTicket(id)
+          const ticket = await getTicket(tx, principal, id)
           if (ticket.status !== "completed" || ticket.weighedOutAt === null) throw problem(409, { detail: `Ticket ${scaleTicketLabel(ticket.number)} is ${ticket.status}; only a completed ticket comes to an amount` })
           const scope = { companyId: principal.companyId, projectId: ticket.projectId }
           const serviceDate = dayInTimezone(ticket.weighedOutAt, await projectTimezone(tx, principal.companyId, ticket.projectId))

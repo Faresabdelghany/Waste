@@ -12,21 +12,18 @@
 // & communication's module, which the Ticket SLA is configured under too.
 import { MessageTemplate, MessageTemplateCreate, MessageTemplateListQuery, MessageTemplatePatch } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
-import type { Tx } from "@waste/db/client"
 import { messageTemplate } from "@waste/db/schema/messaging"
 import { channelShapeIssue } from "@waste/domain/messaging/template"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "configure.templates"
 const TemplatePage = Page(MessageTemplate)
@@ -34,8 +31,6 @@ const TemplatePage = Page(MessageTemplate)
 /** `UNIQUE (company_id, project_id, name)`. */
 const NAME_TAKEN = "message_template_project_id_name_key"
 export const nameTaken = (name: string) => `This project already has a message template named ${name}`
-
-const noSuchTemplate = (id: string) => problem(404, { detail: `No message template ${id} in the projects this account works in` })
 
 const columns = {
   id: messageTemplate.id,
@@ -64,12 +59,7 @@ const templateOf = (row: Row): MessageTemplate => ({
   ...stampsOf(row),
 })
 
-const scope = (principal: Principal) => and(eq(messageTemplate.companyId, principal.companyId), inProjects(messageTemplate.projectId, principal))
-
-async function findTemplate(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx.select(columns).from(messageTemplate).where(and(scope(principal), eq(messageTemplate.id, id))).limit(1)
-  return row
-}
+const { scope, noSuch: noSuchTemplate, find: findTemplate, get: getTemplate, locked: lockedTemplate, list: listTemplates } = scoped(messageTemplate, { noun: "message template", reach: "projects", columns })
 
 export function messageTemplateRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -91,15 +81,9 @@ export function messageTemplateRoutes(deps: RouteDeps) {
         const { limit, cursor, projectId } = c.req.valid("query")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(messageTemplate)
-          .where(and(scope(principal), projectId === undefined ? undefined : eq(messageTemplate.projectId, projectId), after === undefined ? undefined : gt(messageTemplate.id, after)))
-          .orderBy(asc(messageTemplate.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(templateOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listTemplates(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(messageTemplate.projectId, projectId))
+        return c.json(mapPage(page, templateOf))
       },
     )
     .post(
@@ -148,8 +132,7 @@ export function messageTemplateRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findTemplate(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchTemplate(id)
+        const row = await getTemplate(c.get("tx"), c.get("principal"), id)
         return c.json(templateOf(row))
       },
     )
@@ -177,9 +160,7 @@ export function messageTemplateRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const patch = c.req.valid("json")
         if ((await findTemplate(tx, principal, id)) === undefined) throw noSuchTemplate(id)
-        await lockRow(tx, messageTemplate, { companyId: principal.companyId, id }, strengthFor(messageTemplate, patch))
-        const current = await findTemplate(tx, principal, id)
-        if (current === undefined) throw noSuchTemplate(id)
+        const current = await lockedTemplate(tx, principal, id, strengthFor(messageTemplate, patch))
         const issue = channelShapeIssue({
           channel: (patch.channel ?? current.channel),
           subject: patch.subject === undefined ? current.subject : patch.subject,

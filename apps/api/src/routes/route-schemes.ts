@@ -91,7 +91,7 @@ import { generateOccurrences, SHIFT_SEARCH_DAYS } from "@waste/domain/planning/o
 import { addDays } from "@waste/domain/days"
 import type { SchemeRecurrence } from "@waste/domain/planning/recurrence"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm"
+import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
 import { releaseHolds, releasePolicyHolds, schemeReleases } from "@waste/db/commands/route-holds"
@@ -103,15 +103,15 @@ import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
-import { findScheme, fleetOf, groupsOf, MODULE, mergeReferences, noSuchScheme, pickOf, referencesOf, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, SCHEME_NAME_IN_FORCE, SCHEME_NAME_IN_FORCE_SENTENCE, schemeColumns, schemeScope, schemesOf, schemeWithGroups, writeGroupSets } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { findScheme, fleetOf, groupsOf, MODULE, mergeReferences, noSuchScheme, pickOf, referencesOf, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, SCHEME_NAME_IN_FORCE, SCHEME_NAME_IN_FORCE_SENTENCE, listSchemes, schemeColumns, schemeScope, schemesOf, schemeWithGroups, writeGroupSets } from "./scheme-groups"
+import { stamp } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
 const Occurrences = z.array(Occurrence)
@@ -228,29 +228,22 @@ export function routeSchemeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, status, planAhead, validOn: day, archived } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(schemeColumns)
-          .from(routeScheme)
-          .where(
-            and(
-              schemeScope(principal),
-              projectId === undefined ? undefined : eq(routeScheme.projectId, projectId),
-              planningAreaId === undefined ? undefined : eq(routeScheme.planningAreaId, planningAreaId),
-              status === undefined ? undefined : eq(routeScheme.status, status),
-              planAhead === undefined ? undefined : eq(routeScheme.planAhead, planAhead),
-              archived === undefined ? undefined : archived ? isNotNull(routeScheme.archivedAt) : isNull(routeScheme.archivedAt),
-              day === undefined ? undefined : validOn(routeScheme, day),
-              after === undefined ? undefined : gt(routeScheme.id, after),
-            ),
-          )
-          .orderBy(asc(routeScheme.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose groups are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listSchemes(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(routeScheme.projectId, projectId),
+          planningAreaId === undefined ? undefined : eq(routeScheme.planningAreaId, planningAreaId),
+          status === undefined ? undefined : eq(routeScheme.status, status),
+          planAhead === undefined ? undefined : eq(routeScheme.planAhead, planAhead),
+          archived === undefined ? undefined : archived ? isNotNull(routeScheme.archivedAt) : isNull(routeScheme.archivedAt),
+          day === undefined ? undefined : validOn(routeScheme, day),
+        )
         return c.json({ items: await schemesOf(tx, principal.companyId, items, now), nextCursor })
       },
     )
@@ -334,7 +327,7 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         // The row every rule below is held against, locked before it is
         // read: a narrowing of the days and a group being added on one of
         // them are two halves of one rule, and they serialise here
-        // (routes/shared.ts); the group routes take this same lock.
+        // (`@waste/db/commands/shared`); the group routes take this same lock.
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
         const current = await findScheme(tx, principal, id)
         if (current === undefined) throw noSuchScheme(id)

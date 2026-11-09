@@ -39,19 +39,19 @@ import { ACTIVE_TEAM_STATUSES, ACTIVE_TICKET_TYPE_STATUSES, type TeamStatus } fr
 import { retiredTeam } from "@waste/domain/resolution/teams"
 import { retiredTicketType } from "@waste/domain/resolution/ticket-types"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, sql } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { NOT_A_TEAM, requireContainerType, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 import { findNamedType } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
@@ -82,20 +82,9 @@ const nameTaken = (name: string) => `This company already has a counting rule ca
 /** What deleting a rule that has opened a ticket is told. */
 export const ruleHasTickets = (name: string) => `The counting rule ${JSON.stringify(name)} has opened tickets, which name it; switch it off instead`
 
-const noSuchRule = (id: string) => problem(404, { detail: `No counting rule ${id} in this company` })
-
-const scope = (principal: Principal) => eq(countingRule.companyId, principal.companyId)
-
 const ruleOf = (row: Row): CountingRule => ({ ...row, status: row.status, period: row.period, ...stampsOf(row) })
 
-async function findRule(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(countingRule)
-    .where(and(scope(principal), eq(countingRule.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, get: getRule, locked: lockedRule, list: listRules } = scoped(countingRule, { noun: "counting rule", reach: "company", columns })
 
 /** The team a body names: the company's, or a 400 at `teamId`; its status the caller's 409 to ask, after every 400. */
 async function findNamedTeam(tx: Tx, companyId: string, id: string): Promise<{ name: string; status: TeamStatus }> {
@@ -178,15 +167,8 @@ export function countingRuleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(countingRule)
-          .where(and(scope(c.get("principal")), status === undefined ? undefined : eq(countingRule.status, status), after === undefined ? undefined : gt(countingRule.id, after)))
-          .orderBy(asc(countingRule.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const at = pageAt({ cursor, limit })
+        const { items, nextCursor } = await listRules(c.get("tx"), c.get("principal"), at, status === undefined ? undefined : eq(countingRule.status, status))
         return c.json({ items: items.map(ruleOf), nextCursor })
       },
     )
@@ -264,8 +246,7 @@ export function countingRuleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findRule(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchRule(id)
+        const row = await getRule(c.get("tx"), c.get("principal"), id)
         return c.json(ruleOf(row))
       },
     )
@@ -292,9 +273,7 @@ export function countingRuleRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, countingRule, { companyId: principal.companyId, id }, strengthFor(countingRule, patch))
-        const current = await findRule(tx, principal, id)
-        if (current === undefined) throw noSuchRule(id)
+        const current = await lockedRule(tx, principal, id, strengthFor(countingRule, patch))
         await requireReferences(tx, principal.companyId, namedAfresh(current, patch))
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
@@ -327,9 +306,7 @@ export function countingRuleRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The delete's own strength: a ticket the worker is opening holds the rule's key share until it commits, and is then read below; one it opens after waits on this lock and finds no rule.
-        await lockRow(tx, countingRule, { companyId: principal.companyId, id }, "update")
-        const current = await findRule(tx, principal, id)
-        if (current === undefined) throw noSuchRule(id)
+        const current = await lockedRule(tx, principal, id, "update")
         const [opened] = await tx
           .select({ id: ticket.id })
           .from(ticket)

@@ -32,39 +32,27 @@ import { propertyParty } from "@waste/db/schema/customers"
 import { moveOf, moveRefusal, ONE_PLACE, type ApplicationCommand } from "@waste/domain/registry/applications"
 import { isOneOf } from "@waste/domain/lists"
 import { UNDECIDED_APPLICATION_STATUSES } from "@waste/domain/registry/vocabulary"
-import { and, asc, eq, gt, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
+import { nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { applicationColumns, applicationOf, decisionColumns, decisionOf, labelOf, latestDecisions, type ApplicationRow } from "@waste/db/shapes/applications"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { operation, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, operation, routes } from "../operation"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { partyInForce } from "./property-writes"
 import { requireCustomer, requireProperty, requireSharedCollectionPoint, requireSubscription } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.applications"
 const ApplicationPage = Page(Application)
 
-/** The rows of the caller's projects: what every Application statement is bounded by. */
-const scope = (principal: Principal) => and(eq(application.companyId, principal.companyId), inProjects(application.projectId, principal))
-
-const noSuchApplication = (id: string) => problem(404, { detail: `No application ${id} in the projects this account works in` })
-
-async function findApplication(tx: Tx, principal: Principal, id: string): Promise<ApplicationRow | undefined> {
-  const [row] = await tx
-    .select(applicationColumns)
-    .from(application)
-    .where(and(scope(principal), eq(application.id, id)))
-    .limit(1)
-  return row
-}
+const { get: getApplication, locked: lockedApplication, list: listApplications } = scoped(application, { noun: "application", reach: "projects", columns: applicationColumns })
 
 /** One Application on the wire, with its latest Decision. */
 async function answer(tx: Tx, companyId: string, row: ApplicationRow): Promise<Application> {
@@ -120,9 +108,7 @@ const SUBJECT_SENTENCES = { party: NOT_A_PARTY, customer: NOT_THE_CUSTOMERS, pla
 
 /** A command's route: the row locked, its move judged by the domain, and the status written; `decide` appends its Decision first. */
 async function moved(tx: Tx, principal: Principal, id: string, command: ApplicationCommand): Promise<ApplicationRow> {
-  await lockRow(tx, application, { companyId: principal.companyId, id })
-  const current = await findApplication(tx, principal, id)
-  if (current === undefined) throw noSuchApplication(id)
+  const current = await lockedApplication(tx, principal, id)
   // A withdrawal from review after an appeal withdraws the appeal: back to the Decision the Application has.
   const decided = command === "withdraw" && (await latestDecisions(tx, principal.companyId, [id])).has(id)
   const next = moveOf(current.status, command, decided)
@@ -170,7 +156,7 @@ export function applicationRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, customerId, kind, status, inForceOn } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
@@ -180,23 +166,7 @@ export function applicationRoutes(deps: RouteDeps) {
           inForceOn === undefined
             ? undefined
             : sql`exists (select 1 from ${applicationDecision} where ${applicationDecision.id} = ${latestId} and ${applicationDecision.outcome} <> 'refused' and ${applicationDecision.grantedFrom} <= ${inForceOn}::date and (${applicationDecision.grantedTo} is null or ${applicationDecision.grantedTo} > ${inForceOn}::date))`
-        const rows = await tx
-          .select(applicationColumns)
-          .from(application)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(application.projectId, projectId),
-              customerId === undefined ? undefined : eq(application.customerId, customerId),
-              kind === undefined ? undefined : eq(application.kind, kind),
-              status === undefined ? undefined : eq(application.status, status),
-              inForce,
-              after === undefined ? undefined : gt(application.id, after),
-            ),
-          )
-          .orderBy(asc(application.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listApplications(tx, principal, at, projectId === undefined ? undefined : eq(application.projectId, projectId), customerId === undefined ? undefined : eq(application.customerId, customerId), kind === undefined ? undefined : eq(application.kind, kind), status === undefined ? undefined : eq(application.status, status), inForce)
         const decisions = await latestDecisions(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => applicationOf(row, decisions.get(row.id))), nextCursor })
       },
@@ -261,8 +231,7 @@ export function applicationRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findApplication(tx, principal, id)
-        if (row === undefined) throw noSuchApplication(id)
+        const row = await getApplication(tx, principal, id)
         return c.json(await answer(tx, principal.companyId, row))
       },
     )
@@ -289,9 +258,7 @@ export function applicationRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, application, { companyId: principal.companyId, id })
-        const current = await findApplication(tx, principal, id)
-        if (current === undefined) throw noSuchApplication(id)
+        const current = await lockedApplication(tx, principal, id)
         if (!isOneOf(current.status, UNDECIDED_APPLICATION_STATUSES)) throw problem(409, { detail: `${labelOf(current)} is ${current.status}; a correction takes one received or in review` })
         // The place the row ends with is one place at most, whichever field the patch moves.
         const propertyId = patch.propertyId === undefined ? current.propertyId : patch.propertyId
@@ -403,8 +370,7 @@ export function applicationRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findApplication(tx, principal, id)
-        if (row === undefined) throw noSuchApplication(id)
+        await getApplication(tx, principal, id)
         const rows = await tx
           .select(decisionColumns)
           .from(applicationDecision)

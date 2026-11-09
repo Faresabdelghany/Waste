@@ -20,21 +20,19 @@ import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, isBulkyProductUnit } from "
 import type { UnofferedStatus } from "@waste/domain/registry/catalogue"
 import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, gte, isNull } from "drizzle-orm"
+import { and, eq, gte, isNull } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { refuseStranded } from "@waste/db/commands/periods"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, requirePlanningArea, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.schemes"
 
@@ -85,19 +83,7 @@ export const unofferedBulkyProduct = (status: UnofferedStatus): string => `The p
 export const bookingsOutside = (rows: number): string =>
   `${rows} ${rows === 1 ? "booking is" : "bookings are"} for a day on or after the new end; cancel ${rows === 1 ? "it" : "them"} or end the schedule later`
 
-const noSuchSchedule = (id: string) => problem(404, { detail: `No bulky schedule ${id} in the projects this account works in` })
-
-/** This company's schedules, in the projects the caller works in. */
-const scheduleScope = (principal: Principal) => and(eq(bulkySchedule.companyId, principal.companyId), inProjects(bulkySchedule.projectId, principal))
-
-async function findSchedule(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(bulkySchedule)
-    .where(and(scheduleScope(principal), eq(bulkySchedule.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: scheduleScope, noSuch: noSuchSchedule, get: getSchedule, locked: lockedSchedule, list: listSchedules } = scoped(bulkySchedule, { noun: "bulky schedule", reach: "projects", columns })
 
 /** A product a schedule names: the project's, sold by the job or by the item (#449; 400 each), and active (409) unless it is the one the schedule already charges. */
 async function requireBulkyProduct(tx: Tx, scope: Scope, id: string, kept?: string): Promise<void> {
@@ -130,25 +116,11 @@ export function bulkyScheduleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(bulkySchedule)
-          .where(
-            and(
-              scheduleScope(principal),
-              projectId === undefined ? undefined : eq(bulkySchedule.projectId, projectId),
-              planningAreaId === undefined ? undefined : eq(bulkySchedule.planningAreaId, planningAreaId),
-              day === undefined ? undefined : validOn(bulkySchedule, day),
-              after === undefined ? undefined : gt(bulkySchedule.id, after),
-            ),
-          )
-          .orderBy(asc(bulkySchedule.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listSchedules(tx, principal, at, projectId === undefined ? undefined : eq(bulkySchedule.projectId, projectId), planningAreaId === undefined ? undefined : eq(bulkySchedule.planningAreaId, planningAreaId), day === undefined ? undefined : validOn(bulkySchedule, day))
         return c.json({ ...page, items: page.items.map(scheduleOf) })
       },
     )
@@ -201,8 +173,7 @@ export function bulkyScheduleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findSchedule(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchSchedule(id)
+        const row = await getSchedule(c.get("tx"), c.get("principal"), id)
         return c.json(scheduleOf(row))
       },
     )
@@ -229,9 +200,7 @@ export function bulkyScheduleRoutes(deps: RouteDeps) {
         const fields = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, bulkySchedule, { companyId: principal.companyId, id })
-        const current = await findSchedule(tx, principal, id)
-        if (current === undefined) throw noSuchSchedule(id)
+        const current = await lockedSchedule(tx, principal, id)
         const period = periodAfter(current, fields)
         requireOrdered(period)
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }

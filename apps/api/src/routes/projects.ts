@@ -33,11 +33,10 @@ import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { requireHolidayList } from "./holiday-lists"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.organization"
 const ProjectPage = Page(Project)

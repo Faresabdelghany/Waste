@@ -44,10 +44,11 @@ import { vehicleLabel } from "@waste/db/commands/fleet-fit"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
+import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
+import { scoped } from "../scoped"
+import { stamp } from "./shared"
 
 const VEHICLES = "fleet.vehicles"
 const PlanPage = Page(MaintenancePlan)
@@ -65,7 +66,6 @@ export const alreadyClosed = (title: string, status: string): string => `The ord
 export const NEEDS_THE_ODOMETER = "The plan counts kilometres: give the odometer at the service"
 export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the service"
 
-const noSuchPlan = (id: string) => problem(404, { detail: `No maintenance plan ${id} in the projects this account works in` })
 const noSuchOrder = (id: string) => problem(404, { detail: `No maintenance order ${id} in the projects this account works in` })
 
 /** What a list refuses beside the page rule. */
@@ -89,8 +89,6 @@ const planColumns = {
   updatedAt: vehicleMaintenancePlan.updatedAt,
 }
 type PlanRow = Pick<typeof vehicleMaintenancePlan.$inferSelect, keyof typeof planColumns>
-
-const planScope = (principal: Principal) => and(eq(vehicleMaintenancePlan.companyId, principal.companyId), inProjects(vehicleMaintenancePlan.projectId, principal))
 
 /** The readings a plan is judged on between services: none, since nothing reads a vehicle's odometer or engine hours, so the last service's own stand. */
 const NO_READINGS: VehicleReadings = { odometerKm: null, engineHours: null }
@@ -120,10 +118,7 @@ async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now:
   }))
 }
 
-async function findPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {
-  const [row] = await tx.select(planColumns).from(vehicleMaintenancePlan).where(and(planScope(principal), eq(vehicleMaintenancePlan.id, id))).limit(1)
-  return row
-}
+const { find: findPlan, get: getPlan, locked: lockedPlan, list: listPlans } = scoped(vehicleMaintenancePlan, { noun: "maintenance plan", reach: "projects", columns: planColumns })
 
 /** The vehicle a body names, of a project the caller works in, or the 400 at `vehicleId`. */
 async function vehicleHere(tx: Tx, principal: Principal, id: string): Promise<{ id: string; projectId: string; label: string }> {
@@ -203,25 +198,11 @@ export function maintenanceRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const tx = c.get("tx")
-        const rows = await tx
-          .select(planColumns)
-          .from(vehicleMaintenancePlan)
-          .where(
-            and(
-              planScope(principal),
-              projectId === undefined ? undefined : eq(vehicleMaintenancePlan.projectId, projectId),
-              vehicleId === undefined ? undefined : eq(vehicleMaintenancePlan.vehicleId, vehicleId),
-              status === undefined ? undefined : eq(vehicleMaintenancePlan.status, status),
-              after === undefined ? undefined : gt(vehicleMaintenancePlan.id, after),
-            ),
-          )
-          .orderBy(asc(vehicleMaintenancePlan.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listPlans(tx, principal, at, projectId === undefined ? undefined : eq(vehicleMaintenancePlan.projectId, projectId), vehicleId === undefined ? undefined : eq(vehicleMaintenancePlan.vehicleId, vehicleId), status === undefined ? undefined : eq(vehicleMaintenancePlan.status, status))
         return c.json({ items: await plansOf(tx, principal.companyId, items, now()), nextCursor })
       },
     )
@@ -281,8 +262,7 @@ export function maintenanceRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findPlan(tx, principal, id)
-        if (row === undefined) throw noSuchPlan(id)
+        const row = await getPlan(tx, principal, id)
         const [plan] = await plansOf(tx, principal.companyId, [row], now())
         return c.json(plan)
       },
@@ -309,9 +289,7 @@ export function maintenanceRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, vehicleMaintenancePlan, { companyId: principal.companyId, id })
-        const found = await findPlan(tx, principal, id)
-        if (found === undefined) throw noSuchPlan(id)
+        const found = await lockedPlan(tx, principal, id)
         const merged = { ...found, ...patch }
         const issue = planIssue(merged)
         if (issue !== undefined) throw invalidRequest("json", [issue])

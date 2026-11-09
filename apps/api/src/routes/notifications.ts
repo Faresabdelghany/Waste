@@ -26,10 +26,9 @@ import { newId } from "@waste/db/ids"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { messageColumns, messageOf } from "./messages"
-import { describeJson } from "./shared"
 
 const NoticePage = Page(Message)
 
