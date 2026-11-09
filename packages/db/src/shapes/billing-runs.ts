@@ -28,7 +28,6 @@ export const runColumns = {
 
 export type RunRow = Pick<typeof billingRun.$inferSelect, keyof typeof runColumns>
 
-/** The run on the wire. */
 export function runOf(row: RunRow): BillingRun {
   return {
     id: row.id,
@@ -59,7 +58,6 @@ export const exclusionColumns = {
 
 export type ExclusionRow = Pick<typeof billingRunExclusion.$inferSelect, keyof typeof exclusionColumns>
 
-/** The exclusion on the wire. */
 export function exclusionOf(row: ExclusionRow): BillingRunExclusion {
   return {
     id: row.id,

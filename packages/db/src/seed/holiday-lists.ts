@@ -42,7 +42,6 @@ const LISTS: readonly (typeof holidayList.$inferInsert)[] = NAMES.map((name) => 
   return { id: nextList(), companyId: DEMO_COMPANY_ID, country, name }
 })
 
-/** The days of each list, once a day, in date order. */
 const DAYS: readonly { list: string; day: string }[] = SPECS.flatMap((spec) => [...new Set(spec.days)].sort().map((day) => ({ list: spec.name, day })))
 
 /** Every holiday list id the seed writes on a fresh database, by name. */

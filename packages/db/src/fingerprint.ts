@@ -93,12 +93,10 @@ export async function fingerprintDatabase(url: string): Promise<string> {
   }
 }
 
-/** The fingerprint's lines as a file: the header, then one object per line. */
 export function fingerprintText(lines: readonly string[]): string {
   return `${[...HEADER, ...lines].join("\n")}\n`
 }
 
-/** The object lines of a fingerprint's text, comments and blank lines dropped. */
 export function fingerprintLines(text: string): string[] {
   return text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"))
 }
@@ -126,7 +124,6 @@ export function compareFingerprints(expected: string, actual: string): Fingerpri
   return { missing: beyond(want, have), unexpected: beyond(have, want) }
 }
 
-/** The committed fingerprint, as `--write` last wrote it. */
 export function committedFingerprint(): string {
   return readFileSync(FINGERPRINT_FILE, "utf8")
 }
@@ -181,7 +178,6 @@ function spellAcl(items: readonly AclItem[], role: (name: string) => string, { g
 async function readFingerprint(sql: Sql): Promise<string[]> {
   const schemas = textList(sql, OWNED_SCHEMAS)
   const roles = textList(sql, FINGERPRINT_ROLES)
-  // An ACL column exploded where it is read, a default (null) one expanded first.
   const exploded = (acl: Fragment, type: Fragment, owner: Fragment): Fragment => sql`(
     select coalesce(json_agg(json_build_object(
       'grantor', pg_get_userbyid(a.grantor),
@@ -189,7 +185,6 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
       'privilege', a.privilege_type,
       'grantable', a.is_grantable))::text, '[]')
     from aclexplode(coalesce(${acl}, acldefault(${type}, ${owner}))) a)`
-  // The relations of the three schemas, pg-boss's dated partitions left out.
   const ours = sql`
     select c.oid from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = any(${schemas}) and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
@@ -218,9 +213,6 @@ async function readFingerprint(sql: Sql): Promise<string[]> {
     lines.push(extension === undefined ? `extension ${name} missing` : `extension ${name} schema=${extension.schema}`)
   }
 
-  // The service roles: attributes (never a password or its validity, LOGIN
-  // only where no URL logs in as the role), settings, memberships in either
-  // direction.
   for (const { name, login } of FINGERPRINTED) {
     const [attributes] = await sql<{ spelled: string; login: boolean }[]>`
       select format('superuser=%s inherit=%s createrole=%s createdb=%s replication=%s bypassrls=%s connlimit=%s',

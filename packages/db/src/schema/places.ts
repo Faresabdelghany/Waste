@@ -84,7 +84,6 @@ export const depot = wms.table(
     oneOf(t.status),
     validGeometry(t.location),
     positive(t.vehicleCapacity),
-    // Two rules the table alone has, each named for itself: a provider's depot names its provider and no other does; the hours are both given or neither.
     check(tableObjectName(t.id.table, "provider_shape", "depot"), sql`(${t.ownership} = 'service-provider') = (${t.serviceProviderId} is not null)`),
     check(tableObjectName(t.id.table, "hours_shape", "depot"), sql`(${t.opensAt} is null) = (${t.closesAt} is null)`),
     tenantIndex(t, t.serviceProviderId),

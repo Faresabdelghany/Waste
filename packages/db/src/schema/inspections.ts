@@ -13,7 +13,7 @@
 //
 // `field_inspection_photo` is a ledger: one row per photo appended, by its
 // key in the private `proofs` bucket under the inspection's own prefix
-// (`inspectionPhotoKeyOf`, @waste/domain/inspections/rules), each key once.
+// (`inspectionPhotoKeyOf`, @waste/domain/storage-objects), each key once.
 // Its id is the photo id the key names.
 //
 // `right_sizing_proposal` (M23b, row 26.5) is a subscription's container a
@@ -96,7 +96,6 @@ export const fieldInspectionPhoto = wms.table(
     ...recorded,
     inspectionId: uuid().notNull(),
     objectKey: text().notNull(),
-    /** The account that appended it. */
     recordedBy: uuid().notNull(),
   },
   (t) => [

@@ -191,7 +191,6 @@ export const priceListRow = wms.table(
     tenantReference(t, [t.containerTypeId], containerType),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     tenantReference(t, [t.customerId], customer),
-    // The row this one was indexed from is a row of the same project, through the table's own project key, as a provider price's is.
     projectReference(t, [t.indexedFromId], t as ProjectTable),
     projectKey(t),
     validPeriod(t),
@@ -344,7 +343,6 @@ export const serviceProviderPrice = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.serviceAreaAssignmentId], serviceAreaAssignment),
     projectReference(t, [t.productId], product),
-    // The row this one was indexed from is a row of the same project, through the table's own project key.
     projectReference(t, [t.indexedFromId], t as ProjectTable),
     projectKey(t),
     validPeriod(t),
@@ -438,15 +436,12 @@ export const billableEvent = wms.table(
     projectReference(t, [t.productId], product),
     projectReference(t, [t.priceListRowId], priceListRow),
     projectReference(t, [t.routeId], route),
-    // The pickup of the route the event names: the key carries the route on both sides, the proof's and the ticket's shape.
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.ticketId], ticket),
     projectReference(t, [t.visitId], siteVisit),
     projectReference(t, [t.unloadId], unload),
     projectReference(t, [t.scaleTicketLineId], scaleTicketLine),
-    // The hire's placement, through its container: the placement's project key, the stock ledger's reference.
     projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
-    // The reversed event is one of the same project, through the table's own project key.
     projectReference(t, [t.reversesEventId], t as ProjectTable),
     tenantReference(t, [t.createdBy], userAccount),
     tenantReference(t, [t.cancelledBy], userAccount),
@@ -457,9 +452,7 @@ export const billableEvent = wms.table(
     oneOf(t.cancelReason),
     positive(t.quantity),
     positive(t.weightKg),
-    // A priced event names what it was under; a blocked one may leave them null where the reason says why.
     check(tableObjectName(t.id.table, "priced_references", "billableEvent"), sql`${t.blockReason} is not null or (${t.agreementId} is not null and ${t.productId} is not null)`),
-    // Blocked is unpriced and priced is unblocked, and the five price columns are null together or none.
     check(
       tableObjectName(t.id.table, "priced_shape", "billableEvent"),
       sql`(${t.blockReason} is null) = (${t.netMinor} is not null) and (${t.netMinor} is null) = (${t.unitPriceMinor} is null) and (${t.netMinor} is null) = (${t.vatPercent} is null) and (${t.netMinor} is null) = (${t.vatMinor} is null) and (${t.netMinor} is null) = (${t.currency} is null)`,
@@ -468,9 +461,7 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "amounts_shape", "billableEvent"), sql`${t.netMinor} is null or ${t.netMinor} = (case ${t.kind} when 'reversal' then -1 else 1 end) * ${t.unitPriceMinor}::bigint * ${t.quantity}`),
     // The VAT is the domain's vatOf as SQL: half away from zero, per line. The net is cast first, so the product is numeric and never an `integer` that overflows (#314).
     check(tableObjectName(t.id.table, "vat_shape", "billableEvent"), sql`${t.vatMinor} is null or ${t.vatMinor} = round(${t.netMinor}::numeric * ${t.vatPercent} / 100.0)`),
-    // The winning row is traceable unless the event is blocked, a person's, or a reversal.
     check(tableObjectName(t.id.table, "row_shape", "billableEvent"), sql`${t.priceListRowId} is not null or ${t.blockReason} is not null or ${t.kind} in ('manual', 'reversal')`),
-    // A manual event with a person's price and no row carries the reason, and nothing else does.
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
@@ -641,7 +632,6 @@ export const invoice = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.customerId], customer),
     projectReference(t, [t.billingRunId], billingRun),
-    // The invoice a credit note corrects is one of the same project, through the table's own project key.
     projectReference(t, [t.creditsInvoiceId], t as ProjectTable),
     tenantReference(t, [t.issuedBy], userAccount),
     tenantUnique(t, t.number),
@@ -649,9 +639,7 @@ export const invoice = wms.table(
     oneOf(t.kind),
     oneOf(t.creditReason),
     check(tableObjectName(t.id.table, "due_shape", "invoice"), sql`${t.dueOn} >= ${t.issuedOn}`),
-    // An invoice bills a period and a credit note none; the two bounds come together.
     check(tableObjectName(t.id.table, "period_shape", "invoice"), sql`(${t.periodFrom} is null) = (${t.periodTo} is null) and (${t.kind} = 'invoice') = (${t.periodFrom} is not null)`),
-    // An invoice comes from a run and a credit note corrects an invoice for a reason.
     check(
       tableObjectName(t.id.table, "kind_shape", "invoice"),
       sql`(${t.kind} = 'invoice') = (${t.billingRunId} is not null) and (${t.kind} = 'credit-note') = (${t.creditsInvoiceId} is not null) and (${t.kind} = 'credit-note') = (${t.creditReason} is not null)`,
@@ -700,14 +688,12 @@ export const invoiceLine = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.invoiceId], invoice),
     projectReference(t, [t.billableEventId], billableEvent),
-    // The line a credit line credits is one of the same project, through the table's own project key.
     projectReference(t, [t.creditsLineId], t as ProjectTable),
     projectReference(t, [t.productId], product),
     tenantUnique(t, t.invoiceId, t.position),
     projectKey(t),
     positive(t.position),
     positive(t.quantity),
-    // A line charges for an event or credits a line, never both and never neither.
     exactlyOne(t, "source", [t.billableEventId, t.creditsLineId]),
     // The net's magnitude is the unit price times the quantity, both sides a bigint so neither overflows at the column's bound (#314); a credit line is never positive, and an event's line may be negative, since a reversal is one.
     check(tableObjectName(t.id.table, "amounts_shape", "invoiceLine"), sql`abs(${t.netMinor}::bigint) = ${t.unitPriceMinor}::bigint * ${t.quantity} and (${t.creditsLineId} is null or ${t.netMinor} <= 0)`),
@@ -748,7 +734,6 @@ export const settlement = wms.table(
     projectKey(t),
     validPeriod(t),
     oneOf(t.status),
-    // Which stamps each status carries: open none, calculated the first, closed both and the person.
     check(
       tableObjectName(t.id.table, "stamps_shape", "settlement"),
       sql`case ${t.status} when 'open' then ${t.calculatedAt} is null and ${t.closedAt} is null and ${t.closedBy} is null when 'calculated' then ${t.calculatedAt} is not null and ${t.closedAt} is null and ${t.closedBy} is null when 'closed' then ${t.calculatedAt} is not null and ${t.closedAt} is not null and ${t.closedBy} is not null else false end`,
@@ -786,7 +771,6 @@ export const settlementLine = wms.table(
     projectReference(t, [t.serviceProviderPriceId], serviceProviderPrice),
     tenantUnique(t, t.settlementId, t.billableEventId),
     positive(t.quantity),
-    // A priced line has its price and its amount, an unpriced one neither.
     check(tableObjectName(t.id.table, "priced_shape", "settlementLine"), sql`(${t.serviceProviderPriceId} is null) = (${t.netMinor} is null) and (${t.netMinor} is null) = (${t.unitPriceMinor} is null)`),
     tenantIndex(t, t.billableEventId),
     tenantIndex(t, t.serviceProviderPriceId),
@@ -821,7 +805,6 @@ export const settlementEvent = wms.table(
     tenantReference(t, [t.recordedBy], userAccount),
     oneOf(t.kind),
     oneOf(t.status),
-    // Reopening requires a reason, and nothing else carries one.
     check(tableObjectName(t.id.table, "reason_shape", "settlementEvent"), sql`(${t.kind} = 'reopened') = (${t.reason} is not null)`),
     // A settlement's history in recording order: leads with the settlement, so it is the reference's index too.
     index(tableObjectName(t.companyId.table, "settlement_id_idx", "settlementEvent")).on(t.companyId, t.settlementId, t.id),
@@ -883,7 +866,6 @@ export const ticketKindProduct = wms.table(
     projectReference(t, [t.productId], product),
     tenantReference(t, [t.ticketTypeId], ticketType),
     oneOf(t.ticketKind),
-    // A kind or a type is charged at one product in a project.
     tenantUnique(t, t.projectId, t.ticketKind, t.ticketTypeId).nullsNotDistinct(),
     exactlyOne(t, "kind_or_type", [t.ticketKind, t.ticketTypeId]),
     tenantIndex(t, t.productId),
@@ -931,7 +913,6 @@ export const payment = wms.table(
     projectKey(t),
     oneOf(t.source),
     check(tableObjectName(t.id.table, "amount_positive", "payment"), sql`${t.amountMinor} > 0`),
-    // A bank line carries its key, and only a bank line does.
     check(tableObjectName(t.id.table, "bank_line_shape", "payment"), sql`(${t.source} = 'bank-file') = (${t.bankLineKey} is not null)`),
     // A statement imported again adds nothing: one payment per line of the company's statements.
     uniqueIndex(tableObjectName(t.companyId.table, "bank_line_key_idx", "payment")).on(t.companyId, t.bankLineKey).where(sql`${t.bankLineKey} is not null`),
@@ -969,9 +950,7 @@ export const paymentAllocation = wms.table(
     projectReference(t, [t.reversesAllocationId], t as ProjectTable),
     tenantReference(t, [t.recordedBy], userAccount),
     projectKey(t),
-    // Applied money is positive and only a reversal is negative, and a reversal reverses another row.
     check(tableObjectName(t.id.table, "amount_shape", "paymentAllocation"), sql`${t.amountMinor} <> 0 and (${t.amountMinor} < 0) = (${t.reversesAllocationId} is not null) and ${t.reversesAllocationId} <> ${t.id}`),
-    // An allocation is reversed once.
     uniqueIndex(tableObjectName(t.companyId.table, "reverses_allocation_id_idx", "paymentAllocation")).on(t.companyId, t.reversesAllocationId).where(sql`${t.reversesAllocationId} is not null`),
     tenantIndex(t, t.paymentId),
     tenantIndex(t, t.invoiceId),

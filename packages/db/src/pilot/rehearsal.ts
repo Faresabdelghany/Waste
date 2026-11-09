@@ -5,18 +5,6 @@
 // database as its smoke test (scripts/pilot/rehearse.ts, with the barrier on
 // the real app roles), and pilot-rehearsal.test.ts runs it on a fresh
 // database of its own, the barrier on throwaway roles.
-//
-// In order: the journal and the fingerprint captured; the restore's back-up
-// phase, to a throwaway age key, and its archive put where the workflow
-// downloads a source run's, with the choice that names it; the three
-// application schemas dropped, as a lost database would have them; the
-// decrypt phase; the record phase, which verifies the backup against its
-// manifest, this database and the source run and records the logins, the
-// record then stored and read back as the workflow does; the apply phase,
-// which restores behind the barrier and proves the result by the journal
-// check and the backup's own fingerprint; and the journal's rows and the
-// fingerprint compared with the captured ones. Anything that differs throws,
-// naming it.
 import { spawnSync } from "node:child_process"
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"

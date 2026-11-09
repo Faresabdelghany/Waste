@@ -1,8 +1,7 @@
 // Planning's demo rows (Issue #156, decided in #143): what `pnpm db:seed`
 // writes of the pilot's planning configuration, copied from the web
-// prototype's fixtures (`apps/web/lib/data/business-modules.ts`: the `plan`
-// workspace's schemes and calendars, the `configure` workspace's areas)
-// under registry.ts's discipline — literal copies, fixed ids keyed by the
+// prototype's fixtures (the `plan` workspace's schemes and calendars, the
+// `configure` workspace's areas) under registry.ts's discipline — literal copies, fixed ids keyed by the
 // prototype's record ids, and every reading stated here. Configuration only:
 // no Route, Pickup or generation run is written; generating is the running
 // Pilot's (#143).
@@ -103,8 +102,6 @@ const COMPANY_ID = DEMO_COMPANY_ID
 
 type PlanningProject = keyof typeof DEMO_PROJECT_IDS
 
-/* ---------------------------------- areas ---------------------------------- */
-
 type AreaSpec = { key: string; project: PlanningProject; code: string; name: string; purpose: PlanningAreaPurpose }
 const AREAS: readonly AreaSpec[] = [
   { key: "area-indreby", project: "copenhagen", code: "OP-CEN-01", name: "Indre By Operations", purpose: "route-planning" },
@@ -114,7 +111,6 @@ const AREAS: readonly AreaSpec[] = [
   { key: "area-cairo-nasr", project: "cairo", code: "OP-CAI-01", name: "Nasr City Operations", purpose: "route-planning" },
 ]
 
-/** The day every boundary is in force from. */
 const BOUNDARIES_FROM = "2026-01-01"
 
 const round6 = (value: number): number => Math.round(value * 1e6) / 1e6
@@ -139,8 +135,6 @@ function boundarySources(): Record<string, MapPlaced[]> {
 /** The containers each area's boundary is drawn around, by area. */
 export const PLANNING_BOUNDARY_SOURCES: Readonly<Record<string, readonly MapPlaced[]>> = boundarySources()
 
-/* -------------------------------- calendars -------------------------------- */
-
 export type CalendarSpec = {
   key: string
   project: PlanningProject
@@ -149,7 +143,6 @@ export type CalendarSpec = {
   /** The fixture's last day, inclusive. */
   validThrough: string
 }
-/** The calendars, one per project and year. */
 export const CALENDARS: readonly CalendarSpec[] = [
   {
     key: "calendar-central",
@@ -175,8 +168,6 @@ export const CALENDARS: readonly CalendarSpec[] = [
     validThrough: "2027-12-31",
   },
 ]
-
-/* ----------------------------- schemes and groups ----------------------------- */
 
 /** The prototype's implicit group of a scheme, as a row: its stop source, its rule or its picks, and its planned assignment. */
 type GroupSpec = {
@@ -245,8 +236,6 @@ const SCHEMES: readonly SchemeSpec[] = [
 /** A scheme's implicit group, keyed as the prototype keys it: `scheme-central-a:default`. */
 const groupKeyOf = (scheme: SchemeSpec): string => `${scheme.key}:default`
 
-/* --------------------------------- rows ----------------------------------- */
-
 /** Every Planning id, keyed by the prototype's record id. */
 export type PlanningIds = {
   planningAreas: Readonly<Record<string, string>>
@@ -272,7 +261,6 @@ type PlanningRows = {
   collectionGroupContainers: (typeof collectionGroupContainer.$inferInsert)[]
 }
 
-/** How many rows the Planning seed holds per table. */
 export type PlanningCounts = { [K in keyof PlanningRows]: number }
 
 function build(): { ids: PlanningIds; rows: PlanningRows } {
@@ -290,7 +278,6 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
   const pickKey = (entry: (typeof picks)[number]): string => `${entry.group}:${entry.container}`
   const pickIds = keyed(picks, pickKey, "collectionGroupContainer")
   const groupId = (key: string) => required(groupIds, key, "collection group")
-  /** The id keyed `key`, or null where the spec names none. */
   const optional = (ids: Readonly<Record<string, string>>, key: string | null, what: string) => (key === null ? null : required(ids, key, what))
 
   return {
@@ -384,7 +371,6 @@ function build(): { ids: PlanningIds; rows: PlanningRows } {
 
 const built = build()
 
-/** Every Planning id the seed writes. */
 export const PLANNING_IDS: PlanningIds = built.ids
 
 const PLANNING_ROWS: Readonly<PlanningRows> = built.rows

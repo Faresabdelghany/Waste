@@ -104,7 +104,6 @@ export const stockMovement = wms.table(
     placementId: uuid(),
     /** When it happened, on the person's word; evidence, never the order the chain is folded in. */
     occurredAt: timestamp({ withTimezone: true }).notNull(),
-    /** The caller's account. */
     recordedBy: uuid().notNull(),
     /** Why, in the person's words; a decommission's note beside its reason. */
     reason: text(),
@@ -121,17 +120,14 @@ export const stockMovement = wms.table(
     projectReference(t, [t.containerId], container),
     projectReference(t, [t.fromWarehouseId], warehouse),
     projectReference(t, [t.toWarehouseId], warehouse),
-    // The placement of this container and no other: the key carries the container on both sides.
     projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     tenantReference(t, [t.recordedBy], userAccount),
     tenantReference(t, [t.decommissionReasonId], decommissionReason),
-    // The ledger's own key, for the pointer at the row an adjustment corrects: the same table on both sides.
     tenantReference(t, [t.correctsMovementId], t),
     tenantKey(t),
     oneOf(t.kind),
     oneOf(t.fromKind),
     oneOf(t.toKind),
-    // A warehouse is named exactly when the side is a warehouse or maintenance at one; a placement exactly when a side is service.
     check(tableObjectName(t.id.table, "from_shape", "stockMovement"), sql`(${t.fromKind} in ('warehouse', 'maintenance')) = (${t.fromWarehouseId} is not null)`),
     check(tableObjectName(t.id.table, "to_shape", "stockMovement"), sql`(${t.toKind} in ('warehouse', 'maintenance')) = (${t.toWarehouseId} is not null)`),
     check(tableObjectName(t.id.table, "placement_shape", "stockMovement"), sql`(${t.fromKind} = 'service' or ${t.toKind} = 'service') = (${t.placementId} is not null)`),

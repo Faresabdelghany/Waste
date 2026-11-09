@@ -42,7 +42,6 @@ const PERIOD_STARTS = ", daterange("
 /** The range the window helper writes, closing the gist list: a window constraint carries it whatever its key and predicate. */
 const WINDOW_INFIX = `${WINDOW_RANGE})`
 
-/** One spelling for comparison: whitespace runs collapsed, ends trimmed. */
 export const normalised = (statement: string): string => statement.replace(/\s+/g, " ").trim()
 
 /** The statements of a migration file as the migrator runs them, normalised, comments dropped, empty pieces gone. */

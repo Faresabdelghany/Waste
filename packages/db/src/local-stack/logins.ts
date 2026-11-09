@@ -141,7 +141,6 @@ export async function ensureLogin(plan: LocalLoginsPlan, email: string, doFetch:
   throw new Error(`Auth at ${plan.apiUrl} refused the Login for ${email}: HTTP ${response.status}${typeof said === "string" ? ` — ${said}` : ""}`)
 }
 
-/** Every Login of the plan, one after the other, and which were new. */
 export async function ensureLogins(plan: LocalLoginsPlan, doFetch: typeof fetch = fetch): Promise<LocalLoginsReport> {
   const report: LocalLoginsReport = { created: [], existing: [] }
   for (const email of plan.emails) {

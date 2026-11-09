@@ -76,7 +76,6 @@ export const accessCredential = wms.table(
     validPeriod(t),
     oneOf(t.kind),
     check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ ${sql.raw(`'${CREDENTIAL_VALUE_PATTERN}'`)}`),
-    // A business's Customer with its Agreement, or a household's Property: exactly one holder.
     check(
       tableObjectName(t.id.table, "holder_shape", "accessCredential"),
       sql`case when ${t.propertyId} is not null then ${t.customerId} is null and ${t.agreementId} is null else ${t.customerId} is not null and ${t.agreementId} is not null end`,
@@ -148,13 +147,9 @@ export const siteVisit = wms.table(
     oneOf(t.identification),
     oneOf(t.outcome),
     oneOf(t.refusalReason),
-    // A refused visit carries its reason, and an admitted one none.
     check(tableObjectName(t.id.table, "outcome_shape", "siteVisit"), sql`(${t.outcome} = 'refused') = (${t.refusalReason} is not null)`),
-    // A plate or a card is read as a value; a Property found by its address is none.
     check(tableObjectName(t.id.table, "identifier_shape", "siteVisit"), sql`(${t.identification} = 'property') = (${t.identifierValue} is null)`),
-    // The attendant's check-in names its person and no gate id; the gate's read no person.
     check(tableObjectName(t.id.table, "source_shape", "siteVisit"), sql`case ${t.source} when 'staff' then ${t.recordedBy} is not null and ${t.externalId} is null else ${t.recordedBy} is null end`),
-    // A household's Property or a business's Customer, never both, and a business's always with its Agreement; an admitted visit reaches someone.
     check(
       tableObjectName(t.id.table, "holder_shape", "siteVisit"),
       sql`not (${t.propertyId} is not null and ${t.customerId} is not null) and (${t.customerId} is null or ${t.agreementId} is not null) and (${t.outcome} <> 'admitted' or ${t.agreementId} is not null)`,

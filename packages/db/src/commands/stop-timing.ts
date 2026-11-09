@@ -50,10 +50,8 @@ export function shiftOf(row: { shiftStart: string | null; shiftEnd: string | nul
   }
 }
 
-/** Two time columns as a window, or null where they hold none. */
 const windowOf = (start: string | null, end: string | null): TimeWindow | null => (start === null || end === null ? null : { from: start.slice(0, 5), to: end.slice(0, 5) })
 
-/** The columns a driver's shift is read from. */
 export const shiftColumns = {
   shiftStart: driver.shiftStart,
   shiftEnd: driver.shiftEnd,

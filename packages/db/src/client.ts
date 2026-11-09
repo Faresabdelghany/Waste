@@ -30,7 +30,6 @@ export type Database = {
 }
 
 export type ClientOptions = {
-  /** Pool size. */
   max?: number
   /** Where Postgres NOTICE messages go; dropped by default so `CREATE ... IF NOT EXISTS` stays quiet. */
   onnotice?: (notice: postgres.Notice) => void

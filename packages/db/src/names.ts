@@ -58,12 +58,10 @@ export function columnsByName(table: PgTable): Map<string, PgColumn> {
   return new Map(getTableConfig(table).columns.map((column) => [casing.getColumnCasing(column), column]))
 }
 
-/** The table's column with this database name, if it has one. */
 export function columnNamed(table: PgTable, name: string): PgColumn | undefined {
   return columnsByName(table).get(name)
 }
 
-/** `<table>_<suffix>`, checked against the identifier limit. */
 export function tableObjectName(table: Table, suffix: string, helper: string): string {
   return checkedIdentifier(`${getTableName(table)}_${suffix}`, helper)
 }

@@ -10,7 +10,7 @@
 // name, and set once. Planning's `STOP_MATCH_VEHICLE_TYPES` token — "a working
 // taxonomy until Resources" — retired with it in #101's slice 2 (the tuple in
 // @waste/domain/planning/vocabulary, the contracts' `StopMatchVehicleType` and
-// the lockstep test, all gone; the web keeps route-schemes/matching.ts's
+// the lockstep test, all gone; the web keeps @waste/fixtures/taxonomy's
 // display tuple until the adapter maps it): a Stop Matching Rule names a row
 // here (`collection_group.rule_vehicle_type_id`, migration 0007).
 //

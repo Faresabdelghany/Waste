@@ -30,7 +30,6 @@ import { planPilotLogins } from "./grant-logins"
 import { databaseIdentity } from "./identity"
 import { BACKUP_ARTIFACT, LOGIN_STATE_ARTIFACT, readSourceRun, Refusal, theOneFile, type Context, type Phase } from "./phase"
 
-/** One owner connection for a phase's own statements, closed whatever happens. */
 async function asOwner<T>(url: string, work: (sql: Sql) => Promise<T>): Promise<T> {
   const { sql, close } = createDb(url, { max: 1 })
   try {

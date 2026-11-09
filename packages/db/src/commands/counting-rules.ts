@@ -33,7 +33,6 @@ export function countedStops(companyId: string, terms: CountingTerms): SQL {
   ) as SQL
 }
 
-/** How many stops a rule counts at one property over one period. */
 export async function countedAt(tx: Tx, companyId: string, terms: CountingTerms, propertyId: string, period: CountingWindow): Promise<number> {
   const [row] = await tx
     .select({ counted: count() })

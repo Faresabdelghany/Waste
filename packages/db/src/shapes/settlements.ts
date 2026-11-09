@@ -97,7 +97,6 @@ export const lineOf = (row: LineRow): SettlementLine => ({
   ...stampsOf(row),
 })
 
-/** One settlement's lines, by event. */
 export async function linesOf(tx: Tx, companyId: string, settlementId: string): Promise<LineRow[]> {
   return await tx
     .select(lineColumns)

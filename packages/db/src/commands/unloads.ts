@@ -45,7 +45,6 @@ export type UnloadDraft = Pick<Columns, "projectId" | "routeId" | "unloadingStat
   id?: string
 } & Partial<Pick<Columns, "sessionId" | "deviceId" | "location" | "objectKey">>
 
-/** Appends one unload; answers the row. */
 export async function recordUnload(tx: Tx, companyId: string, draft: UnloadDraft): Promise<typeof unload.$inferSelect> {
   const [row] = await tx
     .insert(unload)

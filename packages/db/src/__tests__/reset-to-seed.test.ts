@@ -81,7 +81,6 @@ const KEPT = new Set(["company", "project", "service_provider", "role", "role_gr
 /** The seed's hand-spelled id bucket (seed/ids.ts): a row outside it was minted by the database. */
 const SEEDED_ID = /^01a0d2a4-a280-7/
 
-/** Every stamp in a snapshot. */
 function instantsIn(snapshot: Snapshot): Set<string> {
   const found = new Set<string>()
   for (const rows of Object.values(snapshot)) for (const row of rows) for (const stamp of STAMPS) if (typeof row[stamp] === "string") found.add(row[stamp] as string)
@@ -138,7 +137,6 @@ async function operate(tx: Tx, ground: Ground): Promise<void> {
   const { companyId, projectId, accountId: by } = ground
   const scoped = { companyId, projectId }
   const at = new Date("2026-10-05T06:00:00Z")
-  // Planning.
   const [area] = await tx.insert(planningArea).values({ ...scoped, code: "TESTER-AREA", name: "A tester's area", purpose: "route-planning" }).returning({ id: planningArea.id })
   const [scheme] = await tx
     .insert(routeScheme)

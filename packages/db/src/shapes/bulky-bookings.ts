@@ -93,7 +93,6 @@ export async function bookingAnswered(tx: Tx, companyId: string, row: BookingRow
   return bookingOf(row, (await bulkyItemsOf(tx, companyId, [row.id])).get(row.id) ?? [])
 }
 
-/** Each booking's items in the order listed. */
 export async function bulkyItemsOf(tx: Tx, companyId: string, bookingIds: readonly string[]): Promise<Map<string, { description: string; quantity: number }[]>> {
   const items = new Map<string, { description: string; quantity: number }[]>()
   if (bookingIds.length === 0) return items

@@ -147,7 +147,6 @@ export const serviceProviderAccess = wms.table(
     serviceProviderId: uuid().notNull(),
   },
   (t) => [
-    // The account's own provider, or nothing: the key names the provider column on both sides.
     tenantReference(t, [t.userAccountId, t.serviceProviderId], userAccount, [userAccount.id, userAccount.serviceProviderId]),
     tenantUnique(t, t.userAccountId, t.serviceProviderId),
   ],

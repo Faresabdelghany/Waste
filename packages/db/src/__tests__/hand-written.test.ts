@@ -192,7 +192,7 @@ describe("excludeOverlappingWindow", () => {
   })
 
   test("refuses a constraint name Postgres would truncate", () => {
-    // 43 bytes: room for `_window` (50) and none for `_vehicle_no_overlap` (62)? 43 + 19 = 62 fits; 45 does not.
+    // 45 bytes: room for `_window` (52), none for `_vehicle_no_overlap` (64).
     const name = `specimen_${"o".repeat(36)}`
     const long = wms.table(name, { ...id, ...tenant, ...window, vehicleId: uuid().notNull() }, (columns) => [orderedWindow(columns)])
     assert.throws(() => excludeOverlappingWindow(long, [long.vehicleId]), new RegExp(`excludeOverlappingWindow: "${name}_vehicle_no_overlap" is 64 bytes; Postgres would truncate it to 63 silently`))

@@ -24,7 +24,6 @@ export function libpqEnvironment(url: string, applicationName = "waste-pilot-dat
   return environment
 }
 
-/** `export NAME='value'` lines a shell can evaluate, every value single-quoted. */
 export function shellExports(environment: Record<string, string>): string {
   return Object.entries(environment)
     .map(([name, value]) => `export ${name}='${value.replaceAll("'", `'\\''`)}'`)

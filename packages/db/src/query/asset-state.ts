@@ -49,7 +49,6 @@ export const ASSET_STATE_COLUMNS = {
   occurredAt: stockMovement.occurredAt,
 }
 
-/** The alias the lookup joins under. */
 export const ASSET_STATE = "asset_state"
 
 /**

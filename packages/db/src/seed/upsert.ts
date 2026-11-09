@@ -108,7 +108,6 @@ export async function upsertOwned<T extends SeededTable>(tx: Tx, table: T, rows:
 /** One member of a set as its compared columns say it, the way two members are told apart: a null and an absent value are one. */
 const memberKey = (values: readonly unknown[]): string => JSON.stringify(values.map((value) => value ?? null))
 
-/** Two sets as their members' keys: the same members, as often each. */
 const sameMembers = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n")
 
 /** The rows of a set, and what tells two of its members apart. */

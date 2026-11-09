@@ -82,10 +82,8 @@ const ISO_DOW: Readonly<Record<string, number>> = { monday: 1, tuesday: 2, wedne
 /** What an edit releases of the held routes it reaches: every one, those on the weekdays it takes away, or none. */
 export type HoldRelease = { kind: "all" } | { kind: "days"; left: readonly string[] } | { kind: "none" }
 
-/** The days `before` holds that `after` does not: the collections an edit of days takes away. */
 const daysTakenAway = (before: readonly string[], after: readonly string[]): string[] => before.filter((day) => !after.includes(day))
 
-/** A change of days as a release: the held routes on a weekday taken away, or none where the days only grew. */
 const daysRelease = (before: readonly string[], after: readonly string[]): HoldRelease => {
   const left = daysTakenAway(before, after)
   return left.length === 0 ? { kind: "none" } : { kind: "days", left }

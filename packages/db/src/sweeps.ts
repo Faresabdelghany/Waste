@@ -25,11 +25,6 @@ export async function projectsWithToday(worker: Database, at: Date, projectId: s
   return rows.map((row) => ({ ...row, today: () => dayInTimezone(at, row.timezone) }))
 }
 
-/**
- * Runs `work` over each item in turn, and answers the items whose work
- * threw, each told to `failed` as it failed; the items after a failure still
- * run.
- */
 export async function sweepEach<T>(items: Iterable<T>, work: (item: T) => Promise<void>, failed: (item: T, error: unknown) => void): Promise<T[]> {
   const failures: T[] = []
   for (const item of items) {

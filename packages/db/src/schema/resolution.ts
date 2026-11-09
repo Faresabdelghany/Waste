@@ -216,7 +216,6 @@ export const ticketType = wms.table(
     unique(tableObjectName(t.id.table, "kind_key", "ticketType")).on(t.companyId, t.id, t.kind),
     oneOf(t.kind),
     oneOf(t.status),
-    // One default type per kind.
     uniqueIndex(tableObjectName(t.id.table, "default_kind_key", "ticketType")).on(t.companyId, t.kind).where(sql`${t.isDefault}`),
     // Every opener of a kind reaches its default type, so a default is offered.
     check(tableObjectName(t.id.table, "default_shape", "ticketType"), sql`not ${t.isDefault} or ${t.status} = 'active'`),
@@ -259,7 +258,6 @@ export const ticketTypeField = wms.table(
     lowercase(t.key),
     oneOf(t.input),
     oneOf(t.requirement),
-    // A choice field offers choices, and no other does.
     check(tableObjectName(t.id.table, "choices_shape", "ticketTypeField"), sql`(${t.input} = 'choice') = (cardinality(${t.choices}) > 0)`),
   ],
 )
@@ -354,9 +352,7 @@ export const ticketTypeAction = wms.table(
     oneOf(t.command),
     oneOf(t.resolution),
     oneOf(t.recipient),
-    // What each kind carries and forbids: one CASE built from ACTION_PARAMETERS, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "ticketTypeAction"), sql`case ${t.kind} ${sql.join(TICKET_ACTION_KINDS.map((kind) => actionKindClause(kind, t)), sql` `)} else false end`),
-    // A vehicle with its project, or neither; and the days the domain allows.
     check(tableObjectName(t.id.table, "vehicle_shape", "ticketTypeAction"), sql`(${t.vehicleId} is null) = (${t.vehicleProjectId} is null)`),
     check(tableObjectName(t.id.table, "days_ahead_range", "ticketTypeAction"), sql`${t.daysAhead} between 0 and ${sql.raw(String(PLAN_DAYS_AHEAD_MAX))}`),
     tenantIndex(t, t.teamId),
@@ -490,11 +486,9 @@ export const ticket = wms.table(
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.assigneeUserAccountId], userAccount),
     tenantReference(t, [t.teamId], team),
-    // The type is one of its kind: the key carries the kind on both sides.
     tenantReference(t, [t.ticketTypeId, t.kind], ticketType, [ticketType.id, ticketType.kind]),
     tenantReference(t, [t.createdBy], userAccount),
     projectReference(t, [t.routeId], route),
-    // The pickup of the route the ticket names: the key carries the route on both sides.
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.containerId], container),
     projectReference(t, [t.propertyId], property),
@@ -502,7 +496,6 @@ export const ticket = wms.table(
     projectReference(t, [t.agreementId], agreement),
     projectReference(t, [t.driverId], driver),
     tenantReference(t, [t.customerId], customer),
-    // The parent is a ticket of the same project, through this table's own project key.
     projectReference(t, [t.parentTicketId], t as ProjectTable),
     projectReference(t, [t.recollectionRouteId], route),
     // The re-collection's stop is a stop of the route it rides on (#111): the key carries the route on both sides, as the ticket's own pickup's does.
@@ -518,13 +511,11 @@ export const ticket = wms.table(
     oneOf(t.priority),
     oneOf(t.source),
     oneOf(t.resolution),
-    // A ticket is a person's or an event's.
     check(tableObjectName(t.id.table, "origin_shape", "ticket"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "ticket"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
     // A ticket is not its own parent; a null passes.
     check(tableObjectName(t.id.table, "parent_shape", "ticket"), sql`${t.parentTicketId} <> ${t.id}`),
-    // A completed ticket ended in something, and no other ticket did.
     check(tableObjectName(t.id.table, "resolution_shape", "ticket"), sql`(${t.status} = 'completed') = (${t.resolution} is not null)`),
     // The route a re-collection rides on goes with the resolution that says one was arranged. `is not distinct from`, because `null = 'recollected'` is null and a null check passes: an open ticket has no resolution and may still not carry the route.
     check(tableObjectName(t.id.table, "recollection_shape", "ticket"), sql`${t.recollectionRouteId} is null or ${t.resolution} is not distinct from 'recollected'`),
@@ -534,7 +525,6 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "charge_shape", "ticket"), sql`${t.chargeProductId} is null or (${t.resolution} is not null and ${t.resolution} in (${sql.raw(BILLABLE_RESOLUTIONS.map(literal).join(", "))}))`),
     // The booked stop and its route together or not at all: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "booked_shape", "ticket"), sql`(${t.bookedRouteId} is null) = (${t.bookedPickupId} is null)`),
-    // A counting rule's ticket names the rule, the period and the count together, and the property it counted at.
     check(
       tableObjectName(t.id.table, "counting_shape", "ticket"),
       sql`(${t.countingRuleId} is null) = (${t.countedFrom} is null) and (${t.countingRuleId} is null) = (${t.countedTo} is null) and (${t.countingRuleId} is null) = (${t.counted} is null) and (${t.countingRuleId} is null or (${t.propertyId} is not null and ${t.countedTo} > ${t.countedFrom}))`,
@@ -542,11 +532,8 @@ export const ticket = wms.table(
     positive(t.counted),
     // One ticket per rule, property and period; the rule's reference index too.
     uniqueIndex(tableObjectName(t.id.table, "counting_key", "ticket")).on(t.companyId, t.countingRuleId, t.propertyId, t.countedFrom, t.countedTo).where(sql`${t.countingRuleId} is not null`),
-    // A stop answers one ticket.
     uniqueIndex(tableObjectName(t.id.table, "booked_pickup_id_key", "ticket")).on(t.companyId, t.bookedPickupId).where(sql`${t.bookedPickupId} is not null`),
-    // The values are held by key, so they are an object.
     check(tableObjectName(t.id.table, "field_values_shape", "ticket"), sql`jsonb_typeof(${t.fieldValues}) = 'object'`),
-    // A closed ticket has the instant it closed, and an open one none.
     check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
     // The consumer's idempotency key: one ticket per outbox event, the rows with one in the index and only those.
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "ticket")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
@@ -624,7 +611,6 @@ export const ticketEvent = wms.table(
     oneOf(t.status),
     oneOf(t.resolution),
     oneOf(t.visibility),
-    // What each kind carries and forbids: one CASE built from TICKET_EVENT_SHAPES, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "ticketEvent"), sql`case ${t.kind} ${sql.join(TICKET_EVENT_KINDS.map((kind) => kindClause(kind, t)), sql` `)} else false end`),
     // One comment per outbox event: the consumer's second idempotency key.
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "ticketEvent")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
@@ -734,9 +720,7 @@ export const alert = wms.table(
       tableObjectName(t.id.table, "subject_shape", "alert"),
       sql`(${t.routeId} is not null)::int + (${t.vehicleId} is not null)::int + (${t.driverId} is not null)::int + (${t.containerId} is not null)::int + (${t.ticketId} is not null)::int + (${t.outboundLoadId} is not null)::int >= 1`,
     ),
-    // A rule's alert names its occurrence, and only a rule's does.
     check(tableObjectName(t.id.table, "rule_shape", "alert"), sql`(${t.rule} is null) = (${t.ruleKey} is null)`),
-    // The acknowledgement's instant and account come together or not at all; so do the resolution's, and its note only with them.
     check(tableObjectName(t.id.table, "acknowledged_shape", "alert"), sql`(${t.acknowledgedAt} is null) = (${t.acknowledgedBy} is null)`),
     // A rule's alert may be resolved by the worker, with no account.
     check(

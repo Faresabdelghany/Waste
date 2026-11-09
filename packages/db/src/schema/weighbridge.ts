@@ -81,7 +81,6 @@ export const weighbridgeTicket = wms.table(
     positive(t.netKg),
     // An Unload's own sentence: gross and tare together, and net gross less tare.
     check(tableObjectName(t.id.table, "weights_shape", "weighbridgeTicket"), sql`(${t.grossKg} is null) = (${t.tareKg} is null) and (${t.grossKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg})`),
-    // Matched is a route and its Unload in a project; dismissed says why; unmatched says what it waits for.
     check(
       tableObjectName(t.id.table, "status_shape", "weighbridgeTicket"),
       sql`(${t.status} = 'matched') = (${t.routeId} is not null and ${t.unloadId} is not null and ${t.projectId} is not null) and (${t.status} = 'dismissed') = (${t.dismissedNote} is not null) and (${t.status} <> 'unmatched' or ${t.unmatchedReason} is not null)`,

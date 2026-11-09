@@ -71,7 +71,6 @@ const declaring = (column: PgColumn): PgColumn => Object.values(getTableColumns(
 /** The values a text column declares, `text({ enum: TUPLE })`, which types its rows as the tuple's members; none for a column that declares no vocabulary. */
 const declaredValues = (column: PgColumn): readonly string[] => column.enumValues ?? []
 
-/** `CHECK (<column> in ('a', 'b', ...))` over the values the column declares, named `<table>_<column>_one_of`. */
 export function oneOf(column: PgColumn): CheckBuilder {
   const helper = "oneOf"
   const values = declaredValues(declaring(column))
@@ -82,7 +81,6 @@ export function oneOf(column: PgColumn): CheckBuilder {
   return check(tableObjectName(column.table, `${columnName(column)}_one_of`, helper), sql`${column} in (${sql.raw(values.map(literal).join(", "))})`)
 }
 
-/** `CHECK (<column> = lower(<column>))`, named `<table>_<column>_lowercase`. */
 export function lowercase(column: PgColumn): CheckBuilder {
   return check(tableObjectName(column.table, `${columnName(column)}_lowercase`, "lowercase"), sql`${column} = lower(${column})`)
 }
@@ -111,7 +109,6 @@ export function nonEmpty(column: PgColumn): CheckBuilder {
   return check(tableObjectName(column.table, `${columnName(column)}_non_empty`, "nonEmpty"), sql`cardinality(${column}) > 0`)
 }
 
-/** `CHECK ((a is not null)::int + (b is not null)::int ... = 1)`, named `<table>_<label>_exactly_one`. */
 export function exactlyOne(columns: TenantColumns, label: string, among: [PgColumn, PgColumn, ...PgColumn[]]): CheckBuilder {
   const helper = "exactlyOne"
   if (among.length < 2) {

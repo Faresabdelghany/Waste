@@ -35,7 +35,6 @@ export function backupTools(): string | undefined {
   return undefined
 }
 
-/** Runs one of the scripts, says its output, and answers its exit status. */
 function runScript(script: string, args: readonly string[], env: Record<string, string | undefined>, log: Log): number {
   const result = spawnSync("bash", [path.join(SCRIPTS, script), ...args], { env, encoding: "utf8" })
   if (result.error !== undefined) throw result.error

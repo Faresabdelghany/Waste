@@ -1,7 +1,6 @@
 // Resources' demo rows (Issue #156, decided in #143): what `pnpm db:seed`
 // writes of the fleet and its places, copied from the web prototype's
-// fixtures (`apps/web/lib/data/business-modules.ts`, the `resources`
-// workspace) under registry.ts's discipline — literal copies, fixed ids keyed
+// fixtures (the `resources` workspace) under registry.ts's discipline — literal copies, fixed ids keyed
 // by the prototype's record ids, and every reading stated here.
 //
 //   Vehicle types. Rebuilt from the demo tenant's compatibility table
@@ -89,8 +88,6 @@ import { replaceSets, upsertOwned } from "./upsert"
 
 const COMPANY_ID = DEMO_COMPANY_ID
 
-/* ------------------------------ vehicle types ------------------------------ */
-
 /** A vehicle type's key: its name as a slug, the shape the contracts hold keys to. */
 const slugOf = (name: string): string => name.toLowerCase().replaceAll(" ", "-")
 
@@ -99,7 +96,6 @@ const TRAILER_TYPE = "Closed trailer"
 
 const VEHICLE_TYPE_NAMES: readonly string[] = [...STOP_MATCH_VEHICLE_TYPES, TRAILER_TYPE]
 
-/** The container type a name of the table is, among the Registry's: its key and its id. */
 function containerTypeNamed(name: string): { key: string; id: string } {
   const key = CONTAINER_TYPE_KEYS[name]
   if (!key) throw new Error(`resources seed: the compatibility table names ${name}, which is no container type of the Registry's`)
@@ -113,12 +109,9 @@ const COMPATIBILITY: readonly { vehicleType: string; containerType: { key: strin
     .map(([name]) => ({ vehicleType: slugOf(type), containerType: containerTypeNamed(name) })),
 )
 
-/* --------------------------------- places ---------------------------------- */
-
 /** The Resources fixtures scope to Copenhagen Central and Harbor Commercial; Cairo Operations has none. */
 type ResourcesProject = keyof typeof DEMO_PROJECT_IDS
 
-/** A place's code: its fixture id in capitals. */
 const codeOf = (key: string): string => key.toUpperCase()
 
 const at = (lng: number, lat: number): Point => ({ type: "Point", coordinates: [lng, lat] })
@@ -139,8 +132,6 @@ type StationSpec = { key: string; name: string; address: string; location: Point
 const STATIONS: readonly StationSpec[] = [
   { key: "station-arc", name: "ARC Amager", address: "Kraftværksvej 31", location: at(12.6186, 55.6903), ownership: "external", weighbridge: true, fractions: ["residual", "mixed"] },
 ]
-
-/* ---------------------------------- fleet ---------------------------------- */
 
 type VehicleSpec = {
   key: string
@@ -186,8 +177,6 @@ const DRIVERS: readonly DriverSpec[] = [
 /** Every vehicle and driver fixture is Copenhagen Central's. */
 const FLEET_PROJECT: ResourcesProject = "copenhagen"
 
-/* --------------------------------- rows ----------------------------------- */
-
 /** Every Resources id, keyed by the prototype's record id or the key it goes by. */
 export type ResourcesIds = {
   /** By key: `rear-loader`. */
@@ -220,7 +209,6 @@ type ResourcesRows = {
   drivers: (typeof driver.$inferInsert)[]
 }
 
-/** How many rows the Resources seed holds per table. */
 export type ResourcesCounts = { [K in keyof ResourcesRows]: number }
 
 function build(): { ids: ResourcesIds; rows: ResourcesRows } {
@@ -242,7 +230,6 @@ function build(): { ids: ResourcesIds; rows: ResourcesRows } {
   const depotId = (key: string) => required(depotIds, key, "depot")
   const wasteFractionId = (key: string) => required(REGISTRY_IDS.wasteFractions, key, "waste fraction")
   const vehicleIds = keyed(VEHICLES, (spec) => spec.key, "vehicle")
-  // One compartment per powered vehicle, at position 1.
   const compartments = VEHICLES.filter((spec) => spec.kind === "powered-vehicle").map((spec) => ({ vehicle: spec.key, position: 1, fractions: spec.fractions }))
   const compartmentKey = (entry: { vehicle: string; position: number }): string => `${entry.vehicle}:${entry.position}`
   const compartmentIds = keyed(compartments, compartmentKey, "vehicleCompartment")
@@ -380,7 +367,6 @@ function build(): { ids: ResourcesIds; rows: ResourcesRows } {
 
 const built = build()
 
-/** Every Resources id the seed writes. */
 export const RESOURCES_IDS: ResourcesIds = built.ids
 
 const RESOURCES_ROWS: Readonly<ResourcesRows> = built.rows

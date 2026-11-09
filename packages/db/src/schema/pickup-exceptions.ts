@@ -24,7 +24,7 @@
 // charged occurrence, by position from 1, the last repeating. A step's product
 // is the rule's project's — an additional service sold per job, which the API
 // holds it to — priced by the Price Engine on the stop's service date like any
-// other; this slice charges nothing yet (M5b).
+// other.
 import { PICKUP_EXCEPTION_WINDOW_DAYS } from "@waste/domain/execution/pickup-exceptions"
 import { CONTAMINANT_CODE_STATUSES, PICKUP_EXCEPTION_REASONS, PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"

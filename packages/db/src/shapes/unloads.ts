@@ -55,7 +55,6 @@ const reviewColumns = (review: ReturnType<typeof weightReviewOf>) => ({
   reviewCorrectionUnloadId: review.correctionUnloadId,
 })
 
-/** What the reading adds to a row: the fold, the latest review's id, the correction it wrote. */
 export type ReviewRead = { reviewStatus: WeightReviewStatus; reviewId: string | null; reviewCorrectionUnloadId: string | null }
 
 export type UnloadRow = Pick<typeof unload.$inferSelect, keyof typeof unloadColumns> & ReviewRead
@@ -137,7 +136,6 @@ async function loadsOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): P
   const tolerances = new Map(
     (await tx.select({ id: project.id, tolerance: project.weightTolerancePercent }).from(project).where(and(eq(project.companyId, companyId), inArray(project.id, projectIds)))).map((row) => [row.id, row.tolerance]),
   )
-  // Each route's unloads and weights, gathered in one pass.
   type UnloadAt = Parameters<typeof onBoardByUnload>[0][number]
   type WeightAt = Parameters<typeof onBoardByUnload>[1][number]
   const byRoute = new Map<string, { unloads: UnloadAt[]; weights: WeightAt[] }>(routeIds.map((routeId) => [routeId, { unloads: [], weights: [] }]))
@@ -185,13 +183,11 @@ export async function unloadsAnswered(tx: Tx, companyId: string, rows: readonly 
   return rows.map((row) => unloadOf(row, loads.get(row.id) ?? null, duplicates.get(row.id) ?? []))
 }
 
-/** One unload as every door answers it: `unloadsAnswered` of the one row. */
 export async function unloadAnswered(tx: Tx, companyId: string, row: UnloadRow): Promise<Unload> {
   const [answered] = await unloadsAnswered(tx, companyId, [row])
   return answered
 }
 
-/** One route's unloads, oldest first, each with its reading. */
 export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<UnloadRow[]> {
   return await unloadsFrom(tx, companyId)
     .query.where(and(eq(unload.companyId, companyId), eq(unload.routeId, routeId)))

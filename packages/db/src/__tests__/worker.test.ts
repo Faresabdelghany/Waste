@@ -40,7 +40,7 @@ describe("migration 0011, the worker role and pg-boss's schema", { skip: databas
   })
 
   test("created wms_worker BYPASSRLS, no superuser, no replication, granted to the owner, with USAGE on wms and extensions and the API role's search path", async () => {
-    // Not asserted: rolcanlogin. Roles are cluster-wide, so a `pnpm db:bootstrap` with WORKER_DATABASE_URL set (CI's, and any workstation's) has already given the role LOGIN when this fresh database sees it; the migration itself says NOLOGIN, which worker-rendering.test.ts pins.
+    // Not asserted: rolcanlogin. Roles are cluster-wide, so a `pnpm db:bootstrap` with WORKER_DATABASE_URL set (CI's, and any workstation's) has already given the role LOGIN when this fresh database sees it; the migration itself says NOLOGIN.
     const [attributes] = await owner.sql<{ bypassrls: boolean; superuser: boolean; replication: boolean; owner_member: boolean; config: string[] | null }[]>`
       select r.rolbypassrls as bypassrls, r.rolsuper as superuser, r.rolreplication as replication,
         pg_has_role(current_user, ${WORKER_ROLE}, 'MEMBER') as owner_member,

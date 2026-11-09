@@ -78,7 +78,6 @@ import { DEMO_COMPANY_ID } from "./seed/ids"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
 import { COUNTERS, KEPT_TABLES, TABLES } from "./table-policies"
 
-/** The names of the tables a table's foreign keys point at, itself left out. */
 function parentsOf(table: PgTable): Set<string> {
   const own = getTableName(table)
   return new Set(
@@ -158,7 +157,6 @@ function companyColumnOf(table: PgTable): PgColumn {
   return column
 }
 
-/** Deletes every row of the company from the swept tables, children first, and answers the counts. */
 async function sweep(tx: Tx, companyId: string): Promise<ResetReport["swept"]> {
   const swept: ResetReport["swept"] = []
   for (const table of SWEPT_TABLES) {
@@ -168,7 +166,6 @@ async function sweep(tx: Tx, companyId: string): Promise<ResetReport["swept"]> {
   return swept
 }
 
-/** Puts every table's counters back to their defaults where one moved; answers whether any did. */
 async function resetCounters(tx: Tx, companyId: string): Promise<boolean> {
   let reset = false
   for (const { table, counters } of COUNTERS) {
@@ -225,7 +222,6 @@ export async function resetToSeed(adminUrl: string, companyId: string = DEMO_COM
       const countersReset = await resetCounters(tx, companyId)
       const written = await applyDemo(tx)
 
-      // The postconditions: the seed, which has the last word, finds nothing left to change, and the counters are a fresh seed's.
       const again = await applyDemo(tx)
       if (again !== 0) throw new Error(`the seed found ${again} rows still to change after the reset, so the reset was rolled back`)
       const off = await countersOffDefault(tx, companyId)
@@ -246,7 +242,6 @@ export async function resetToSeed(adminUrl: string, companyId: string = DEMO_COM
   }
 }
 
-/** `a, b and c`. */
 const listed = (items: readonly string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`)
 
 /** What a reset says, line by line, for a run's summary: what it swept and kept, what the seed wrote back, and what became of the audit history, the outbox and pg-boss's jobs. */

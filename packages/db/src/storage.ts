@@ -65,7 +65,6 @@ export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch 
   const base = `${url.replace(/\/+$/, "")}/storage/v1`
   const auth = { authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
 
-  /** One call to Storage, its JSON answer and status, or StorageSilent where the network fails. */
   async function call(method: string, path: string, body?: unknown): Promise<{ status: number; answer: unknown }> {
     let response: Response
     try {
@@ -85,7 +84,6 @@ export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch 
     return { status: response.status, answer }
   }
 
-  /** An answer that is not the call's: a refusal where Storage says 4xx, its silence otherwise. */
   const refused = (method: string, path: string, status: number, answer: unknown) => {
     const said = `Storage answered ${method} ${path} with ${status}: ${JSON.stringify(answer).slice(0, 200)}`
     const real = Number((answer as { statusCode?: unknown } | null)?.statusCode)

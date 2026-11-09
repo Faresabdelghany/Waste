@@ -172,7 +172,6 @@ export const holidayListHoliday = wms.table(
     ...tenant,
     ...timestamps,
     holidayListId: uuid().notNull(),
-    /** The holiday, a calendar day. */
     day: date().notNull(),
     /** What the day is called (`Grundlovsdag`); null where nobody named it. */
     name: text(),

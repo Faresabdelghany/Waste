@@ -35,19 +35,15 @@ import { decommissionReason } from "../schema/stock"
 import { withCompany } from "../tenant"
 import { companyDefaultRows } from "./company-defaults"
 
-/** What a new company is made from. */
 export type CompanyProvision = {
   company: { name: string; legalName: string; registrationNumber: string; country: string }
   project: { name: string; kind: string; language: string; currency: string; timezone: string }
   administrator: { email: string; fullName: string }
 }
 
-/** What was made, by id. */
 export type ProvisionedCompany = { companyId: string; projectId: string; administratorId: string; roleIds: Readonly<Record<SystemRoleKey, string>> }
 
-/** What a company the register knows already is told. */
 export const companyRegistered = (country: string, registrationNumber: string): string => `A company is registered as ${registrationNumber} in ${country} already`
-/** What an address with an open Invitation is told. */
 export const invitationOpen = (email: string): string =>
   `${email} has an open invitation in another company already; a Login binds to one open invitation, so the first administrator needs another address or that invitation withdrawn`
 

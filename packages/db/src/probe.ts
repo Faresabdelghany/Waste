@@ -33,7 +33,6 @@ import type { ClientOptions, Database } from "./client"
 
 export type DatabaseCheck = "ok" | "unreachable"
 
-/** The pool a probe runs on: one connection, a dial that gives up with the bound, a short fixed backoff. */
 export function probePoolOptions(timeoutMs = CHECK_TIMEOUT_MS): ClientOptions {
   return { max: 1, connectTimeoutSeconds: timeoutMs / 1_000, backoffSeconds: 1 }
 }

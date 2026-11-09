@@ -113,7 +113,6 @@ export type OpenTicketInput = {
 /** The ticket the caller is appending to: the three ids every history row carries. */
 export type TicketRef = { companyId: string; projectId: string; id: string }
 
-/** The ticket a history row is appended to, off its row. */
 export const ticketRefOf = (companyId: string, row: { projectId: string; id: string }): TicketRef => ({ companyId, projectId: row.projectId, id: row.id })
 
 /** One history row as a command hands it in: the kind, the snapshot after the event, and what the kind carries. */
@@ -234,7 +233,6 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
 /** The draft's kind and type, for the rows a project keeps of either. */
 export type Typed = Pick<TicketDraft, "projectId" | "kind"> & { ticketTypeId: string }
 
-/** The rows of a kind-or-type setting the draft's kind or type names. */
 const ownOrKinds = (columns: { kind: Parameters<typeof eq>[0]; ticketTypeId: Parameters<typeof eq>[0] }, draft: Typed): SQL | undefined => or(eq(columns.ticketTypeId, draft.ticketTypeId), and(isNull(columns.ticketTypeId), eq(columns.kind, draft.kind)))
 
 /** The due date `hours` after it happened, or none where no target is set. */
