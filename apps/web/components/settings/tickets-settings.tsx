@@ -20,7 +20,8 @@ import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { TicketDefaultTeamsSettings } from "@/components/settings/ticket-teams-settings"
 import { TicketTypesSettings } from "@/components/settings/ticket-types-settings"
 import type { ProjectPick } from "@/components/settings/use-project-setting"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
+import { PillTab, PillTabsList } from "@/components/page-layout"
 import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
 
 type TicketsTab = SettingsTabOf<"tickets">
@@ -36,13 +37,13 @@ export function TicketsSettings({ params, onParamsChange, onOpenPane }: Settings
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs value={tab} onValueChange={(value) => onParamsChange({ tab: value })}>
-        <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket settings">
+        <PillTabsList aria-label="Ticket settings">
           {settingsTabsOf("tickets").map((option) => (
-            <TabsTrigger key={option.value} value={option.value} className="whitespace-nowrap rounded-full px-3">
+            <PillTab key={option.value} value={option.value} nav>
               {option.label}
-            </TabsTrigger>
+            </PillTab>
           ))}
-        </TabsList>
+        </PillTabsList>
       </Tabs>
     </div>
   )

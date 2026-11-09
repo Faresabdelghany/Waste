@@ -1,11 +1,25 @@
-import type { ReactNode } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr"
 
 import { NotificationsMenu } from "@/components/top-bar/notifications-menu"
 import { TopAccountMenu } from "@/components/top-bar/top-account-menu"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+
+/** The frame a page's content sits in beside the office's sidebar: what each page adds is its own layout. */
+export const CONTENT_FRAME = "rounded-lg border border-sidebar bg-background"
+
+/** The pill strip a page's, a record's or a Settings pane's tabs sit in. */
+export function PillTabsList({ className, ...props }: ComponentProps<typeof TabsList>) {
+  return <TabsList className={cn("inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs", className)} {...props} />
+}
+
+/** One tab of the strip: a record's or a pane's at the strip's size, a workspace's or Settings' page tabs (`nav`) at the text's. */
+export function PillTab({ nav = false, className, ...props }: ComponentProps<typeof TabsTrigger> & { nav?: boolean }) {
+  return <TabsTrigger className={cn(nav ? "whitespace-nowrap rounded-full px-3" : "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background", className)} {...props} />
+}
 
 /**
  * The bar at the top of every page: the sidebar toggle and the page's title

@@ -65,7 +65,8 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
+import { PillTab, PillTabsList } from "@/components/page-layout"
 import {
   DEACTIVATE_USER,
   REACTIVATE_USER,
@@ -734,16 +735,16 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           setSelectedRoleId(null)
         }}
       >
-        <TabsList className="inline-flex h-8 bg-muted rounded-full px-1 py-0.5 text-xs border border-border/50">
+        <PillTabsList>
           {settingsTabsOf("access").map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="rounded-full px-3 whitespace-nowrap">
+            <PillTab key={tab.value} value={tab.value} nav>
               {tab.label}
               <span className="ml-1.5 text-[10px] text-muted-foreground">
                 {tabCounts[tab.value]}
               </span>
-            </TabsTrigger>
+            </PillTab>
           ))}
-        </TabsList>
+        </PillTabsList>
       </Tabs>
     </div>
   )

@@ -134,7 +134,7 @@ import {
 import { awaitedRowsSentence, recordCountLabel } from "@/lib/table-copy"
 import { cn, slugify } from "@/lib/utils"
 import { createModuleSync } from "@/lib/url/module-sync"
-import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
+import { CONTENT_FRAME, PageActions, PageTopBar, PillTab, PillTabsList, TableCard } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Badge } from "@/components/ui/badge"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -156,7 +156,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -3122,7 +3122,7 @@ export function BusinessWorkspace({
 
   if (!hasRoleViewableModules) {
     return (
-      <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
+      <div className={cn("mx-2 my-2 flex min-h-0 min-w-0 flex-1 flex-col", CONTENT_FRAME)}>
         <PageTopBar>
           <Breadcrumbs items={[{ label: workspaceLabel ?? workspace.label }]} />
         </PageTopBar>
@@ -3202,7 +3202,7 @@ export function BusinessWorkspace({
     ) : null
 
   return (
-    <div className="flex flex-1 flex-col min-h-0 bg-background mx-2 my-2 border border-sidebar rounded-lg min-w-0">
+    <div className={cn("mx-2 my-2 flex min-h-0 min-w-0 flex-1 flex-col", CONTENT_FRAME)}>
       {schemeDetailRecord ? (
         <SchemeDetailsPage
           module={activeModule}
@@ -3281,17 +3281,17 @@ export function BusinessWorkspace({
               className="flex items-center gap-1 overflow-x-auto pb-1"
             >
               <Tabs value={activeModule.id} onValueChange={handleModuleChange}>
-                <TabsList className="inline-flex h-8 bg-muted rounded-full px-1 py-0.5 text-xs border border-border/50">
+                <PillTabsList>
                   {primaryModules.map((module) => (
-                    <TabsTrigger
+                    <PillTab
                       key={module.id}
                       value={module.id}
-                      className="rounded-full px-3 whitespace-nowrap"
+                      nav
                     >
                       {module.label}
-                    </TabsTrigger>
+                    </PillTab>
                   ))}
-                </TabsList>
+                </PillTabsList>
               </Tabs>
               {secondaryModules.length > 0 && (
                 <DropdownMenu>

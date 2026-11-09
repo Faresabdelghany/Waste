@@ -13,7 +13,7 @@ import type {
 import { workspaceHref } from "@/lib/data/workspace-href"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
-import { PageTopBar } from "@/components/page-layout"
+import { PageTopBar, PillTab, PillTabsList } from "@/components/page-layout"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import {
   Table,
@@ -27,7 +27,7 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 
 function providerStatusTone(status: string): StatusTone {
   // "Deactive"/"Inactive" contain the "active" substring, so they must be
@@ -298,26 +298,26 @@ export function ServiceProviderDetailsPage({
       <Tabs defaultValue="information" className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-border/40 px-4 py-3">
           <div className="overflow-x-auto">
-            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
-              <TabsTrigger value="information" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+            <PillTabsList>
+              <PillTab value="information">
                 Service provider information
-              </TabsTrigger>
-              <TabsTrigger value="users" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+              </PillTab>
+              <PillTab value="users">
                 Users <span className="ml-1.5 text-[10px] text-muted-foreground">{users.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="vehicles" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+              </PillTab>
+              <PillTab value="vehicles">
                 Vehicles <span className="ml-1.5 text-[10px] text-muted-foreground">{vehicles.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="drivers" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+              </PillTab>
+              <PillTab value="drivers">
                 Drivers <span className="ml-1.5 text-[10px] text-muted-foreground">{drivers.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="service-areas" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+              </PillTab>
+              <PillTab value="service-areas">
                 Service areas <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceAreas.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="prices" className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background">
+              </PillTab>
+              <PillTab value="prices">
                 Prices <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceProviderPrices.length}</span>
-              </TabsTrigger>
-            </TabsList>
+              </PillTab>
+            </PillTabsList>
           </div>
         </div>
 
