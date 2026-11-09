@@ -71,7 +71,7 @@ export const CUSTOM_THEME_STORAGE_KEY = "waste.theme.custom.v1"
  * first key that holds a value wins, so a browser carrying two generations of
  * one store reads the newer one. Whatever comes back still goes through the
  * store's own shape migration — `waste-active-routes-v1` has two legacy keys
- * holding two different shapes, and `components/waste/active-routes-store.tsx`
+ * holding two different shapes, and `components/platform/active-routes-store.tsx`
  * recognises both.
  */
 export const LEGACY_STORAGE_KEYS: Readonly<

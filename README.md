@@ -45,13 +45,13 @@ Restricted persona surfaces sit alongside the internal workspaces:
 ## Architecture
 
 - `app/` — thin server-component routes; most render `WorkspacePageShell` with a `workspaceId`. In-workspace navigation is driven by `?module=` and `?record=` search params.
+- `components/platform/` — what every feature shares: the session and record stores, the form dialog generated from form schemas, the record views and list toolbar, the command-support hooks
 - `components/waste/` — the workspace shell machinery:
-  - `business-workspace.tsx` — generic module list/table/detail rendering used by every workspace
-  - `business-record-form-dialog.tsx` — create/edit dialogs generated from form schemas
+  - `business-workspace.tsx` — generic module list/table/detail rendering used by every workspace, by each module's spec in `lib/modules/`
   - `restricted-workspace-shell.tsx` — shells for the driver, portal, service provider, and control-center personas
+- `lib/modules/` — the module manifest: one spec per module key, by workspace
 - `lib/data/` — the data registries:
   - `business-modules.ts` — central registry: workspaces → modules → fixture records
-  - `business-domain.ts` — machine-readable map of every UI surface to canonical business modules M01–M24 (owners, personas, dependencies, boundaries)
   - `business-form-types.ts` + `business-form-schemas*.ts` — per-module form field schemas
   - `legacy-ids.ts` — old → new id maps and `migrateLegacy*` helpers that keep browser state and bookmarks from before the 2026-09-02 terminology rename working (see `apps/web/CLAUDE.md`)
 - `lib/storage-keys.ts` — every browser-storage key, the keys each one replaced, and the read that moves a value from an old key to the current one

@@ -100,7 +100,7 @@ export const OPERATE = workspaceSpec("operate", {
     // Retained as a data contract for route evidence and existing schemas, but
     // omitted from office navigation and public routing: the Driver App is /driver.
     "driver-app": {
-      shown: "elsewhere",
+      shown: "app",
       label: "Driver App",
       title: "Driver and Navigation App",
       description: "A narrow, role-gated field experience for assigned routes, navigation, stop outcomes, proof, messages, and reliable offline synchronization.",

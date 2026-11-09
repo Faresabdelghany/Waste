@@ -2084,7 +2084,7 @@ export function BusinessWorkspace({
               resolved.module.id).find(
               (candidate) =>
                 candidate.name === label ||
-                candidate.name.split(" · ")[0] === label,
+                resolved.module.picked?.named?.(candidate) === label,
             )?.id ?? ""
           )
         }
@@ -2891,8 +2891,8 @@ export function BusinessWorkspace({
       const provider = linkOnce("serviceProviderId", SERVICE_PROVIDERS, group.serviceProviderId)
       return {
         ...group,
-        // Vehicle names carry the registration plate; facts show the callsign.
-        ...(vehicle ? { vehicleName: vehicle.name.split(" · ")[0] } : {}),
+        // The name a fact gives a vehicle, its spec's (the callsign before its plate).
+        ...(vehicle ? { vehicleName: moduleSpecOf(VEHICLES)?.picked?.named?.(vehicle) ?? vehicle.name } : {}),
         ...(driver ? { driverName: driver.name } : {}),
         ...(provider ? { serviceProviderName: provider.name } : {}),
       }

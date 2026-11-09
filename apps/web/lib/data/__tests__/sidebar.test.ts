@@ -74,6 +74,8 @@ describe("the nav item a page is", () => {
       "/improve/imports": ["improve"],
       "/performance": ["improve"],
       "/settings": [],
+      "/driver": [],
+      "/control-center": [],
     }
     for (const [pathname, items] of Object.entries(expected)) assert.deepEqual(activeOn(pathname), items, pathname)
   })

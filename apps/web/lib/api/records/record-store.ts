@@ -1,5 +1,5 @@
 // The record store's controller (Issue #81): the server-backed half of what
-// `components/waste/business-record-store.tsx` answers, framework-free as the
+// `components/platform/business-record-store.tsx` answers, framework-free as the
 // Driver App's controller is (`createDriverApp`). It holds a session's
 // switched modules and runs everything that moves them — the session's load,
 // a write and its turn, a command, an action, a row or a module read again,

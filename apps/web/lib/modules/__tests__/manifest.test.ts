@@ -47,11 +47,11 @@ describe("the module manifest", () => {
   test("gives a module shown elsewhere the surface it opens", () => {
     const elsewhere = Object.entries(MODULES).filter(([, spec]) => spec.shown === "elsewhere")
     assert.deepEqual(elsewhere.map(([key, spec]) => [key, spec.deepLink]), [
-      ["operate.driver-app", "/driver"],
       ["customers.citizen-portal", "/portal"],
       ["service-providers.service-provider-workspace", "/service-provider-workspace"],
       ["configure.control-center", "/control-center"],
     ])
+    assert.deepEqual(Object.entries(MODULES).flatMap(([key, spec]) => (spec.shown === "app" ? [[key, spec.deepLink]] : [])), [["operate.driver-app", "/driver"]])
   })
 })
 
