@@ -105,7 +105,6 @@ export type TicketLinks = z.infer<typeof TicketLinks>
 
 export const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
-/** The label is the number's. */
 export const labelMatches = (value: { number: number; label: string }): boolean => value.label === ticketLabel(value.number)
 
 /** A ticket's fields, spelled once for the two resources that carry them; each refines `labelMatches` again, since spreading takes the fields and not the rule. */
@@ -214,13 +213,11 @@ export const TicketEvent = z
   })
 export type TicketEvent = z.infer<typeof TicketEvent>
 
-/** A ticket with its history in recording order and the alerts naming it. */
 export const TicketDetail = z
   .object({
     ...ticketFields,
     /** Oldest first. */
     events: z.array(TicketEvent),
-    /** The alerts linked to this ticket. */
     alerts: z.array(Alert),
   })
   .refine(labelMatches, labelIsTheNumber)
@@ -338,7 +335,6 @@ export const TicketComplete = z
   .refine(chargeWithABillableResolution, chargeWithABillableResolutionAt)
 export type TicketComplete = z.infer<typeof TicketComplete>
 
-/** One ticket kind's charge (#291 C3): the product a completed ticket of the kind is charged at when its completion names none. */
 /** The product a completed ticket of one kind, or of one Ticket Type (#548 of #544), is charged at when its completion names none: exactly one of the two, the type's own winning over its kind's. */
 export const TicketCharge = z.object({ kind: TicketKind.nullable(), ticketTypeId: Id.nullable(), productId: Id })
 export type TicketCharge = z.infer<typeof TicketCharge>
@@ -423,13 +419,6 @@ export const TicketEventListQuery = PageRequest.extend({
 export type TicketEventListQuery = z.infer<typeof TicketEventListQuery>
 
 /**
- * What the stop a ticket is about recorded (#293 M6): its outcome, when, where
- * the device stood for it, the proofs taken there in recording order — a
- * photo's or a signature's bytes are signed for through
- * `GET /pickups/{id}/proof-objects`, never here — the reply that quotes it,
- * and whether a missed collection is answered by it.
- */
-/**
  * A proof at the stop as the ticket's evidence tells it: what was recorded,
  * by which door, when, and the object a photo or a signature names — read
  * under the ticket's grant, so narrower than the stop's own read (`GET
@@ -449,6 +438,13 @@ export const EvidenceProof = z.object({
 })
 export type EvidenceProof = z.infer<typeof EvidenceProof>
 
+/**
+ * What the stop a ticket is about recorded (#293 M6): its outcome, when, where
+ * the device stood for it, the proofs taken there in recording order — a
+ * photo's or a signature's bytes are signed for through
+ * `GET /pickups/{id}/proof-objects`, never here — the reply that quotes it,
+ * and whether a missed collection is answered by it.
+ */
 export const StopEvidence = z.object({
   pickupId: Id,
   routeId: Id,

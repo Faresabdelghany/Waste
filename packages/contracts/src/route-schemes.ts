@@ -160,7 +160,6 @@ export const CollectionGroup = z.object({
 })
 export type CollectionGroup = z.infer<typeof CollectionGroup>
 
-/** What a group whose source and stops disagree is told, at the field that says which it is. */
 const oneWayToFindStops = { message: ONE_WAY_TO_FIND_STOPS, path: ["stopSource"] }
 
 type StopsGiven = { stopSource?: string; rule?: unknown; containerIds?: readonly unknown[] | null }
@@ -223,10 +222,8 @@ export type CollectionGroupPatch = z.infer<typeof CollectionGroupPatch>
 const weekRotationWithFortnightly = { message: WEEK_ROTATION_WITH_FORTNIGHTLY, path: ["weekRotation"] }
 const dailyServesEveryDayIssue = { message: DAILY_SERVES_EVERY_DAY, path: ["serviceDays"] }
 
-/** What a create body naming two groups alike is told, at the list. */
 const eachGroupNameOnce = { message: EACH_GROUP_NAME_ONCE, path: ["collectionGroups"] }
 
-/** No two groups of a body share a name; a half-seen list is not judged. */
 const groupNamesOnce = (body: { collectionGroups?: unknown }): boolean =>
   !Array.isArray(body.collectionGroups) || eachOnce(body.collectionGroups, (group: { name?: unknown }) => group?.name)
 
@@ -261,7 +258,6 @@ const seasonsApart = (seasons: readonly SchemeSeason[], ctx: z.RefinementCtx) =>
   if (pair !== undefined) ctx.addIssue({ code: "custom", message: SEASONS_KEEP_APART, path: [pair[1]] })
 }
 
-/** A scheme's seasons, whole. */
 export const SchemeSeasons = z.array(SchemeSeason).max(SEASONS_MAX, AT_MOST_SEASONS).superRefine(seasonsApart)
 
 const dailyHasNoSeasonsIssue = { message: DAILY_HAS_NO_SEASONS, path: ["seasons"] }
@@ -291,7 +287,6 @@ export const SchemeGeneration = z.object({
 })
 export type SchemeGeneration = z.infer<typeof SchemeGeneration>
 
-/** What a patch naming one of the scheme's groups in two entries is told, at the list. */
 const eachGroupOnce = { message: EACH_GROUP_ONCE, path: ["collectionGroups"] }
 
 /** No two entries of a patch name one group; an entry without an id is a new group, and a half-seen list is not judged. */
@@ -326,7 +321,6 @@ export const RouteScheme = effectiveDated(
     planningAreaId: Id.nullable(),
     serviceType: ServiceType,
     frequency: RecurrenceFrequency,
-    /** The weekdays the scheme serves, one or more, each once. */
     serviceDays: ServiceDays.min(1),
     /** Which ISO-week parity an every-2-weeks scheme serves; null for every other cadence. */
     weekRotation: WeekRotation.nullable(),
@@ -420,7 +414,6 @@ export const RouteSchemePatch = routeSchemeBodies.patch
   .superRefine(groupsWithinServiceDays)
 export type RouteSchemePatch = z.infer<typeof RouteSchemePatch>
 
-/** A page of schemes: one project's, one planning area's, by status, by whether the nightly job plans them, in force on a day. */
 export const RouteSchemeListQuery = ProjectScopedListQuery.extend({
   planningAreaId: Id.optional(),
   status: RouteSchemeStatus.optional(),

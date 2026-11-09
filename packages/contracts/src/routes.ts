@@ -47,7 +47,6 @@ import { DriverShift } from "./shifts"
 import { Paragraph } from "./text"
 import { Unload } from "./unloads"
 
-/** A count of pickups: whole, zero or more. */
 const Count = NonNegativeInt
 
 /** A route's progress: how many pickups stand in each status, how many there are, and the fraction with an outcome. Derived, never stored. */
@@ -71,7 +70,6 @@ export type RouteAssignment = z.infer<typeof RouteAssignment>
 
 export const labelIsTheNumber = { message: LABEL_IS_THE_NUMBER, path: ["label"] }
 
-/** The label is the number's. */
 export const labelMatches = (value: { number: number; label: string }): boolean => value.label === routeLabel(value.number)
 
 /** A route's fields, spelled once for the resources that carry them — the three here and the driver's `DriverRouteDetail` (driver-commands.ts); each refines `labelMatches` again, since spreading takes the fields and not the rule. */
@@ -180,7 +178,6 @@ export const RouteListItem = z
   .refine(labelMatches, labelIsTheNumber)
 export type RouteListItem = z.infer<typeof RouteListItem>
 
-/** A route with what hangs off it: the pickups by position, the open session, every session, the unloads. */
 export const RouteDetail = z
   .object({
     ...routeFields,

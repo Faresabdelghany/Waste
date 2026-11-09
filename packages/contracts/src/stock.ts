@@ -72,7 +72,6 @@ export const StockMovement = z.object({
   placementId: Id.nullable(),
   /** When it happened, on the person's word; evidence, never the order the ledger is folded in. */
   occurredAt: IsoDateTime,
-  /** The account that recorded it. */
   recordedBy: Id,
   /** Why, in the person's words; a decommission's note beside its reason. */
   reason: Paragraph.nullable(),
@@ -133,7 +132,6 @@ export const Decommission = z.strictObject({
 })
 export type Decommission = z.infer<typeof Decommission>
 
-/** What an adjustment naming a warehouse for scrap, or none for a place in stock, is told. */
 const warehouseWithAStockPlace = { message: WAREHOUSE_WITH_A_STOCK_PLACE, path: ["warehouseId"] }
 
 /** `POST /containers/:id/adjust`: the correction door, never into or out of service. */
@@ -192,7 +190,6 @@ export type DecommissionReasonCreate = z.infer<typeof DecommissionReasonCreate>
 export const DecommissionReasonPatch = decommissionReasonBodies.patch
 export type DecommissionReasonPatch = z.infer<typeof DecommissionReasonPatch>
 
-/** A page of reasons: every one of the company's, or one status's. */
 export const DecommissionReasonListQuery = PageRequest.extend({ status: DecommissionReasonStatus.optional() })
 export type DecommissionReasonListQuery = z.infer<typeof DecommissionReasonListQuery>
 

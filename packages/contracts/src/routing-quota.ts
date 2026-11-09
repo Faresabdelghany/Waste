@@ -27,7 +27,6 @@ export const RoutingQuotaReading = z.object({
   exhaustedAt: IsoDateTime.nullable(),
   /** Since when the provider refuses the key: "Routing unavailable: key refused". */
   keyRefusedAt: IsoDateTime.nullable(),
-  /** When the reading was last written. */
   updatedAt: IsoDateTime,
 })
 export type RoutingQuotaReading = z.infer<typeof RoutingQuotaReading>

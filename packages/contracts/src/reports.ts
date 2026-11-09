@@ -155,7 +155,6 @@ export const PickupStandings = z.object({
 })
 export type PickupStandings = z.infer<typeof PickupStandings>
 
-/** The missed pickups of one reason, skipped and failed. */
 export const MissedReason = z.object({ reason: PickupReason, skipped: Count, failed: Count })
 export type MissedReason = z.infer<typeof MissedReason>
 

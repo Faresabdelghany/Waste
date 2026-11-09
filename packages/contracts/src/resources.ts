@@ -34,7 +34,6 @@ import * as z from "zod"
 export const VehicleKind = z.enum(VEHICLE_KINDS)
 export type VehicleKind = z.infer<typeof VehicleKind>
 
-/** Whose vehicle it is. */
 export const VehicleOwnership = z.enum(VEHICLE_OWNERSHIPS)
 export type VehicleOwnership = z.infer<typeof VehicleOwnership>
 
@@ -42,7 +41,6 @@ export type VehicleOwnership = z.infer<typeof VehicleOwnership>
 export const VehicleStatus = z.enum(VEHICLE_STATUSES)
 export type VehicleStatus = z.infer<typeof VehicleStatus>
 
-/** What the vehicle runs on. */
 export const FuelType = z.enum(FUEL_TYPES)
 export type FuelType = z.infer<typeof FuelType>
 
@@ -50,11 +48,9 @@ export type FuelType = z.infer<typeof FuelType>
 export const LicenceClass = z.enum(LICENCE_CLASSES)
 export type LicenceClass = z.infer<typeof LicenceClass>
 
-/** How the driver is employed. */
 export const EmploymentType = z.enum(EMPLOYMENT_TYPES)
 export type EmploymentType = z.infer<typeof EmploymentType>
 
-/** The driver's lifecycle. */
 export const DriverStatus = z.enum(DRIVER_STATUSES)
 export type DriverStatus = z.infer<typeof DriverStatus>
 
@@ -70,7 +66,6 @@ export type DepotStatus = z.infer<typeof DepotStatus>
 export const UnloadingStationStatus = z.enum(UNLOADING_STATION_STATUSES)
 export type UnloadingStationStatus = z.infer<typeof UnloadingStationStatus>
 
-/** Whose depot it is. */
 export const DepotOwnership = z.enum(DEPOT_OWNERSHIPS)
 export type DepotOwnership = z.infer<typeof DepotOwnership>
 
@@ -90,7 +85,6 @@ export type StockPlaceKind = z.infer<typeof StockPlaceKind>
 export const AssetStatus = z.enum(ASSET_STATUSES)
 export type AssetStatus = z.infer<typeof AssetStatus>
 
-/** Where a vehicle allocation stands. */
 export const AllocationStatus = z.enum(ALLOCATION_STATUSES)
 export type AllocationStatus = z.infer<typeof AllocationStatus>
 

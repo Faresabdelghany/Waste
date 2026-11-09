@@ -59,7 +59,6 @@ export type RightSizingApprove = z.infer<typeof RightSizingApprove>
 export const RightSizingDismiss = z.strictObject({ note: Paragraph })
 export type RightSizingDismiss = z.infer<typeof RightSizingDismiss>
 
-/** A page of proposals: one project's, one subscription's, one status's. */
 export const RightSizingListQuery = ProjectScopedListQuery.extend({
   subscriptionId: Id.optional(),
   status: RightSizingStatus.optional(),

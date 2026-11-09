@@ -20,7 +20,6 @@ import * as z from "zod"
 export const ModuleKey = z.enum(MODULE_KEYS)
 export type ModuleKey = z.infer<typeof ModuleKey>
 
-/** What a grant allows on a module. */
 export const Action = z.enum(ACTIONS)
 export type Action = z.infer<typeof Action>
 
