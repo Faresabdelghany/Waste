@@ -40,12 +40,11 @@ import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared
 import { stampsOf } from "@waste/db/shapes/times"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)

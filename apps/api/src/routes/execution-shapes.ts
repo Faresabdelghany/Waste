@@ -31,8 +31,7 @@ import { problem } from "../problem"
 import { scoped } from "../scoped"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
-import { NOT_A_ROUTE } from "./references"
-import { requireRow } from "./shared"
+import { NOT_A_ROUTE, requireRow } from "./references"
 
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })
 export const noSuchSession = (id: string) => problem(404, { detail: `No session ${id} in the projects this account works in` })

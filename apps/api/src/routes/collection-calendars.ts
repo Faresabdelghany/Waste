@@ -35,12 +35,11 @@ import { stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.calendars"
 const CollectionCalendarPage = Page(CollectionCalendar)

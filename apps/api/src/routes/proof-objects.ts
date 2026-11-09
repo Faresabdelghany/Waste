@@ -39,10 +39,9 @@ import { labelOf } from "@waste/db/shapes/routes"
 
 import { resolveDriver } from "../auth/driver"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
 import { findAssignedRoute, noSuchAssignedRoute, noSuchPickup, pickupReach } from "./execution-shapes"
-import { describeJson, IdParam } from "./shared"
 
 /** The grant a stop's proofs are read under: the stop's own read's. */
 const PICKUPS = "route-studio.pickups"

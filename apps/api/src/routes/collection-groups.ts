@@ -76,12 +76,11 @@ import { projectToday } from "@waste/db/query/project-clock"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
 import { assembleGroups, findScheme, requireNotArchived, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, groupScope, groupsOf, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotPickedTwice, requireStructure, writeGroupSets, type GroupRow } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const GroupPage = Page(CollectionGroup)
 

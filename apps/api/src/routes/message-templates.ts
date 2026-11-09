@@ -20,11 +20,10 @@ import { refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest } from "../problem"
 import { scoped } from "../scoped"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.templates"
 const TemplatePage = Page(MessageTemplate)

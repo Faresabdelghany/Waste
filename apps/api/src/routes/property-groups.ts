@@ -43,7 +43,7 @@ import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import {
@@ -58,7 +58,6 @@ import {
 } from "./members"
 import { scoped } from "../scoped"
 import { requireCustomer } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.groups"
 const PropertyGroupPage = Page(PropertyGroup)

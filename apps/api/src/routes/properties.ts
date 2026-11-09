@@ -47,7 +47,7 @@ import { and, asc, eq, exists, gt } from "drizzle-orm"
 import { projectToday } from "@waste/db/query/project-clock"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem } from "../problem"
 import { addressLookup, foundAddress } from "./addresses"
@@ -65,7 +65,6 @@ import {
   noSuchProperty,
   setPropertyParties,
 } from "./property-writes"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)

@@ -70,11 +70,10 @@ import { appendUnload } from "@waste/db/commands/unloads"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { findUnload, noSuchUnload } from "./execution-shapes"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.weights"
 

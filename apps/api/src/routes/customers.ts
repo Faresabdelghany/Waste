@@ -29,11 +29,10 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import { customer } from "@waste/db/schema/customers"
 import { and, asc, eq, gt } from "drizzle-orm"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem } from "../problem"
 import { createCustomer, customerColumns as columns, customerOf, noSuchCustomer, patchCustomer } from "./customer-writes"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
 const CustomerPage = Page(Customer)

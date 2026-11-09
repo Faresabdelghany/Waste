@@ -46,10 +46,9 @@ import { grantsOfRows, normalisedGrants } from "../access-shape"
 import type { Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.access"
 const RolePage = Page(Role)

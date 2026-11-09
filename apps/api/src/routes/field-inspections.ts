@@ -45,12 +45,11 @@ import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { NO_PROOF_STORAGE_DETAIL, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "./proof-objects"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "operate.inspections"
 

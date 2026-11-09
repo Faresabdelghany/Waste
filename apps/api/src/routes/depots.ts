@@ -49,13 +49,12 @@ import { refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/sh
 import { stampsOf } from "@waste/db/shapes/times"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import { scoped } from "../scoped"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)

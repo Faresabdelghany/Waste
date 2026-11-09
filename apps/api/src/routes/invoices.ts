@@ -63,12 +63,11 @@ import { lockRow } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { findInvoice, invoiceScope, noSuchInvoice } from "./billing-shapes"
 import { requireCustomer } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "commercial.invoices"
 

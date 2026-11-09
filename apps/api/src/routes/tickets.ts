@@ -75,12 +75,13 @@ import { alertOf } from "@waste/db/shapes/alerts"
 import { eventColumns, eventOf, labelOf, linksOf, NO_TICKET_LINKS, ticketColumns, ticketOf, type TicketRow } from "@waste/db/shapes/tickets"
 import { labelOf as routeLabelOf } from "@waste/db/shapes/routes"
 import { lockRow } from "@waste/db/commands/shared"
+import type { PgColumn } from "drizzle-orm/pg-core"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { findReachedRoute } from "./execution-shapes"
@@ -102,7 +103,7 @@ import {
   type Scope,
 } from "./references"
 import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
-import { created, dayWindow, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
+import { requireNotAhead } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
 import { openingIssues, refuseRetiredType, requireFieldsToComplete, requireMayGive, rulesOfTicket, typeAfterPatch, typeToOpen, valueIssues } from "./ticket-type-rules"
@@ -909,4 +910,27 @@ export function ticketRoutes(deps: RouteDeps) {
         return c.json(eventOf(row), 201)
       },
     )
+}
+
+/** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
+const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
+
+/** The first instant after a `YYYY-MM-DD` day on the UTC calendar: the exclusive end of a window that takes the whole of that day. */
+export const endOfDayExclusive = (day: string): Date => new Date(startOfUtcDay(day).getTime() + 86_400_000)
+
+/**
+ * The `where` fragment a list filter's `from`/`to` pair of `IsoDate` days
+ * makes over an instant column (Issue #109, at integration): both ends
+ * inclusive, on the UTC calendar day — `from` at its first instant, `to` up
+ * to but not including the midnight after it, so a row at 23:59 on the `to`
+ * day is inside the window and one at 00:00 the day after is not. Spelled
+ * once, because `lte(column, new Date(to))` reads a day as its first midnight
+ * and lists nothing of the day itself. A filter whose bounds are
+ * `IsoDateTime` instants (`GET /unloads`, `GET /stock-movements`) compares
+ * them as instants and does not come here, and one over a `date` column (a
+ * route's operating day) compares days and needs no window. Undefined when
+ * neither end was given, as `and` of nothing is.
+ */
+export function dayWindow(column: PgColumn, from: string | undefined, to: string | undefined): SQL | undefined {
+  return and(from === undefined ? undefined : gte(column, startOfUtcDay(from)), to === undefined ? undefined : lt(column, endOfDayExclusive(to)))
 }

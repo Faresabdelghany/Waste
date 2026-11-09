@@ -13,8 +13,7 @@ import { RoutingQuota } from "@waste/contracts/routing-quota"
 import { quotaRows } from "@waste/db/commands/routing-quota"
 
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
-import { describeJson } from "./shared"
+import { describeJson, routes } from "../operation"
 
 const MODULE = "route-studio.routes"
 

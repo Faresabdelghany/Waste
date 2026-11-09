@@ -182,8 +182,8 @@ import { DISPATCHED_ROUTE_STATUSES, DRIVER_COMMAND_KINDS, type DriverCommandKind
 import { isOneOf } from "@waste/domain/lists"
 import { identifiedBy } from "@waste/domain/registry/container-identity"
 import { ACTIVE_VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
-import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
-import { alias } from "drizzle-orm/pg-core"
+import { and, asc, eq, getTableName, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { alias, type PgTable } from "drizzle-orm/pg-core"
 import { isDeepStrictEqual } from "node:util"
 import { emit } from "@waste/db/commands/outbox"
 import { lockRow, replayed } from "@waste/db/commands/shared"
@@ -200,7 +200,7 @@ import { bulkyItemsOf } from "@waste/db/shapes/bulky-bookings"
 import { resolveDriver, type DriverProfile } from "../auth/driver"
 import { actorOf, type Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problemBody } from "../problem"
 import { namedByCode } from "./container-identity"
@@ -209,9 +209,20 @@ import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSess
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { vehicleColumns } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
-import { COMMAND_BACKDATE_MS, describeJson, IdParam, primaryKeyOf } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { tellOfficeNotTaken } from "./unload-writes"
+
+/**
+ * How far behind the request's clock a driver command's `occurredAt` may lie:
+ * forty-eight hours. A device that was offline for two days is a device whose
+ * day is over, and its queue is answered as rejections Resolution reads rather
+ * than as facts (#104 §7.8). The receipts are still written, so nothing the
+ * device said is dropped.
+ */
+export const COMMAND_BACKDATE_MS = 48 * 3_600_000
+
+/** The primary key constraint Postgres names when a row with the table's id is already there: `<table>_pkey`, its own default, which a driver command's `replayed` names. */
+export const primaryKeyOf = (table: PgTable): string => `${getTableName(table)}_pkey`
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)

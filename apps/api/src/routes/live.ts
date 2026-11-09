@@ -33,14 +33,13 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-
 import { progressByRoute, progressFor, routeColumns, routeOf } from "@waste/db/shapes/routes"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem } from "../problem"
 import { noSuchSession, openSessionsByRoute, routeScope, sessionColumns, sessionOf, sessionScope } from "./execution-shapes"
 import { activePlansByRoute } from "./plan-shapes"
 import { liveEtaOf, newestPositionsBySession } from "./positions"
 import { requireRoute } from "./references"
-import { describeJson, IdParam } from "./shared"
 
 const MODULE = "route-studio.live"
 

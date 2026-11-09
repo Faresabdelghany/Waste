@@ -27,9 +27,8 @@ import type { PublishedProject as PublishedProjectRow } from "@waste/db/public-d
 import { FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS } from "../auth/public-door"
 import type { RouteDeps } from "../deps"
 import { CALENDAR_MEDIA_TYPE, icsOf } from "../ical"
-import { routes } from "../operation"
+import { describeJson, routes } from "../operation"
 import { describeProblem, problem } from "../problem"
-import { describeJson } from "./shared"
 
 /** How long anyone may keep a public answer: a minute, so a published change shows within one. */
 export const PUBLIC_CACHE = "public, max-age=60"

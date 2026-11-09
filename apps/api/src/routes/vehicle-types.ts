@@ -45,13 +45,12 @@ import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireContainerType } from "./references"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.master"
 const VehicleTypePage = Page(VehicleType)

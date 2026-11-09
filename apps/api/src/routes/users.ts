@@ -78,10 +78,9 @@ import type { Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf, providerNameOf } from "../auth/provider"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
-import { routes } from "../operation"
+import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.access"
 const UserPage = Page(User)
