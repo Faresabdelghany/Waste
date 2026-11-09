@@ -89,7 +89,6 @@ export function majorOf(version: string): number {
   return Number(match[1])
 }
 
-/** The dumps' own checks: each is there and non-empty, and the wms schema dump holds the schema and a table. */
 function checkDumps(dir: string, schemas: readonly string[]): void {
   for (const required of OWNED_SCHEMAS.filter((schema) => !OPTIONAL_SCHEMAS.includes(schema))) {
     if (!schemas.includes(required)) throw new Error(`the backup holds no ${required} schema`)
@@ -179,7 +178,6 @@ export function verifyBackup(dir: string): BackupManifest {
   return manifest
 }
 
-/** Holds a verified backup to the database it will be restored into and the run it came from. */
 export function checkRestoreTarget(manifest: BackupManifest, { identity, commit, run }: { identity: string; commit?: string; run?: RunRef }): void {
   if (manifest.identity !== identity) throw new Error(`the backup is of ${manifest.identity}; this database is ${identity}`)
   if (commit !== undefined && manifest.commit !== commit) throw new Error(`the backup names commit ${manifest.commit}; its run was of ${commit}`)

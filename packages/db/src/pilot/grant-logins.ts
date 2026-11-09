@@ -14,7 +14,6 @@ import { passwordOf, type PilotTarget } from "../supabase"
 
 export type PilotLogin = { role: string; password: string }
 export type PilotLoginPlan = {
-  /** The roles to give LOGIN, each with its password. */
   logins: PilotLogin[]
   /** Every password the URLs carry, for the workflow to mask before anything runs. */
   secrets: string[]
