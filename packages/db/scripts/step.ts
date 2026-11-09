@@ -24,7 +24,6 @@ export function summary(line: string): void {
   if (file !== undefined && file !== "") appendFileSync(file, `${line}\n`)
 }
 
-/** Runs a script's body, printing a failure's message alone (`failureMessage`) and exiting 1. */
 export async function step(body: () => Promise<void>): Promise<void> {
   try {
     await body()
