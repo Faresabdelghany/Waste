@@ -24,11 +24,8 @@ import { and, asc, eq, inArray, isNotNull, type SQL } from "drizzle-orm"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import { reachesThroughRoute } from "../auth/provider"
-import { problem } from "../problem"
-
-export const noSuchPlan = (id: string) => problem(404, { detail: `No plan ${id} in the projects this account works in` })
+import { scoped } from "../scoped"
 
 export const planColumns = {
   id: plan.id,
@@ -70,21 +67,10 @@ export function planOf(row: PlanRow): Plan {
   }
 }
 
-/** The plans of this company, in the projects the caller works in: what a command's Plan is read through. */
-export const planScope = (principal: Principal): SQL | undefined => and(eq(plan.companyId, principal.companyId), inProjects(plan.projectId, principal))
-
 /** The plans of this company the caller reads: its projects' for an office account, the Plans of the routes its provider serves for a Service Provider's (`reachesThroughRoute`, #291 slice 23). */
 export const planReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(plan.companyId, principal.companyId), reachesThroughRoute(tx, principal, plan))
 
-/** One plan of this company by id, inside the caller's projects; undefined when it is neither. */
-export async function findPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {
-  const [row] = await tx
-    .select(planColumns)
-    .from(plan)
-    .where(and(planScope(principal), eq(plan.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: planScope, noSuch: noSuchPlan, find: findPlan } = scoped(plan, { noun: "plan", reach: "projects", columns: planColumns })
 
 /** One plan of this company by id that the caller reads (`planReach`); undefined when it is not one. */
 export async function findReachedPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {

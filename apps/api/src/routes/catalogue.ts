@@ -50,11 +50,12 @@ import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "configure.master"
@@ -223,21 +224,7 @@ function frequencyOf(row: FrequencyRow): ServiceFrequency {
 const FREQUENCY_NAME_TAKEN = "service_frequency_project_id_name_key"
 const frequencyNameTaken = (name: string) => `This project already has a service frequency called ${JSON.stringify(name)}`
 
-const noSuchFrequency = (id: string) => problem(404, { detail: `No service frequency ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every service frequency statement is bounded by. */
-const frequencyScope = (principal: Principal) =>
-  and(eq(serviceFrequency.companyId, principal.companyId), inProjects(serviceFrequency.projectId, principal))
-
-/** One frequency of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findFrequency(tx: Tx, principal: Principal, id: string): Promise<FrequencyRow | undefined> {
-  const [row] = await tx
-    .select(frequencyColumns)
-    .from(serviceFrequency)
-    .where(and(frequencyScope(principal), eq(serviceFrequency.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: frequencyScope, noSuch: noSuchFrequency, get: getFrequency, list: listFrequencies } = scoped(serviceFrequency, { noun: "service frequency", reach: "projects", columns: frequencyColumns })
 
 export function catalogueRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -442,23 +429,11 @@ export function catalogueRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(frequencyColumns)
-          .from(serviceFrequency)
-          .where(
-            and(
-              frequencyScope(principal),
-              projectId === undefined ? undefined : eq(serviceFrequency.projectId, projectId),
-              after === undefined ? undefined : gt(serviceFrequency.id, after),
-            ),
-          )
-          .orderBy(asc(serviceFrequency.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(frequencyOf), limit))
+        const page = await listFrequencies(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(serviceFrequency.projectId, projectId))
+        return c.json(mapPage(page, frequencyOf))
       },
     )
     .post(
@@ -508,8 +483,7 @@ export function catalogueRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findFrequency(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchFrequency(id)
+        const row = await getFrequency(c.get("tx"), c.get("principal"), id)
         return c.json(frequencyOf(row))
       },
     )
@@ -537,8 +511,7 @@ export function catalogueRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const current = await findFrequency(tx, principal, id)
-        if (current === undefined) throw noSuchFrequency(id)
+        const current = await getFrequency(tx, principal, id)
         const merged = {
           collectionsPerWeek: patch.collectionsPerWeek === undefined ? current.collectionsPerWeek : patch.collectionsPerWeek,
           weeksBetween: patch.weeksBetween === undefined ? current.weeksBetween : patch.weeksBetween,

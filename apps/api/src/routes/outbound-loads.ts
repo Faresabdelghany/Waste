@@ -37,8 +37,9 @@ import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireServiceProvider, requireUnloadingStation, requireVehicle, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam, requireNotAhead } from "./shared"
 
@@ -90,10 +91,7 @@ type AdjustmentRow = Pick<typeof materialAdjustment.$inferSelect, keyof typeof a
 
 const adjustmentOf = (row: AdjustmentRow): MaterialAdjustment => ({ ...row, recordedAt: row.recordedAt.toISOString() })
 
-const noSuchLoad = (id: string) => problem(404, { detail: `No outbound load ${id} in the projects this account works in` })
 const noSuchStation = (id: string) => problem(404, { detail: `No unloading station ${id} in this company` })
-
-const loadScope = (principal: Principal) => and(eq(outboundLoad.companyId, principal.companyId), inProjects(outboundLoad.projectId, principal))
 
 /** Each project's weight tolerance, for the projects named: what a receipt is read against. */
 async function tolerancesOf(tx: Tx, companyId: string, projectIds: readonly string[]): Promise<Map<string, number>> {
@@ -118,14 +116,7 @@ async function loadsOf(tx: Tx, companyId: string, rows: readonly LoadRow[]): Pro
   })
 }
 
-async function findLoad(tx: Tx, principal: Principal, id: string): Promise<LoadRow | undefined> {
-  const [row] = await tx
-    .select(loadColumns)
-    .from(outboundLoad)
-    .where(and(loadScope(principal), eq(outboundLoad.id, id)))
-    .limit(1)
-  return row
-}
+const { noSuch: noSuchLoad, find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, { noun: "outbound load", reach: "projects", columns: loadColumns })
 
 /** A station of the company the caller reaches: an account that works in no project reaches none, as on the stations' own routes. */
 async function findStation(tx: Tx, principal: Principal, id: string): Promise<{ id: string; name: string; transfer: boolean } | undefined> {
@@ -249,24 +240,9 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const { limit, cursor, projectId, status, fromStationId, toStationId } = c.req.valid("query")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
-        const rows = await tx
-          .select(loadColumns)
-          .from(outboundLoad)
-          .where(
-            and(
-              loadScope(principal),
-              projectId === undefined ? undefined : eq(outboundLoad.projectId, projectId),
-              status === undefined ? undefined : eq(outboundLoad.status, status),
-              fromStationId === undefined ? undefined : eq(outboundLoad.fromStationId, fromStationId),
-              toStationId === undefined ? undefined : eq(outboundLoad.toStationId, toStationId),
-              after === undefined ? undefined : gt(outboundLoad.id, after),
-            ),
-          )
-          .orderBy(asc(outboundLoad.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listLoads(tx, principal, at, projectId === undefined ? undefined : eq(outboundLoad.projectId, projectId), status === undefined ? undefined : eq(outboundLoad.status, status), fromStationId === undefined ? undefined : eq(outboundLoad.fromStationId, fromStationId), toStationId === undefined ? undefined : eq(outboundLoad.toStationId, toStationId))
         return c.json({ ...page, items: await loadsOf(tx, principal.companyId, page.items) })
       },
     )
@@ -338,8 +314,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        const row = await findLoad(tx, principal, id)
-        if (row === undefined) throw noSuchLoad(id)
+        const row = await getLoad(tx, principal, id)
         return c.json((await loadsOf(tx, principal.companyId, [row]))[0]!)
       },
     )

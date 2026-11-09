@@ -38,17 +38,16 @@ import { ACTIVE_CONTAMINANT_CODE_STATUSES } from "@waste/domain/execution/vocabu
 import { unofferedStep } from "@waste/domain/registry/catalogue"
 import { OFFERED_PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, desc, eq, gt, gte, inArray } from "drizzle-orm"
+import { and, desc, eq, gte, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
 
@@ -97,19 +96,7 @@ export const NOT_A_STEP = "A step charges an additional service of this project 
 /** What a rule naming a code that is not the company's is told. */
 export const NOT_A_CODE = "Not a contaminant code of this company"
 
-const noSuchRule = (id: string) => problem(404, { detail: `No pickup exception rule ${id} in the projects this account works in` })
-
-/** This company's rules, in the projects the caller works in. */
-const ruleScope = (principal: Principal) => and(eq(pickupExceptionRule.companyId, principal.companyId), inProjects(pickupExceptionRule.projectId, principal))
-
-async function findRule(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(pickupExceptionRule)
-    .where(and(ruleScope(principal), eq(pickupExceptionRule.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: ruleScope, noSuch: noSuchRule, get: getRule, locked: lockedRule, list: listRules } = scoped(pickupExceptionRule, { noun: "pickup exception rule", reach: "projects", columns })
 
 /**
  * Holds a ladder to its project's products: every step a product of the
@@ -263,24 +250,11 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(pickupExceptionRule)
-          .where(
-            and(
-              ruleScope(principal),
-              projectId === undefined ? undefined : eq(pickupExceptionRule.projectId, projectId),
-              day === undefined ? undefined : validOn(pickupExceptionRule, day),
-              after === undefined ? undefined : gt(pickupExceptionRule.id, after),
-            ),
-          )
-          .orderBy(asc(pickupExceptionRule.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listRules(tx, principal, at, projectId === undefined ? undefined : eq(pickupExceptionRule.projectId, projectId), day === undefined ? undefined : validOn(pickupExceptionRule, day))
         const ladders = await laddersOf(
           tx,
           principal.companyId,
@@ -348,8 +322,7 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findRule(tx, principal, id)
-        if (row === undefined) throw noSuchRule(id)
+        const row = await getRule(tx, principal, id)
         return c.json(ruleOf(row, (await laddersOf(tx, principal.companyId, [row.id])).get(row.id) ?? []))
       },
     )
@@ -376,9 +349,7 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         const { ladder, ...fields } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, pickupExceptionRule, { companyId: principal.companyId, id })
-        const current = await findRule(tx, principal, id)
-        if (current === undefined) throw noSuchRule(id)
+        const current = await lockedRule(tx, principal, id)
         requireOrdered(periodAfter(current, fields))
         const stored = (await laddersOf(tx, principal.companyId, [id])).get(id) ?? []
         if (ladder !== undefined) await requireLadder(tx, principal.companyId, current.projectId, ladder, stored)

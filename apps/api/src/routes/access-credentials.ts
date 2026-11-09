@@ -29,17 +29,16 @@ import { accessCredential } from "@waste/db/schema/site-visits"
 import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { normaliseCredentialValue } from "@waste/domain/visits/charges"
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { operation, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -95,18 +94,7 @@ export const ALREADY_BLOCKED = "The credential is already blocked; unblock it fi
 /** What an unblock of a credential not blocked is told. */
 export const NOT_BLOCKED = "The credential is not blocked"
 
-const noSuchCredential = (id: string) => problem(404, { detail: `No access credential ${id} in the projects this account works in` })
-
-const credentialScope = (principal: Principal) => and(eq(accessCredential.companyId, principal.companyId), inProjects(accessCredential.projectId, principal))
-
-async function findCredential(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(accessCredential)
-    .where(and(credentialScope(principal), eq(accessCredential.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: credentialScope, get: getCredential, locked: lockedCredential, list: listCredentials } = scoped(accessCredential, { noun: "access credential", reach: "projects", columns })
 
 /** What a credential running outside its business's Agreement is told, at the bound. */
 export const WITHIN_THE_AGREEMENT = "A business's credential is in force only while the agreement its visits are charged to is"
@@ -161,29 +149,11 @@ export function accessCredentialRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, kind, value, customerId, propertyId, validOn: day, blocked } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(accessCredential)
-          .where(
-            and(
-              credentialScope(principal),
-              projectId === undefined ? undefined : eq(accessCredential.projectId, projectId),
-              kind === undefined ? undefined : eq(accessCredential.kind, kind),
-              value === undefined ? undefined : eq(accessCredential.value, normaliseCredentialValue(value)),
-              customerId === undefined ? undefined : eq(accessCredential.customerId, customerId),
-              propertyId === undefined ? undefined : eq(accessCredential.propertyId, propertyId),
-              day === undefined ? undefined : validOn(accessCredential, day),
-              blocked === undefined ? undefined : blocked ? isNotNull(accessCredential.blockedAt) : isNull(accessCredential.blockedAt),
-              after === undefined ? undefined : gt(accessCredential.id, after),
-            ),
-          )
-          .orderBy(asc(accessCredential.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listCredentials(tx, principal, at, projectId === undefined ? undefined : eq(accessCredential.projectId, projectId), kind === undefined ? undefined : eq(accessCredential.kind, kind), value === undefined ? undefined : eq(accessCredential.value, normaliseCredentialValue(value)), customerId === undefined ? undefined : eq(accessCredential.customerId, customerId), propertyId === undefined ? undefined : eq(accessCredential.propertyId, propertyId), day === undefined ? undefined : validOn(accessCredential, day), blocked === undefined ? undefined : blocked ? isNotNull(accessCredential.blockedAt) : isNull(accessCredential.blockedAt))
         return c.json({ ...page, items: page.items.map(credentialOf) })
       },
     )
@@ -257,8 +227,7 @@ export function accessCredentialRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findCredential(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchCredential(id)
+        const row = await getCredential(c.get("tx"), c.get("principal"), id)
         return c.json(credentialOf(row))
       },
     )
@@ -285,13 +254,10 @@ export function accessCredentialRoutes(deps: RouteDeps) {
         const fields = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findCredential(tx, principal, id)
-        if (found === undefined) throw noSuchCredential(id)
+        const found = await getCredential(tx, principal, id)
         // The agreement a business's credential is charged to first, parent before child, as its shortening and its termination take it.
         if (found.agreementId !== null) await lockRow(tx, agreement, { companyId: principal.companyId, id: found.agreementId })
-        await lockRow(tx, accessCredential, { companyId: principal.companyId, id })
-        const current = await findCredential(tx, principal, id)
-        if (current === undefined) throw noSuchCredential(id)
+        const current = await lockedCredential(tx, principal, id)
         const period = periodAfter(current, fields)
         requireOrdered(period)
         // A business's credential stays inside its Agreement's period, which an end moved past it would leave.
@@ -316,9 +282,7 @@ export function accessCredentialRoutes(deps: RouteDeps) {
         const { reason } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, accessCredential, { companyId: principal.companyId, id })
-        const current = await findCredential(tx, principal, id)
-        if (current === undefined) throw noSuchCredential(id)
+        const current = await lockedCredential(tx, principal, id)
         if (current.blockedAt !== null) throw problem(409, { detail: ALREADY_BLOCKED })
         const [row] = await tx
           .update(accessCredential)
@@ -335,9 +299,7 @@ export function accessCredentialRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, accessCredential, { companyId: principal.companyId, id })
-        const current = await findCredential(tx, principal, id)
-        if (current === undefined) throw noSuchCredential(id)
+        const current = await lockedCredential(tx, principal, id)
         if (current.blockedAt === null) throw problem(409, { detail: NOT_BLOCKED })
         const [row] = await tx
           .update(accessCredential)

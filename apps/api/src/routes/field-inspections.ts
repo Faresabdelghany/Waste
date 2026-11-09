@@ -37,17 +37,18 @@ import { loggable } from "@waste/db/sqlstate"
 import { StorageRefused, StorageSilent, type ProofStorage } from "@waste/db/storage"
 import { findingsIssue } from "@waste/domain/inspections/rules"
 import { inspectionPhotoKeyNames, inspectionPhotoKeyOf, NO_PROOF_STORAGE, photoIdOf } from "@waste/domain/storage-objects"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
+import { refuseDuplicate } from "@waste/db/commands/shared"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { NO_PROOF_STORAGE_DETAIL, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "./proof-objects"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -66,8 +67,6 @@ export const KEY_NAMES_ANOTHER = "The photo key names another company or another
 export const PHOTO_ALREADY_APPENDED = "That photo is already the inspection's"
 /** What an upload of a key the bucket holds already is told: a fresh id never meets one, so asking again signs another. */
 export const PHOTO_ALREADY_UPLOADED = "Storage holds that photo already; ask again for another"
-
-const noSuchInspection = (id: string) => problem(404, { detail: `No field inspection ${id} in the projects this account works in` })
 
 const columns = {
   id: fieldInspection.id,
@@ -106,8 +105,6 @@ function inspectionOf(row: Row, photos: readonly PhotoRow[]): FieldInspection {
   }
 }
 
-const inspectionScope = (principal: Principal) => and(eq(fieldInspection.companyId, principal.companyId), inProjects(fieldInspection.projectId, principal))
-
 /** The photos of these inspections, in recording order. */
 async function photosOf(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, PhotoRow[]>> {
   const byInspection = new Map<string, PhotoRow[]>()
@@ -121,14 +118,7 @@ async function photosOf(tx: Tx, companyId: string, ids: readonly string[]): Prom
   return byInspection
 }
 
-async function findInspection(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(fieldInspection)
-    .where(and(inspectionScope(principal), eq(fieldInspection.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: inspectionScope, get: getInspection, locked: lockedInspection, list: listInspections } = scoped(fieldInspection, { noun: "field inspection", reach: "projects", columns })
 
 /** One inspection on the wire, with its photos. */
 async function answered(tx: Tx, principal: Principal, row: Row): Promise<FieldInspection> {
@@ -157,9 +147,7 @@ async function subjectProject(tx: Tx, principal: Principal, subject: { container
 
 /** An open inspection, locked: the path's row (404), then its state (409). */
 async function openInspection(tx: Tx, principal: Principal, id: string): Promise<Row> {
-  await lockRow(tx, fieldInspection, { companyId: principal.companyId, id })
-  const current = await findInspection(tx, principal, id)
-  if (current === undefined) throw noSuchInspection(id)
+  const current = await lockedInspection(tx, principal, id)
   if (current.status !== "open") throw problem(409, { detail: INSPECTION_CLOSED })
   return current
 }
@@ -204,27 +192,11 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, containerId, propertyId, outcome, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(fieldInspection)
-          .where(
-            and(
-              inspectionScope(principal),
-              projectId === undefined ? undefined : eq(fieldInspection.projectId, projectId),
-              containerId === undefined ? undefined : eq(fieldInspection.containerId, containerId),
-              propertyId === undefined ? undefined : eq(fieldInspection.propertyId, propertyId),
-              outcome === undefined ? undefined : eq(fieldInspection.outcome, outcome),
-              status === undefined ? undefined : eq(fieldInspection.status, status),
-              after === undefined ? undefined : gt(fieldInspection.id, after),
-            ),
-          )
-          .orderBy(asc(fieldInspection.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listInspections(tx, principal, at, projectId === undefined ? undefined : eq(fieldInspection.projectId, projectId), containerId === undefined ? undefined : eq(fieldInspection.containerId, containerId), propertyId === undefined ? undefined : eq(fieldInspection.propertyId, propertyId), outcome === undefined ? undefined : eq(fieldInspection.outcome, outcome), status === undefined ? undefined : eq(fieldInspection.status, status))
         const photos = await photosOf(tx, principal.companyId, page.items.map((row) => row.id))
         return c.json({ ...page, items: page.items.map((row) => inspectionOf(row, photos.get(row.id) ?? [])) })
       },
@@ -285,8 +257,7 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findInspection(tx, principal, id)
-        if (row === undefined) throw noSuchInspection(id)
+        const row = await getInspection(tx, principal, id)
         return c.json(await answered(tx, principal, row))
       },
     )
@@ -411,8 +382,7 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
         const { extension } = c.req.valid("json")
         const principal = c.get("principal")
         await c.get("fenced")(async (tx) => {
-          const found = await findInspection(tx, principal, id)
-          if (found === undefined) throw noSuchInspection(id)
+          const found = await getInspection(tx, principal, id)
           // A photo no append can land for is one nothing ever names.
           if (found.status !== "open") throw problem(409, { detail: INSPECTION_CLOSED })
         })
@@ -445,8 +415,7 @@ export function fieldInspectionRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
         const photos = await c.get("fenced")(async (tx) => {
-          const found = await findInspection(tx, principal, id)
-          if (found === undefined) throw noSuchInspection(id)
+          await getInspection(tx, principal, id)
           return (await photosOf(tx, principal.companyId, [id])).get(id) ?? []
         })
         const expiresAt = new Date(now().getTime() + READ_URL_TTL_SECONDS * 1000).toISOString()

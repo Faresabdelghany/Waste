@@ -25,17 +25,16 @@ import { OFFERED_PRODUCT_STATUSES, type ProductUnit } from "@waste/domain/regist
 import { TRADE_TOGETHER } from "@waste/domain/visits/charges"
 import { unofferedProduct, unofferedStep } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, stamp } from "./shared"
@@ -89,18 +88,7 @@ function ruleOf(row: Row, sets: Sets): VisitRule {
   }
 }
 
-const noSuchRule = (id: string) => problem(404, { detail: `No visit rule ${id} in the projects this account works in` })
-
-const ruleScope = (principal: Principal) => and(eq(visitRule.companyId, principal.companyId), inProjects(visitRule.projectId, principal))
-
-async function findRule(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(visitRule)
-    .where(and(ruleScope(principal), eq(visitRule.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: ruleScope, find: findRule, get: getRule, list: listRules } = scoped(visitRule, { noun: "visit rule", reach: "projects", columns })
 
 async function setsOf(tx: Tx, companyId: string, ids: readonly string[]): Promise<(id: string) => Sets> {
   const { ladders, freeFractions } = await ruleSetsOf(tx, companyId, ids)
@@ -187,24 +175,11 @@ export function visitRuleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(visitRule)
-          .where(
-            and(
-              ruleScope(principal),
-              projectId === undefined ? undefined : eq(visitRule.projectId, projectId),
-              day === undefined ? undefined : validOn(visitRule, day),
-              after === undefined ? undefined : gt(visitRule.id, after),
-            ),
-          )
-          .orderBy(asc(visitRule.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listRules(tx, principal, at, projectId === undefined ? undefined : eq(visitRule.projectId, projectId), day === undefined ? undefined : validOn(visitRule, day))
         const sets = await setsOf(
           tx,
           principal.companyId,
@@ -277,8 +252,7 @@ export function visitRuleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findRule(tx, principal, id)
-        if (row === undefined) throw noSuchRule(id)
+        const row = await getRule(tx, principal, id)
         return c.json(ruleOf(row, (await setsOf(tx, principal.companyId, [row.id]))(row.id)))
       },
     )
@@ -305,8 +279,7 @@ export function visitRuleRoutes(deps: RouteDeps) {
         const { ladder, freeFractionIds, ...fields } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findRule(tx, principal, id)
-        if (found === undefined) throw noSuchRule(id)
+        const found = await getRule(tx, principal, id)
         await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
         await lockRow(tx, visitRule, { companyId: principal.companyId, id })
         const current = (await findRule(tx, principal, id)) ?? found

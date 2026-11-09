@@ -37,7 +37,7 @@ import { ACTIVE_TEAM_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/doma
 import { retiredTeam } from "@waste/domain/resolution/teams"
 import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock, refuseDuplicate } from "@waste/db/commands/shared"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -46,8 +46,9 @@ import { projectIdsOf } from "../auth/projects"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
 import { NOT_A_TEAM, requireUserAccount } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -82,19 +83,9 @@ const teamOf = (row: Row, memberUserAccountIds: readonly string[]): Team => ({ i
 const NAME_TAKEN = "team_name_key"
 const nameTaken = (name: string) => `This company already has a team called ${JSON.stringify(name)}`
 
-const noSuchTeam = (id: string) => problem(404, { detail: `No team ${id} in this company` })
 const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in the projects this account works in` })
 
-const scope = (principal: Principal) => eq(team.companyId, principal.companyId)
-
-async function findTeam(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(team)
-    .where(and(scope(principal), eq(team.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchTeam, get: getTeam, list: listTeams } = scoped(team, { noun: "team", reach: "company", columns })
 
 type DefaultRow = { id: string; kind: string | null; ticketTypeId: string | null; teamId: string }
 
@@ -149,16 +140,10 @@ export function ticketTeamRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const rows = await tx
-          .select(columns)
-          .from(team)
-          .where(and(scope(principal), status === undefined ? undefined : eq(team.status, status), after === undefined ? undefined : gt(team.id, after)))
-          .orderBy(asc(team.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listTeams(tx, principal, at, status === undefined ? undefined : eq(team.status, status))
         const held = await idsOf(tx, members, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => teamOf(row, held.get(row.id) ?? [])), nextCursor })
       },
@@ -213,8 +198,7 @@ export function ticketTeamRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findTeam(tx, principal, id)
-        if (row === undefined) throw noSuchTeam(id)
+        const row = await getTeam(tx, principal, id)
         return c.json(teamOf(row, await idsFor(tx, members, principal.companyId, row.id)))
       },
     )

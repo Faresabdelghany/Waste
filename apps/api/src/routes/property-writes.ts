@@ -38,8 +38,9 @@ import { refuseDuplicate, refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
-import { invalidRequest, problem } from "../problem"
+import { requireProject } from "../auth/projects"
+import { invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 import { requirePartyCustomers, type Entry, type Parent } from "./members"
 import { stamp } from "./shared"
 import { serviceWindowOf, serviceWindowValues } from "./time-windows"
@@ -192,20 +193,7 @@ const collisions = (values: { name?: string; registryId?: string | null }): Reco
   ...(values.registryId == null ? {} : { [REGISTRY_TAKEN]: registryTaken(values.registryId) }),
 })
 
-export const noSuchProperty = (id: string) => problem(404, { detail: `No property ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every property statement is bounded by. */
-export const propertyScope = (principal: Principal) => and(eq(property.companyId, principal.companyId), inProjects(property.projectId, principal))
-
-/** One property of this company by id, inside the caller's projects; undefined when it is neither. */
-export async function findProperty(tx: Tx, principal: Principal, id: string): Promise<PropertyRow | undefined> {
-  const [row] = await tx
-    .select(propertyColumns)
-    .from(property)
-    .where(and(propertyScope(principal), eq(property.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: propertyScope, noSuch: noSuchProperty, find: findProperty } = scoped(property, { noun: "property", reach: "projects", columns: propertyColumns })
 
 /** Registers a property in one of the caller's projects, with the parties it starts with, each from the project's today on `now`; `found` is what the register said of the body's `addressId`. */
 export async function createProperty(tx: Tx, principal: Principal, body: PropertyCreate, now: () => Date, found?: Address | null): Promise<Property> {

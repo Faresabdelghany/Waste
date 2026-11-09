@@ -28,31 +28,20 @@ import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { reachesRoute, reachesThroughRoute, type ReachedRouteColumns } from "../auth/provider"
 import { problem } from "../problem"
+import { scoped } from "../scoped"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
 import { NOT_A_ROUTE } from "./references"
 import { requireRow } from "./shared"
 
-export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })
 export const noSuchSession = (id: string) => problem(404, { detail: `No session ${id} in the projects this account works in` })
 export const noSuchUnload = (id: string) => problem(404, { detail: `No unload ${id} in the projects this account works in` })
 
-/** The routes of this company, in the projects the caller works in: what every route command, and every route statement outside the routes' and the pickups' reads, is bounded by. */
-export const routeScope = (principal: Principal): SQL | undefined => and(eq(route.companyId, principal.companyId), inProjects(route.projectId, principal))
-
 /** The routes of this company the caller reads: its projects' for an office account, the ones its provider serves for a Service Provider's (`reachesRoute`). What the routes' and the pickups' reads are bounded by, and nothing that writes. */
 export const routeReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(route.companyId, principal.companyId), reachesRoute(tx, principal))
 
-/** One route of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
-export async function findRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow | undefined> {
-  const [row] = await tx
-    .select(routeColumns)
-    .from(route)
-    .where(and(routeScope(principal), eq(route.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: routeScope, noSuch: noSuchRoute, find: findRoute } = scoped(route, { noun: "route", reach: "projects", columns: routeColumns })
 
 /** One route of this company by id that the caller reads (`routeReach`); undefined when it is not one. What a read reads. */
 export async function findReachedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow | undefined> {

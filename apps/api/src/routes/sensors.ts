@@ -62,7 +62,7 @@ import { dayInTimezone } from "@waste/domain/clock"
 import { aheadOfClock } from "@waste/domain/execution/commands"
 import { projectTimezones, projectToday, projectTodays } from "@waste/db/query/project-clock"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
-import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { inForceOn } from "@waste/domain/periods"
 import { ACTIVE_SENSOR_STATUSES, type SensorStatus } from "@waste/domain/resources/vocabulary"
 import { refuseUnless, takesReference } from "@waste/domain/status-gates"
@@ -73,11 +73,12 @@ import { lockRow, refuseDuplicate, refuseOverlap, strengthFor } from "@waste/db/
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { AuthEnv, Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
 import { Allowance } from "../auth/public-door"
@@ -185,12 +186,6 @@ export const RETIRED_SENSOR = "The sensor is retired; only an active sensor is p
 export const stillPaired = (open: number): string =>
   `The sensor has ${open === 1 ? "a pairing" : `${open} pairings`} open on or after today; end ${open === 1 ? "it" : "them"} before retiring the sensor`
 
-const noSuchSensor = (id: string) => problem(404, { detail: `No sensor ${id} in the projects this account works in` })
-const noSuchPairing = (id: string) => problem(404, { detail: `No sensor pairing ${id} in the projects this account works in` })
-
-const sensorScope = (principal: Principal) => and(eq(sensor.companyId, principal.companyId), inProjects(sensor.projectId, principal))
-const pairingScope = (principal: Principal) => and(eq(sensorPairing.companyId, principal.companyId), inProjects(sensorPairing.projectId, principal))
-
 /**
  * The sensors as the wire spells them: the pairing in force today on each
  * one's project's clock, and each one's newest reading, two statements for
@@ -233,23 +228,9 @@ async function sensorsOf(tx: Tx, companyId: string, rows: readonly SensorRow[], 
   })
 }
 
-async function findSensor(tx: Tx, principal: Principal, id: string): Promise<SensorRow | undefined> {
-  const [row] = await tx
-    .select(sensorColumns)
-    .from(sensor)
-    .where(and(sensorScope(principal), eq(sensor.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: sensorScope, noSuch: noSuchSensor, find: findSensor, get: getSensor, list: listSensors } = scoped(sensor, { noun: "sensor", reach: "projects", columns: sensorColumns })
 
-async function findPairing(tx: Tx, principal: Principal, id: string): Promise<PairingRow | undefined> {
-  const [row] = await tx
-    .select(pairingColumns)
-    .from(sensorPairing)
-    .where(and(pairingScope(principal), eq(sensorPairing.id, id)))
-    .limit(1)
-  return row
-}
+const { get: getPairing, list: listPairings } = scoped(sensorPairing, { noun: "sensor pairing", reach: "projects", columns: pairingColumns })
 
 /** The pairings of a sensor open on or after a day: what a retirement would leave measuring. */
 async function openPairings(tx: Tx, companyId: string, sensorId: string, day: string): Promise<number> {
@@ -377,22 +358,9 @@ export function sensorRoutes(deps: RouteDeps) {
         const { limit, cursor, projectId, status } = c.req.valid("query")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
-        const rows = await tx
-          .select(sensorColumns)
-          .from(sensor)
-          .where(
-            and(
-              sensorScope(principal),
-              projectId === undefined ? undefined : eq(sensor.projectId, projectId),
-              status === undefined ? undefined : eq(sensor.status, status),
-              after === undefined ? undefined : gt(sensor.id, after),
-            ),
-          )
-          .orderBy(asc(sensor.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listSensors(tx, principal, at, projectId === undefined ? undefined : eq(sensor.projectId, projectId), status === undefined ? undefined : eq(sensor.status, status))
         return c.json({ ...page, items: await sensorsOf(tx, principal.companyId, page.items, now()) })
       },
     )
@@ -445,8 +413,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        const row = await findSensor(tx, principal, id)
-        if (row === undefined) throw noSuchSensor(id)
+        const row = await getSensor(tx, principal, id)
         const [answer] = await sensorsOf(tx, principal.companyId, [row], now())
         return c.json(answer!)
       },
@@ -514,14 +481,8 @@ export function sensorRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const tx = c.get("tx")
         if ((await findSensor(tx, principal, id)) === undefined) throw noSuchSensor(id)
-        const after = afterCursor(cursor)
-        const rows = await tx
-          .select(pairingColumns)
-          .from(sensorPairing)
-          .where(and(pairingScope(principal), eq(sensorPairing.sensorId, id), after === undefined ? undefined : gt(sensorPairing.id, after)))
-          .orderBy(asc(sensorPairing.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const at = pageAt({ cursor, limit })
+        const page = await listPairings(tx, principal, at, eq(sensorPairing.sensorId, id))
         return c.json({ ...page, items: page.items.map(pairingOf) })
       },
     )
@@ -581,8 +542,7 @@ export function sensorRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findPairing(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchPairing(id)
+        const row = await getPairing(c.get("tx"), c.get("principal"), id)
         return c.json(pairingOf(row))
       },
     )
@@ -609,8 +569,7 @@ export function sensorRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        const found = await findPairing(tx, principal, id)
-        if (found === undefined) throw noSuchPairing(id)
+        const found = await getPairing(tx, principal, id)
         await lockRow(tx, sensor, { companyId: principal.companyId, id: found.sensorId })
         await lockRow(tx, sensorPairing, { companyId: principal.companyId, id })
         requireOrdered(periodAfter(found, patch))

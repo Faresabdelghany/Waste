@@ -32,17 +32,18 @@ import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf, timeOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { requireEachOf } from "./id-sets"
 import { pointInvalid } from "./place-rules"
 import { requireWasteFraction } from "./references"
@@ -193,19 +194,7 @@ const nameTaken = (name: string) => `This project already has a drop-off point c
 /** The one check only the database runs on the point. */
 const CHECKS = pointInvalid("drop_off_point_location_valid")
 
-const noSuchPoint = (id: string) => problem(404, { detail: `No drop-off point ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every statement here is bounded by. */
-const scope = (principal: Principal) => and(eq(dropOffPoint.companyId, principal.companyId), inProjects(dropOffPoint.projectId, principal))
-
-async function findPoint(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(dropOffPoint)
-    .where(and(scope(principal), eq(dropOffPoint.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchPoint, get: getPoint, list: listPoints } = scoped(dropOffPoint, { noun: "drop-off point", reach: "projects", columns })
 
 /** Stamps the point and answers its row, or undefined where the caller reaches no such point: a set's PUT does this before it writes. */
 async function stampPoint(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
@@ -266,26 +255,12 @@ export function dropOffPointRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, kind } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(dropOffPoint)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(dropOffPoint.projectId, projectId),
-              status === undefined ? undefined : eq(dropOffPoint.status, status),
-              kind === undefined ? undefined : eq(dropOffPoint.kind, kind),
-              after === undefined ? undefined : gt(dropOffPoint.id, after),
-            ),
-          )
-          .orderBy(asc(dropOffPoint.id))
-          .limit(fetchLimit(limit))
+        const { items, nextCursor } = await listPoints(tx, principal, at, projectId === undefined ? undefined : eq(dropOffPoint.projectId, projectId), status === undefined ? undefined : eq(dropOffPoint.status, status), kind === undefined ? undefined : eq(dropOffPoint.kind, kind))
         // Paged first, so the row that only proves there is a next page is not one whose sets are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
         const sets = await setsOf(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => pointOf(row, sets.get(row.id) ?? NO_SETS)), nextCursor })
       },
@@ -345,8 +320,7 @@ export function dropOffPointRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findPoint(tx, principal, id)
-        if (row === undefined) throw noSuchPoint(id)
+        const row = await getPoint(tx, principal, id)
         return c.json(await withSets(tx, principal.companyId, row))
       },
     )

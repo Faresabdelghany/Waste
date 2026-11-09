@@ -42,7 +42,7 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
-import { and, asc, eq, gt, isNull, lt, or } from "drizzle-orm"
+import { and, eq, gt, isNull, lt, or } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseOverlap } from "@waste/db/commands/shared"
 import { lockedSubscription, PAUSE_OVERLAP, pauseSubscription } from "@waste/db/commands/subscription-pauses"
@@ -54,8 +54,9 @@ import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
 import { askRuns, mergedRuns, runsBringingBack, stopsLeft, type Window } from "./service-ends"
 import { describeCreated, describeJson, IdParam } from "./shared"
@@ -69,7 +70,6 @@ export const KEEPS_ITS_FIRST_DAY = "A pause that has begun keeps its first day"
 export const pauseEnded = (day: string) => `This pause ended on ${day}; a later one is a new pause`
 export const pauseBegun = (day: string) => `This pause began on ${day}; give it an end instead`
 
-const noSuchPause = (id: string) => problem(404, { detail: `No pause ${id} in the projects this account works in` })
 const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
 
 const columns = {
@@ -93,8 +93,6 @@ const pauseOf = (row: Row): SubscriptionPause => ({
   ...stampsOf(row),
 })
 
-const scope = (principal: Principal) => and(eq(subscriptionPause.companyId, principal.companyId), inProjects(subscriptionPause.projectId, principal))
-
 /** The subscription a pause hangs on, as a write needs it: its period, its project and the agreement whose lock comes first. */
 type Parent = Period & { id: string; projectId: string; agreementId: string }
 
@@ -114,10 +112,7 @@ async function lockedParent(tx: Tx, principal: Principal, found: Parent): Promis
   return current
 }
 
-async function findPause(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx.select(columns).from(subscriptionPause).where(and(scope(principal), eq(subscriptionPause.id, id))).limit(1)
-  return row
-}
+const { scope, noSuch: noSuchPause, get: getPause, list: listPauses } = scoped(subscriptionPause, { noun: "pause", reach: "projects", columns })
 
 /** The containers serving the subscription on any day of the window: what its pause suspends, or gives back. */
 async function containersOf(tx: Tx, companyId: string, subscriptionId: string, window: Window): Promise<string[]> {
@@ -157,25 +152,11 @@ export function subscriptionPauseRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, subscriptionId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(subscriptionPause)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(subscriptionPause.projectId, projectId),
-              subscriptionId === undefined ? undefined : eq(subscriptionPause.subscriptionId, subscriptionId),
-              day === undefined ? undefined : validOn(subscriptionPause, day),
-              after === undefined ? undefined : gt(subscriptionPause.id, after),
-            ),
-          )
-          .orderBy(asc(subscriptionPause.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(pauseOf), limit))
+        const page = await listPauses(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(subscriptionPause.projectId, projectId), subscriptionId === undefined ? undefined : eq(subscriptionPause.subscriptionId, subscriptionId), day === undefined ? undefined : validOn(subscriptionPause, day))
+        return c.json(mapPage(page, pauseOf))
       },
     )
     .get(
@@ -194,8 +175,7 @@ export function subscriptionPauseRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findPause(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchPause(id)
+        const row = await getPause(c.get("tx"), c.get("principal"), id)
         return c.json(pauseOf(row))
       },
     )
@@ -263,13 +243,11 @@ export function subscriptionPauseRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findPause(tx, principal, id)
-        if (found === undefined) throw noSuchPause(id)
+        const found = await getPause(tx, principal, id)
         const owner = await findSubscription(tx, principal, found.subscriptionId)
         if (owner === undefined) throw noSuchPause(id)
         const parent = await lockedParent(tx, principal, owner)
-        const current = await findPause(tx, principal, id)
-        if (current === undefined) throw noSuchPause(id)
+        const current = await getPause(tx, principal, id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
         const today = await projectToday(tx, within, now)()
 
@@ -321,13 +299,11 @@ export function subscriptionPauseRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const found = await findPause(tx, principal, id)
-        if (found === undefined) throw noSuchPause(id)
+        const found = await getPause(tx, principal, id)
         const owner = await findSubscription(tx, principal, found.subscriptionId)
         if (owner === undefined) throw noSuchPause(id)
         const parent = await lockedParent(tx, principal, owner)
-        const current = await findPause(tx, principal, id)
-        if (current === undefined) throw noSuchPause(id)
+        const current = await getPause(tx, principal, id)
         const within = { companyId: principal.companyId, projectId: parent.projectId }
         const today = await projectToday(tx, within, now)()
         if (current.validFrom <= today) throw problem(409, { detail: pauseBegun(current.validFrom) })

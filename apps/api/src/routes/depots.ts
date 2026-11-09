@@ -42,19 +42,17 @@
 import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
 import { Depot, DepotCreate, DepotListQuery, DepotPatch } from "@waste/contracts/places"
-import type { Tx } from "@waste/db/client"
 import { depot } from "@waste/db/schema/places"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -114,20 +112,7 @@ const LOCATION_INVALID = "depot_location_valid"
 /** Every check the table runs that a body can be told about: the point, and the two shape rules behind `requirePlaceShape`. */
 const CHECKS = { ...pointInvalid(LOCATION_INVALID), ...placeShapeInvalid("depot") }
 
-const noSuchDepot = (id: string) => problem(404, { detail: `No depot ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every depot statement is bounded by. */
-const scope = (principal: Principal) => and(eq(depot.companyId, principal.companyId), inProjects(depot.projectId, principal))
-
-/** One depot of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findDepot(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(depot)
-    .where(and(scope(principal), eq(depot.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchDepot, get: getDepot, locked: lockedDepot, list: listDepots } = scoped(depot, { noun: "depot", reach: "projects", columns })
 
 export function depotRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -148,24 +133,11 @@ export function depotRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(depot)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(depot.projectId, projectId),
-              status === undefined ? undefined : eq(depot.status, status),
-              after === undefined ? undefined : gt(depot.id, after),
-            ),
-          )
-          .orderBy(asc(depot.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(depotOf), limit))
+        const page = await listDepots(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(depot.projectId, projectId), status === undefined ? undefined : eq(depot.status, status))
+        return c.json(mapPage(page, depotOf))
       },
     )
     .post(
@@ -218,8 +190,7 @@ export function depotRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findDepot(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchDepot(id)
+        const row = await getDepot(c.get("tx"), c.get("principal"), id)
         return c.json(depotOf(row))
       },
     )
@@ -253,9 +224,7 @@ export function depotRoutes(deps: RouteDeps) {
         // lock makes the second read what the first wrote (routes/shared.ts).
         // An id nobody minted locks nothing and is a 404 here as in every
         // other family.
-        await lockRow(tx, depot, { companyId: principal.companyId, id }, strengthFor(depot, patch))
-        const current = await findDepot(tx, principal, id)
-        if (current === undefined) throw noSuchDepot(id)
+        const current = await lockedDepot(tx, principal, id, strengthFor(depot, patch))
         // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).
         await requirePlacePatch(tx, principal.companyId, current, patch)
 

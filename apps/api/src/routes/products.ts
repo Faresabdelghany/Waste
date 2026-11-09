@@ -34,17 +34,16 @@ import { product } from "@waste/db/schema/catalogue"
 import { visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { project } from "@waste/db/schema/organisation"
 import { FREE_DAYS_ARE_A_HIRES } from "@waste/domain/finance/hire"
-import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm"
+import { and, count, eq, inArray, or } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -114,11 +113,6 @@ const collisions = (values: { name?: string; invoiceCode?: string | null }): Rec
   ...(values.invoiceCode == null ? {} : { [INVOICE_CODE_TAKEN]: invoiceCodeTaken(values.invoiceCode) }),
 })
 
-const noSuchProduct = (id: string) => problem(404, { detail: `No product ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every product statement is bounded by. */
-const scope = (principal: Principal) => and(eq(product.companyId, principal.companyId), inProjects(product.projectId, principal))
-
 /** What the body points at, held to this company and this project. A null or an absent field points at nothing. */
 type References = { containerTypeId?: string | null; wasteFractionId?: string | null; serviceFrequencyId?: string | null }
 
@@ -129,15 +123,7 @@ async function requireReferences(tx: Tx, within: { companyId: string; projectId:
   await requireServiceFrequency(tx, within, values.serviceFrequencyId)
 }
 
-/** One product of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findProduct(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(product)
-    .where(and(scope(principal), eq(product.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchProduct, find: findProduct, get: getProduct, list: listProducts } = scoped(product, { noun: "product", reach: "projects", columns })
 
 export function productRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -158,23 +144,11 @@ export function productRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(product)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(product.projectId, projectId),
-              after === undefined ? undefined : gt(product.id, after),
-            ),
-          )
-          .orderBy(asc(product.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(productOf), limit))
+        const page = await listProducts(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(product.projectId, projectId))
+        return c.json(mapPage(page, productOf))
       },
     )
     .post(
@@ -225,8 +199,7 @@ export function productRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findProduct(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchProduct(id)
+        const row = await getProduct(c.get("tx"), c.get("principal"), id)
         return c.json(productOf(row))
       },
     )
@@ -254,8 +227,7 @@ export function productRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const found = await findProduct(tx, principal, id)
-        if (found === undefined) throw noSuchProduct(id)
+        const found = await getProduct(tx, principal, id)
         // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's Visit Rules are written under too.
         await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
         await lockRow(tx, product, { companyId: principal.companyId, id }, strengthFor(product, patch))

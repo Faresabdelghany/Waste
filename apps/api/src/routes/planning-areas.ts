@@ -68,18 +68,19 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { planningAreasAt } from "@waste/db/query/zones"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate, refuseOverlap, type CheckRefusal } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -167,35 +168,9 @@ const polygonInvalid = (path: string): Record<string, CheckRefusal> => ({
   [POLYGON_INVALID]: { input: path, sentence: NOT_A_VALID_POLYGON },
 })
 
-const noSuchArea = (id: string) => problem(404, { detail: `No planning area ${id} in the projects this account works in` })
-const noSuchBoundary = (id: string) => problem(404, { detail: `No planning area boundary ${id} in the projects this account works in` })
+const { scope, noSuch: noSuchArea, find: findArea, get: getArea, list: listAreas } = scoped(planningArea, { noun: "planning area", reach: "projects", columns })
 
-/** The rows of this company, in the projects the caller works in: what every planning area statement is bounded by. */
-const scope = (principal: Principal) => and(eq(planningArea.companyId, principal.companyId), inProjects(planningArea.projectId, principal))
-
-/** The same for a boundary, which carries the project its area is in. */
-const boundaryScope = (principal: Principal) =>
-  and(eq(planningAreaBoundary.companyId, principal.companyId), inProjects(planningAreaBoundary.projectId, principal))
-
-/** One area of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findArea(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(planningArea)
-    .where(and(scope(principal), eq(planningArea.id, id)))
-    .limit(1)
-  return row
-}
-
-/** One boundary version of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findBoundary(tx: Tx, principal: Principal, id: string): Promise<BoundaryRow | undefined> {
-  const [row] = await tx
-    .select(boundaryColumns)
-    .from(planningAreaBoundary)
-    .where(and(boundaryScope(principal), eq(planningAreaBoundary.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: boundaryScope, noSuch: noSuchBoundary, get: getBoundary, list: listBoundaries } = scoped(planningAreaBoundary, { noun: "planning area boundary", reach: "projects", columns: boundaryColumns })
 
 /**
  * Writes one version of an area, on the create that registers the area with
@@ -256,15 +231,13 @@ export async function patchPlanningArea(tx: Tx, principal: Principal, id: string
 
 /** Adds a version to an area the caller reaches; the 404 where there is none. */
 export async function addPlanningAreaBoundary(tx: Tx, principal: Principal, areaId: string, values: PlanningAreaBoundaryCreate): Promise<PlanningAreaBoundary> {
-  const area = await findArea(tx, principal, areaId)
-  if (area === undefined) throw noSuchArea(areaId)
+  const area = await getArea(tx, principal, areaId)
   return boundaryOf(await writeBoundary(tx, { companyId: principal.companyId, projectId: area.projectId, id: area.id }, values, "boundary"))
 }
 
 /** Ends or redraws one version the caller reaches; the 404 where there is none. */
 export async function patchPlanningAreaBoundary(tx: Tx, principal: Principal, id: string, patch: PlanningAreaBoundaryPatch): Promise<PlanningAreaBoundary> {
-  const current = await findBoundary(tx, principal, id)
-  if (current === undefined) throw noSuchBoundary(id)
+  const current = await getBoundary(tx, principal, id)
   if (patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
   const [row] = await refuseCheck(polygonInvalid("boundary"), () =>
     refuseOverlap({ [BOUNDARY_RUNNING]: BOUNDARY_RUNNING_SENTENCE }, () =>
@@ -315,24 +288,11 @@ export function planningAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, purpose } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(planningArea)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(planningArea.projectId, projectId),
-              purpose === undefined ? undefined : eq(planningArea.purpose, purpose),
-              after === undefined ? undefined : gt(planningArea.id, after),
-            ),
-          )
-          .orderBy(asc(planningArea.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(areaOf), limit))
+        const page = await listAreas(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(planningArea.projectId, projectId), purpose === undefined ? undefined : eq(planningArea.purpose, purpose))
+        return c.json(mapPage(page, areaOf))
       },
     )
     .post(
@@ -396,8 +356,7 @@ export function planningAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findArea(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchArea(id)
+        const row = await getArea(c.get("tx"), c.get("principal"), id)
         return c.json(areaOf(row))
       },
     )
@@ -441,24 +400,12 @@ export function planningAreaRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if ((await findArea(tx, principal, id)) === undefined) throw noSuchArea(id)
-        const rows = await tx
-          .select(boundaryColumns)
-          .from(planningAreaBoundary)
-          .where(
-            and(
-              boundaryScope(principal),
-              eq(planningAreaBoundary.planningAreaId, id),
-              day === undefined ? undefined : validOn(planningAreaBoundary, day),
-              after === undefined ? undefined : gt(planningAreaBoundary.id, after),
-            ),
-          )
-          .orderBy(asc(planningAreaBoundary.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(boundaryOf), limit))
+        const page = await listBoundaries(tx, principal, at, eq(planningAreaBoundary.planningAreaId, id), day === undefined ? undefined : validOn(planningAreaBoundary, day))
+        return c.json(mapPage(page, boundaryOf))
       },
     )
     .post(
@@ -498,25 +445,11 @@ export function planningAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, planningAreaId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(boundaryColumns)
-          .from(planningAreaBoundary)
-          .where(
-            and(
-              boundaryScope(principal),
-              projectId === undefined ? undefined : eq(planningAreaBoundary.projectId, projectId),
-              planningAreaId === undefined ? undefined : eq(planningAreaBoundary.planningAreaId, planningAreaId),
-              day === undefined ? undefined : validOn(planningAreaBoundary, day),
-              after === undefined ? undefined : gt(planningAreaBoundary.id, after),
-            ),
-          )
-          .orderBy(asc(planningAreaBoundary.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(boundaryOf), limit))
+        const page = await listBoundaries(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(planningAreaBoundary.projectId, projectId), planningAreaId === undefined ? undefined : eq(planningAreaBoundary.planningAreaId, planningAreaId), day === undefined ? undefined : validOn(planningAreaBoundary, day))
+        return c.json(mapPage(page, boundaryOf))
       },
     )
     .get(
@@ -536,8 +469,7 @@ export function planningAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findBoundary(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchBoundary(id)
+        const row = await getBoundary(c.get("tx"), c.get("principal"), id)
         return c.json(boundaryOf(row))
       },
     )

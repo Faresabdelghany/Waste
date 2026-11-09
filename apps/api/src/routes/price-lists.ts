@@ -102,13 +102,12 @@ import { lockRow, refuseDuplicate, refuseOverlap } from "@waste/db/commands/shar
 import { projectCurrency } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 import { notWithin, refuseStranded } from "@waste/db/commands/periods"
-
-import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
+import { scoped } from "../scoped"
 import { periodAfter, periodOf, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
 import { answerOf, batchesOf, productStatuses, refusePlan } from "./indexation"
@@ -219,34 +218,9 @@ export const OUTSIDE_PRICE_LIST = "Outside the price list's period"
 /** What a list shortened under its rows is refused with; the rows in the way are not in the body, so the caller ends them first. */
 const strandedRows = strandedSentence("price row", "end")
 
-const noSuchList = (id: string) => problem(404, { detail: `No price list ${id} in the projects this account works in` })
-const noSuchRow = (id: string) => problem(404, { detail: `No price row ${id} in the projects this account works in` })
+const { scope, noSuch: noSuchList, find: findList, get: getPriceList, locked: lockedPriceList, list: listPriceLists } = scoped(priceList, { noun: "price list", reach: "projects", columns })
 
-/** The rows of this company, in the projects the caller works in: what every list statement is bounded by. */
-const scope = (principal: Principal) => and(eq(priceList.companyId, principal.companyId), inProjects(priceList.projectId, principal))
-
-/** The same for a row, which carries the project its list is in. */
-const rowScope = (principal: Principal) => and(eq(priceListRow.companyId, principal.companyId), inProjects(priceListRow.projectId, principal))
-
-/** One list of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findList(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(priceList)
-    .where(and(scope(principal), eq(priceList.id, id)))
-    .limit(1)
-  return row
-}
-
-/** One row of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findRow(tx: Tx, principal: Principal, id: string): Promise<PriceRowRow | undefined> {
-  const [row] = await tx
-    .select(rowColumns)
-    .from(priceListRow)
-    .where(and(rowScope(principal), eq(priceListRow.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: rowScope, noSuch: noSuchRow, get: getPriceRow, locked: lockedPriceRow, list: listPriceRows } = scoped(priceListRow, { noun: "price row", reach: "projects", columns: rowColumns })
 
 /** Holds a default list to its project's currency: the field that made the rule apply is `isDefault`, so the refusal sits there. */
 async function requireDefaultInProjectCurrency(tx: Tx, within: Scope, currency: string): Promise<void> {
@@ -317,25 +291,11 @@ export function priceListRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, validOn: day, isDefault } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(priceList)
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(priceList.projectId, projectId),
-              day === undefined ? undefined : validOn(priceList, day),
-              isDefault === undefined ? undefined : eq(priceList.isDefault, isDefault),
-              after === undefined ? undefined : gt(priceList.id, after),
-            ),
-          )
-          .orderBy(asc(priceList.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(listOf), limit))
+        const page = await listPriceLists(c.get("tx"), principal, at, projectId === undefined ? undefined : eq(priceList.projectId, projectId), day === undefined ? undefined : validOn(priceList, day), isDefault === undefined ? undefined : eq(priceList.isDefault, isDefault))
+        return c.json(mapPage(page, listOf))
       },
     )
     .post(
@@ -390,8 +350,7 @@ export function priceListRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findList(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchList(id)
+        const row = await getPriceList(c.get("tx"), c.get("principal"), id)
         return c.json(listOf(row))
       },
     )
@@ -422,9 +381,7 @@ export function priceListRoutes(deps: RouteDeps) {
         // The row this patch counts rows against, locked before it is read: a
         // shortening and a row being added to it are the two halves of one
         // rule, and they serialise here (routes/shared.ts).
-        await lockRow(tx, priceList, { companyId: principal.companyId, id })
-        const current = await findList(tx, principal, id)
-        if (current === undefined) throw noSuchList(id)
+        const current = await lockedPriceList(tx, principal, id)
 
         const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined
         if (period !== undefined) requireOrdered(period)
@@ -467,25 +424,12 @@ export function priceListRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, productId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if ((await findList(tx, principal, id)) === undefined) throw noSuchList(id)
-        const rows = await tx
-          .select(rowColumns)
-          .from(priceListRow)
-          .where(
-            and(
-              rowScope(principal),
-              eq(priceListRow.priceListId, id),
-              productId === undefined ? undefined : eq(priceListRow.productId, productId),
-              day === undefined ? undefined : validOn(priceListRow, day),
-              after === undefined ? undefined : gt(priceListRow.id, after),
-            ),
-          )
-          .orderBy(asc(priceListRow.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(rowOf), limit))
+        const page = await listPriceRows(tx, principal, at, eq(priceListRow.priceListId, id), productId === undefined ? undefined : eq(priceListRow.productId, productId), day === undefined ? undefined : validOn(priceListRow, day))
+        return c.json(mapPage(page, rowOf))
       },
     )
     .post(
@@ -514,9 +458,7 @@ export function priceListRoutes(deps: RouteDeps) {
 
         // The list's lock, then the list: a row being added and the list
         // being shortened are the two halves of one rule (routes/periods.ts).
-        await lockRow(tx, priceList, { companyId: principal.companyId, id })
-        const list = await findList(tx, principal, id)
-        if (list === undefined) throw noSuchList(id)
+        const list = await lockedPriceList(tx, principal, id)
         const within: Scope = { companyId: principal.companyId, projectId: list.projectId }
         const productStatus = await requireProduct(tx, within, values.productId)
         await requireConditions(tx, within, values)
@@ -555,8 +497,7 @@ export function priceListRoutes(deps: RouteDeps) {
         const { productId, on, ...conditions } = c.req.valid("query")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const list = await findList(tx, principal, id)
-        if (list === undefined) throw noSuchList(id)
+        const list = await getPriceList(tx, principal, id)
         // The product's rate, and the proof it is the list's project's, in one statement; a query names it, so the refusal sits on the query string.
         const [priced] = await tx
           .select({ vatPercent: product.vatPercent })
@@ -612,8 +553,7 @@ export function priceListRoutes(deps: RouteDeps) {
 
         // A write holds the list's lock, which every writer of its rows takes first (a row's create and patch, the list's patch), so the rows read under it stay as read; a preview writes nothing and takes none.
         if (!dryRun) await lockRow(tx, priceList, { companyId: principal.companyId, id })
-        const list = await findList(tx, principal, id)
-        if (list === undefined) throw noSuchList(id)
+        const list = await getPriceList(tx, principal, id)
         const rows = await tx
           .select(rowColumns)
           .from(priceListRow)
@@ -685,8 +625,7 @@ export function priceListRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findRow(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchRow(id)
+        const row = await getPriceRow(c.get("tx"), c.get("principal"), id)
         return c.json(rowOf(row))
       },
     )
@@ -719,12 +658,9 @@ export function priceListRoutes(deps: RouteDeps) {
         // and the row's create take them — and the row is read again under
         // them, so a list shortened while this waited is what the end is
         // held inside (routes/periods.ts).
-        const named = await findRow(tx, principal, id)
-        if (named === undefined) throw noSuchRow(id)
+        const named = await getPriceRow(tx, principal, id)
         await lockRow(tx, priceList, { companyId: principal.companyId, id: named.priceListId })
-        await lockRow(tx, priceListRow, { companyId: principal.companyId, id })
-        const current = await findRow(tx, principal, id)
-        if (current === undefined) throw noSuchRow(id)
+        const current = await lockedPriceRow(tx, principal, id)
         if (patch.validTo !== undefined) {
           const list = await findList(tx, principal, current.priceListId)
           if (list === undefined) throw noSuchRow(id)

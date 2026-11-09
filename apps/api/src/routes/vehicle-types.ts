@@ -38,7 +38,7 @@ import { VehicleType, VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTy
 import type { Tx } from "@waste/db/client"
 import { containerType } from "@waste/db/schema/catalogue"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
@@ -46,8 +46,9 @@ import { stampsOf } from "@waste/db/shapes/times"
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireContainerType } from "./references"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
@@ -98,20 +99,7 @@ const NAME_TAKEN = "vehicle_type_name_key"
 const keyTaken = (key: string) => `This company already has a vehicle type keyed ${JSON.stringify(key)}`
 const nameTaken = (name: string) => `This company already has a vehicle type named ${JSON.stringify(name)}`
 
-const noSuchType = (id: string) => problem(404, { detail: `No vehicle type ${id} in this company` })
-
-/** The rows of this company: what every vehicle type statement is bounded by. */
-const scope = (principal: Principal) => eq(vehicleType.companyId, principal.companyId)
-
-/** One type of this company by id; undefined when there is none. */
-async function findType(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(vehicleType)
-    .where(and(scope(principal), eq(vehicleType.id, id)))
-    .limit(1)
-  return row
-}
+const { scope, noSuch: noSuchType, get: getType, list: listTypes } = scoped(vehicleType, { noun: "vehicle type", reach: "company", columns })
 
 // The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
 // O30 of #290) share, so an imported row is held to every rule a form's is.
@@ -186,18 +174,12 @@ export function vehicleTypeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const rows = await tx
-          .select(columns)
-          .from(vehicleType)
-          .where(and(scope(principal), after === undefined ? undefined : gt(vehicleType.id, after)))
-          .orderBy(asc(vehicleType.id))
-          .limit(fetchLimit(limit))
+        const { items, nextCursor } = await listTypes(tx, principal, at)
         // Paged first, so the row that only proves there is a next page is
         // not one of the types whose container types are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
         const held = await idsOf(tx, containerTypes, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => typeOf(row, held.get(row.id) ?? [])), nextCursor })
       },
@@ -239,8 +221,7 @@ export function vehicleTypeRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findType(tx, principal, id)
-        if (row === undefined) throw noSuchType(id)
+        const row = await getType(tx, principal, id)
         return c.json(await typeWithContainerTypes(tx, principal.companyId, row))
       },
     )
