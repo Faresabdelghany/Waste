@@ -36,7 +36,7 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import {

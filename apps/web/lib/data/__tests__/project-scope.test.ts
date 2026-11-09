@@ -16,6 +16,7 @@ import {
   pinnedProjectId,
   projectRecordsOf,
   projectScopeLabel,
+  projectShown,
   recordsForProject,
   selectedProjectIds,
   type ProjectScope,
@@ -181,5 +182,20 @@ describe("projectScopeLabel", () => {
 
   test("no project reads as nothing", () => {
     assert.equal(projectScopeLabel([], projects), "")
+  })
+})
+
+describe("the project a per-project pane shows", () => {
+  test("the one picked where the pane lists it, else the first by name", () => {
+    // The person's projects by the API's id, and the organisation's records by the web's, in different orders.
+    const mine = [{ id: "p-2", name: "Copenhagen Central" }, { id: "p-1", name: "Cairo Operations" }]
+    const records = [{ id: "project-p-1", name: "Cairo Operations" }, { id: "project-p-2", name: "Copenhagen Central" }].reverse()
+    const serverIdOfRecord = (record: { id: string }) => record.id.slice("project-".length)
+    assert.equal(projectShown(mine, null, (project) => project.id)?.name, "Cairo Operations")
+    assert.equal(projectShown(records, null, serverIdOfRecord)?.name, "Cairo Operations")
+    assert.equal(projectShown(mine, "p-2", (project) => project.id)?.name, "Copenhagen Central")
+    assert.equal(projectShown(records, "p-2", serverIdOfRecord)?.name, "Copenhagen Central")
+    assert.equal(projectShown(mine, "p-9", (project) => project.id)?.name, "Cairo Operations", "a project the pane does not list")
+    assert.equal(projectShown([], "p-1", (project: { id: string; name: string }) => project.id), null)
   })
 })

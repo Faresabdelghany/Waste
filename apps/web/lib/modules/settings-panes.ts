@@ -252,6 +252,16 @@ export type SettingsParamsOf<Id extends SettingsPaneId> = { readonly [Param in P
 /** A pane's params as an address holds them: the ones it declares, each a value. */
 export type SettingsParams = Partial<Readonly<Record<SettingsParam | "tab", string>>>
 
+/** What every pane's view is handed: its own params, and the moves it makes in the address. */
+export type SettingsPaneProps = {
+  paneId: SettingsPaneId
+  /** The params of its own the address gives it. */
+  params: SettingsParams
+  /** Moves its params, in place in the address, or as a new entry Back returns from. */
+  onParamsChange: (params: SettingsParams, how?: "push" | "replace") => void
+  onOpenPane: (paneId: SettingsPaneId, params?: SettingsParams) => void
+}
+
 /** What Settings shows: a pane, and the params of its own it was asked with. */
 export type SettingsAddress = { readonly pane: SettingsPaneId; readonly params: SettingsParams }
 
@@ -265,9 +275,9 @@ export function settingsPane(id: SettingsPaneId): SettingsPane {
   return pane
 }
 
-/** A pane's tabs. */
-export function settingsTabsOf(paneId: SettingsPaneId): NonNullable<SettingsPane["tabs"]> {
-  return settingsPane(paneId).tabs ?? []
+/** A pane's tabs, each typed as the pane spells it. */
+export function settingsTabsOf<Id extends SettingsPaneId>(paneId: Id): readonly { readonly value: SettingsTabOf<Id>; readonly label: string }[] {
+  return (settingsPane(paneId).tabs ?? []) as readonly { readonly value: SettingsTabOf<Id>; readonly label: string }[]
 }
 
 /** The params `given` holds that the pane reads: its own, and one of its tabs. */
@@ -339,14 +349,4 @@ function hrefOf(paneId: SettingsPaneId, given: Readonly<Record<string, string | 
   const from = given.from
   if (typeof from === "string" && from !== "/") query.set("from", from)
   return `/settings?${query.toString()}`
-}
-
-/**
- * The project a per-project pane shows: the one picked where the pane lists
- * it, else its first by name, so every such pane — and the tabs of Settings ›
- * Tickets, which share their pick — opens on the same one. `serverIdOf` names
- * a listed project by the API's id.
- */
-export function projectShown<P extends { name: string }>(projects: readonly P[], picked: string | null, serverIdOf: (project: P) => string | undefined): P | null {
-  return projects.find((project) => picked !== null && serverIdOf(project) === picked) ?? [...projects].sort((one, other) => one.name.localeCompare(other.name))[0] ?? null
 }
