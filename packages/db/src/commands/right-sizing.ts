@@ -38,7 +38,6 @@ type Candidate = {
   last_evidence: string | null
 }
 
-/** The proposals a run made: how many, and their ids. */
 export type RightSizingRunResult = { proposed: string[] }
 
 /**
@@ -52,7 +51,6 @@ export async function proposeRightSizing(tx: Tx, companyId: string, at: Date, pr
     projectIds.map((id) => sql`${id}::uuid`),
     sql`, `,
   )})`
-  // The subscription in force today on its project's clock.
   const today = todayOnClock(at, sql`p.timezone`)
   const candidates = await tx.execute<Candidate>(sql`
     select s.id as subscription_id, s.project_id, s.product_id, ${utcInstantText(sql`s.updated_at`)} as updated_at,

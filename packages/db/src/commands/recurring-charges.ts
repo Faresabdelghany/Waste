@@ -170,5 +170,4 @@ export async function mintRecurringCharges(tx: Tx, scope: Scope, period: Billing
   return written
 }
 
-/** The charges one insert writes. */
 const MINT_CHUNK = 1000

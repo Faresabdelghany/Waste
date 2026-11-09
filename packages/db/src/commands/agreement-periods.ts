@@ -40,14 +40,12 @@ export const credentialsBeginLater = (rows: number) => `${count(rows, "access cr
 const PLACEMENTS: DatedChild = { table: containerServicePlacement, parent: containerServicePlacement.subscriptionId, stranded: strandedPlacements, beginsLater: placementsBeginLater, children: [] }
 const PAUSES: DatedChild = { table: subscriptionPause, parent: subscriptionPause.subscriptionId, stranded: strandedPauses, beginsLater: pausesBeginLater, children: [] }
 
-/** What a subscription holds: the placements serving it and its pauses. */
 export const SUBSCRIPTION_CHILDREN: readonly DatedChild[] = [PLACEMENTS, PAUSES]
 
 const SUBSCRIPTIONS: DatedChild = { table: subscription, parent: subscription.agreementId, stranded: strandedSubscriptions, beginsLater: subscriptionsBeginLater, children: SUBSCRIPTION_CHILDREN }
 /** A business's credential names the agreement its visits are charged to; a household's names none and hangs on no agreement. */
 const CREDENTIALS: DatedChild = { table: accessCredential, parent: accessCredential.agreementId, stranded: strandedCredentials, beginsLater: credentialsBeginLater, children: [] }
 
-/** What an agreement holds: its subscriptions, and the credentials charged to it. */
 export const AGREEMENT_CHILDREN: readonly DatedChild[] = [SUBSCRIPTIONS, CREDENTIALS]
 
 /**

@@ -1,7 +1,6 @@
 // The project's clock and calendar as a statement reads them, spelled once
-// for the API, the worker and the commands (lifted from `apps/api/src/routes/
-// fleet-lookups.ts` with the commands the worker runs, Issue #112 part B; the
-// SQL twins and the calendar read since #574): its timezone, what an instant
+// for the API, the worker and the commands (Issue #112 part B; the SQL twins
+// and the calendar read since #574): its timezone, what an instant
 // is rendered as a day in (@waste/domain/clock); its currency, ISO 4217 as the
 // contracts checked it; today on its clock; and its calendar, the weekend it
 // rests on and the holidays of the list it names. The project is the
@@ -87,13 +86,10 @@ export async function projectTimezones(tx: Tx, companyId: string, projectIds: re
   return zones
 }
 
-/** Today on each of the projects' clocks at `now`, by project id. */
 export async function projectTodays(tx: Tx, companyId: string, projectIds: readonly string[], now: Date): Promise<ReadonlyMap<string, string>> {
   const zones = await projectTimezones(tx, companyId, projectIds)
   return new Map([...zones].map(([id, timezone]) => [id, dayInTimezone(now, timezone)]))
 }
-
-/* ------------------------------ the SQL twins ------------------------------ */
 
 /** The caller's instant as a statement's `timestamptz`: what a statement judges "now" on, in place of Postgres's `now()`. */
 export const instantAt = (at: Date): SQL => sql`${at.toISOString()}::timestamptz`
@@ -128,8 +124,6 @@ export function instantOnClock(day: SQLWrapper | string, timezone: SQLWrapper, t
   const local = time === undefined ? sql`(${day})::date::timestamp` : sql`((${day})::date + ${time})`
   return sql`(${local} at time zone ${timezone})`
 }
-
-/* ------------------------------- the calendar ------------------------------ */
 
 /** Both ends included, as ISO days; none reads every holiday of the list. */
 export type HolidayWindow = { from?: string; to?: string }

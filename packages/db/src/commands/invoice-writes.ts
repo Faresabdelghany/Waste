@@ -1,8 +1,7 @@
-// The invoice-issuing statements, once (Issue #112 §3; lifted here from
-// `apps/api/src/routes/invoice-writes.ts` with the commands the worker runs,
-// part B): the one function that writes an `invoice` row with its lines and
-// publishes it. The billing run (billing-runs.ts) issues one per payer and
-// currency — from the office's request or the worker's schedule — and the
+// The invoice-issuing statements, once (Issue #112 §3): the one function that
+// writes an `invoice` row with its lines and publishes it. The billing run
+// (billing-runs.ts) issues one per payer and currency — from the office's
+// request or the worker's schedule — and the
 // credit note command (`apps/api/src/routes/invoices.ts`) one per correction,
 // and both go through `issueInvoice`, so a document is numbered, written and
 // published one way whichever door made it — the `appendEvent` rule (#101):
@@ -15,7 +14,7 @@
 // one transaction, the lock held for the rest of it, and a run that fails
 // rolls its numbers back with its rows, so the company's series is unbroken.
 // A credit note takes its number from the same series (§7.13): one series,
-// two prefixes, the contracts' `invoiceLabel`.
+// two prefixes, the domain's `invoiceLabel`.
 //
 // Every line's shape is checked before the insert (`invoiceLineShapeIssue`):
 // the server composes every line itself — from an event, or from the line it

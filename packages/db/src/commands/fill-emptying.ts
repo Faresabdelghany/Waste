@@ -52,7 +52,6 @@ export const fillEmptyingNote = (sensorIdentifier: string, fillPercent: number, 
  */
 export async function bookFillEmptying(tx: Tx, scope: { companyId: string; projectId: string }, containerId: string, today: string, note: string): Promise<FillEmptyingOutcome> {
   const { companyId, projectId } = scope
-  // The container's next emptying of generation's, still planned on a route that has not started.
   const [next] = await tx
     .select(routeColumns)
     .from(pickup)

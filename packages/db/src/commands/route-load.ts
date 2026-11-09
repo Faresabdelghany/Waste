@@ -20,7 +20,6 @@ import { vehicle } from "../schema/fleet"
 /** A route's loads: each pickup's kilograms by its id, null where its weight cannot be expected, and the planned vehicle's payload, null without one. */
 export type RouteLoad = { capacityKg: number | null; kg: Map<string, number | null> }
 
-/** The route's loads over the pickups named. */
 export async function routeLoad(tx: Tx, companyId: string, routeRow: { plannedVehicleId: string | null }, pickupIds: readonly string[]): Promise<RouteLoad> {
   const [rows, [planned]] = await Promise.all([
     pickupIds.length === 0

@@ -45,7 +45,6 @@ export const MAP_POINTS_MAX = 1000
 /** `HH:MM:SS` as Postgres answers a `time`, `HH:MM` as the domain reads it. */
 const clock = (time: string): string => time.slice(0, 5)
 
-/** Rows grouped by their point, in the order read. */
 function byPoint<Row extends { point: string }, Out>(source: readonly Row[], map: (row: Row) => Out): Map<string, Out[]> {
   const grouped = new Map<string, Out[]>()
   for (const row of source) {
