@@ -16,7 +16,7 @@ describe("a property's zones", () => {
   test("are the role's where it views the properties", () => {
     assert.equal(zonesReadable([{ moduleKey: "customers.properties", actions: ["view"] }]), true)
     assert.equal(zonesReadable([{ moduleKey: "configure.areas", actions: ["view"] }]), false, "the areas' grant alone does not read a property's")
-    assert.equal(zonesReadable(undefined), false)
+    assert.equal(zonesReadable([]), false)
   })
 
   test("are told by name and code, one or several, or why there are none", () => {

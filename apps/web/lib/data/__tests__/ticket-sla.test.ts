@@ -107,6 +107,6 @@ describe("who may read and set it", () => {
     assert.deepEqual(slaAccessOf([{ moduleKey: "configure.templates", actions: ["view", "edit"] }]), { view: true, edit: true })
     assert.deepEqual(slaAccessOf([{ moduleKey: "configure.templates", actions: ["view"] }]), { view: true, edit: false })
     assert.deepEqual(slaAccessOf([{ moduleKey: "operate.tickets", actions: ["view", "edit"] }]), { view: false, edit: false })
-    assert.deepEqual(slaAccessOf(undefined), { view: false, edit: false })
+    assert.deepEqual(slaAccessOf([]), { view: false, edit: false })
   })
 })

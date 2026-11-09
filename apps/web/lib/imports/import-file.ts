@@ -15,7 +15,7 @@ import { planningAreaRows } from "@waste/domain/imports/geojson"
 import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 
 /** Each kind as the screen offers it: its label, the module its rows are written to, and whether a file of it is a project's. */
 export const IMPORT_KIND_OPTIONS = [
@@ -40,15 +40,15 @@ export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
 export const kindOption = (kind: ImportKind): ImportKindOption => IMPORT_KIND_OPTIONS.find((option) => option.kind === kind) ?? IMPORT_KIND_OPTIONS[0]
 
 /** Whether the role reads the imports run here: the import's own `view`. */
-export const mayView = (grants: Grants | undefined): boolean => allows(grants, "improve.imports", "view")
+export const mayView = (grants: Grants | null): boolean => mayOn(grants, "improve.imports", "view")
 
 /** Whether the role may run an import at all: the import's own `create`. */
-export const mayImport = (grants: Grants | undefined): boolean => allows(grants, "improve.imports", "create")
+export const mayImport = (grants: Grants | null): boolean => mayOn(grants, "improve.imports", "create")
 
 /** The kinds a role may import: those whose module it may write a row to, by making a record or changing one. */
-export function importableKinds(grants: Grants | undefined): ImportKindOption[] {
+export function importableKinds(grants: Grants | null): ImportKindOption[] {
   if (!mayImport(grants)) return []
-  return IMPORT_KIND_OPTIONS.filter((option) => allows(grants ?? [], option.moduleKey, "create") || allows(grants ?? [], option.moduleKey, "edit"))
+  return IMPORT_KIND_OPTIONS.filter((option) => mayOn(grants, option.moduleKey, "create") || mayOn(grants, option.moduleKey, "edit"))
 }
 
 /**

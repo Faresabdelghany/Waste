@@ -52,6 +52,7 @@ import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kind
 
 import { ImportResultsTable } from "./import-results-table"
 import { ImportRuns } from "./import-runs"
+import { useGrants } from "@/components/platform/use-grants"
 
 type Chosen = { name: string; reading: FileReading }
 
@@ -67,7 +68,7 @@ type Phase =
 export function ImportsOnApi() {
   const { me } = useApiSession()
   const client = useApiClient()
-  const grants = me?.role.grants
+  const grants = useGrants()
   const kinds = useMemo(() => importableKinds(grants), [grants])
   const projects = useMemo(() => me?.projects ?? [], [me])
   const [kindChoice, setKindChoice] = useState<ImportKind | null>(null)

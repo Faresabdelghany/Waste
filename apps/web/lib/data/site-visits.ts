@@ -17,7 +17,7 @@ import { FREE_VISITS, normaliseCredentialValue, TRADE_THRESHOLD, TRADE_WINDOW_DA
 import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { firstDayOut, lastDayIn, periodOn } from "@waste/domain/periods"
 import { count } from "@waste/domain/text"
 import { formatMinor } from "@/lib/commercial/money"
@@ -164,11 +164,11 @@ export function rememberedSite(sites: readonly { id: string }[], remembered: str
 // ---------------------------------------------------------------------------
 
 /** What the person's role lets them do with the Visit Rules — the products' module, the API's grant for them — and whether it reads the fractions they name. */
-export const visitRuleAccessOf = (grants: Grants | undefined) => ({
-  view: allows(grants, "commercial.products", "view"),
-  create: allows(grants, "commercial.products", "create"),
-  edit: allows(grants, "commercial.products", "edit"),
-  fractions: allows(grants, "configure.master", "view"),
+export const visitRuleAccessOf = (grants: Grants | null) => ({
+  view: mayOn(grants, "commercial.products", "view"),
+  create: mayOn(grants, "commercial.products", "create"),
+  edit: mayOn(grants, "commercial.products", "edit"),
+  fractions: mayOn(grants, "configure.master", "view"),
 })
 
 /** The unit a ladder step and a business visit are sold in, and the annual access's. */

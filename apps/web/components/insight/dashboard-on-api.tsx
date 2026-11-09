@@ -23,7 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageActions, PageTopBar } from "@/components/page-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
-import { viewedModules } from "@/lib/modules/grants"
+import { modulesMayView } from "@/lib/modules/grants"
 import { keptOnApi } from "@/lib/api/records/server-records"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
@@ -47,6 +47,7 @@ import { AnalyticsTab } from "./analytics-tab"
 import { ComplianceTab } from "./compliance-tab"
 import { PerformanceTab } from "./performance-tab"
 import { ReportNotice } from "./report-card"
+import { useGrants } from "@/components/platform/use-grants"
 
 const ALL = "all"
 
@@ -60,7 +61,8 @@ export function DashboardOnApi() {
   const [visited, setVisited] = useState<ReadonlySet<DashboardTabId>>(() => new Set())
 
   const projects = useMemo(() => me?.projects ?? [], [me])
-  const viewed = useMemo(() => viewedModules(me?.role.grants), [me])
+  const grants = useGrants()
+  const viewed = useMemo(() => modulesMayView(grants), [grants])
   const tabs = tabsShown(viewed)
   const tab = tabs.find((candidate) => candidate.id === tabChoice) ?? tabs[0]
   const projectId = projects.some((candidate) => candidate.id === projectChoice) ? projectChoice : undefined
@@ -139,7 +141,7 @@ export function DashboardOnApi() {
               </p>
             )}
             {/* Improve's Imports (#291 slice 12), for a role that reads them. */}
-            {mayViewImports(me?.role.grants) && (
+            {mayViewImports(grants) && (
               <PageActions>
                 <Button asChild variant="outline" size="sm">
                   <Link href="/improve/imports" data-testid="dashboard-imports">

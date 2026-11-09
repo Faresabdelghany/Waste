@@ -67,6 +67,7 @@ import {
 } from "@/lib/data/ticket-types"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.
@@ -74,8 +75,7 @@ import { moduleReadSentence } from "@/lib/api/read-state"
  */
 export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: ReactNode; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
   const session = useApiSession()
-  const { me } = session
-  const access = ticketTypesAccessOf(me?.role.grants)
+  const access = ticketTypesAccessOf(useGrants())
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
   const resolver = useServerResolver()
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId)

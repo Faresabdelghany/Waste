@@ -17,24 +17,24 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { CONTACT_ROLE_LABELS, contactLine, customerContacts, draftOf, NEW_CONTACT, saveContact, takesContacts, type ContactDraft } from "@/lib/api/records/customer-contacts"
 import { customerKindOf } from "@/lib/api/records/registry"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
+import { useGrants } from "@/components/platform/use-grants"
 
 const ROLES = Object.entries(CONTACT_ROLE_LABELS) as Array<[ContactDraft["role"], string]>
 
 /** An organisation's contact persons, and the dialog that adds or changes one. */
 export function ContactPersonsSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
-  const { me } = useApiSession()
+  const grants = useGrants()
   const moduleReady = useModuleReady(CONTACTS_MODULE)
-  const writes = me !== null && allows(me.role.grants, "customers.contacts", "edit")
+  const writes = mayOn(grants, "customers.contacts", "edit")
   const [version, setVersion] = useState(0)
   const contacts = useRowHistory(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, record, version, customerContacts)
   const [draft, setDraft] = useState<ContactDraft | null>(null)

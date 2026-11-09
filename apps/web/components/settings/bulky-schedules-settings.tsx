@@ -26,11 +26,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 import {
   bulkyProductLabel,
   bulkyProductsOffered,
@@ -57,8 +57,7 @@ type Read = { schedules: BulkySchedule[]; areas: PlanningArea[]; products: Produ
 type Editing = { schedule: BulkySchedule | null; form: ScheduleForm }
 
 export function BulkySchedulesSettings() {
-  const { me } = useApiSession()
-  const access = scheduleAccessOf(me?.role.grants)
+  const access = scheduleAccessOf(useGrants())
   const setting = useProjectSetting<Read, Editing, ScheduleRefusal>({
     name: "bulky-schedules",
     readable: access.view,

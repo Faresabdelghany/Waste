@@ -27,12 +27,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
 import { periodSentence } from "@/lib/data/bulky"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 import {
   ANNUAL_ACCESS_UNIT,
   householdSentence,
@@ -56,8 +56,7 @@ type Read = { rules: VisitRule[]; products: Product[]; fractions: WasteFraction[
 type Editing = { rule: VisitRule | null; form: VisitRuleForm }
 
 export function VisitRulesSettings() {
-  const { me } = useApiSession()
-  const access = visitRuleAccessOf(me?.role.grants)
+  const access = visitRuleAccessOf(useGrants())
   const setting = useProjectSetting<Read, Editing, VisitRuleRefusal>({
     name: "visit-rules",
     readable: access.view,

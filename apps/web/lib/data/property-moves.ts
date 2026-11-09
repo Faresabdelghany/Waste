@@ -14,7 +14,7 @@ import { PROPERTY_PARTY_ROLES } from "@waste/domain/registry/vocabulary"
 import { splitList } from "@/lib/prototype/record-values"
 import { lastDayIn } from "@waste/domain/periods"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import type { LocalRefusal } from "@/lib/records/fields"
 import { formatMinor } from "../commercial/money"
 import type { BusinessRecord } from "./business-modules"
@@ -24,7 +24,7 @@ import { PARTY_FIELDS } from "./properties"
 export type MoveTyped = { on: string; outgoing: string; incoming: string; payer: string; agreementNumber: string }
 
 /** Whether the role may move a property's occupant: the move writes the parties and the agreements, so it asks edit on both, as the API does. */
-export const moveOffered = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "edit") && allows(grants, "customers.agreements", "edit")
+export const moveOffered = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "edit") && mayOn(grants, "customers.agreements", "edit")
 
 
 /** Who may move out: every customer the record names today, in any role, each once, in the order the roles are listed. */

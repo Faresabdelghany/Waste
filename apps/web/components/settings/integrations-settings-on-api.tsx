@@ -17,24 +17,23 @@ import { ArrowClockwise, CheckCircle, Gear, Warning } from "@phosphor-icons/reac
 import { AssetPanelShell, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { useReport } from "@/components/platform/use-report"
 import { Button } from "@/components/ui/button"
-import { useApiSession } from "@/components/platform/api-session-store"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { recentImportRuns } from "@/lib/api/imports"
 import { deploymentIntegrations } from "@/lib/api/integrations"
 import { problemSentence } from "@/lib/api/problem"
 import { routingQuota } from "@/lib/api/routing"
 import { importRow, integrationRowsOf, type IntegrationRow, type IntegrationTone } from "@/lib/data/integrations"
 import { cn } from "@/lib/utils"
+import { useGrants } from "@/components/platform/use-grants"
 
 /** The module whose `view` reads the deployment's connections. */
 const INTEGRATIONS_MODULE = "configure.integrations" satisfies ModuleKey
 
 export function IntegrationsSettingsOnApi() {
-  const { me } = useApiSession()
-  const grants = me?.role.grants
-  const granted = allows(grants, INTEGRATIONS_MODULE, "view")
-  const readsQuota = allows(grants, "route-studio.routes", "view")
-  const readsImports = allows(grants, "improve.imports", "view")
+  const grants = useGrants()
+  const granted = mayOn(grants, INTEGRATIONS_MODULE, "view")
+  const readsQuota = mayOn(grants, "route-studio.routes", "view")
+  const readsImports = mayOn(grants, "improve.imports", "view")
   const [reading, setReading] = useState(0)
   // The instant a quota's resumption is read against: when the pane was opened or last refreshed.
   const [now, setNow] = useState(() => new Date())

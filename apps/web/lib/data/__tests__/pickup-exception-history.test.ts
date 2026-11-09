@@ -41,7 +41,7 @@ describe("the grants", () => {
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }], "property"), false)
     assert.equal(historyReadable([{ moduleKey: "customers.properties", actions: ["view"] }, stops], "shared-point"), false)
     assert.equal(historyReadable([{ moduleKey: "customers.shared", actions: ["view"] }, stops], "shared-point"), true)
-    assert.equal(historyReadable(undefined, "property"), false)
+    assert.equal(historyReadable([], "property"), false)
   })
 })
 

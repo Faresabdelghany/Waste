@@ -9,7 +9,6 @@
 import Link from "next/link"
 
 import { useServerModuleState } from "@/components/platform/business-record-store"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { PICKUPS_MODULE } from "@/lib/data/routes"
 import { workspaceHref } from "@/lib/data/workspace-href"
@@ -19,6 +18,7 @@ import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { chargeSentence, exceptionSentence, historyReadable, historySummary, type ExceptionPlace } from "@/lib/data/pickup-exception-history"
 import { placePickupExceptions } from "@/lib/api/property-details"
 import { readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 const READS: Readonly<Record<ExceptionPlace, ReturnType<typeof placePickupExceptions>>> = {
   property: placePickupExceptions("property"),
@@ -26,8 +26,8 @@ const READS: Readonly<Record<ExceptionPlace, ReturnType<typeof placePickupExcept
 }
 
 export function PickupExceptionsSection({ record, module, place }: { record: BusinessRecord; module: ModuleLocation; place: ExceptionPlace }) {
-  const { me } = useApiSession()
-  const readable = historyReadable(me?.role.grants, place)
+  const grants = useGrants()
+  const readable = historyReadable(grants, place)
   const history = useRowHistory(module.workspaceId, module.moduleId, record, readable ? "read" : "not-granted", readable ? READS[place] : NO_HISTORY)
   const productName = useServerNames(PRODUCTS_MODULE, "product")
   const codeName = useServerNames(MASTER_DATA_MODULE, "contaminant-code")

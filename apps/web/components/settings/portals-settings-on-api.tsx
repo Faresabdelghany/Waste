@@ -23,9 +23,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { BRANDING_MODULE, replaceBranding } from "@/lib/api/project-branding"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -33,6 +33,7 @@ import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSug
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 
 export function PortalsSettingsOnApi() {
@@ -41,8 +42,7 @@ export function PortalsSettingsOnApi() {
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-")).sort((a, b) => a.name.localeCompare(b.name))
   const [publishing, setPublishing] = useState<BusinessRecord | null>(null)
   const [branding, setBranding] = useState<BusinessRecord | null>(null)
-  const { me } = useApiSession()
-  const brands = allows(me?.role.grants, BRANDING_MODULE, "edit")
+  const brands = mayOn(useGrants(), BRANDING_MODULE, "edit")
   const [saving, setSaving] = useState(false)
   const { upsertRecord } = useBusinessRecordStore()
 

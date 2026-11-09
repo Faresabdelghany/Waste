@@ -24,11 +24,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 import { PICKUP_EXCEPTION_LADDER_MAX } from "@waste/domain/execution/pickup-exceptions"
 import { lastDayIn } from "@waste/domain/periods"
 import {
@@ -59,8 +59,7 @@ type Read = { rules: PickupExceptionRule[]; products: Product[]; codes: Contamin
 type Editing = { rule: PickupExceptionRule | null; form: RuleForm }
 
 export function PickupExceptionChargesSettings() {
-  const { me } = useApiSession()
-  const access = ruleAccessOf(me?.role.grants)
+  const access = ruleAccessOf(useGrants())
   const setting = useProjectSetting<Read, Editing, RuleRefusal>({
     name: "exception-charges",
     readable: access.view,

@@ -11,7 +11,7 @@ import type { TankEmptying, TankInspectionCreate, TankInstallation, TankInstalla
 import { TANK_INTERVAL_MONTHS_MAX } from "@waste/domain/registry/tanks"
 import type { TankInspectionOutcome, TankKind, TankOutlet } from "@waste/domain/registry/vocabulary"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import type { LocalRefusal } from "@/lib/records/fields"
 import type { BusinessRecord } from "./business-modules"
 import { thousands } from "./tank-words"
@@ -35,9 +35,9 @@ export function lastEmptyingSentence(tank: { lastEmptying: TankEmptying | null; 
 }
 
 /** Whether the role reads the register: it is the Property's, under its module. */
-export const tanksReadable = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "view")
+export const tanksReadable = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "view")
 /** Whether the role writes it: a tank and an inspection alike. */
-export const tanksEditable = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "edit")
+export const tanksEditable = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "edit")
 
 const wholeNumber = (value: string): number | undefined => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : undefined)
 

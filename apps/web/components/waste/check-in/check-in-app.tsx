@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { SIGN_IN_PATH } from "@/lib/api/landing"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { checkInVisit, readVisitSites, searchVisitAddresses } from "@/lib/api/site-visits"
@@ -32,6 +32,7 @@ import { answerHeadline, chargeSentence, CHECK_IN_MODES, CHECK_IN_PATH, checkInB
 import { persistedStore } from "@/lib/persisted-store"
 import { CHECK_IN_SITE_STORAGE_KEY } from "@/lib/storage-keys"
 import { cn } from "@/lib/utils"
+import { useGrants } from "@/components/platform/use-grants"
 
 /** How long the address search waits after the last key before it asks. */
 const SEARCH_DELAY_MS = 300
@@ -49,6 +50,7 @@ type SitesRead = { status: "reading" } | { status: "read"; projectId: string; si
 
 export function CheckInApp() {
   const { apiConfigured, session, me, signOut } = useApiSession()
+  const grants = useGrants()
   const signedIn = apiConfigured && session !== null
 
   return (
@@ -81,7 +83,7 @@ export function CheckInApp() {
           </section>
         ) : me === null ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Reading your account…</p>
-        ) : !allows(me.role.grants, "operate.site-visits", "create") ? (
+        ) : !mayOn(grants, "operate.site-visits", "create") ? (
           <section className="rounded-xl border border-destructive/40 p-4">
             <h1 className="font-semibold">This login does not check visitors in</h1>
             <p className="text-sm text-muted-foreground">{me.role.name} may not record site visits. The office gives the Site attendant role to the recycling centre&apos;s staff.</p>
