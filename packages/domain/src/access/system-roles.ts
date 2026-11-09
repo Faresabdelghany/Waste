@@ -1,6 +1,5 @@
 // The twelve roles every company is seeded with: their copy and the grants
-// they start with. This is `DEFAULT_ROLE_ACCESS` from
-// apps/web/lib/data/role-permissions.ts, moved here so the database seed and
+// they start with, here so the database seed and
 // the web read one source (Issue #70): the names, scopes and descriptions are
 // the prototype's fixture roles, and the grants are the same charters, with
 // the workspace-wide sugar expanded against MODULE_KEYS instead of the web's
@@ -71,7 +70,6 @@ const VIEW_EDIT: readonly Action[] = ["view", "edit"]
 const VIEW_EDIT_CREATE: readonly Action[] = ["view", "edit", "create"]
 const VIEW: readonly Action[] = ["view"]
 
-/** Every module of a workspace, with the same actions: the web's `workspaceGrant`, expanded against the vocabulary, less any module named in `except`. */
 function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonly ModuleKey[] = []): Grant[] {
   return modulesOf(id)
     .filter((moduleKey) => !except.includes(moduleKey))
@@ -84,13 +82,12 @@ const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.s
 /** The Operate modules a Service Provider never reads: the visits', the scale house's window (M16a of #293), whose tickets name the office's customers and walk-ins, and the inspections' (M23 of #293), whose photos and findings at a customer's bins are the office's to follow up. */
 const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.scale-house", "operate.inspections"]
 
-/** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {
   return { moduleKey, actions }
 }
 
 /**
- * The web's `mergeAccess`: a module named by two lines of a charter keeps the
+ * A module named by two lines of a charter keeps the
  * union of their actions, and the result is spelled as grants.ts spells a
  * grant set. It merges, it does not imply `view` — every charter below says
  * `view` itself, and a test holds it to that, so what is read here is what is
