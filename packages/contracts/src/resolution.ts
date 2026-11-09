@@ -1,9 +1,9 @@
 // Resolution's closed lists at the API boundary (Issue #109): each of
 // @waste/domain/resolution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because two modules
-// read them — `tickets.ts` the ticket's seven, `alerts.ts` the alert's four —
-// and a list spelled in one place is a list that cannot drift between them.
+// would refuse it as a 500 naming nothing. Shared here because several
+// modules read them, and a list spelled in one place is a list that cannot
+// drift between them.
 //
 // A comment's attachment is a Storage object under an agreed key,
 // `<companyId>/<ticketId>/<objectId>.<ext>` in the bucket `ticket-attachments`

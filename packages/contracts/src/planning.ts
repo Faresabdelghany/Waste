@@ -1,11 +1,9 @@
 // Planning's closed lists at the API boundary (Issue #97): each of
 // @waste/domain/planning/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because four modules
-// read them — `organisation.ts` for a project's weekend, `route-schemes.ts` for
-// nearly everything, `planning-areas.ts` for a purpose, `generation.ts` for a
-// run's trigger and status (part B) — and a list spelled in
-// one place is a list that cannot drift between them. The vehicle a rule asks
+// would refuse it as a 500 naming nothing. Shared here because several
+// modules read them, and a list spelled in one place is a list that cannot
+// drift between them. The vehicle a rule asks
 // for is not an enum since Resources (Issue #101): a vehicle type is a row of
 // the company's (`vehicle-types.ts`), and a Stop Matching Rule names it by id.
 //

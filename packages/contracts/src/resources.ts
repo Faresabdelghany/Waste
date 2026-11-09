@@ -1,12 +1,8 @@
 // Resources' closed lists at the API boundary (Issue #101): each of
 // @waste/domain/resources/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
-// would refuse it as a 500 naming nothing. Shared here because five modules
-// read them — `vehicle-types.ts` none of them yet, `places.ts` the statuses
-// and ownerships of the three places, `fleet.ts` the vehicle's and the
-// driver's, `stock.ts` the ledger's kinds and the asset status, and
-// `allocations.ts` the allocation's — and `containers.ts` reads the asset
-// status onto the Registry's Container.
+// would refuse it as a 500 naming nothing. Shared here because several
+// modules read them.
 import {
   ALLOCATION_ACTIONS,
   ALLOCATION_STATUSES,
