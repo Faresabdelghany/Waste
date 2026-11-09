@@ -20,7 +20,6 @@
 import { columnOf, headerIssues, IMPORT_COLUMNS } from "./columns"
 import type { CsvSeparator, ImportKind } from "./vocabulary"
 
-/** Each separator's character. */
 export const SEPARATOR_CHARACTERS = { comma: ",", semicolon: ";" } as const satisfies Record<CsvSeparator, string>
 
 /**

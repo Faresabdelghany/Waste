@@ -34,16 +34,15 @@ export type ImportColumn = {
   required: boolean
   /** What the column holds, for the column guide. */
   description: string
-  /** A value it might hold. */
   example: string
 }
 
 const column = (header: string, required: boolean, description: string, example: string): ImportColumn => ({ header, required, description, example })
 
-/** The columns of each kind, in the template's order. */
 /** The one column whose cell is longer than a paragraph: a planning area's boundary, its polygon's GeoJSON (O30 of #290). */
 export const BOUNDARY_COLUMN = "boundary"
 
+/** The columns of each kind, in the template's order. */
 export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]>> = {
   customers: [
     column("kind", true, "person or organisation", "organisation"),

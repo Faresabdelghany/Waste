@@ -27,10 +27,8 @@
 import { INT4_MAX } from "../requests"
 import { PARAGRAPH_MAX } from "../text"
 
-/** What a file imports. */
 export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers", "collection-calendars", "planning-areas"] as const
 
-/** What became of one row. */
 export const IMPORT_ROW_OUTCOMES = ["created", "updated", "unchanged", "refused"] as const
 
 /** Where a run stands: still recording its rows, or every row recorded. A reading of its counts, never a column. */

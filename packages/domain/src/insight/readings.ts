@@ -39,7 +39,6 @@ export const WITHDRAWN_REASONS = ["regeneration", "removed-by-dispatcher"] as co
 /** Where a pickup stands in a report. */
 export type PickupStanding = "completed" | "missed" | "open" | "withdrawn"
 
-/** The standing of a pickup of the given status and reason. */
 export function pickupStanding(status: PickupStatus, reason: PickupReason | null): PickupStanding {
   if (reason !== null && (WITHDRAWN_REASONS as readonly PickupReason[]).includes(reason)) return "withdrawn"
   switch (status) {
@@ -59,7 +58,6 @@ export const ON_TIME_GRACE_MINUTES = 15
 /** Where an unload's net weight stands in a tonnage report. */
 export type UnloadStanding = "approved" | "captured" | "rejected" | "superseded"
 
-/** The standing of an unload whose weight review reads `status`. */
 export function unloadStanding(status: WeightReviewStatus): UnloadStanding {
   return status === "corrected" ? "superseded" : status
 }
