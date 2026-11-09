@@ -3,6 +3,7 @@ import { describe, test } from "node:test"
 
 import {
   boundsFromPolygon,
+  inBounds,
   pointInPolygon,
   simplifyPath,
   worldPoint,
@@ -52,8 +53,11 @@ describe("point in polygon", () => {
 })
 
 describe("bounds", () => {
-  test("the polygon's bounding box", () => {
-    assert.deepEqual(boundsFromPolygon(square), { west: 12.5, south: 55.6, east: 12.6, north: 55.7 })
+  test("the polygon's bounding box and membership", () => {
+    const bounds = boundsFromPolygon(square)
+    assert.deepEqual(bounds, { west: 12.5, south: 55.6, east: 12.6, north: 55.7 })
+    assert.equal(inBounds({ lng: 12.55, lat: 55.65 }, bounds), true)
+    assert.equal(inBounds({ lng: 12.45, lat: 55.65 }, bounds), false)
   })
 })
 

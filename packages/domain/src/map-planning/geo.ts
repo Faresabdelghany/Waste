@@ -59,6 +59,15 @@ export function boundsFromPolygon(polygon: readonly LngLat[]): LngLatBounds {
   return { west, south, east, north }
 }
 
+export function inBounds(point: LngLat, bounds: LngLatBounds): boolean {
+  return (
+    point.lng >= bounds.west &&
+    point.lng <= bounds.east &&
+    point.lat >= bounds.south &&
+    point.lat <= bounds.north
+  )
+}
+
 /** The four corners of a bounds, as a polygon. */
 export function boundsPolygon(bounds: LngLatBounds): LngLat[] {
   return [
