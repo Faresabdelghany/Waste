@@ -11,7 +11,7 @@
 // `scale_ticket` is the window's ticket: weighed in at its gross, for an
 // account customer under one of its agreements or a walk-in (`party_shape`),
 // and completed at its tare — a second pass or the register's — with its net
-// the difference (`completed_shape`), or voided with its reason, never
+// the difference (`weighing_shape`), or voided with its reason, never
 // deleted, since it is what the customer was handed (`void_shape`). Numbered
 // in the company's series. One of our own vehicles' ticket, matched to the
 // route it ran, is also that route's Unload, whose id it keeps; one that found
@@ -145,19 +145,15 @@ export const scaleTicket = wms.table(
     positive(t.grossKg),
     positive(t.tareKg),
     positive(t.netKg),
-    // An account's customer and agreement, a walk-in's neither.
     check(
       tableObjectName(t.id.table, "party_shape", "scaleTicket"),
       sql`case when ${t.party} = 'account' then ${t.customerId} is not null and ${t.agreementId} is not null else ${t.customerId} is null and ${t.agreementId} is null end`,
     ),
-    // The second weighing is all or nothing, the net the gross less the tare, the register's tare named exactly when it was used; an open ticket has none, a completed one has it.
     check(
       tableObjectName(t.id.table, "weighing_shape", "scaleTicket"),
       sql`(${t.tareKg} is null) = (${t.tareSource} is null) and (${t.tareKg} is null) = (${t.weighedOutAt} is null) and (${t.tareKg} is null) = (${t.netKg} is null) and (${t.netKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg}) and (${t.tareSource} is not distinct from 'registered') = (${t.vehicleTareId} is not null) and (${t.status} <> 'open' or ${t.tareKg} is null) and (${t.status} <> 'completed' or ${t.tareKg} is not null)`,
     ),
-    // Voided says when, by whom and why; nothing else is.
     check(tableObjectName(t.id.table, "void_shape", "scaleTicket"), sql`(${t.status} = 'voided') = (${t.voidReason} is not null) and (${t.voidReason} is null) = (${t.voidedAt} is null) and (${t.voidReason} is null) = (${t.voidedBy} is null) and (${t.voidReason} <> 'other' or ${t.voidNote} is not null)`),
-    // Our own vehicle's completed ticket is a route's Unload, or says why it is none; any other ticket is neither.
     check(
       tableObjectName(t.id.table, "match_shape", "scaleTicket"),
       sql`(${t.routeId} is null) = (${t.unloadId} is null) and (${t.unloadId} is null or (${t.vehicleId} is not null and ${t.tareKg} is not null)) and (${t.unmatchedReason} is null or (${t.vehicleId} is not null and ${t.tareKg} is not null and ${t.unloadId} is null))`,

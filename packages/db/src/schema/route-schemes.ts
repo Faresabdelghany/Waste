@@ -190,7 +190,6 @@ export const collectionGroup = wms.table(
     ...projectScoped,
     ...timestamps,
     routeSchemeId: uuid().notNull(),
-    /** Unique within the scheme. */
     name: text().notNull(),
     /** Group order: the first rule group wins a container on a shared day. Not unique; ties order by id. */
     position: integer().notNull(),
@@ -312,7 +311,6 @@ export const collectionGroupContainer = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.collectionGroupId], collectionGroup),
-    // A group cannot pick another project's container: both tables are project-scoped, so the key carries the project.
     projectReference(t, [t.containerId], container),
     tenantUnique(t, t.collectionGroupId, t.containerId),
     tenantUnique(t, t.collectionGroupId, t.position),

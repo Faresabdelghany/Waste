@@ -229,7 +229,7 @@ export const route = wms.table(
     projectReference(t, [t.actualTrailerId], vehicle),
     projectReference(t, [t.actualDriverId], driver),
     projectReference(t, [t.generationRunId], generationRun),
-    // The key on active_plan_id is hand-written (src/sql/active-plan.ts): a plan of this route, and no other's,
+    // The key on active_plan_id is hand-written (migration 0013_routing.sql): a plan of this route, and no other's,
     // ON DELETE SET NULL (active_plan_id) — the column subset Drizzle cannot express, without which a multi-column
     // SET NULL would null company_id and the route's own id. Out of Drizzle's sight, it is also out of sweepOrder's,
     // which is right: a self-clearing edge forces no order (reset-to-seed.ts).
@@ -385,9 +385,7 @@ export const pickup = wms.table(
     oneOf(t.origin),
     oneOf(t.service),
     oneOf(t.fillLevel),
-    // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
-    // A work order is of a container; an address-only stop empties, or collects a bulky booking.
     check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} in (${sql.raw(CONTAINERLESS_SERVICES.map(literal).join(", "))}) or ${t.containerId} is not null`),
     // A bulky collection is a booking's, at its address with no container, and nothing else names a booking (O11 of #290).
     check(tableObjectName(t.id.table, "bulky_shape", "pickup"), sql`(${t.service} = 'bulky') = (${t.bulkyBookingId} is not null) and (${t.service} <> 'bulky' or ${t.containerId} is null)`),
@@ -398,7 +396,6 @@ export const pickup = wms.table(
     check(tableObjectName(t.id.table, "subscription_shape", "pickup"), sql`(${t.service} = 'deliver') = (${t.subscriptionId} is not null)`),
     check(tableObjectName(t.id.table, "warehouse_shape", "pickup"), sql`(${t.service} in ('remove', 'swap')) = (${t.warehouseId} is not null)`),
     check(tableObjectName(t.id.table, "replacement_shape", "pickup"), sql`(${t.service} = 'swap') = (${t.replacementContainerId} is not null) and (${t.replacementContainerId} is null or ${t.replacementContainerId} <> ${t.containerId})`),
-    // A stock container is held back by one planned delivery or swap at a time, and one in service taken away by one planned removal or swap.
     uniqueIndex(tableObjectName(t.id.table, "reserved_container_id_key", "pickup")).on(t.companyId, t.reservedContainerId).where(sql`${t.reservedContainerId} is not null`),
     uniqueIndex(tableObjectName(t.id.table, "taken_container_id_key", "pickup")).on(t.companyId, t.takenContainerId).where(sql`${t.takenContainerId} is not null`),
     oneOf(t.reason),
@@ -410,7 +407,6 @@ export const pickup = wms.table(
     check(tableObjectName(t.id.table, "outcome_shape", "pickup"), sql`(${t.status} <> 'planned') = (${t.outcomeAt} is not null)`),
     check(tableObjectName(t.id.table, "reason_shape", "pickup"), sql`(${t.status} in (${sql.raw(MISSED_PICKUP_STATUSES.map(literal).join(", "))})) = (${t.reason} is not null)`),
     tenantReference(t, [t.contaminantCodeId], contaminantCode),
-    // A code tags the wrong waste: a stop missed for contamination, or one collected all the same.
     check(tableObjectName(t.id.table, "contaminant_code_shape", "pickup"), sql`${t.contaminantCodeId} is null or ${t.reason} = 'contamination' or ${t.status} = 'completed'`),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.containerId),
@@ -424,7 +420,6 @@ export const pickup = wms.table(
     tenantIndex(t, t.routeId, t.position),
     tenantIndex(t, t.contaminantCodeId),
     tenantIndex(t, t.bulkyBookingId),
-    // A moved stop names the stop it was moved from, on that stop's route, and only the office's stop a move adds names one; each stop is moved from once.
     projectReference(t, [t.movedFromRouteId, t.movedFromPickupId], t as ProjectTable, [t.routeId, t.id]),
     check(tableObjectName(t.id.table, "moved_from_shape", "pickup"), sql`(${t.movedFromRouteId} is null) = (${t.movedFromPickupId} is null) and (${t.movedFromPickupId} is null or ${t.origin} = 'office')`),
     uniqueIndex(tableObjectName(t.id.table, "moved_from_pickup_id_key", "pickup")).on(t.companyId, t.movedFromPickupId).where(sql`${t.movedFromPickupId} is not null`),
@@ -465,7 +460,6 @@ export const session = wms.table(
     projectReference(t, [t.trailerId], vehicle),
     // Carries the route: a proof, an unload or a receipt names a session of the route it names.
     projectKey(t, t.routeId),
-    // One live session per route and one per driver: the rows with `ended_at` null, and only those, are in the index.
     uniqueIndex(tableObjectName(t.companyId.table, "route_open_idx", "session")).on(t.companyId, t.routeId).where(sql`${t.endedAt} is null`),
     uniqueIndex(tableObjectName(t.companyId.table, "driver_open_idx", "session")).on(t.companyId, t.driverId).where(sql`${t.endedAt} is null`),
     tenantIndex(t, t.projectId),
@@ -532,7 +526,6 @@ export const proofOfService = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.routeId], route),
-    // A pickup and a session of the route the proof names: the keys carry the route on both sides.
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.routeId, t.sessionId], session, [session.routeId, session.id]),
     tenantReference(t, [t.recordedBy], userAccount),
@@ -549,12 +542,9 @@ export const proofOfService = wms.table(
       tableObjectName(t.id.table, "pickup_shape", "proofOfService"),
       sql`(${t.kind} in (${kindsNaming("required")}) and ${t.pickupId} is not null) or (${t.kind} in (${kindsNaming("none")}) and ${t.pickupId} is null) or ${t.kind} in (${kindsNaming("optional")})`,
     ),
-    // A driver-recorded row names its session and an office row names none.
     check(tableObjectName(t.id.table, "session_shape", "proofOfService"), sql`(${t.source} = 'driver-app') = (${t.sessionId} is not null)`),
-    // What each kind carries and forbids: one CASE built from PROOF_SHAPES, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "proofOfService"), sql`case ${t.kind} ${sql.join(PROOF_KINDS.map((kind) => kindClause(kind, t)), sql` `)} else false end`),
     tenantReference(t, [t.contaminantCodeId], contaminantCode),
-    // A code tags an outcome: only the proofs that record one carry it, from the domain's list (CODED_PROOF_KINDS).
     check(tableObjectName(t.id.table, "contaminant_code_shape", "proofOfService"), sql`${t.contaminantCodeId} is null or ${t.kind} in (${sql.raw(CODED_PROOF_KINDS.map(literal).join(", "))})`),
     // The route's timeline in recording order: leads with the route, so it is the index the reference needs too.
     index(tableObjectName(t.companyId.table, "route_id_idx", "proofOfService")).on(t.companyId, t.routeId, t.id),
@@ -698,7 +688,6 @@ export const sessionPosition = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.routeId], route),
-    // A session of the route the position names: the key carries the route on both sides, as the proofs' does.
     projectReference(t, [t.routeId, t.sessionId], session, [session.routeId, session.id]),
     projectReference(t, [t.driverId], driver),
     validGeometry(t.location),
