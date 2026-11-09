@@ -26,6 +26,7 @@ import { useApiClient } from "@/components/platform/api-session-store"
 import { get, listAll, put } from "@/lib/api/client"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { CUSTOMER_NOTICES, isBroadcast, NOT_SENT, noticePicksOf, noticeRulesBody, noticeTemplateOptions, type NoticePick } from "@/lib/data/notification-rules"
+import { readSentence } from "@/lib/api/read-state"
 
 type Picks = Record<CustomerNoticeEvent, NoticePick>
 
@@ -90,8 +91,7 @@ export function CustomerNoticesSection({ project, templates, access }: { project
           </Button>
         </div>
       </div>
-      {read.problem !== null && <p className="text-sm text-muted-foreground">The customer notices could not be read from the API: {problemSentence(read.problem)}</p>}
-      {read.problem === null && picks === null && <p className="text-sm text-muted-foreground">Reading the customer notices from the API…</p>}
+      {(read.problem !== null || picks === null) && <p className="text-sm text-muted-foreground">{readSentence({ problem: read.problem && problemSentence(read.problem), answered: picks !== null }, "customer notices")}</p>}
       {picks !== null && (
         <div className="grid gap-3 sm:grid-cols-2">
           {CUSTOMER_NOTICES.map((notice) => (

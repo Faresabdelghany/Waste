@@ -134,9 +134,10 @@ describe("Settings addresses", () => {
   // Bug: a ticket type's or a ticket team's link opened Settings › Tickets on a tab of the pane's choosing (once Deadlines), never the record.
   test("a ticket type opens on its own page under Tickets, and a ticket team under Users & roles' Teams", () => {
     const templates = { workspaceId: "configure", moduleId: "templates" } as const
-    assert.equal(workspaceHref(templates, "ticket-type-0190a6d2-0000-7000-8000-000000000001"), "/settings?pane=tickets&type=ticket-type-0190a6d2-0000-7000-8000-000000000001")
+    assert.equal(workspaceHref(templates, "ticket-type-0190a6d2-0000-7000-8000-000000000001"), "/settings?pane=tickets&type=0190a6d2-0000-7000-8000-000000000001", "by the API's id, as the pane's own addresses")
     assert.equal(workspaceHref(templates, "team-0190a6d2-0000-7000-8000-000000000002"), "/settings?pane=access&tab=teams")
     assert.equal(workspaceHref(templates, "template-1"), "/settings?pane=tickets", "any other record of the module opens the pane")
+    assert.equal(workspaceHref(templates, "templates-ticket-type-1700000000000"), "/settings?pane=tickets", "a type made this session, which no API id names yet")
   })
 
   test("the sidebar's Ticket templates opens Message templates, and its Settings the account", () => {

@@ -12,9 +12,9 @@ import { listAll } from "@/lib/api/client"
 import { problemOfError } from "@/lib/api/problem"
 import type { TypeChoice, TypeChoices } from "@/lib/data/ticket-scope"
 
-/** The company's ticket types, every status and each kind's default marked, by name: null until read, none where the role reads none (a 403), `failed` where the read did otherwise. */
-export function useTicketTypeChoices(): TypeChoices {
-  const read = useReport<TypeChoice[]>("ticket-type-choices", async (client) => {
+/** The company's ticket types, every status and each kind's default marked, by name: null until read (or while not `readable`), none where the role reads none (a 403), `failed` where the read did otherwise. */
+export function useTicketTypeChoices(readable = true): TypeChoices {
+  const read = useReport<TypeChoice[]>(readable ? "ticket-type-choices" : null, async (client) => {
     const types = await listAll<TicketType>(client, "/ticket-types").catch((error: unknown) => {
       if (problemOfError(error).status === 403) return []
       throw error

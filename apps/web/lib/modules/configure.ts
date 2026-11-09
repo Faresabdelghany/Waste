@@ -1,6 +1,8 @@
 // Configure: the registry's twin of Settings. Its modules' records are
 // business records (each its `configure.<module>` bucket) that the rest of the
 // app names, and each module opens the Settings pane that manages it.
+import { hasPrefix, serverIdIn } from "@/lib/records/fields"
+
 import { record } from "./fixture-records"
 import { workspaceSpec } from "./spec"
 
@@ -87,9 +89,15 @@ export const CONFIGURE = workspaceSpec("configure", {
     templates: {
       shown: {
         pane: "tickets",
-        // A record opens where its kind is kept: a team under Users & roles' Teams, a ticket type on its own page of Tickets' Types.
+        // A record opens where its kind is kept: a team under Users & roles' Teams, a ticket type on its own page of
+        // Tickets' Types, named by the API's id as the pane names it. A link carries the id alone, and only an id the API
+        // gave (`webIdOf`) holds a server id, so the kind is the id's half of `ofKind`: a row made this session opens the pane.
         opens: (recordId) =>
-          recordId.startsWith(`${TICKET_TEAM_PREFIX}-`) ? { pane: "access", params: { tab: "teams" } } : recordId.startsWith(`${TICKET_TYPE_PREFIX}-`) ? { pane: "tickets", params: { type: recordId } } : { pane: "tickets", params: {} },
+          hasPrefix(TICKET_TEAM_PREFIX)({ id: recordId })
+            ? { pane: "access", params: { tab: "teams" } }
+            : hasPrefix(TICKET_TYPE_PREFIX)({ id: recordId })
+              ? { pane: "tickets", params: { type: serverIdIn(TICKET_TYPE_PREFIX, recordId) } }
+              : { pane: "tickets", params: {} },
       },
       // A template field offers the message templates alone, of the records the module holds.
       picked: { offers: (fieldId, record) => fieldId !== "templateId" || record.id.startsWith("template-") },
