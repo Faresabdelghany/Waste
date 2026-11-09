@@ -32,7 +32,6 @@ function fitted(text: string, width: number, font: Font, size: number): string {
   return `${cut.trimEnd()}…`
 }
 
-/** The text broken into lines no wider than `width`, at its spaces. */
 function wrapped(text: string, width: number, font: Font, size: number): string[] {
   const lines: string[] = []
   let line = ""
@@ -64,7 +63,6 @@ export async function renderTransferNote(document: TransferNoteDocument): Promis
   const writeRight = (text: string, right: number, y: number, size = TEXT, font = regular, color = ink) => write(text, right - font.widthOfTextAtSize(text, size), y, size, font, color)
   const rule = (y: number, from = LEFT, to = RIGHT) => page.drawLine({ start: { x: from, y }, end: { x: to, y }, thickness: 0.5, color: grey })
 
-  // The holder and the note's name and number.
   const [name, ...rest] = document.holder
   write(name, LEFT, TOP, 11, bold)
   rest.forEach((text, index) => write(text, LEFT, TOP - 14 - index * 12))
@@ -96,7 +94,6 @@ export async function renderTransferNote(document: TransferNoteDocument): Promis
     y -= 12
   }
 
-  // A line to sign on for each party, side by side, with its caption under it.
   y -= 44
   const half = (RIGHT - LEFT - 30) / 2
   document.signatures.forEach((caption, index) => {
