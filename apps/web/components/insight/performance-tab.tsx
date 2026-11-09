@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { statusLabel } from "@/lib/records/fields"
 import { reportKey, serviceReport, ticketReport, type ReportWindowQuery } from "@/lib/api/reports"
 import { csvFileName, csvOf, downloadCsv } from "@/lib/data/csv"
-import { pickupReasonLabel } from "@/lib/data/routes"
+import { pickupReasonLabel } from "@/lib/data/route-labels"
 import {
   countChange,
   countedOf,

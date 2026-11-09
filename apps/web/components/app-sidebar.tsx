@@ -33,10 +33,9 @@ import {
 } from "@/components/platform/active-routes-store"
 import { projectScopeOfMe, projectWebIdOf } from "@/lib/api/records/me-projects"
 import { ROUTES_MODULE } from "@/lib/data/routes"
-import { TICKETS_MODULE } from "@/lib/data/tickets"
+import { opennessOf, TICKETS_MODULE } from "@/lib/data/tickets"
 import { settingsHref } from "@/lib/modules/settings-panes"
 import { footerItems, navBadgeOf, navItemActive, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
-import { opennessOf } from "@/lib/data/tickets"
 import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
 import { projectScopeLabel, selectedProjectIds } from "@/lib/data/project-scope"
 

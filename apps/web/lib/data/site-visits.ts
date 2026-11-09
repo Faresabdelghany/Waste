@@ -19,6 +19,7 @@ import type { AccessCredentialKind, SiteVisitIdentification, SiteVisitOutcome, S
 import { moduleAt } from "@/lib/modules/keys"
 import { allows, type Grants } from "@/lib/modules/grants"
 import { firstDayOut, lastDayIn, periodOn, type PeriodStanding } from "@waste/domain/periods"
+import { count } from "@waste/domain/text"
 import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 
@@ -299,7 +300,7 @@ export function householdSentence(rule: Pick<VisitRule, "freeVisits" | "ladder">
 
 /** "8 visits in 30 days", or none: the likely-trade threshold. */
 export const tradeSentence = (rule: Pick<VisitRule, "tradeThreshold" | "tradeWindowDays">): string =>
-  rule.tradeThreshold === null || rule.tradeWindowDays === null ? "Not flagged" : `${rule.tradeThreshold} ${rule.tradeThreshold === 1 ? "visit" : "visits"} in ${rule.tradeWindowDays} ${rule.tradeWindowDays === 1 ? "day" : "days"}`
+  rule.tradeThreshold === null || rule.tradeWindowDays === null ? "Not flagged" : `${count(rule.tradeThreshold, "visit")} in ${count(rule.tradeWindowDays, "day")}`
 
 /** A project's rules, latest start first. */
 export const rulesInOrder = (rules: readonly VisitRule[]): VisitRule[] => [...rules].sort((a, b) => b.validFrom.localeCompare(a.validFrom))

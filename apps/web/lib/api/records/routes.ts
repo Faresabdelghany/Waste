@@ -58,6 +58,7 @@ import { DISPATCH_MANY_MAX } from "@waste/domain/execution/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
+import { count } from "@waste/domain/text"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
@@ -142,7 +143,7 @@ export function assignmentOf(context: MappingContext, { driverId, vehicleId, tra
 
 /** "3 stops", "1 stop", "2/3 stops" once any stop is decided: the map counts a route's stops off the first. */
 function stopsValue({ planned, total }: Route["progress"]): string {
-  if (planned === total) return `${total} ${total === 1 ? "stop" : "stops"}`
+  if (planned === total) return `${count(total, "stop")}`
   return `${total - planned}/${total} stops`
 }
 
@@ -549,14 +550,14 @@ export function workloadFacts(workload: RouteWorkload, unloadsOnTheWay = 0): Rec
   if (workload.expectedKg !== null) {
     const against = workload.capacityKg === null ? kilograms(workload.expectedKg) : `${kilograms(workload.expectedKg)} of ${kilograms(workload.capacityKg)}`
     const over = workload.overCapacityKg !== null && workload.overCapacityKg > 0 ? `: over by ${kilograms(workload.overCapacityKg)}, ${unloadsOnTheWay > 0 ? "so its Plan unloads on the way" : "plan a tip"}` : ""
-    const uncounted = workload.unexpectedStops > 0 ? `, ${workload.unexpectedStops} ${workload.unexpectedStops === 1 ? "stop" : "stops"} not counted` : ""
+    const uncounted = workload.unexpectedStops > 0 ? `, ${count(workload.unexpectedStops, "stop")} not counted` : ""
     facts["Expected load"] = `${against}${over}${uncounted}`
   }
   return facts
 }
 
 /** The unload visits a route's Plan makes on the way (O15 of #290), as its facts say them: where the vehicle is full before its last stop, it empties and goes on. */
-export const unloadsFact = (visits: number): string => `${visits} ${visits === 1 ? "visit" : "visits"} to the unloading station before the last stop, where the vehicle is full`
+export const unloadsFact = (visits: number): string => `${count(visits, "visit")} to the unloading station before the last stop, where the vehicle is full`
 
 /** What the office is told of a stop its Plan holds outside its Service Window (O14 of #290): planned all the same, and the record or the route to look at. */
 export const STOP_WARNING_SENTENCES: Readonly<Record<PlanStopWarning, string>> = {

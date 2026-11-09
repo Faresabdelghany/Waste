@@ -117,7 +117,7 @@ import type {
 import { isSoftDeleted, softDeletedRecord } from "@/lib/prototype/record-visibility"
 import { resolveBusinessRelation } from "@/lib/data/business-links"
 import { workspaceHref } from "@/lib/data/workspace-href"
-import { moduleAt } from "@/lib/modules/keys"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
 import { moduleSpecOfKey, moduleSpecOf, type ProviderForm } from "@/lib/modules/manifest"
 import {
   agreementFormSchemaOnApi,
@@ -262,7 +262,6 @@ import { RouteDetailsOnApi } from "@/components/waste/route-page-on-api"
 import { LiveTicketDetailsDialog } from "@/components/tickets/ticket-details-live"
 import { useGrants } from "@/components/platform/use-grants"
 import { mayOn } from "@/lib/modules/grants"
-import { moduleKeyOf } from "@/lib/modules/keys"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 
 type BusinessWorkspaceProps = {

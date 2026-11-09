@@ -44,7 +44,7 @@ import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-stat
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { intervalCollectionsPerWeek } from "@waste/domain/planning/frequency-reconciliation"
-import { moduleAt } from "@/lib/modules/keys"
+import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
 import { PROMISED_RATE_KEY } from "@/lib/prototype/service-frequencies"
 
 import { SHARED_POINT_PREFIX } from "@/lib/data/agreements"
@@ -56,7 +56,6 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 
 import { command, create, get, listAll, patch } from "../client"
 import { patchOf, said, type Client, type CommandInput, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
-import { moduleKeyOf } from "@/lib/modules/keys"
 import { isLocalRefusal, ofKind, statusLabel, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { instantOn, projectTimezoneOf, shownOn, todayIn } from "./clock"
 import { containerPlace, servesOn } from "./container-places"

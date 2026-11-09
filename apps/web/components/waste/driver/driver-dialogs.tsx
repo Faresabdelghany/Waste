@@ -23,7 +23,7 @@ import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason,
 import { PARAGRAPH_MAX } from "@waste/domain/text"
 import { wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
 import { LITRES_MAX, litresOf } from "@/lib/data/tank-words"
-import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
+import { DRIVER_REASON_LABELS } from "@/lib/data/route-labels"
 import { FILL_OPTIONS } from "@/lib/data/fill-levels"
 import { REFUSAL_LABELS } from "@/lib/data/unload-refusals"
 

@@ -34,7 +34,6 @@ import { MISSED_PICKUP_STATUSES, OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PI
 import { moduleAt } from "@/lib/modules/keys"
 import { statusLabel } from "@/lib/records/fields"
 import { CONTAINERS_MODULE } from "@/lib/data/containers"
-import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -43,6 +42,7 @@ import { BULKY_BOOKINGS_MODULE } from "./bulky"
 import { mintedRecord, ORGANISATION_MODULE, WAREHOUSES_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
+import { pickupReasonLabel } from "./route-labels"
 import { NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 import { SERVICE_PROVIDERS_MODULE } from "./provider-money"
 
@@ -206,8 +206,6 @@ export function createRouteRecord(values: BusinessFormValues, { now }: { now: nu
 }
 
 const MISSED = { fieldId: "outcome", oneOf: MISSED_PICKUP_STATUSES } as const
-/** A stop's reason in the Driver App's words ("Over capacity" for `capacity`, lib/driver/route-view.ts); the system's four as any token is spelled. */
-export const pickupReasonLabel = (reason: string) => (DRIVER_REASON_LABELS as Readonly<Record<string, string>>)[reason] ?? statusLabel(reason)
 
 /** Each stop command's dialog. */
 export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, BusinessFormSchema>> = {

@@ -13,6 +13,7 @@ import { COUNTING_LIMIT_MAX, countedWhat, periodName } from "@waste/domain/resol
 import { addDays } from "@waste/domain/days"
 import { lastDayIn } from "@waste/domain/periods"
 import { COUNTING_PERIODS, type CountingPeriod } from "@waste/domain/resolution/vocabulary"
+import { count } from "@waste/domain/text"
 
 import { allows, type Grants } from "@/lib/modules/grants"
 
@@ -136,7 +137,7 @@ export function simulationSentence(answer: Pick<CountingSimulation, "from" | "to
   const found =
     answer.tickets === 0
       ? `No property would have received a ticket ${window}.`
-      : `${answer.tickets} ${answer.tickets === 1 ? "ticket" : "tickets"} at ${answer.properties} ${answer.properties === 1 ? "property" : "properties"} ${window}.`
+      : `${count(answer.tickets, "ticket")} at ${count(answer.properties, "property", "properties")} ${window}.`
   return answer.shown.length < answer.tickets ? `${found} The first ${answer.shown.length} are listed.` : found
 }
 

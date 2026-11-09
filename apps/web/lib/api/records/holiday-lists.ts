@@ -10,6 +10,7 @@
 // Removing a list is an action (`REMOVE_HOLIDAY_LIST`), since the store has
 // no delete: the API refuses a list a project still names, in its sentence.
 import type { HolidayList, HolidayListHoliday } from "@waste/contracts/holiday-lists"
+import { count } from "@waste/domain/text"
 import { HOLIDAY_LIST_KEYS, HOLIDAY_LIST_KIND, HOLIDAY_LIST_PREFIX, holidayListEntries } from "@/lib/prototype/route-schemes/holiday-list-records"
 import { holidayEntryValues } from "@/lib/prototype/route-schemes/holiday-lists"
 
@@ -50,7 +51,7 @@ export const holidayListAdapter: ResourceAdapter<HolidayList, unknown, HolidayLi
   list: (client) => listAll<HolidayList>(client, "/holiday-lists"),
   toRecord: (list) => {
     const { holidayDates, holidayNames } = holidayEntryValues(list.holidays.map((holiday) => ({ date: holiday.day, name: holiday.name ?? "" })))
-    const projects = `${list.projectCount} ${list.projectCount === 1 ? "project" : "projects"}`
+    const projects = `${count(list.projectCount, "project")}`
     return {
       name: list.name,
       context: `${list.country} · ${projects}`,

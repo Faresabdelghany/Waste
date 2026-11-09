@@ -21,12 +21,11 @@ import { ACKNOWLEDGE_ALERT, ALERTS_MODULE, LINK_ALERT_TICKET, RESOLVE_ALERT } fr
 import { useIsProviderAccount } from "@/components/platform/provider-account"
 import { ROUTES_MODULE } from "@/lib/data/routes"
 import { ticketOpened } from "@/lib/api/records/tickets"
-import { TICKETS_MODULE } from "@/lib/data/tickets"
+import { createTicketRecord, TICKET_FORM, TICKETS_MODULE } from "@/lib/data/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert, type AlertCommandWithForm } from "@/lib/data/alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/api/provider-workspace"
-import { createTicketRecord, TICKET_FORM } from "@/lib/data/tickets"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"

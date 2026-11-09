@@ -13,12 +13,12 @@
 // page — and stops once the run has finished, once that age has passed (the
 // worker has not reported on it), or once the page is gone.
 import type { GenerationRun } from "@waste/contracts/generation"
+import { count } from "@waste/domain/text"
 
 import type { ModuleLocation } from "@/lib/data/business-modules"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
 
 import { get, listPage, type ApiClient } from "../client"
-import { PICKUPS_MODULE } from "@/lib/data/routes"
-import { ROUTES_MODULE } from "@/lib/data/routes"
 import { problemOfError, type Problem } from "../problem"
 
 /** How often an open run is read again. */
@@ -46,8 +46,6 @@ export function withRun(runs: readonly GenerationRun[], run: GenerationRun): Gen
   return runs.some((candidate) => candidate.id === run.id) ? runs.map((candidate) => (candidate.id === run.id ? run : candidate)) : [run, ...runs]
 }
 
-const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
-
 /** What a run did, as counts, leaving out what it did none of: "5 routes created, 1 cancelled · 39 pickups written". */
 export function runCounts(run: GenerationRun): string {
   const routes = (
@@ -56,12 +54,12 @@ export function runCounts(run: GenerationRun): string {
       [run.routesRefreshed, "refreshed"],
       [run.routesCancelled, "cancelled"],
     ] as const
-  ).filter(([count]) => count > 0)
+  ).filter(([n]) => n > 0)
   const parts = [
-    routes.map(([count, word], index) => (index === 0 ? `${counted(count, "route", "routes")} ${word}` : `${count} ${word}`)).join(", "),
-    run.pickupsWritten > 0 ? `${counted(run.pickupsWritten, "pickup", "pickups")} written` : "",
-    run.holidaysSkipped > 0 ? `${counted(run.holidaysSkipped, "holiday", "holidays")} skipped` : "",
-    run.unlocated > 0 ? `${counted(run.unlocated, "container", "containers")} not placed` : "",
+    routes.map(([n, word], index) => (index === 0 ? `${count(n, "route")} ${word}` : `${n} ${word}`)).join(", "),
+    run.pickupsWritten > 0 ? `${count(run.pickupsWritten, "pickup")} written` : "",
+    run.holidaysSkipped > 0 ? `${count(run.holidaysSkipped, "holiday")} skipped` : "",
+    run.unlocated > 0 ? `${count(run.unlocated, "container")} not placed` : "",
   ].filter((part) => part !== "")
   // All nought: a rerun over routes already as planned, or a window with nothing to plan — either way no route changed.
   return parts.length === 0 ? "No route changed" : parts.join(" · ")

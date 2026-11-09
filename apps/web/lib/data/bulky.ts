@@ -18,6 +18,7 @@ import { addDays, formatShortDay, SERVICE_DAY_LABELS, SERVICE_DAYS } from "@wast
 import { isOneOf } from "@waste/domain/lists"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 import { takesReference } from "@waste/domain/status-gates"
+import { count } from "@waste/domain/text"
 
 import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
@@ -277,7 +278,7 @@ export function recurrenceSentence(schedule: Pick<BulkySchedule, "frequency" | "
 }
 
 /** "12 slots a day", "1 slot a day". */
-export const slotsSentence = (slots: number): string => `${slots} ${slots === 1 ? "slot" : "slots"} a day`
+export const slotsSentence = (slots: number): string => `${count(slots, "slot")} a day`
 
 /** "From 2027-01-01", "2027-01-01 to 2027-06-30": a period by its last day in force. */
 export const periodSentence = (period: { validFrom: string; validTo: string | null }): string =>
