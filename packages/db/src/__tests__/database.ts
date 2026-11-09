@@ -97,7 +97,6 @@ export async function freshDatabase(adminUrl: string, prefix: string): Promise<F
   }
 }
 
-/** Creates a database with a unique name, runs `fn` against its URL, and drops it afterwards whatever happened. */
 export async function withFreshDatabase<T>(
   adminUrl: string,
   prefix: string,

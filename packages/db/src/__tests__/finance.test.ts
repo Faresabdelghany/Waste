@@ -295,10 +295,10 @@ const row = (values: Partial<typeof priceListRow.$inferInsert>): typeof priceLis
   ...values,
 })
 
-/** A sound credit note against company a's invoice, but for what a test overrides. */
 /** The parties a hand-written invoice row freezes (#291 C5); `issueInvoice` reads them from the company and the payer. */
 const PARTIES = { seller: { legalName: "Test Renovation A/S", registrationNumber: "12345678", vatNumber: null, postalAddress: null, bankIban: null, bankBic: null, fikCreditorNumber: null }, buyer: { name: "Test Customer", registrationNumber: null, billingAddress: null } }
 
+/** A sound credit note against company a's invoice, but for what a test overrides. */
 const creditNote = (values: Partial<typeof invoice.$inferInsert>): typeof invoice.$inferInsert => ({
   parties: PARTIES,
   id: a.spare,

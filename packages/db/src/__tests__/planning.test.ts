@@ -10,8 +10,8 @@
 // ring validity refuse what they should, the project's working week defaults
 // and is checked, and the fence shows the API role exactly its company's rows
 // in each of the eight still standing (the ninth, the calendars' holidays,
-// was dropped on 2026-11-05: calendar-holidays-dropped.test.ts). Every test runs as the owner in a transaction that is
-// rolled back, so nothing needs cleaning up.
+// was dropped on 2026-11-05). Every test runs as the owner in a transaction
+// that is rolled back, so nothing needs cleaning up.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
