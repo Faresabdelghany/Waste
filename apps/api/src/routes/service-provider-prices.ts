@@ -85,12 +85,13 @@ import { projectCurrency } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { projectIdsOf, requireProject } from "../auth/projects"
 import { reachesThroughAssignments } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { answerOf, batchesOf, INDEX_BELOW_ZERO, INDEX_TOO_LARGE, lockInBatches, productStatuses, refusePlan } from "./indexation"
 import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
@@ -153,8 +154,6 @@ export const INDEX_OUTSIDE_PERIOD = "The index applies inside the price's period
 /** The two sentences an index past what a price holds is told, shared with the Apply index over many prices (routes/indexation.ts). */
 export { INDEX_BELOW_ZERO, INDEX_TOO_LARGE }
 
-const noSuchPrice = (id: string) => problem(404, { detail: `No service provider price ${id} this account reaches` })
-
 /**
  * The prices the caller reads: the office's projects' (`inProjects`), or,
  * for a provider's account, the prices under the assignments naming its own
@@ -163,18 +162,14 @@ const noSuchPrice = (id: string) => problem(404, { detail: `No service provider 
 const readable = (tx: Tx, principal: Principal) =>
   and(eq(serviceProviderPrice.companyId, principal.companyId), reachesThroughAssignments(tx, principal, serviceProviderPrice, eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId)))
 
-/** The prices the caller writes: the office's projects' and no other, since the company sets what it pays. */
-const writable = (principal: Principal) => and(eq(serviceProviderPrice.companyId, principal.companyId), inProjects(serviceProviderPrice.projectId, principal))
-
-/** One price by id under a scope; undefined when it is not there. */
-async function findPrice(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(serviceProviderPrice)
-    .where(and(where, eq(serviceProviderPrice.id, id)))
-    .limit(1)
-  return row
-}
+/** The prices: read as `readable` reaches them, written in the office's projects and no other (`writable`, `findPrice`), since the company sets what it pays. */
+const {
+  scope: writable,
+  noSuch: noSuchPrice,
+  get: getPrice,
+  commanded: findPrice,
+  list: listPrices,
+} = scoped(serviceProviderPrice, { noun: "service provider price", reach: "projects", reads: readable, place: "this account reaches", columns })
 
 /** The prices under every assignment naming a provider, for the list's `serviceProviderId` filter. */
 const underProvider = (tx: Tx, companyId: string, serviceProviderId: string) =>
@@ -204,27 +199,21 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaAssignmentId, serviceProviderId, productId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(serviceProviderPrice)
-          .where(
-            and(
-              readable(tx, principal),
-              projectId === undefined ? undefined : eq(serviceProviderPrice.projectId, projectId),
-              serviceAreaAssignmentId === undefined ? undefined : eq(serviceProviderPrice.serviceAreaAssignmentId, serviceAreaAssignmentId),
-              serviceProviderId === undefined ? undefined : underProvider(tx, principal.companyId, serviceProviderId),
-              productId === undefined ? undefined : eq(serviceProviderPrice.productId, productId),
-              day === undefined ? undefined : validOn(serviceProviderPrice, day),
-              after === undefined ? undefined : gt(serviceProviderPrice.id, after),
-            ),
-          )
-          .orderBy(asc(serviceProviderPrice.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(priceOf), limit))
+        const page = await listPrices(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(serviceProviderPrice.projectId, projectId),
+          serviceAreaAssignmentId === undefined ? undefined : eq(serviceProviderPrice.serviceAreaAssignmentId, serviceAreaAssignmentId),
+          serviceProviderId === undefined ? undefined : underProvider(tx, principal.companyId, serviceProviderId),
+          productId === undefined ? undefined : eq(serviceProviderPrice.productId, productId),
+          day === undefined ? undefined : validOn(serviceProviderPrice, day),
+        )
+        return c.json(mapPage(page, priceOf))
       },
     )
     .post(
@@ -301,16 +290,16 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
         const dryRun = index.dryRun === true
 
         // The scope named: an award of the caller's projects, or a provider of this company.
-        let scoped: SQL
+        let asked: SQL
         if (index.serviceAreaAssignmentId !== undefined) {
           await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, index.serviceAreaAssignmentId)
-          scoped = eq(serviceProviderPrice.serviceAreaAssignmentId, index.serviceAreaAssignmentId)
+          asked = eq(serviceProviderPrice.serviceAreaAssignmentId, index.serviceAreaAssignmentId)
         } else {
           const serviceProviderId = index.serviceProviderId!
           await requireServiceProvider(tx, principal.companyId, serviceProviderId)
-          scoped = underProvider(tx, principal.companyId, serviceProviderId)
+          asked = underProvider(tx, principal.companyId, serviceProviderId)
         }
-        const inPlan = and(writable(principal), scoped, or(isNull(serviceProviderPrice.validTo), gt(serviceProviderPrice.validTo, index.appliedFrom)))
+        const inPlan = and(writable(principal), asked, or(isNull(serviceProviderPrice.validTo), gt(serviceProviderPrice.validTo, index.appliedFrom)))
         // No parent row holds the scope, so a write locks what it reads until the set read under the locks is the set locked: a single index that committed while this waited wrote a successor this has not locked yet. Each round takes the assignments' locks before the prices', the order a price's create and patch take them, since a successor's key into its assignment asks the assignment's key share and the reverse order could deadlock.
         let rows = await tx.select(columns).from(serviceProviderPrice).where(inPlan).orderBy(asc(serviceProviderPrice.id))
         const lockedAssignments = new Set<string>()
@@ -394,8 +383,7 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
-        const row = await findPrice(tx, readable(tx, c.get("principal")), id)
-        if (row === undefined) throw noSuchPrice(id)
+        const row = await getPrice(tx, c.get("principal"), id)
         return c.json(priceOf(row))
       },
     )
@@ -428,11 +416,11 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
         // assignment's patch and the price's create take them — and the price
         // is read again under them, so an assignment shortened while this
         // waited is what the end is held inside (routes/periods.ts).
-        const named = await findPrice(tx, writable(principal), id)
+        const named = await findPrice(tx, principal, id)
         if (named === undefined) throw noSuchPrice(id)
         await lockRow(tx, serviceAreaAssignment, { companyId: principal.companyId, id: named.serviceAreaAssignmentId })
         await lockRow(tx, serviceProviderPrice, { companyId: principal.companyId, id })
-        const current = await findPrice(tx, writable(principal), id)
+        const current = await findPrice(tx, principal, id)
         if (current === undefined) throw noSuchPrice(id)
         if (patch.validTo !== undefined) {
           // The stored assignment, read the way the create reads a named one: the price's project is the assignment's by the composite key, so the check finds it.
@@ -480,11 +468,11 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
         // reverse order could deadlock with a patch — and the price is read
         // again under them, so two indexations of one row take turns and the
         // second sees the end the first wrote.
-        const named = await findPrice(tx, writable(principal), id)
+        const named = await findPrice(tx, principal, id)
         if (named === undefined) throw noSuchPrice(id)
         await lockRow(tx, serviceAreaAssignment, { companyId: principal.companyId, id: named.serviceAreaAssignmentId })
         await lockRow(tx, serviceProviderPrice, { companyId: principal.companyId, id })
-        const current = await findPrice(tx, writable(principal), id)
+        const current = await findPrice(tx, principal, id)
         if (current === undefined) throw noSuchPrice(id)
         if (index.appliedFrom <= current.validFrom) throw invalidRequest("body", [{ path: "appliedFrom", message: INDEX_OUTSIDE_PERIOD }])
         // The row judged by the plan the Apply index over many prices runs (routes/indexation.ts), its end set aside: a fee past what a price holds is the basis points' 400, judged before the 409 an ended row earns, which needs the body's day too.

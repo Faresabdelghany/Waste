@@ -83,7 +83,7 @@ import { validOn, validOver } from "@waste/db/query/valid-on"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { and, asc, eq, exists, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm"
 import * as z from "zod"
 import { newId } from "@waste/db/ids"
 import { lockRow, lockRows, refuseOverlap } from "@waste/db/commands/shared"
@@ -91,12 +91,13 @@ import { stampsOf } from "@waste/db/shapes/times"
 import { notWithin, refuseStranded } from "@waste/db/commands/periods"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import { reachesAssignments, reachesThroughAssignments } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet, type IdSetColumns } from "./id-sets"
 import { boundsOutside, periodAfter, periodOf, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { requirePlanningArea, requireServiceProvider, requireWasteFraction } from "./references"
@@ -195,9 +196,6 @@ const strandedPrices = strandedSentence("service provider price", "end")
 /** The one-award rule's sentence: the planning area by its code, the other area by its. */
 export const awardedElsewhere = (planningAreaCode: string, serviceAreaCode: string): string => `Planning area ${planningAreaCode} is already in service area ${serviceAreaCode} over part of that period`
 
-const noSuchArea = (id: string) => problem(404, { detail: `No service area ${id} this account reaches` })
-const noSuchAssignment = (id: string) => problem(404, { detail: `No service area assignment ${id} this account reaches` })
-
 /** The assignments the caller reaches: its provider's, or its projects' (auth/provider.ts). */
 const assignmentReach = (principal: Principal) => and(eq(serviceAreaAssignment.companyId, principal.companyId), reachesAssignments(principal))
 
@@ -217,31 +215,23 @@ const reachableAssignmentsOf = (tx: Tx, principal: Principal, where: SQL | undef
  */
 const readable = (tx: Tx, principal: Principal) => and(eq(serviceArea.companyId, principal.companyId), reachesThroughAssignments(tx, principal, serviceArea, eq(serviceAreaAssignment.serviceAreaId, serviceArea.id)))
 
-/** The areas the caller writes: the office's projects' and no other, since the award is the company's to make and to move. */
-const writable = (principal: Principal) => and(eq(serviceArea.companyId, principal.companyId), inProjects(serviceArea.projectId, principal))
+/** The areas: read as `readable` reaches them, written in the office's projects and no other (`writable`, `findArea`), since the award is the company's to make and to move. */
+const {
+  scope: writable,
+  noSuch: noSuchArea,
+  get: getArea,
+  commanded: findArea,
+  list: listAreas,
+} = scoped(serviceArea, { noun: "service area", reach: "projects", reads: readable, place: "this account reaches", columns })
 
-/** The same for an assignment's writes. */
-const writableAssignment = (principal: Principal) => and(eq(serviceAreaAssignment.companyId, principal.companyId), inProjects(serviceAreaAssignment.projectId, principal))
-
-/** One area by id under a scope; undefined when it is not there. */
-async function findArea(tx: Tx, where: SQL | undefined, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(serviceArea)
-    .where(and(where, eq(serviceArea.id, id)))
-    .limit(1)
-  return row
-}
-
-/** One assignment by id under a scope; undefined when it is not there. */
-async function findAssignment(tx: Tx, where: SQL | undefined, id: string): Promise<AssignmentRow | undefined> {
-  const [row] = await tx
-    .select(assignmentColumns)
-    .from(serviceAreaAssignment)
-    .where(and(where, eq(serviceAreaAssignment.id, id)))
-    .limit(1)
-  return row
-}
+/** The same for an assignment: read as `assignmentReach` reaches it, written in the office's projects. */
+const {
+  scope: writableAssignment,
+  noSuch: noSuchAssignment,
+  get: getAssignment,
+  commanded: findAssignment,
+  list: listAssignments,
+} = scoped(serviceAreaAssignment, { noun: "service area assignment", reach: "projects", reads: (_tx, principal) => assignmentReach(principal), place: "this account reaches", columns: assignmentColumns })
 
 /** The planning-area set's columns, what reading it needs. */
 const PLANNING_AREAS: IdSetColumns = { table: serviceAreaPlanningArea, parentId: serviceAreaPlanningArea.serviceAreaId, entryId: serviceAreaPlanningArea.planningAreaId }
@@ -403,29 +393,22 @@ export function serviceAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, validOn: day, planningAreaId, serviceProviderId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(serviceArea)
-          .where(
-            and(
-              readable(tx, principal),
-              projectId === undefined ? undefined : eq(serviceArea.projectId, projectId),
-              day === undefined ? undefined : validOn(serviceArea, day),
-              planningAreaId === undefined ? undefined : covering(principal.companyId, planningAreaId),
-              // The contracts hold `serviceProviderId` to come with `validOn`.
-              serviceProviderId === undefined || day === undefined ? undefined : heldBy(tx, principal, serviceProviderId, day),
-              after === undefined ? undefined : gt(serviceArea.id, after),
-            ),
-          )
-          .orderBy(asc(serviceArea.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is
         // not one of the areas whose sets are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listAreas(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(serviceArea.projectId, projectId),
+          day === undefined ? undefined : validOn(serviceArea, day),
+          planningAreaId === undefined ? undefined : covering(principal.companyId, planningAreaId),
+          // The contracts hold `serviceProviderId` to come with `validOn`.
+              serviceProviderId === undefined || day === undefined ? undefined : heldBy(tx, principal, serviceProviderId, day),
+        )
         const held = await setsOf(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => areaOf(row, held.get(row.id) ?? { planningAreaIds: [], wasteFractionIds: [] })), nextCursor })
       },
@@ -503,8 +486,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findArea(tx, readable(tx, principal), id)
-        if (row === undefined) throw noSuchArea(id)
+        const row = await getArea(tx, principal, id)
         const answer: ServiceAreaDetail = { ...areaOf(row, await setsFor(tx, principal.companyId, row.id)), assignments: await assignmentsFor(tx, principal, row.id) }
         return c.json(answer)
       },
@@ -537,7 +519,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         // read: a shortening and an assignment being added are the two halves
         // of one rule, and they serialise here (`@waste/db/commands/shared`).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
-        const current = await findArea(tx, writable(principal), id)
+        const current = await findArea(tx, principal, id)
         if (current === undefined) throw noSuchArea(id)
         const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined
         if (period !== undefined) requireOrdered(period)
@@ -590,7 +572,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         // steps spelled out, since the rule runs between the proof and the
         // write and takes the planning areas' locks (`@waste/db/commands/shared`).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
-        const current = await findArea(tx, writable(principal), id)
+        const current = await findArea(tx, principal, id)
         if (current === undefined) throw noSuchArea(id)
         const set = planningAreasOf(current.projectId, "ids")
         await set.require(tx, principal.companyId, ids)
@@ -630,7 +612,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The area is read for its project, which the membership rows carry; the replacement's own stamping update answers the 404 again and takes the lock.
-        const current = await findArea(tx, writable(principal), id)
+        const current = await findArea(tx, principal, id)
         if (current === undefined) throw noSuchArea(id)
         const row = await replaceIdSet(tx, wasteFractionsOf(current.projectId, "ids"), principal.companyId, ids, (stamped) =>
           tx
@@ -663,7 +645,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findArea(tx, readable(tx, principal), id)) === undefined) throw noSuchArea(id)
+        await getArea(tx, principal, id)
         return c.json(await assignmentsFor(tx, principal, id))
       },
     )
@@ -694,7 +676,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         // The area's lock, then the area: an assignment being added and the
         // area being shortened are the two halves of one rule (routes/periods.ts).
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id })
-        const area = await findArea(tx, writable(principal), id)
+        const area = await findArea(tx, principal, id)
         if (area === undefined) throw noSuchArea(id)
         const parent: Parent & Period = { companyId: principal.companyId, projectId: area.projectId, id: area.id, validFrom: area.validFrom, validTo: area.validTo }
         const row = await writeAssignment(tx, parent, { ...values, ...periodOf(values) })
@@ -718,26 +700,19 @@ export function serviceAreaRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaId, serviceProviderId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(assignmentColumns)
-          .from(serviceAreaAssignment)
-          .where(
-            and(
-              assignmentReach(principal),
-              projectId === undefined ? undefined : eq(serviceAreaAssignment.projectId, projectId),
-              serviceAreaId === undefined ? undefined : eq(serviceAreaAssignment.serviceAreaId, serviceAreaId),
-              serviceProviderId === undefined ? undefined : eq(serviceAreaAssignment.serviceProviderId, serviceProviderId),
-              day === undefined ? undefined : validOn(serviceAreaAssignment, day),
-              after === undefined ? undefined : gt(serviceAreaAssignment.id, after),
-            ),
-          )
-          .orderBy(asc(serviceAreaAssignment.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(assignmentOf), limit))
+        const page = await listAssignments(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(serviceAreaAssignment.projectId, projectId),
+          serviceAreaId === undefined ? undefined : eq(serviceAreaAssignment.serviceAreaId, serviceAreaId),
+          serviceProviderId === undefined ? undefined : eq(serviceAreaAssignment.serviceProviderId, serviceProviderId),
+          day === undefined ? undefined : validOn(serviceAreaAssignment, day),
+        )
+        return c.json(mapPage(page, assignmentOf))
       },
     )
     .get(
@@ -758,8 +733,7 @@ export function serviceAreaRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
-        const row = await findAssignment(c.get("tx"), assignmentReach(principal), id)
-        if (row === undefined) throw noSuchAssignment(id)
+        const row = await getAssignment(c.get("tx"), principal, id)
         return c.json(assignmentOf(row))
       },
     )
@@ -792,15 +766,15 @@ export function serviceAreaRoutes(deps: RouteDeps) {
         // area's patch and the assignment's create take them — and the
         // assignment is read again under them, so an area shortened while
         // this waited is what the end is held inside (routes/periods.ts).
-        const named = await findAssignment(tx, writableAssignment(principal), id)
+        const named = await findAssignment(tx, principal, id)
         if (named === undefined) throw noSuchAssignment(id)
         await lockRow(tx, serviceArea, { companyId: principal.companyId, id: named.serviceAreaId })
         await lockRow(tx, serviceAreaAssignment, { companyId: principal.companyId, id })
-        const current = await findAssignment(tx, writableAssignment(principal), id)
+        const current = await findAssignment(tx, principal, id)
         if (current === undefined) throw noSuchAssignment(id)
         const period = patch.validTo === undefined ? undefined : periodAfter(current, patch)
         if (period !== undefined) {
-          const area = await findArea(tx, writable(principal), current.serviceAreaId)
+          const area = await findArea(tx, principal, current.serviceAreaId)
           if (area === undefined) throw noSuchAssignment(id)
           requireWithin(area, period, OUTSIDE_SERVICE_AREA)
           // Every 400 above, every 409 below.

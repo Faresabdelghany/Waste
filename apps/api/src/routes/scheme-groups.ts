@@ -110,7 +110,6 @@ import { instantOf, stampsOf, timeOf } from "@waste/db/shapes/times"
 import { vehicleLabel } from "@waste/db/shapes/vehicles"
 
 import type { Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import { invalidRequest, problem, refusalProblem } from "../problem"
 import { scoped } from "../scoped"
 import { driverColumns, findDriver, findVehicle, vehicleColumns, type DriverRow, type VehicleRow } from "./fleet-lookups"
@@ -155,8 +154,6 @@ export function requireNotArchived(scheme: { name: string; archivedAt: Date | nu
   const refusal = archivedRefusal(scheme)
   if (refusal !== undefined) throw refusalProblem(refusal)
 }
-
-export const noSuchGroup = (id: string) => problem(404, { detail: `No collection group ${id} in the projects this account works in` })
 
 export const schemeColumns = {
   id: routeScheme.id,
@@ -371,8 +368,7 @@ export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow
 }
 
 /** The same for a group, which carries the project its scheme is in. */
-export const groupScope = (principal: Principal): SQL | undefined =>
-  and(eq(collectionGroup.companyId, principal.companyId), inProjects(collectionGroup.projectId, principal))
+export const { scope: groupScope, noSuch: noSuchGroup, list: listGroups } = scoped(collectionGroup, { noun: "collection group", reach: "projects", columns: groupColumns })
 
 export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
 

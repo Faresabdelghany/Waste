@@ -74,9 +74,8 @@ import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
 import { importTemplate, SEPARATOR_CHARACTERS } from "@waste/domain/imports/csv"
 import { IMPORT_KINDS } from "@waste/domain/imports/vocabulary"
 import { PARAGRAPH_MAX } from "@waste/domain/text"
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, TransactionRollbackError, type SQL } from "drizzle-orm"
+import { and, eq, inArray, isNull, or, sql, TransactionRollbackError, type SQL } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
@@ -85,8 +84,9 @@ import { changeReasonOf } from "../auth/audit"
 import { allows, requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { IMPORT_MODULES, importRow, type ImportContext } from "./import-rows"
 
 const MODULE = "improve.imports"
@@ -149,30 +149,27 @@ const resultOf = (row: RowRow): ImportRowResult => ({
 
 const runRowOf = (row: RowRow): ImportRunRow => ({ id: row.id, ...resultOf(row), recordedAt: row.recordedAt.toISOString() })
 
-/** The runs this caller reads: the runs of the company's kinds, and the runs of the projects they work in. */
-const runScope = (principal: Principal): SQL | undefined =>
-  and(
-    eq(importRun.companyId, principal.companyId),
-    or(isNull(importRun.projectId), inProjects(importRun.projectId, principal)),
-    kindsIn(readableKinds(principal)),
-  )
-
 /** The kinds whose runs a caller reads: those whose module the caller views. */
 const readableKinds = (principal: Principal): ImportKind[] => IMPORT_KINDS.filter((kind) => allows(principal.grants, IMPORT_MODULES[kind], "view"))
 
 /** A run of one of these kinds; `false` when there are none, never an `in ()`. */
 const kindsIn = (kinds: readonly ImportKind[]): SQL => (kinds.length === 0 ? sql`false` : inArray(importRun.kind, [...kinds]))
 
-const noSuchRun = (id: string) => problem(404, { detail: `No import run ${id} in this company's imports this account reads` })
+/** The runs this caller reads, newest first: the runs of the company's kinds, and the runs of the projects they work in. */
+const {
+  get: getRun,
+  locked: lockedRun,
+  list: listRuns,
+} = scoped(importRun, {
+  noun: "import run",
+  reach: (principal) => and(or(isNull(importRun.projectId), inProjects(importRun.projectId, principal)), kindsIn(readableKinds(principal))),
+  place: "in this company's imports this account reads",
+  columns: runColumns,
+  order: "desc",
+})
 
-async function findRun(tx: Tx, principal: Principal, id: string): Promise<RunRow | undefined> {
-  const [row] = await tx
-    .select(runColumns)
-    .from(importRun)
-    .where(and(runScope(principal), eq(importRun.id, id)))
-    .limit(1)
-  return row
-}
+/** A run's rows, read once the run is the caller's. */
+const { list: listRunRows } = scoped(importRunRow, { noun: "import run row", reach: "company", columns: rowColumns })
 
 /** How many rows each way. */
 function countsOf(results: readonly ImportRowResult[]): ImportCounts {
@@ -312,25 +309,17 @@ export function importRoutes(deps: RouteDeps) {
       async (c) => {
         const { limit, cursor, kind, projectId } = c.req.valid("query")
         // Newest first, so the next page is the runs below the cursor.
-        const below = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(runColumns)
-          .from(importRun)
-          .where(
-            and(
-              runScope(principal),
-              kind === undefined ? undefined : eq(importRun.kind, kind),
-              projectId === undefined ? undefined : eq(importRun.projectId, projectId),
-              below === undefined ? undefined : lt(importRun.id, below),
-            ),
-          )
-          .orderBy(desc(importRun.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(runOf), nextCursor })
+        const page = await listRuns(
+          c.get("tx"),
+          principal,
+          at,
+          kind === undefined ? undefined : eq(importRun.kind, kind),
+          projectId === undefined ? undefined : eq(importRun.projectId, projectId),
+        )
+        return c.json(mapPage(page, runOf))
       },
     )
     .get(
@@ -349,8 +338,7 @@ export function importRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findRun(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchRun(id)
+        const row = await getRun(c.get("tx"), c.get("principal"), id)
         return c.json(runOf(row))
       },
     )
@@ -380,9 +368,7 @@ export function importRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
 
         // The run first, locked: a batch sent twice at once is two requests, and the second reads what the first recorded.
-        await lockRow(tx, importRun, { companyId: principal.companyId, id })
-        const run = await findRun(tx, principal, id)
-        if (run === undefined) throw noSuchRun(id)
+        const run = await lockedRun(tx, principal, id)
         const kind = run.kind
         const context = contextFor(tx, principal, kind, run.projectId, now)
         requireColumns(kind, rows, "rows")
@@ -452,25 +438,12 @@ export function importRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, outcome } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findRun(tx, principal, id)) === undefined) throw noSuchRun(id)
-        const rows = await tx
-          .select(rowColumns)
-          .from(importRunRow)
-          .where(
-            and(
-              eq(importRunRow.companyId, principal.companyId),
-              eq(importRunRow.importRunId, id),
-              outcome === undefined ? undefined : eq(importRunRow.outcome, outcome),
-              after === undefined ? undefined : gt(importRunRow.id, after),
-            ),
-          )
-          .orderBy(asc(importRunRow.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(runRowOf), nextCursor })
+        await getRun(tx, principal, id)
+        const page = await listRunRows(tx, principal, at, eq(importRunRow.importRunId, id), outcome === undefined ? undefined : eq(importRunRow.outcome, outcome))
+        return c.json(mapPage(page, runRowOf))
       },
     )
 }

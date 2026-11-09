@@ -114,25 +114,20 @@ const nameTaken = (name: string) => `This company already has a role called ${JS
  * The roles of this company the caller reads: every one for the office, and
  * for a Service Provider's account the roles of a provider's team
  * (`PROVIDER_ROLE_SCOPE`), the ones its team door may give (#291 slice 23b,
- * routes/users.ts holds the rest of that rule when one is given).
+ * routes/users.ts holds the rest of that rule when one is given). A command
+ * reads the company's, every one (`findRole`).
  */
-const { noSuch: noSuchRole, get: getRole, list: listRoles } = scoped(role, {
+const {
+  noSuch: noSuchRole,
+  get: getRole,
+  commanded: findRole,
+  list: listRoles,
+} = scoped(role, {
   noun: "role",
-  reach: (principal) => (providerIdOf(principal) === null ? undefined : eq(role.scope, PROVIDER_ROLE_SCOPE)),
-  place: "in this company",
+  reach: "company",
+  reads: (_tx, principal) => and(eq(role.companyId, principal.companyId), providerIdOf(principal) === null ? undefined : eq(role.scope, PROVIDER_ROLE_SCOPE)),
   columns,
 })
-
-/** The role of the path, or the family's 404. */
-async function findRole(tx: Tx, companyId: string, id: string): Promise<Row> {
-  const [row] = await tx
-    .select(columns)
-    .from(role)
-    .where(and(eq(role.companyId, companyId), eq(role.id, id)))
-    .limit(1)
-  if (row === undefined) throw noSuchRole(id)
-  return row
-}
 
 export function roleRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -242,8 +237,10 @@ export function roleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const current = await findRole(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const current = await findRole(tx, principal, id)
+        if (current === undefined) throw noSuchRole(id)
         if (current.system && patch.scope !== undefined && patch.scope !== current.scope) throw problem(409, { detail: systemRoleScopeKept(current.name) })
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
@@ -279,8 +276,10 @@ export function roleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const { grants: asked } = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const current = await findRole(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const current = await findRole(tx, principal, id)
+        if (current === undefined) throw noSuchRole(id)
         if (current.system) throw problem(409, { detail: systemRoleKept(current.name) })
         // The matrix is part of the role on the wire, so replacing it changes
         // the role: the update is what says so. The trigger would stamp

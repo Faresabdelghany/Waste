@@ -68,7 +68,7 @@ import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { alreadyPicked, containerPickedTwice, groupRuns, isParked } from "@waste/domain/planning/checks"
 import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/domain/planning/schemes"
 import { INT4_MAX } from "@waste/domain/requests"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { groupReleases, releaseHolds } from "@waste/db/commands/route-holds"
@@ -77,10 +77,10 @@ import { projectToday } from "@waste/db/query/project-clock"
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { requireServiceProvider, type Scope } from "./references"
-import { assembleGroups, findScheme, requireNotArchived, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, groupScope, groupsOf, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotPickedTwice, requireStructure, writeGroupSets, type GroupRow } from "./scheme-groups"
+import { assembleGroups, CREW_THERE, findScheme, GROUP_NAME_TAKEN, groupColumns, groupNameTaken, type GroupRow, groupScope, groupsOf, listGroups, MODULE, noSuchGroup, noSuchScheme, pickOf, referencesOf, replaceGroupSet, requireFleetInService, requireFleetThere, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, writeGroupSets } from "./scheme-groups"
 
 const GroupPage = Page(CollectionGroup)
 
@@ -174,17 +174,11 @@ export function collectionGroupRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if ((await findScheme(tx, principal, id)) === undefined) throw noSuchScheme(id)
-        const rows = await tx
-          .select(groupColumns)
-          .from(collectionGroup)
-          .where(and(groupScope(principal), eq(collectionGroup.routeSchemeId, id), after === undefined ? undefined : gt(collectionGroup.id, after)))
-          .orderBy(asc(collectionGroup.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listGroups(tx, principal, at, eq(collectionGroup.routeSchemeId, id))
         return c.json({ items: await assembleGroups(tx, principal.companyId, items), nextCursor })
       },
     )

@@ -80,7 +80,7 @@
 // carries the provider price alone, never a customer's — and CityHaul's are a
 // 404. It commands nothing: the settlement is what the company tells the
 // provider, so `calculate`, `close` and `reopen` read through the office's
-// scope alone (`writable`), and a provider's account with `edit` granted
+// scope alone (`lockedSettlement`), and a provider's account with `edit` granted
 // finds no row — the family's 404, not a 403, since which settlements exist
 // outside its reach is not its to learn.
 import { Page } from "@waste/contracts/pagination"
@@ -95,22 +95,23 @@ import { settlementTransition, type SettlementCommand } from "@waste/domain/fina
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
 import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, gte, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
+import { refuseOverlap } from "@waste/db/commands/shared"
 import { labelOf, lastDayOf, linesBySettlement, lineOf, linesOf, periodEnd, settlementColumns, settlementDetailOf, settlementOf, settlementsFrom, type SettlementRow } from "@waste/db/shapes/settlements"
 import { projectCurrency, projectToday } from "@waste/db/query/project-clock"
 import { refuseStranded } from "@waste/db/commands/periods"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { projectIdsOf, requireProject } from "../auth/projects"
 import { reachesThroughAssignments } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireServiceAreaAssignment } from "./references"
 
 const MODULE = "commercial.settlements"
@@ -132,31 +133,28 @@ export const eventsMissed = (rows: number): string => `${count(rows, "event")} o
 /** The other way the calculation goes stale: lines whose event is no longer served — cancelled since the calculation — which would otherwise be paid. */
 export const linesStale = (rows: number): string => `${count(rows, "line")} ${rows === 1 ? "names an event" : "name events"} no longer served in the period; calculate again`
 
-/** A settlement outside what the account reaches, or none: one sentence for the office's projects and the provider's own assignments alike. */
-const noSuchSettlement = (id: string) => problem(404, { detail: `No settlement ${id} this account reaches` })
-
 /** The settlements the caller reads: the office's projects', or a provider account's own through the assignment they are made under (auth/provider.ts). */
 const readable = (tx: Tx, principal: Principal): SQL | undefined =>
   and(eq(settlement.companyId, principal.companyId), reachesThroughAssignments(tx, principal, settlement, eq(serviceAreaAssignment.id, settlement.serviceAreaAssignmentId)))
 
-/** The settlements the caller commands: the office's projects' and no other, since the settlement is what the company tells the provider; a provider's command finds no row. */
-const writable = (principal: Principal): SQL | undefined => and(eq(settlement.companyId, principal.companyId), inProjects(settlement.projectId, principal))
-
-/** One settlement of this company by id under a scope; undefined when it is not there. */
-async function findSettlement(tx: Tx, where: SQL | undefined, id: string): Promise<SettlementRow | undefined> {
-  const [row] = await settlementsFrom(tx)
-    .where(and(where, eq(settlement.id, id)))
-    .limit(1)
-  return row
-}
-
-/** The settlement the path names, locked and read under the office's scope: the three commands hold rules the API holds — the machine, the three counts of `close` — so they take the row lock first and read afterwards (`@waste/db/commands/shared`), and a provider's account, which commands nothing, finds no row. */
-async function lockedSettlement(tx: Tx, principal: Principal, id: string): Promise<SettlementRow> {
-  await lockRow(tx, settlement, { companyId: principal.companyId, id })
-  const current = await findSettlement(tx, writable(principal), id)
-  if (current === undefined) throw noSuchSettlement(id)
-  return current
-}
+/**
+ * The settlements: read as `readable` reaches them, commanded in the
+ * office's projects and no other, since the settlement is what the company
+ * tells the provider. The path's settlement is locked and read under the
+ * office's scope (`lockedSettlement`): the three commands hold rules the API
+ * holds — the machine, the three counts of `close` — so they take the row
+ * lock first and read afterwards (`@waste/db/commands/shared`), and a
+ * provider's account, which commands nothing, finds no row. A settlement
+ * outside what the account reaches, or none, is one sentence for the
+ * office's projects and the provider's own assignments alike.
+ */
+const {
+  noSuch: noSuchSettlement,
+  find: findSettlement,
+  get: getSettlement,
+  locked: lockedSettlement,
+  list: listSettlements,
+} = scoped(settlement, { noun: "settlement", reach: "projects", reads: readable, place: "this account reaches", read: (tx) => settlementsFrom(tx) })
 
 const eventColumns = {
   id: settlementEvent.id,
@@ -171,6 +169,9 @@ const eventColumns = {
 }
 
 type EventRow = Pick<typeof settlementEvent.$inferSelect, keyof typeof eventColumns>
+
+/** A settlement's history, read once the settlement is the caller's. */
+const { list: listEvents } = scoped(settlementEvent, { noun: "settlement event", reach: "company", columns: eventColumns })
 
 const eventOf = (row: EventRow): SettlementEvent => ({
   id: row.id,
@@ -364,25 +365,20 @@ export function settlementRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, serviceAreaAssignmentId, serviceProviderId, status, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await settlementsFrom(tx)
-          .where(
-            and(
-              readable(tx, principal),
-              projectId === undefined ? undefined : eq(settlement.projectId, projectId),
-              serviceAreaAssignmentId === undefined ? undefined : eq(settlement.serviceAreaAssignmentId, serviceAreaAssignmentId),
-              serviceProviderId === undefined ? undefined : eq(serviceAreaAssignment.serviceProviderId, serviceProviderId),
-              status === undefined ? undefined : eq(settlement.status, status),
-              day === undefined ? undefined : validOn(settlement, day),
-              after === undefined ? undefined : gt(settlement.id, after),
-            ),
-          )
-          .orderBy(asc(settlement.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listSettlements(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(settlement.projectId, projectId),
+          serviceAreaAssignmentId === undefined ? undefined : eq(settlement.serviceAreaAssignmentId, serviceAreaAssignmentId),
+          serviceProviderId === undefined ? undefined : eq(serviceAreaAssignment.serviceProviderId, serviceProviderId),
+          status === undefined ? undefined : eq(settlement.status, status),
+          day === undefined ? undefined : validOn(settlement, day),
+        )
         const lines = await linesBySettlement(
           tx,
           principal.companyId,
@@ -428,7 +424,7 @@ export function settlementRoutes(deps: RouteDeps) {
             })
             .returning(settlementColumns),
         )
-        const written = await findSettlement(tx, readable(tx, principal), row.id)
+        const written = await findSettlement(tx, principal, row.id)
         if (written === undefined) throw new Error(`settlement ${row.id} was written and cannot be read back`)
         return created(c, "/settlements", { ...settlementOf(written), lines: [] })
       },
@@ -453,8 +449,7 @@ export function settlementRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findSettlement(tx, readable(tx, principal), id)
-        if (row === undefined) throw noSuchSettlement(id)
+        const row = await getSettlement(tx, principal, id)
         return c.json(await settlementDetailOf(tx, principal.companyId, row))
       },
     )
@@ -585,25 +580,12 @@ export function settlementRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, kind } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findSettlement(tx, readable(tx, principal), id)) === undefined) throw noSuchSettlement(id)
-        const rows = await tx
-          .select(eventColumns)
-          .from(settlementEvent)
-          .where(
-            and(
-              eq(settlementEvent.companyId, principal.companyId),
-              eq(settlementEvent.settlementId, id),
-              kind === undefined ? undefined : eq(settlementEvent.kind, kind),
-              after === undefined ? undefined : gt(settlementEvent.id, after),
-            ),
-          )
-          .orderBy(asc(settlementEvent.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(eventOf), nextCursor })
+        await getSettlement(tx, principal, id)
+        const page = await listEvents(tx, principal, at, eq(settlementEvent.settlementId, id), kind === undefined ? undefined : eq(settlementEvent.kind, kind))
+        return c.json(mapPage(page, eventOf))
       },
     )
 }

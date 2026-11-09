@@ -36,7 +36,7 @@
 import { inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
-import { invalidRequest } from "../problem"
+import { invalidRequest, problem } from "../problem"
 import type { Principal } from "./principal"
 
 /** The ids of the projects the caller works in; empty for an account that works in none. */
@@ -69,4 +69,14 @@ const NOT_A_PROJECT = "Not a project this account works in"
 export function requireProject(principal: Principal, projectId: string, path = "projectId", target: "body" | "query" = "body"): void {
   if (projectIdsOf(principal).includes(projectId)) return
   throw invalidRequest(target, [{ path, message: NOT_A_PROJECT }])
+}
+
+/**
+ * Holds the project a path names (`/projects/:id/…`) to the ones the caller
+ * works in, or answers the 404 a project-scoped family answers for a row out
+ * of reach. Nothing is read: the caller's projects are the principal's.
+ */
+export function requireOwnProject(principal: Principal, id: string): void {
+  if (projectIdsOf(principal).includes(id)) return
+  throw problem(404, { detail: `No project ${id} in the projects this account works in` })
 }

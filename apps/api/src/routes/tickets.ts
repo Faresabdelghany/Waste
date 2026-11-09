@@ -82,7 +82,7 @@ import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { findReachedRoute } from "./execution-shapes"
 import { partyInForce } from "./property-writes"
@@ -102,7 +102,7 @@ import {
   requireTicket,
   type Scope,
 } from "./references"
-import { alertsNamingTicket, eventsOfTicket, findReachedTicket, findTicket, historyReadable, noSuchTicket, PROVIDER_THREAD, ticketReach, ticketScope } from "./resolution-shapes"
+import { alertsNamingTicket, eventsOfTicket, findTicket, getReachedTicket, historyReadable, listTickets, lockedTicket, noSuchTicket, PROVIDER_THREAD, ticketScope } from "./resolution-shapes"
 import { requireNotAhead } from "./shared"
 import { requireTicketWorkProduct } from "./ticket-charges"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
@@ -243,14 +243,6 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
   if (stop !== undefined && pickupMissed(stop.status)) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
-/** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (`@waste/db/commands/shared`). */
-async function lockedTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow> {
-  await lockRow(tx, ticket, { companyId: principal.companyId, id })
-  const current = await findTicket(tx, principal, id)
-  if (current === undefined) throw noSuchTicket(id)
-  return current
-}
-
 /** What a patch moving a counting rule's ticket off its property is told (#547 of #544): the ticket is that property's count, one per rule and period. */
 export const countedPropertyKept = (label: string): string => `${label} was opened by a counting rule for its property's emptyings, so it stays that property's`
 
@@ -365,41 +357,35 @@ export function ticketRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, open, overdue, kind, ticketTypeId, priority, source, assigneeUserAccountId, teamId, unassigned, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (customerId !== undefined) await requireCustomer(tx, principal.companyId, customerId, "customerId", "query")
-        const rows = await tx
-          .select(ticketColumns)
-          .from(ticket)
-          .where(
-            and(
-              ticketReach(tx, principal),
-              projectId === undefined ? undefined : eq(ticket.projectId, projectId),
-              status === undefined ? undefined : eq(ticket.status, status),
-              open === undefined ? undefined : inArray(ticket.status, [...(open ? OPEN_TICKET_STATUSES : CLOSED_TICKET_STATUSES)]),
-              overdue === undefined ? undefined : overdueAt(overdue, now()),
-              kind === undefined ? undefined : eq(ticket.kind, kind),
-              ticketTypeId === undefined ? undefined : eq(ticket.ticketTypeId, ticketTypeId),
-              priority === undefined ? undefined : eq(ticket.priority, priority),
-              source === undefined ? undefined : eq(ticket.source, source),
-              assigneeUserAccountId === undefined ? undefined : eq(ticket.assigneeUserAccountId, assigneeUserAccountId),
-              teamId === undefined ? undefined : eq(ticket.teamId, teamId),
-              unassigned === undefined ? undefined : unassigned ? isNull(ticket.assigneeUserAccountId) : isNotNull(ticket.assigneeUserAccountId),
-              customerId === undefined ? undefined : visibleTo(tx, principal.companyId, customerId, now()),
-              propertyId === undefined ? undefined : eq(ticket.propertyId, propertyId),
-              routeId === undefined ? undefined : eq(ticket.routeId, routeId),
-              pickupId === undefined ? undefined : eq(ticket.pickupId, pickupId),
-              containerId === undefined ? undefined : eq(ticket.containerId, containerId),
-              driverId === undefined ? undefined : eq(ticket.driverId, driverId),
-              dayWindow(ticket.occurredAt, from, to),
-              after === undefined ? undefined : gt(ticket.id, after),
-            ),
-          )
-          .orderBy(asc(ticket.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(ticketOf), limit))
+        const page = await listTickets(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(ticket.projectId, projectId),
+          status === undefined ? undefined : eq(ticket.status, status),
+          open === undefined ? undefined : inArray(ticket.status, [...(open ? OPEN_TICKET_STATUSES : CLOSED_TICKET_STATUSES)]),
+          overdue === undefined ? undefined : overdueAt(overdue, now()),
+          kind === undefined ? undefined : eq(ticket.kind, kind),
+          ticketTypeId === undefined ? undefined : eq(ticket.ticketTypeId, ticketTypeId),
+          priority === undefined ? undefined : eq(ticket.priority, priority),
+          source === undefined ? undefined : eq(ticket.source, source),
+          assigneeUserAccountId === undefined ? undefined : eq(ticket.assigneeUserAccountId, assigneeUserAccountId),
+          teamId === undefined ? undefined : eq(ticket.teamId, teamId),
+          unassigned === undefined ? undefined : unassigned ? isNull(ticket.assigneeUserAccountId) : isNotNull(ticket.assigneeUserAccountId),
+          customerId === undefined ? undefined : visibleTo(tx, principal.companyId, customerId, now()),
+          propertyId === undefined ? undefined : eq(ticket.propertyId, propertyId),
+          routeId === undefined ? undefined : eq(ticket.routeId, routeId),
+          pickupId === undefined ? undefined : eq(ticket.pickupId, pickupId),
+          containerId === undefined ? undefined : eq(ticket.containerId, containerId),
+          driverId === undefined ? undefined : eq(ticket.driverId, driverId),
+          dayWindow(ticket.occurredAt, from, to),
+        )
+        return c.json(mapPage(page, ticketOf))
       },
     )
     .post(
@@ -496,8 +482,7 @@ export function ticketRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findReachedTicket(tx, principal, id)
-        if (row === undefined) throw noSuchTicket(id)
+        const row = await getReachedTicket(tx, principal, id)
         return c.json(await detailOf(tx, principal, row))
       },
     )
@@ -852,7 +837,7 @@ export function ticketRoutes(deps: RouteDeps) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findReachedTicket(tx, principal, id)) === undefined) throw noSuchTicket(id)
+        await getReachedTicket(tx, principal, id)
         const rows = await tx
           .select(eventColumns)
           .from(ticketEvent)
@@ -895,8 +880,7 @@ export function ticketRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         // The row's lock, though the row is not written: the snapshot below is read under it, so a `start` in flight is waited for and the comment carries the status it wrote, never one the row has left. Read through the reach: a provider comments on the tickets it reads.
         await lockRow(tx, ticket, { companyId: principal.companyId, id })
-        const current = await findReachedTicket(tx, principal, id)
-        if (current === undefined) throw noSuchTicket(id)
+        const current = await getReachedTicket(tx, principal, id)
         // A provider's comment is its thread's (the contracts default the visibility to `internal`, which from a provider's account is that thread too); the customer's is the office's to write.
         const fromProvider = providerIdOf(principal) !== null
         if (fromProvider && visibility === "customer") throw invalidRequest("body", [{ path: "visibility", message: OFFICE_SPEAKS_TO_CUSTOMERS }])
