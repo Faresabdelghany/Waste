@@ -20,7 +20,6 @@ import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } 
 /** Configure › Tickets & communication: the module the teams are the records of on the Pilot. */
 export const TICKET_TEAMS_MODULE = moduleAt("configure.templates")
 
-
 /** A team's two statuses as the form offers them. */
 export const TEAM_STATUS_LABELS = ["Active", "Inactive"] as const
 

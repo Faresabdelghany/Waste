@@ -133,7 +133,6 @@ export const isCompanyRecord = (record: BusinessRecord): boolean => companyAdapt
 /** `Project · municipality`, the fixture's context shape, from the wire's free-text kind. */
 const projectContext = (kind: string) => `Project · ${kind.toLowerCase()}`
 
-
 export const projectAdapter: ResourceAdapter<Project> = {
   prefix: "project",
   auditTable: "project",

@@ -62,7 +62,6 @@ import { WarehouseStockSurface } from "./stock-surfaces"
 import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
 
-
 export type CommandSurface = {
   /**
    * What stands in for the module's primary action on the Pilot: its own

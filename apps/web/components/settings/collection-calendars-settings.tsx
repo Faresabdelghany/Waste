@@ -71,10 +71,8 @@ import { calendarRowSummary } from "@/lib/prototype/route-schemes/calendar-list"
 import { resolveProjectCalendar } from "@/lib/prototype/route-schemes/project-calendar"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-
 export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
-  // Who saves: the account on the Pilot, the persona in fixture mode.
   const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")

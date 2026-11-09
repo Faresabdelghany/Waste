@@ -11,7 +11,6 @@ import nextConfig from "../../next.config.mjs"
 import ConfigurePage from "../../app/configure/page"
 import ImprovePage from "../../app/improve/page"
 import TemplatesPage from "../../app/templates/page"
-import { DEFAULT_SETTINGS_PANE, settingsHref } from "../modules/settings-panes"
 
 /** Where a path is sent: the first redirect whose source matches, as Next tries them (with its own `/_next` kept out). */
 async function redirectOf(pathname: string): Promise<string | undefined> {
@@ -57,7 +56,7 @@ function redirectedTo(page: () => unknown): string | undefined {
 describe("the pages that only redirect", () => {
   test("/templates opens Message templates, /configure Settings where it opens, and /improve the Dashboard", () => {
     assert.equal(redirectedTo(TemplatesPage), "/settings?pane=message-templates")
-    assert.equal(redirectedTo(ConfigurePage), settingsHref(DEFAULT_SETTINGS_PANE))
+    assert.equal(redirectedTo(ConfigurePage), "/settings?pane=account")
     assert.equal(redirectedTo(ImprovePage), "/performance")
   })
 })

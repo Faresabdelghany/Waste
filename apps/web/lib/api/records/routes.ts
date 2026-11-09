@@ -534,7 +534,6 @@ const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
   baseline: "Generated order, not optimised",
 }
 
-
 /**
  * What a route's stops take and weigh (O10 of #290), as its facts say it: the
  * time at the kerb its Duration adds to the drive, and the load its stops are

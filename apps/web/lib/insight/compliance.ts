@@ -67,7 +67,6 @@ export function periodOf(id: CompliancePeriodId, today: string): DayWindow | nul
   }
 }
 
-
 /** What the tab says of a period the report would refuse, in place of asking the API. */
 export const PERIOD_INCOMPLETE = "Pick the period's first and last day"
 export const PERIOD_BACKWARDS = "The period's last day comes on or after its first"

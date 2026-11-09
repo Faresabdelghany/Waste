@@ -110,7 +110,6 @@ const roleScopeOptions = [
   "Own service provider",
 ] as const
 
-
 function UserRowActions({
   row,
   self,

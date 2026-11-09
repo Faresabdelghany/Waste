@@ -7,7 +7,7 @@ import { GearSix, Key, Moon, SignOut, Sun } from "@phosphor-icons/react/dist/ssr
 
 import { useAppTheme } from "@/components/app-theme-provider"
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog"
-import { useShellIdentity } from "@/components/platform/shell-identity"
+import { useActorName, useShellIdentity } from "@/components/platform/shell-identity"
 import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { actorNameOf, initialsOf } from "@/lib/data/account-profile"
+import { initialsOf } from "@/lib/data/account-profile"
 import { settingsHref } from "@/lib/modules/settings-panes"
 import type { LinearThemeId } from "@/lib/app-themes"
 import { cn } from "@/lib/utils"
@@ -46,7 +46,7 @@ export function TopAccountMenu() {
   const [changingPassword, setChangingPassword] = useState(false)
 
   const email = apiConfigured ? (me?.user.email ?? session?.email ?? "") : ""
-  const name = actorNameOf(apiConfigured, me, session?.email, fixture)
+  const name = useActorName()
   const detail = apiConfigured ? (me?.role.name ?? "") : fixture.detail
   const initials = apiConfigured ? initialsOf(name) : fixture.initials
 

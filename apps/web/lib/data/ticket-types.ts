@@ -34,7 +34,6 @@ import { capitalised } from "@/lib/format/words"
 /** The module the types are records of: the teams', the API's grant for both being `configure.templates`. */
 export const TICKET_TYPES_MODULE: ModuleLocation = TICKET_TEAMS_MODULE
 
-
 /** The record's custom fields, as the wire's list in JSON: what the pane edits and the ticket's forms read. */
 export const TICKET_TYPE_FIELDS_KEY = "fieldsJson"
 

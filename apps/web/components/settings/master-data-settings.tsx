@@ -94,7 +94,6 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
 
 export function MasterDataSettings({ params }: SettingsPaneProps) {
   const { upsertRecord } = useBusinessRecordStore()
-  // Who saves: the account on the Pilot, the persona in fixture mode.
   const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(params.kind) ? params.kind : "waste-fraction")

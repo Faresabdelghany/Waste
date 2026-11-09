@@ -51,7 +51,6 @@ export function revenueReport(client: ApiClient, window: ReportWindowQuery): Pro
   return get<RevenueReport>(client, withQuery("/reports/revenue", query(window)))
 }
 
-
 const periodQuery = (query: WasteDataQuery) => ({ projectId: query.projectId, from: query.from, to: query.to })
 
 /** What one read of the waste-data report is told apart by. */

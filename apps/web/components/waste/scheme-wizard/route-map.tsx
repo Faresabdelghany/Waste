@@ -106,7 +106,6 @@ export function RouteMap({ routes, roads, selected, day, baseMap, bounds }: Rout
     )
   }, [frame, mapInstance, styleLoaded])
 
-
   // Road paths are built once, in world pixels at the reference zoom
   // relative to the city centre; per frame only the group transform changes.
   const roadPaths = useMemo(() => {

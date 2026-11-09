@@ -472,7 +472,6 @@ export function SchemeContainerPicker({
   )
 }
 
-
 /* ------------------------------ group helpers ------------------------------ */
 
 /** The next free `group-N` id — stable within the scheme, never Date.now(). */

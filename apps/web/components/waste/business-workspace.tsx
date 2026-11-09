@@ -810,7 +810,6 @@ export function BusinessWorkspace({
   navigationBasePath,
   serviceProviderScopeId,
 }: BusinessWorkspaceProps) {
-  // Who acts here: the account on the Pilot, the shell's persona in fixture mode.
   const actorName = useActorName()
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
   const { getRecords, upsertRecord } = useBusinessRecordStore()

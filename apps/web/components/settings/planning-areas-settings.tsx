@@ -73,13 +73,11 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
 import { todayIso } from "@waste/domain/planning/recurrence"
 
-
 const isAreasModule = (location: ModuleLocation) =>
   location.workspaceId === PLANNING_AREAS_MODULE.workspaceId && location.moduleId === PLANNING_AREAS_MODULE.moduleId
 
 export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const { getRecords, upsertRecord } = useBusinessRecordStore()
-  // Who saves: the account on the Pilot, the persona in fixture mode.
   const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")

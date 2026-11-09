@@ -215,7 +215,6 @@ export function stationLoads(client: Parameters<typeof get>[0], serverId: string
   return listAll<OutboundLoad>(client, "/outbound-loads", { fromStationId: serverId }).then((loads) => [...loads].reverse())
 }
 
-
 /** A stock row as its line reads: "6,000 kg on hand · in 27,500 kg · out 20,000 kg · adjusted -1,500 kg". */
 export function stockLine(row: Pick<MaterialStockRow, "inKg" | "outKg" | "adjustedKg" | "onHandKg" | "rejectedKg">): string {
   return [`${kg(row.onHandKg)} on hand`, `in ${kg(row.inKg)}`, `out ${kg(row.outKg)}`, ...(row.adjustedKg === 0 ? [] : [`adjusted ${kg(row.adjustedKg)}`]), ...(row.rejectedKg === 0 ? [] : [`${kg(row.rejectedKg)} under a rejected weight`])].join(" · ")

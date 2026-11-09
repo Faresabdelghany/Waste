@@ -15,7 +15,6 @@ import type {
   ImportRunRow,
 } from "@waste/contracts/imports"
 
-
 import { create, get, listAll, listPage, post, withQuery, type ApiClient, type Page } from "./client"
 
 /** A kind's template, the header row as the API writes it. */
