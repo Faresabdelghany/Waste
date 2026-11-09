@@ -12,9 +12,9 @@
 // precedent (query/asset-state.ts) — and the fold runs over the row in
 // `eventOf`, so a page, a single read, the answer to a command and the row a
 // write answers all say the same thing about where an event stands.
-// `statusIs` is the same fold as a `where`, the four readings as predicates
-// over the two subqueries and the two stamps, so a list filters by status in
-// SQL without a fifth way of saying what the columns say.
+// `statusIs` is the same fold as a `where`, the readings as predicates over
+// the two subqueries and the two stamps, so a list filters by status in SQL
+// without another way of saying what the columns say.
 //
 // Every kind, status and reason column is text with a CHECK in the database
 // and an enum on the wire, so the row's string is asserted to the

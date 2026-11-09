@@ -298,7 +298,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
     })
 
   test("0008 created the seven tables in wms, each fenced, four with the updated_at trigger and the three ledgers with none, and gave company its counter at 1000; 0114 gave the outbox the route problem's trigger", async () => {
-    // The API role's policies alone: the public door's own (0018) are public-door.test.ts's question.
+    // The API role's policies alone: the public door's own (0017) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
     assert.equal(names.length, 7)
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] | null }[]>`
