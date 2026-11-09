@@ -97,9 +97,10 @@ import {
   userRowsOf,
   type UserRow,
 } from "@/lib/api/users-roles"
-import type { SettingsTabOf } from "@/lib/modules/settings-panes"
-import type { SettingsPaneProps } from "@/components/settings/settings-pane-views"
+import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
+import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { cn } from "@/lib/utils"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const roleScopeOptions = [
   "Company",
@@ -444,15 +445,8 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
 
   const emptyMessage =
     accessUnknownSentence(session) ??
-    (teams.pending
-      ? "Reading the teams from the API…"
-      : teams.notGranted
-        ? "The ticket teams are not shown to your role."
-        : teams.problem
-          ? `The teams could not be read from the API: ${teams.problem.detail ?? teams.problem.title}`
-          : rows.length > 0
-            ? "No teams match your search."
-            : "No team yet.")
+    moduleReadSentence(teams, "teams", { notShown: "ticket teams" }) ??
+    (rows.length > 0 ? "No teams match your search." : "No team yet.")
 
   return (
     <>
@@ -730,6 +724,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const roleUserCount = (roleName: string) =>
     userRows.filter((user) => user.role === roleName).length
 
+  const tabCounts: Readonly<Record<UsersRolesTab, number>> = { users: userRows.length, roles: roleRows.length, teams: teamRows.length }
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs
@@ -740,24 +735,14 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         }}
       >
         <TabsList className="inline-flex h-8 bg-muted rounded-full px-1 py-0.5 text-xs border border-border/50">
-          <TabsTrigger value="users" className="rounded-full px-3 whitespace-nowrap">
-            Users
-            <span className="ml-1.5 text-[10px] text-muted-foreground">
-              {userRows.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="roles" className="rounded-full px-3 whitespace-nowrap">
-            Roles
-            <span className="ml-1.5 text-[10px] text-muted-foreground">
-              {roleRows.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="teams" className="rounded-full px-3 whitespace-nowrap">
-            Teams
-            <span className="ml-1.5 text-[10px] text-muted-foreground">
-              {teamRows.length}
-            </span>
-          </TabsTrigger>
+          {settingsTabsOf("access").map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="rounded-full px-3 whitespace-nowrap">
+              {tab.label}
+              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                {tabCounts[tab.value]}
+              </span>
+            </TabsTrigger>
+          ))}
         </TabsList>
       </Tabs>
     </div>

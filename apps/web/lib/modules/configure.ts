@@ -4,6 +4,10 @@
 import { record } from "./fixture-records"
 import { workspaceSpec } from "./spec"
 
+/** The ids Tickets & Communication's records carry by their kind (`<prefix>-<uuid>`): a ticket type's, a ticket team's. */
+export const TICKET_TYPE_PREFIX = "ticket-type"
+export const TICKET_TEAM_PREFIX = "team"
+
 export const CONFIGURE = workspaceSpec("configure", {
   label: "Configure",
   description: "Control organization, access, master data, integrations, portals, finance, and feature behavior.",
@@ -81,7 +85,12 @@ export const CONFIGURE = workspaceSpec("configure", {
       ],
     },
     templates: {
-      shown: { pane: "tickets" },
+      shown: {
+        pane: "tickets",
+        // A record opens where its kind is kept: a team under Users & roles' Teams, a ticket type on its own page of Tickets' Types.
+        opens: (recordId) =>
+          recordId.startsWith(`${TICKET_TEAM_PREFIX}-`) ? { pane: "access", params: { tab: "teams" } } : recordId.startsWith(`${TICKET_TYPE_PREFIX}-`) ? { pane: "tickets", params: { type: recordId } } : { pane: "tickets", params: {} },
+      },
       // A template field offers the message templates alone, of the records the module holds.
       picked: { offers: (fieldId, record) => fieldId !== "templateId" || record.id.startsWith("template-") },
       form: false,

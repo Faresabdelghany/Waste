@@ -103,3 +103,13 @@ export function projectScopeLabel(
   if (projectId === undefined) return ""
   return projects.find((project) => project.id === projectId)?.name ?? projectId
 }
+
+/**
+ * The project a per-project pane shows: the one picked where the pane lists
+ * it, else its first by name, so every such pane — and the tabs of Settings ›
+ * Tickets, which share their pick — opens on the same one. `serverIdOf` names
+ * a listed project by the API's id.
+ */
+export function projectShown<P extends { name: string }>(projects: readonly P[], picked: string | null, serverIdOf: (project: P) => string | undefined): P | null {
+  return projects.find((project) => picked !== null && serverIdOf(project) === picked) ?? [...projects].sort((one, other) => one.name.localeCompare(other.name))[0] ?? null
+}

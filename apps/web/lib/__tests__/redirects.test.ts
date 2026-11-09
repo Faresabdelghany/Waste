@@ -1,12 +1,17 @@
 // The redirects of next.config.mjs, run through Next's own route builder: an
 // address a browser may still hold from a page that is gone lands on the
-// page that took its place.
+// page that took its place. And the pages whose one job is a redirect, run
+// as Next runs them.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { buildCustomRoute } from "next/dist/lib/build-custom-route"
 
 import nextConfig from "../../next.config.mjs"
+import ConfigurePage from "../../app/configure/page"
+import ImprovePage from "../../app/improve/page"
+import TemplatesPage from "../../app/templates/page"
+import { DEFAULT_SETTINGS_PANE, settingsHref } from "../modules/settings-panes"
 
 /** Where a path is sent: the first redirect whose source matches, as Next tries them (with its own `/_next` kept out). */
 async function redirectOf(pathname: string): Promise<string | undefined> {
@@ -34,5 +39,25 @@ describe("the removed portfolio dashboard's addresses", () => {
     for (const path of ["/route-studio", "/customers", "/tickets", "/performance", "/operate"]) {
       assert.equal(await redirectOf(path), undefined, path)
     }
+  })
+})
+
+/** Where a page that only redirects sends a browser: the address its `redirect` throws for Next to follow. */
+function redirectedTo(page: () => unknown): string | undefined {
+  try {
+    page()
+  } catch (thrown) {
+    const digest = (thrown as { digest?: unknown }).digest
+    if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT;")) return digest.split(";")[2]
+    throw thrown
+  }
+  return undefined
+}
+
+describe("the pages that only redirect", () => {
+  test("/templates opens Message templates, /configure Settings where it opens, and /improve the Dashboard", () => {
+    assert.equal(redirectedTo(TemplatesPage), "/settings?pane=message-templates")
+    assert.equal(redirectedTo(ConfigurePage), settingsHref(DEFAULT_SETTINGS_PANE))
+    assert.equal(redirectedTo(ImprovePage), "/performance")
   })
 })

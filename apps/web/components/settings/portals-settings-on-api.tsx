@@ -32,6 +32,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "@/lib/data/portals"
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 
 export function PortalsSettingsOnApi() {
@@ -60,13 +61,7 @@ export function PortalsSettingsOnApi() {
     )
   }
 
-  const emptyMessage = organisation.pending
-    ? "Reading the projects from the API…"
-    : organisation.notGranted
-      ? "The projects are not shown to your role."
-      : organisation.problem
-        ? `The projects could not be read from the API: ${organisation.problem.detail ?? organisation.problem.title}`
-        : "No projects yet."
+  const emptyMessage = moduleReadSentence(organisation, "projects") ?? "No projects yet."
   const driverReading = (projectId: string) =>
     drivers.notGranted ? "Not shown to your role" : drivers.pending ? "Reading…" : drivers.problem ? "Could not be read" : driverAppReadingOf(drivers.records, projectId)
 

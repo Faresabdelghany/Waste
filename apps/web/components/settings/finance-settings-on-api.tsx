@@ -36,6 +36,7 @@ import {
 } from "@/lib/data/finance-settings"
 import { PAYMENT_REFERENCE_SCHEMES, type PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 const typedOf = (record: BusinessRecord, key: string): string => {
   const value = record.submittedValues?.[key]
@@ -48,13 +49,7 @@ export function FinanceSettingsOnApi() {
   const projects = organisation.records.filter((record) => !isSoftDeleted(record) && record.id.startsWith("project-")).sort((a, b) => a.name.localeCompare(b.name))
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
 
-  const emptyMessage = organisation.pending
-    ? "Reading the projects from the API…"
-    : organisation.notGranted
-      ? "The projects are not shown to your role."
-      : organisation.problem
-        ? `The projects could not be read from the API: ${organisation.problem.detail ?? organisation.problem.title}`
-        : "No projects yet."
+  const emptyMessage = moduleReadSentence(organisation, "projects") ?? "No projects yet."
   const hasCreditor = company !== null && typedOf(company, "fikCreditorNumber") !== ""
 
   return (

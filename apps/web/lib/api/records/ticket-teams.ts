@@ -16,7 +16,8 @@ import type { Team, TeamCreate, TeamPatch } from "@waste/contracts/ticket-teams"
 
 import { type BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
-import { TICKET_TEAMS_MODULE, TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
+import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
+import { TICKET_TEAM_PREFIX } from "@/lib/modules/configure"
 
 import { create, listAll, patch, put } from "../client"
 import { patchOf, type MappingContext, type RecordFields, type ResourceAdapter, type ServerModule } from "./adapter"

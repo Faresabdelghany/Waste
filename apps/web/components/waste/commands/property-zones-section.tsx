@@ -7,6 +7,7 @@ import { useRowHistory } from "@/components/platform/use-command-support"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { zonesReadable, zonesSentence } from "@/lib/data/property-zones"
 import { propertyZones } from "@/lib/api/property-details"
+import { readSentence } from "@/lib/api/read-state"
 
 export function PropertyZonesSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
   const { me } = useApiSession()
@@ -19,13 +20,7 @@ export function PropertyZonesSection({ record, module }: { record: BusinessRecor
     <section className="space-y-2" data-testid="property-zones" aria-label="Notification zones">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notification zones</h3>
       <p className="text-sm text-muted-foreground">
-        {!readable
-          ? "The notification zones are not shown to your role."
-          : zones.problem !== null
-            ? `The notification zones could not be read from the API: ${zones.problem}`
-            : read === null
-              ? "Reading the notification zones from the API…"
-              : zonesSentence(read, point !== "")}
+        {readSentence({ viewed: readable, problem: zones.problem, answered: read !== null }, "notification zones") ?? (read === null ? null : zonesSentence(read, point !== ""))}
       </p>
     </section>
   )

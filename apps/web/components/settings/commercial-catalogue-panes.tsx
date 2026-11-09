@@ -41,13 +41,12 @@ import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 /** What a pane says in place of rows: still reading, not the role's to see, a read refused, or nothing to show. */
 function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: string, filtered: boolean): { message: string; hint?: string } {
-  if (answer.pending) return { message: `Reading the ${noun} from the API…` }
-  if (answer.notGranted) return { message: `The ${noun} are not shown to your role.`, hint: answer.problem?.detail }
-  if (answer.problem) return { message: `The ${noun} could not be read from the API: ${answer.problem.detail ?? answer.problem.title}` }
-  return { message: filtered ? `No ${noun} match this search.` : `No ${noun} yet.` }
+  const message = moduleReadSentence(answer, noun) ?? (filtered ? `No ${noun} match this search.` : `No ${noun} yet.`)
+  return answer.notGranted && !answer.pending ? { message, hint: answer.problem?.detail } : { message }
 }
 
 /** A dialog open on a snapshot of the row, or on a new one. */

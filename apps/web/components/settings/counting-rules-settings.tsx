@@ -20,9 +20,9 @@ import { toast } from "sonner"
 import type { CountingRule, CountingSimulation } from "@waste/contracts/counting-rules"
 import type { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
 import type { Team } from "@waste/contracts/ticket-teams"
-import type { TicketType } from "@waste/contracts/ticket-types"
 import { todayIso } from "@waste/domain/planning/recurrence"
 import { useReport } from "@/components/platform/use-report"
+import { useTicketTypeChoices } from "@/components/settings/use-ticket-type-choices"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -37,6 +37,8 @@ import { useApiClient, useApiSession } from "@/components/platform/api-session-s
 import { create, listAll, patch, post, remove } from "@/lib/api/client"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { accessUnknownSentence } from "@/lib/api/session"
+import { unknownTypeName, type TypeChoice } from "@/lib/data/ticket-scope"
+import { readSentence } from "@/lib/api/read-state"
 import {
   COUNTING_PERIOD_OPTIONS,
   countingRuleBodyOf,
@@ -57,20 +59,19 @@ import {
 } from "@/lib/data/counting-rules"
 import type { CountingPeriod } from "@waste/domain/resolution/vocabulary"
 
-/** What the pickers offer and the table names a rule's references by: each by server id. */
+/** What the pickers offer and the table names a rule's references by: each by server id. The types are the Tickets tabs' own read (`useTicketTypeChoices`). */
 /** `teamsRead` says the teams were answered, none among them or not, rather than refused or lost on the way. */
-type Choices = { types: readonly TicketType[]; teams: readonly Team[]; teamsRead: boolean; fractions: readonly WasteFraction[]; containerTypes: readonly ContainerType[] }
+type Choices = { types: readonly TypeChoice[]; teams: readonly Team[]; teamsRead: boolean; fractions: readonly WasteFraction[]; containerTypes: readonly ContainerType[] }
 
-const NO_CHOICES: Choices = { types: [], teams: [], teamsRead: false, fractions: [], containerTypes: [] }
+const NO_CHOICES: Omit<Choices, "types"> = { teams: [], teamsRead: false, fractions: [], containerTypes: [] }
 
 /** The name of a reference among the choices, or its id where no list the role reads holds it. */
 const nameIn = (rows: readonly { id: string; name: string }[], id: string | null): string | null => (id === null ? null : (rows.find((row) => row.id === id)?.name ?? id))
 
 /** The lists a rule picks from, each read under its own grant: a list the role may not read offers nothing, and a rule's reference reads as its id. */
-async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices> {
+async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Omit<Choices, "types">> {
   const settle = async <T,>(read: Promise<T[]>): Promise<T[]> => read.catch(() => [])
-  const [types, teams, fractions, containerTypes] = await Promise.all([
-    settle(listAll<TicketType>(client, "/ticket-types")),
+  const [teams, fractions, containerTypes] = await Promise.all([
     listAll<Team>(client, "/teams").then(
       (rows) => ({ rows, read: true }),
       () => ({ rows: [] as Team[], read: false }),
@@ -78,7 +79,7 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Choices
     settle(listAll<WasteFraction>(client, "/waste-fractions")),
     settle(listAll<ContainerType>(client, "/container-types")),
   ])
-  return { types, teams: teams.rows, teamsRead: teams.read, fractions, containerTypes }
+  return { teams: teams.rows, teamsRead: teams.read, fractions, containerTypes }
 }
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header; `onOpenTeams` opens Settings › Users & roles at its Teams tab, where a rule's team is added. */
@@ -89,21 +90,18 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   // Read again after every write: the key carries how many there have been.
   const [writes, setWrites] = useState(0)
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))
-  const read = useReport<Choices>(access.view ? "counting-rule-choices" : null, choicesOf)
-  const choices = read.report ?? NO_CHOICES
+  const read = useReport<Omit<Choices, "types">>(access.view ? "counting-rule-choices" : null, choicesOf)
+  const types = useTicketTypeChoices()
+  const choices: Choices = { ...(read.report ?? NO_CHOICES), types: types === null || types === "failed" ? [] : types }
+  // A rule's type the list does not hold reads as the other Tickets tabs say it: being read, not shown to the role, or not read.
+  const typeNameOf = (id: string | null) => (id === null ? null : (choices.types.find((type) => type.id === id)?.name ?? unknownTypeName(types)))
   // Told once the teams are answered with no active one, never while they are read or where the read failed: a rule's tickets wait with a team, and the company has none to pick.
   const noTeam = read.report !== null && read.report.teamsRead && offered(read.report.teams).length === 0
   const [editing, setEditing] = useState<CountingRule | "new" | null>(null)
   const rows = rules.report ?? []
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
-  const emptyMessage = accessUnknownSentence(session) ?? (!access.view
-    ? "The counting rules are not shown to your role."
-    : rules.problem !== null
-      ? `The counting rules could not be read from the API: ${problemSentence(rules.problem)}`
-      : rules.report === null
-        ? "Reading the counting rules from the API…"
-        : "No counting rule yet.")
+  const emptyMessage = accessUnknownSentence(session) ?? readSentence({ viewed: access.view, problem: rules.problem && problemSentence(rules.problem), answered: rules.report !== null }, "counting rules") ?? "No counting rule yet."
 
   return (
     <AssetPanelShell
@@ -146,7 +144,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
                     <TableCell className="font-medium">{rule.name}</TableCell>
                     <TableCell>{countingRuleSentence(rule, { wasteFraction: nameIn(choices.fractions, rule.wasteFractionId), containerType: nameIn(choices.containerTypes, rule.containerTypeId) })}</TableCell>
                     <TableCell>
-                      {nameIn(choices.types, rule.ticketTypeId)} · {nameIn(choices.teams, rule.teamId)}
+                      {typeNameOf(rule.ticketTypeId)} · {nameIn(choices.teams, rule.teamId)}
                       {rule.notifiesTeam && <span className="text-muted-foreground"> · team told</span>}
                     </TableCell>
                     <TableCell>

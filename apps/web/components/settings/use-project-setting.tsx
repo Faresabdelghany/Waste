@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import { problemOfError, problemSentence, type Problem } from "@/lib/api/problem"
-import { projectShown } from "@/lib/modules/settings-panes"
+import { projectShown } from "@/lib/data/project-scope"
 
 type MeProject = Me["projects"][number]
 

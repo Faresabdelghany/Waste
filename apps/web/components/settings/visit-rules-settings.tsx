@@ -32,6 +32,7 @@ import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/format/clock"
 import { periodSentence } from "@/lib/data/bulky"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 import {
   ANNUAL_ACCESS_UNIT,
   householdSentence,
@@ -94,14 +95,10 @@ export function VisitRulesSettings() {
   }
 
   const emptyMessage = !access.view
-    ? "The Visit Rules are not shown to your role."
+    ? notShownSentence("Visit Rules")
     : project === null
       ? "No project to charge recycling-centre visits in."
-      : setting.problem !== null
-        ? `The Visit Rules could not be read from the API: ${problemSentence(setting.problem)}`
-        : shown === null
-          ? "Reading the Visit Rules from the API…"
-          : `${project.name} has no Visit Rule: its visits are logged and charged nothing.`
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: shown !== null }, "Visit Rules") ?? `${project.name} has no Visit Rule: its visits are logged and charged nothing.`)
 
   // The products a rule may charge: the project's active ones sold in the unit asked, and any it charges now whatever they are.
   const productOptions = (unit: string, kept: readonly string[]) => (shown?.products ?? []).filter((candidate) => (candidate.unit === unit && candidate.status === "active") || kept.includes(candidate.id))

@@ -25,6 +25,7 @@ import { problemSentence } from "@/lib/api/problem"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { typesListed } from "@/lib/data/ticket-scope"
 import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
+import { notShownSentence, readSentence } from "@/lib/api/read-state"
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Default teams and Charges tabs. */
 export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: ProjectPick }) {
@@ -57,14 +58,10 @@ export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: Proj
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
   const emptyMessage = accessUnknownSentence(session) ?? (!access.view
-    ? "The ticket SLA is not shown to your role."
+    ? notShownSentence("ticket SLA", { is: true })
     : project === null
       ? "No project to set an SLA for."
-      : setting.problem !== null
-        ? `The SLA could not be read from the API: ${problemSentence(setting.problem)}`
-        : base === null
-          ? "Reading the SLA from the API…"
-          : `${project.name} has no SLA: its tickets open without a due date unless someone gives one.`)
+      : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: base !== null }, "SLA") ?? `${project.name} has no SLA: its tickets open without a due date unless someone gives one.`))
 
   return (
     <AssetPanelShell

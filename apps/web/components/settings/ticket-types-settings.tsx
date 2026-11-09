@@ -66,6 +66,7 @@ import {
   type FieldDraft,
 } from "@/lib/data/ticket-types"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
+import { moduleReadSentence } from "@/lib/api/read-state"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.
@@ -128,13 +129,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
 
-  const emptyMessage = accessUnknownSentence(session) ?? (types.pending
-      ? "Reading the ticket types from the API…"
-      : types.notGranted
-        ? "The ticket types are not shown to your role."
-        : types.problem
-          ? `The ticket types could not be read from the API: ${types.problem.detail ?? types.problem.title}`
-          : "No ticket type yet.")
+  const emptyMessage = accessUnknownSentence(session) ?? moduleReadSentence(types, "ticket types") ?? "No ticket type yet."
 
   if (addressed !== undefined) {
     if (opened === undefined) return <TicketTypeMissing message={types.ready ? "No ticket type has this address." : emptyMessage} onBack={() => onOpenType(null)} />
