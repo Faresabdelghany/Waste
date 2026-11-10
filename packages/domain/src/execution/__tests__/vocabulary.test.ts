@@ -33,7 +33,7 @@ describe("the Execution vocabulary's own rules", () => {
     )
   })
 
-  test("the seventeen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
+  test("the command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }

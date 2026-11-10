@@ -1,21 +1,14 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { OPTIMISER_MAX_PARTS } from "../parts"
 import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_LOCATIONS, OPTIMISER_MAX_STOPS, optimiserMaxStops, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
-import { ROUTING_VOCABULARIES } from "../vocabulary"
+import * as vocabulary from "../vocabulary"
 
-describe("the routing vocabularies", () => {
-  test("every value is a kebab-case token, fit for a CHECK literal and a z.enum member", () => {
-    for (const [name, values] of Object.entries(ROUTING_VOCABULARIES)) {
-      assert.ok(values.length > 0, name)
-      for (const value of values) assert.match(value, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${name}: ${value}`)
-      assert.equal(new Set(values).size, values.length, `${name} repeats a value`)
-    }
-  })
-})
+defineVocabularyTests("routing", vocabulary, vocabulary.ROUTING_VOCABULARIES)
 
 describe("which solver an Optimise request gets (#124 §4, #171)", () => {
   test("from a depot, the optimiser, no fallback: in one request, or above fifty stops in parts (O15 of #290)", () => {

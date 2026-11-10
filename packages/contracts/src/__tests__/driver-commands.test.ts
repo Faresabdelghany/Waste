@@ -50,7 +50,7 @@ describe("DriverCommand", () => {
     for (const kind of DRIVER_COMMAND_KINDS) assert.equal("location" in COMMAND_BODIES[kind].shape, carriesLocation(kind), kind)
   })
 
-  test("is the discriminated union over the seventeen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the command kinds, each a strict envelope around a strict body", () => {
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
     for (const key of ["id", "routeId", "occurredAt", "deviceId", "body"]) {
@@ -188,7 +188,7 @@ describe("the batch", () => {
     assert.deepEqual(DriverCommandEnvelope.parse(loose), loose)
     assert.equal(DriverCommand.safeParse(loose).success, false)
     assert.deepEqual(refusal(COMMAND_BODIES["skip-pickup"].safeParse(loose.body)).map((issue) => issue.path), ["reason"], "the body against its kind, afterwards")
-    assert.equal(DriverCommandEnvelope.safeParse({ ...loose, kind: "retry-sync" }).success, false, "the kind is still one of the fifteen")
+    assert.equal(DriverCommandEnvelope.safeParse({ ...loose, kind: "retry-sync" }).success, false, "the kind is still one of the command kinds")
     assert.match(refusal(DriverCommandEnvelope.safeParse({ ...loose, extra: 1 }))[0].message, /extra/)
   })
 

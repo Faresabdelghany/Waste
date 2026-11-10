@@ -43,7 +43,7 @@ const subscription = {
 }
 
 describe("the agreement enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
+  test("refuse an expired status, since expiry is a reading of the period, and a weekly cadence", () => {
     assert.equal(AgreementStatus.safeParse("expired").success, false, "expiry is a reading of the period, never a status")
     assert.equal(BillingCadence.safeParse("weekly").success, false)
   })

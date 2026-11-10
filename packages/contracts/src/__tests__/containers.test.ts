@@ -49,7 +49,7 @@ const placement = {
 }
 
 describe("ContainerOwnership", () => {
-  test("is the vocabulary the database checks against, value for value and in the same order", () => {
+  test("refuses an ownership outside the vocabulary", () => {
     assert.equal(ContainerOwnership.safeParse("leased").success, false)
   })
 })

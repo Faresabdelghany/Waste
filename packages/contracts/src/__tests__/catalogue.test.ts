@@ -40,7 +40,7 @@ const product = {
 }
 
 describe("the catalogue enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
+  test("refuse a kind outside the vocabulary and a status spelled other than lowercase", () => {
     assert.equal(ProductKind.safeParse("container-rental").success, false)
     assert.equal(ProductStatus.safeParse("Draft").success, false)
   })

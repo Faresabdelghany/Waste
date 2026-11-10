@@ -39,7 +39,7 @@ const settlementTable: Record<SettlementStatus, Record<SettlementCommand, Transi
 }
 
 describe("settlementTransition", () => {
-  test("every status under every command once the period has ended, as the table spells it: nine pairs", () => {
+  test("every status under every command once the period has ended, as the table spells it", () => {
     for (const status of SETTLEMENT_STATUSES) {
       for (const command of SETTLEMENT_COMMANDS) {
         assert.deepEqual(july(status, command, AFTER), settlementTable[status][command], `${status} under ${command}`)
@@ -128,7 +128,7 @@ const reviewTable: Record<WeightReviewStatus, Record<WeightReviewDecision, Trans
 }
 
 describe("weightReviewTransition", () => {
-  test("every status under every decision, as the table spells it: twelve pairs", () => {
+  test("every status under every decision, as the table spells it", () => {
     for (const status of WEIGHT_REVIEW_STATUSES) {
       for (const decision of WEIGHT_REVIEW_DECISIONS) {
         assert.deepEqual(weightReviewTransition(status, decision, status === "corrected" ? CORRECTION : null), reviewTable[status][decision], `${status} under ${decision}`)

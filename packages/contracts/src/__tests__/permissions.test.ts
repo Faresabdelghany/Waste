@@ -15,7 +15,7 @@ describe("ModuleKey", () => {
 })
 
 describe("Action", () => {
-  test("the four actions, and nothing else", () => {
+  test("refuses an action outside the four, and one spelled other than lowercase", () => {
     assert.equal(Action.safeParse("approve").success, false)
     assert.equal(Action.safeParse("View").success, false)
   })
