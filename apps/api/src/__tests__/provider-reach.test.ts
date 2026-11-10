@@ -71,6 +71,11 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
         .update(routeScheme)
         .set({ planningAreaId: planning.areas.cairo.id })
         .where(and(eq(routeScheme.companyId, tenant.companyId), eq(routeScheme.id, execution.schemes.cairo.id)))
+      // NordRen's assignment runs on past its area, so the first day after the area is out of reach by the area's period alone.
+      await tx
+        .update(serviceAreaAssignment)
+        .set({ validTo: null })
+        .where(and(eq(serviceAreaAssignment.companyId, tenant.companyId), eq(serviceAreaAssignment.id, finance.nordren.assignmentId ?? "")))
     })
     const day = (operatingDate: string, seed: Parameters<typeof seedRoute>[4] = {}) => seedRoute(pool, tenant, fleet, execution, { operatingDate, ...seed })
     const dayBefore = (iso: string) => new Date(new Date(`${iso}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10)
