@@ -4,17 +4,17 @@
 // alert as it stands — so the suite can say that the counter comes before the
 // row, the row before the `created` event, the alert's link (under its lock)
 // after the event, the outbox event, then the type's opening actions read
-// (#546 of #544) and the row read back as they leave it; the `sets.test.ts`
-// precedent.
-// The statements themselves run against Postgres in tickets.test.ts.
+// (#546 of #544) and the row read back as they leave it; the API's
+// `sets.test.ts` precedent.
+// The statements themselves run against Postgres in the API's tickets.test.ts.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Tx } from "@waste/db/client"
+import type { Tx } from "../client"
 import { getTableName, type Table } from "drizzle-orm"
 
-import { createIdMinter } from "@waste/db/ids"
-import { appendTicketEvent, openTicket, type TicketDraft } from "@waste/db/commands/open-ticket"
+import { createIdMinter } from "../ids"
+import { appendTicketEvent, openTicket, type TicketDraft } from "../commands/open-ticket"
 import { Refused } from "@waste/domain/refusal"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
