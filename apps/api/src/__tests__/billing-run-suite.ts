@@ -47,7 +47,6 @@ export type BillingRunSuite = {
   harbor: string
 }
 
-/** Two tenants, the first with its fleet, execution and billing fixtures, and the calls the suites make. */
 export async function setUpBillingRuns(databaseUrl: string, ownerUrl: string): Promise<BillingRunSuite> {
   const pool = createDb(databaseUrl, { max: 4 })
   const ownerPool = createDb(ownerUrl, { max: 1 })

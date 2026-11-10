@@ -32,7 +32,6 @@ type Statement = { kind: "update" | "insert" | "select"; table: string; values?:
 const SELLER = { legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", vatNumber: "DK12345678", postalAddress: "Havnegade 4\n2100 København Ø", bankIban: null, bankBic: null, fikCreditorNumber: null }
 const BUYER = { name: "Østerbro Housing", registrationNumber: "38112009", billingAddress: null }
 
-/** A `tx` that records each statement by kind and table, answering the counter, the parties' reads, and every insert with the rows as inserted. */
 const scripted = () => {
   const statements: Statement[] = []
   const tx = {

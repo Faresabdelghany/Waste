@@ -37,7 +37,6 @@ const MODULE = "operate.exceptions"
 /** The request's clock, pinned: noon on the fixtures' Monday, so a default `detectedAt` and every stamp are known. */
 const NOON = new Date("2026-10-05T12:00:00Z")
 const noon = NOON.toISOString()
-/** So many minutes and seconds after noon, as the wire spells it. */
 const afterNoon = (minutes: number, seconds = 0) => new Date(NOON.getTime() + minutes * 60_000 + seconds * 1_000).toISOString()
 
 /** A ticket seeded through `tx` for the link to point at: an alert needs only the row, and the tickets API is proved in its own suite. */
@@ -47,7 +46,6 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, seeded once and read from never again but to prove it is invisible. */
   let b: Tenant
@@ -66,7 +64,6 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
   let ungranted: Call
   /** A route of Harbor Commercial, which the viewer does not work in. */
   let harbors: SeededRoute
-  /** The other company's alert, and one of Harbor Commercial's. */
   let theirAlert: Alert
   let harborAlert: Alert
 
@@ -102,7 +99,6 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
   }
-  /** A body about a route of Copenhagen Central, with whatever else the test says. */
   const body = (values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     title: "Truck late leaving the depot",
@@ -138,7 +134,7 @@ describe("the alert endpoints", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return Alert.parse(await response.json())
   }
-  /** A ticket of a project, written through `tx` as `wms_api` with its number from the company's counter, the way `POST /tickets` will take it. */
+  /** A ticket of a project, written through `tx` as `wms_api` with its number from the company's counter, the way `POST /tickets` takes it. */
   async function ticketIn(tenant: Tenant, projectId: string, createdBy: string): Promise<SeededTicket> {
     const id = testId()
     let number = 0

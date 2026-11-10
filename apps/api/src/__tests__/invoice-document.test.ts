@@ -70,7 +70,6 @@ describe("an invoice's document (#291 C5)", { skip: database.skip || owner.skip 
     return response
   }
 
-  /** The housing association invoiced for one residual pickup today: the run's one document. */
   const issued = async (): Promise<InvoiceDetail> => {
     await ok(await olivia("/billable-events", { method: "POST", body: { projectId: copenhagen, agreementId: fx.agreements.housingDkk.id, productId: fx.products.residual.id, quantity: 1, serviceDate: TODAY, unitPriceMinor: 40_000, overrideReason: "Agreed by phone" } }), 201)
     const run = await created(olivia, "/billing-runs", await olivia("/billing-runs", { method: "POST", body: { projectId: copenhagen, periodFrom: TODAY, periodTo: TODAY } }), BillingRunDetail)

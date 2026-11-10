@@ -15,7 +15,6 @@ import { withCompany } from "@waste/db/tenant"
 import { testId, type Tenant } from "./tenant"
 
 export type FleetFixtures = {
-  /** Two vehicle types of the company. */
   vehicleTypes: { rearLoader: { id: string }; glassCrane: { id: string } }
   /** One depot in Copenhagen Central and one in Harbor Commercial, so a body can name the wrong project's. */
   depots: { nordhavn: { id: string }; harbor: { id: string } }

@@ -158,7 +158,6 @@ export async function seedBilling(pool: Database, tenant: Tenant, ex: ExecutionF
     ])
   })
 
-  // The two lists, open-ended from 2026-01-01, each row's period the list's: the default list prices residual collection at 120.00 kr, at 100.00 kr for the housing association by a negotiated row, and the bulky pickup at 350.00 kr; the EUR list prices residual collection at 16.00 EUR and nothing else.
   const defaultList = await seedPriceList(pool, tenant, {
     code: "PL-CPH-2026",
     name: "Copenhagen tariff 2026",

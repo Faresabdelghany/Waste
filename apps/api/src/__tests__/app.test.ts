@@ -152,11 +152,11 @@ describe("GET /openapi.json", () => {
   test("documents the operations the snapshot lists, each with its security and its answers, and no other", async (t) => {
     // One line per operation, sorted, so two branches that each add a route
     // add a line each and merge: the method and path, the operationId, the
-    // bearer requirement or none (the probes, this document and the public
-    // door's reads), and every status it answers, a 201 marked where it
-    // declares Location — a create says where the row is now read; an append
-    // to a ledger, a command or a set replacement does not. A route added,
-    // removed or re-described is a change here: run this file with
+    // bearer requirement or none (the probes and the public door's reads),
+    // and every status it answers, a 201 marked where it declares Location —
+    // a create says where the row is now read; an append to a ledger, a
+    // command or a set replacement does not. A route added, removed or
+    // re-described is a change here: run this file with
     // `--test-update-snapshots` and read the diff.
     const document = await spec()
     const lines: { path: string; method: string; line: string }[] = []
@@ -559,7 +559,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/service-providers"), { get: "listServiceProviders", post: "createServiceProvider" })
     assert.deepEqual(operations("/service-providers/{id}"), { get: "getServiceProvider", patch: "patchServiceProvider" })
 
-    // What a caller can earn on each of them, and in what shape.
     // Both company handlers can answer 404 (the row the token was resolved
     // against, gone between that join and the statement), so both describe it.
     assert.deepEqual(Object.keys(document.paths["/company"].get.responses), ["200", "401", "403", "404"])
@@ -577,7 +576,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(page.required, ["items", "nextCursor"])
     assert.equal(page.properties?.items.type, "array")
 
-    // The path id and the page's query, as parameters a client can read.
     const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
     assert.deepEqual(byName(document.paths["/projects/{id}"].get), ["path:id"])
     assert.deepEqual(byName(document.paths["/projects"].get).sort(), ["query:cursor", "query:limit"])
@@ -601,7 +599,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/roles/{id}"), { get: "getRole", patch: "patchRole" })
     assert.deepEqual(operations("/roles/{id}/grants"), { put: "putRoleGrants" })
 
-    // What a caller can earn on each of them, and in what shape.
     assert.deepEqual(Object.keys(document.paths["/users"].get.responses), ["200", "400", "401", "403"])
     assert.deepEqual(Object.keys(document.paths["/users"].post.responses), ["201", "400", "401", "403", "409"])
     assert.deepEqual(Object.keys(document.paths["/users/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
@@ -663,7 +660,6 @@ describe("GET /openapi.json", () => {
     // A calendar carries no holidays (2026-11-05): a project's are its holiday list's.
     assert.equal(document.paths["/collection-calendars/{id}/holidays"], undefined)
 
-    // What a caller can earn on each of them, and in what shape.
     for (const path of ["/planning-areas", "/collection-calendars"]) {
       assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
       assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
@@ -752,7 +748,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/shared-collection-points/{id}"), { get: "getSharedCollectionPoint", patch: "patchSharedCollectionPoint" })
     assert.deepEqual(operations("/shared-collection-points/{id}/members"), { put: "putSharedCollectionPointMembers" })
 
-    // What a caller can earn on each of them, and in what shape.
     const families = ["/waste-fractions", "/container-types", "/service-frequencies", "/products", "/customers", "/properties", "/property-groups", "/shared-collection-points"]
     for (const path of families) {
       // A property's write may ask the address register: its silence is a 502, its absence a 503 (#291 C13).
@@ -865,7 +860,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(Object.keys(document.paths["/placements"].get.responses), ["200", "400", "401", "403"])
     assert.deepEqual(Object.keys(document.paths["/placements/{id}"].patch.responses), ["200", "400", "401", "403", "404", "409"])
 
-    // What is asked for by day, and what by id: the filters each list takes.
     const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
     assert.deepEqual(byName(document.paths["/agreements"].get).sort(), [
       "query:cursor",
@@ -1101,7 +1095,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/unloading-stations/{id}"), { get: "getUnloadingStation", patch: "patchUnloadingStation" })
     assert.deepEqual(operations("/unloading-stations/{id}/fractions"), { put: "putUnloadingStationFractions" })
 
-    // What a caller can earn on each of them, and in what shape.
     for (const path of ["/vehicle-types", "/warehouses", "/depots", "/unloading-stations"]) {
       assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
       assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)
@@ -1261,7 +1254,6 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/drivers"), { get: "listDrivers", post: "createDriver" })
     assert.deepEqual(operations("/drivers/{id}"), { get: "getDriver", patch: "patchDriver" })
 
-    // What a caller can earn on each of them, and in what shape.
     for (const path of ["/vehicles", "/drivers"]) {
       assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
       assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409"], path)

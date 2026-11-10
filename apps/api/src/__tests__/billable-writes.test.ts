@@ -35,7 +35,6 @@ const DAY = "2026-10-05"
 
 type Statement = { kind: "select" | "insert"; table: string; values?: Record<string, unknown> }
 
-/** A `tx` that records each statement by kind and table, answering a select from the rows scripted for its table and an insert with the row as inserted. */
 const scripted = (answers: Partial<Record<string, unknown[]>> = {}) => {
   const statements: Statement[] = []
   const chainFor = (rows: unknown[]) => {
@@ -71,7 +70,6 @@ const scripted = (answers: Partial<Record<string, unknown[]>> = {}) => {
 
 const shape = (statements: readonly Statement[]) => statements.map((statement) => `${statement.kind} ${statement.table}`)
 
-/** Ids that count up from a pinned clock, so the suite can name them. */
 const minter = () => createIdMinter(() => STAMP.getTime())
 
 const NO_LINKS = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }

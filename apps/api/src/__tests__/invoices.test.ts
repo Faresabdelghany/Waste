@@ -31,7 +31,6 @@ const InvoicePage = Page(Invoice)
 
 const MODULE = "commercial.invoices"
 
-/** The request's clock, pinned: noon on the fixtures' Monday. */
 /** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
 const NOON = new Date("2026-10-09T12:00:00Z")
 
@@ -97,7 +96,6 @@ describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
     return BillableEvent.parse(await response.json())
   }
 
-  /** Runs billing over a period as Olivia and answers the one invoice it issued. */
   const invoiced = async (from: string, to: string = from): Promise<InvoiceDetail> => {
     const response = await olivia("/billing-runs", { method: "POST", body: { projectId: copenhagen, periodFrom: from, periodTo: to } })
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))

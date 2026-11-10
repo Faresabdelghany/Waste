@@ -44,7 +44,6 @@ export const ReceiptPage = Page(DriverCommandReceipt)
 export const MORNING = new Date(`${FIXTURE_DAY}T14:00:00Z`)
 /** An instant of the operating date, UTC. */
 export const at = (time: string): string => `${FIXTURE_DAY}T${time}:00.000Z`
-/** An instant so many milliseconds from the pinned clock. */
 export const fromNow = (ms: number): string => new Date(MORNING.getTime() + ms).toISOString()
 
 /** Ids that sort in the order they were minted: one millisecond apart, so a page over `id` is a page over upload order. */
@@ -56,7 +55,6 @@ export const byId = <Row extends { id: string }>(rows: Row[]): Row[] => [...rows
 export type Envelope = { id: string; kind: DriverCommandKind; routeId: string; occurredAt: string; deviceId: string; body: unknown }
 type EnvelopeOptions = { id?: string; occurredAt?: string; deviceId?: string }
 
-/** One command as a device sends it: a fresh id and the morning's clock unless said. */
 export const envelope = (kind: DriverCommandKind, routeId: string, body: unknown, options: EnvelopeOptions = {}): Envelope => ({
   id: options.id ?? mint(),
   kind,
@@ -70,7 +68,6 @@ export type DriverDoor = {
   pool: Database
   ownerPool: Database
   keys: SigningKeys
-  /** The company under test, and the other one. */
   a: Tenant
   b: Tenant
   fleet: FleetFixtures
@@ -116,7 +113,7 @@ export function driverDoor({ now, logged }: { now: () => Date; logged: unknown[]
     const theirFleet = await seedFleet(pool, b, await seedPlanning(pool, b))
     const fixtures = await seedDriverFixtures(pool, a, fleet)
     const theirFixtures = await seedDriverFixtures(pool, b, theirFleet)
-    // The door under test, mounted with its own log so the two things it notes can be read, beside the office's route commands (routes/routes.ts) for the cancel that clears the yard between tests and the one a test sends mid-route; the whole app is what app.test.ts documents.
+    // The door under test, mounted with its own log so what it notes can be read, beside the office's route commands (routes/routes.ts) for the cancel that clears the yard between tests and the one a test sends mid-route; the whole app is what app.test.ts documents.
     const deps = routeDeps({ probe: pool, pool, verifier: keys.verifier, now, log: (entry) => logged.push(entry), jobs: createJobSender(pool) })
     const mounted = new Hono()
     mounted.onError(errorHandler())
@@ -214,7 +211,6 @@ export function driverDoorCalls(of: () => DriverDoor) {
     assert.equal(outcome.outcome, "applied", JSON.stringify(outcome.problem))
     return outcome
   }
-  /** Sends the command and holds it rejected with the status and the sentence; answers the problem for the field checks. */
   const rejected = async (command: Envelope, status: number, detail: string, call: Call = of().mads) => {
     const outcome = await one(command, call)
     assert.equal(outcome.outcome, "rejected", `${command.kind}: ${JSON.stringify(outcome)}`)
@@ -223,7 +219,6 @@ export function driverDoorCalls(of: () => DriverDoor) {
     assert.equal(outcome.result, undefined)
     return outcome.problem!
   }
-  /** The row an outcome carries, tagged as the resource asked for and parsed with its contract. */
   const valueOf = <T>(outcome: CommandOutcomeRow, resource: CommandResult["resource"], schema: { parse: (value: unknown) => T }): T => {
     assert.equal(outcome.result?.resource, resource, JSON.stringify(outcome))
     return schema.parse(outcome.result?.value)

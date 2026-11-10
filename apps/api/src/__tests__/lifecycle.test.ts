@@ -35,7 +35,6 @@ const PlacementPage = Page(ContainerServicePlacement)
 const MODULE = "resources.containers"
 const INVENTORY = "resources.inventory"
 
-/** The days the periods of this file are cut from. */
 const JANUARY = "2026-01-01"
 const FEBRUARY = "2026-02-01"
 const APRIL = "2026-04-01"
@@ -60,7 +59,6 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -175,11 +173,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     return await readProblem(response)
   }
 
-  /** A container of this test's own, in Copenhagen Central unless it says otherwise. */
   const container = (label: string, values: Record<string, unknown> = {}) =>
     create(olivia, "/containers", { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id, ...values }, Container)
 
-  /** The commands, each answering the movement it appended. */
   const command = (into: Container, verb: string, body: Record<string, unknown>, call: Call = olivia) =>
     create(call, `/containers/${into.id}/${verb}`, body, StockMovement)
   const receive = (into: Container, warehouseId: string, body: Record<string, unknown> = {}) => command(into, "receive", { warehouseId, ...body })
@@ -191,10 +187,8 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   /** A container received into the west warehouse: the state most commands start from (stock-fixtures.ts). */
   const stocked = (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> =>
     stockedIn(olivia, { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id, ...values }, warehouseId)
-  /** Issues the container into service under the open-ended subscription, from January unless said otherwise. */
   const place = (into: Container, values: Record<string, unknown> = {}) =>
     create(olivia, `/containers/${into.id}/placements`, { subscriptionId: subscribed.id, wasteFractionId: residual.id, validFrom: JANUARY, ...values }, ContainerServicePlacement)
-  /** A command refused: the status and the problem. */
   const refusedCommand = async (into: Container, verb: string, body: Record<string, unknown>, status: number, call: Call = olivia) =>
     refused(await call(`/containers/${into.id}/${verb}`, { method: "POST", body }), status)
 

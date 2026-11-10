@@ -97,7 +97,6 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     administrator = await make(olivia, "/customers", { kind: "organisation", name: "Housing administrator" }, Customer)
   })
   type Schema<T> = { parse: (value: unknown) => T }
-  /** A create through the API, 201 and its body parsed. */
   async function make<T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> {
     return created(call, path, await call(path, { method: "POST", body: values }), schema)
   }
@@ -108,7 +107,6 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     await ownerPool?.close()
   })
 
-  /** A property the landlord owns and `tenant` rents and pays for from January. */
   const rented = async (name: string, tenant = leaving): Promise<Property> => {
     const property = await make(olivia, "/properties", { projectId: copenhagen, name, address: `${name}, 2100 København Ø`, kind: "residential" }, Property)
     await withCompany(pool.db, a.companyId, (tx: Tx) =>
@@ -123,7 +121,6 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     return property
   }
 
-  /** The tenant's agreement from January, priced under the project's list. */
   const agreementOf = (number: string, customer = leaving) =>
     make(
       olivia,
@@ -132,7 +129,6 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
       Agreement,
     )
 
-  /** A subscription of `product` at `property` from January, a bin issued under it where `bin` says so. */
   const subscribed = async (of: Agreement, property: Property, product: Product, withBin = false) => {
     const subscription = await make(olivia, `/agreements/${of.id}/subscriptions`, { productId: product.id, propertyId: property.id, validFrom: "2026-01-01" }, Subscription)
     if (!withBin) return { subscription, container: undefined }
@@ -156,7 +152,6 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
   /** Rows in one order whatever ids the test minted: who, as what, from when. */
   const inKeyOrder = (rows: readonly PartyRow[]) => [...rows].sort((x, y) => `${x.customerId} ${x.role} ${x.validFrom}`.localeCompare(`${y.customerId} ${y.role} ${y.validFrom}`))
 
-  /** Every party row of a property, as the table holds them: who, as what, from when until when. */
   const partyRows = (propertyId: string) =>
     withCompany(pool.db, a.companyId, (tx: Tx) =>
       tx

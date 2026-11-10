@@ -35,7 +35,6 @@ const EventPage = Page(BillableEvent)
 
 const MODULE = "commercial.events"
 
-/** The request's clock, pinned: noon on the fixtures' Monday, so a stamp is known. */
 /** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
 const NOON = new Date("2027-02-05T12:00:00Z")
 
@@ -43,7 +42,6 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company: to prove a's events are invisible to it. */
   let b: Tenant
@@ -370,7 +368,6 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
   })
 
   describe("the list", () => {
-    /** A page as Olivia reads it, every item parsed. */
     const page = async (query: string, call: Call = olivia) => {
       const response = await call(`/billable-events?${query}`)
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

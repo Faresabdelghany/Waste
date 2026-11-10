@@ -22,15 +22,12 @@ const DepotPage = Page(Depot)
 
 const MODULE = "resources.depots"
 
-/** Nordhavn, where a yard of this file stands until it is moved. */
 const nordhavn: Point = { type: "Point", coordinates: [12.5977, 55.7083] }
-/** Sydhavn, for a depot that moves. */
 const sydhavn: Point = { type: "Point", coordinates: [12.5445, 55.6491] }
 
 describe("the depot endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -43,7 +40,6 @@ describe("the depot endpoints", { skip: database.skip }, () => {
   let other: Call
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
-  /** The other company's. */
   let theirDepot: Depot
 
   before(async () => {

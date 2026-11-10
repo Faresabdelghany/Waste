@@ -28,7 +28,6 @@ describe("newId", () => {
 })
 
 describe("createIdMinter", () => {
-  /** A clock and a randomness that give the minter nothing to work with. */
   const still = (millis: number) => createIdMinter(() => millis, (bytes) => bytes.fill(0))
 
   test("keeps the order even with a clock that never ticks and randomness that never changes", () => {

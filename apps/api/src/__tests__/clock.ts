@@ -7,7 +7,7 @@
 // stamps at all. Five milliseconds, not one: the wait is against the
 // database's clock as well as this process's.
 //
-// Not for users.test.ts or listen.test.ts, which time other things.
+// Not for users.test.ts, which times other things.
 
 /** Resolves once the wire's next millisecond has surely begun. */
 export const nextMillisecond = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 5))
