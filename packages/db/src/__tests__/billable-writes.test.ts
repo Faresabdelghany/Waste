@@ -7,16 +7,17 @@
 // agreement, the list, the rows and the product in that order and stops at
 // the first block, and that a row disagreeing with its kind is thrown before
 // anything reaches the database; the `ticket-writes.test.ts` precedent. The
-// statements themselves run against Postgres in billable-events.test.ts.
+// statements themselves run against Postgres in the API's
+// billable-events.test.ts.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Tx } from "@waste/db/client"
+import type { Tx } from "../client"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { getTableName, type Table } from "drizzle-orm"
 
-import { createIdMinter } from "@waste/db/ids"
-import { billableEventShapeIssue, priceDraft, recordBillableEvent, type ComposedEvent } from "@waste/db/commands/billable-writes"
+import { createIdMinter } from "../ids"
+import { billableEventShapeIssue, priceDraft, recordBillableEvent, type ComposedEvent } from "../commands/billable-writes"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

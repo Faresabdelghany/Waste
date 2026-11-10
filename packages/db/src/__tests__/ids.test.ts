@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { Id } from "@waste/contracts/ids"
 
-import { createIdMinter, newId } from "@waste/db/ids"
+import { createIdMinter, newId } from "../ids"
 
 /** The 48 bits an id leads with, back as milliseconds. */
 const millisOf = (id: string) => parseInt(id.slice(0, 8) + id.slice(9, 13), 16)
