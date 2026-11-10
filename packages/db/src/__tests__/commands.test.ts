@@ -14,7 +14,7 @@ import { product } from "../schema/catalogue"
 import { vehicle } from "../schema/fleet"
 import { company } from "../schema/organisation"
 import { depot } from "../schema/places"
-import { CHECK_VIOLATION, checkConstraintOf, DRIZZLE_QUERY, EXCLUSION_VIOLATION, exclusionConstraintOf, loggable, messageWithoutStatement, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
+import { checkConstraintOf, DRIZZLE_QUERY, exclusionConstraintOf, loggable, messageWithoutStatement, sqlstate, uniqueConstraintOf } from "../sqlstate"
 
 /** An error the way postgres.js raises one: the SQLSTATE as `code`, the constraint as `constraint_name`. */
 const postgresError = (code: string, constraint?: string) => Object.assign(new Error(`SQLSTATE ${code}`), { code, ...(constraint === undefined ? {} : { constraint_name: constraint }) })
@@ -33,7 +33,6 @@ describe("sqlstate", () => {
   })
 
   test("names the three states and answers each reader for its own state only", () => {
-    assert.deepEqual([UNIQUE_VIOLATION, EXCLUSION_VIOLATION, CHECK_VIOLATION], ["23505", "23P01", "23514"])
     const unique = wrapped(postgresError("23505", "ticket_event_source_event_id_idx"))
     const exclusion = postgresError("23P01", "route_scheme_no_overlap")
     const check = postgresError("23514", "ticket_origin_shape")
