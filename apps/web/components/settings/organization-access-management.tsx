@@ -82,14 +82,12 @@ import {
 } from "@/lib/api/users-roles"
 import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
-import { ChipOverflow } from "@/components/chip-overflow"
-import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
-import { BusinessViewOptionsPopover, defaultBusinessViewOptions, type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
-import { RecordSearchInput } from "@/components/platform/record-search-input"
-import { businessFilterChips, emptyBusinessFilters, matchesBusinessFilters, removeBusinessFilterValue, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
+import { type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
+import { listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
 const roleScopeOptions = [
   "Company",
@@ -158,9 +156,6 @@ function statusClassName(status: string) {
   return "border-border bg-muted text-muted-foreground"
 }
 
-/** A list's view: the shared toolbar's options, its order the list's own and its one optional column its details. */
-const listView = (ordering: BusinessViewOptions["ordering"]): BusinessViewOptions => ({ ...defaultBusinessViewOptions, ordering, showDescription: true })
-
 const defaultUserView = listView("name")
 const defaultRoleView = listView("default")
 const defaultTeamView = listView("default")
@@ -185,53 +180,6 @@ const LIST_ORDERS: readonly BusinessOrderingOption[] = [
   { value: "default", label: "Default order" },
   { value: "name", label: "Name" },
 ]
-
-/** The record toolbar every list draws: search, the filters its readers name, the view, and the filters' chips. */
-function ListToolbar({
-  placeholder,
-  query,
-  onQueryChange,
-  records,
-  readers,
-  filters,
-  onFiltersChange,
-  view,
-  onViewChange,
-  orderingOptions,
-  defaults,
-  detailsLabel,
-}: {
-  placeholder: string
-  query: string
-  onQueryChange: (value: string) => void
-  records: readonly BusinessRecord[]
-  readers: FilterValueReaders
-  filters: BusinessFilters
-  onFiltersChange: (filters: BusinessFilters) => void
-  view: BusinessViewOptions
-  onViewChange: (view: BusinessViewOptions) => void
-  orderingOptions: readonly BusinessOrderingOption[]
-  defaults: BusinessViewOptions
-  detailsLabel: string
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-        <RecordSearchInput value={query} onChange={onQueryChange} placeholder={placeholder} />
-        <BusinessFilterPopover records={[...records]} value={filters} onChange={onFiltersChange} readers={readers} />
-        <BusinessViewOptionsPopover
-          value={view}
-          onChange={onViewChange}
-          variant="records"
-          builtinColumnChips={[{ key: "showDescription", label: detailsLabel }]}
-          orderingOptions={orderingOptions}
-          defaults={defaults}
-        />
-      </div>
-      <ChipOverflow chips={businessFilterChips(filters)} onRemove={(key, value) => onFiltersChange(removeBusinessFilterValue(filters, key, value))} maxVisible={4} />
-    </div>
-  )
-}
 
 function TeamRowActions({
   team,
@@ -336,7 +284,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
       <AssetPanelShell
         tabs={tabs}
         toolbar={
-          <ListToolbar
+          <RecordToolbar
             placeholder="Search teams"
             query={query}
             onQueryChange={setQuery}
@@ -498,7 +446,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   )
   const roleReaders = useMemo<FilterValueReaders>(
     () => ({
-      roleTypes: (record) => singleFilterValue(roleById.get(record.id)?.type),
+      types: (record) => singleFilterValue(roleById.get(record.id)?.type),
       scopes: (record) => singleFilterValue(roleById.get(record.id)?.scope),
     }),
     [roleById],
@@ -646,7 +594,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         <AssetPanelShell
           tabs={tabs}
           toolbar={
-            <ListToolbar
+            <RecordToolbar
               placeholder="Search users"
               query={userQuery}
               onQueryChange={setUserQuery}
@@ -761,7 +709,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         <AssetPanelShell
           tabs={tabs}
           toolbar={
-            <ListToolbar
+            <RecordToolbar
               placeholder="Search roles"
               query={roleQuery}
               onQueryChange={setRoleQuery}

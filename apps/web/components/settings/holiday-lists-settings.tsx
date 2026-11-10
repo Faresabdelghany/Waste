@@ -32,7 +32,6 @@ import {
 import { toast } from "sonner"
 
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
-import { ChipOverflow } from "@/components/chip-overflow"
 import { RecordPageHeader, TableCard } from "@/components/page-layout"
 import { AssetPanelShell } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
@@ -51,11 +50,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
 import { savedRow, useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/platform/business-record-store"
 import { RecordActionsMenu } from "@/components/platform/business-record-views"
 import {
-  BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
   type BusinessColumnChip,
   type BusinessGroupOption,
@@ -64,6 +61,7 @@ import {
 } from "@/components/platform/business-view-options-popover"
 import { RecordSearchInput } from "@/components/platform/record-search-input"
 import { useActorName } from "@/components/platform/shell-identity"
+import { RecordToolbar } from "@/components/platform/record-toolbar"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
@@ -91,7 +89,6 @@ import {
   businessFilterChips,
   emptyBusinessFilters,
   matchesBusinessFilters,
-  removeBusinessFilterValue,
   singleFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
@@ -335,28 +332,23 @@ function HolidayListsIndex({
   return (
     <AssetPanelShell
       toolbar={
-        <div className="flex flex-col gap-2">
-          <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-            <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holiday lists" />
-            <BusinessFilterPopover records={[...lists]} value={filters} onChange={setFilters} readers={readers} />
-            <BusinessViewOptionsPopover
-              value={view}
-              onChange={setView}
-              variant="records"
-              columnOptions={HOLIDAY_LIST_OPTIONAL_COLUMNS}
-              groupOptions={GROUP_OPTIONS}
-              builtinColumnChips={BUILTIN_COLUMNS}
-              fixedColumnChips={FIXED_COLUMNS}
-              orderingOptions={ORDERING_OPTIONS}
-              defaults={HOLIDAY_LIST_VIEW_DEFAULTS}
-            />
-          </div>
-          <ChipOverflow
-            chips={businessFilterChips(filters)}
-            onRemove={(key, value) => setFilters(removeBusinessFilterValue(filters, key, value))}
-            maxVisible={4}
-          />
-        </div>
+        <RecordToolbar
+          placeholder="Search holiday lists"
+          query={query}
+          onQueryChange={setQuery}
+          records={lists}
+          readers={readers}
+          filters={filters}
+          onFiltersChange={setFilters}
+          view={view}
+          onViewChange={setView}
+          orderingOptions={ORDERING_OPTIONS}
+          defaults={HOLIDAY_LIST_VIEW_DEFAULTS}
+          columnOptions={HOLIDAY_LIST_OPTIONAL_COLUMNS}
+          groupOptions={GROUP_OPTIONS}
+          builtinColumnChips={BUILTIN_COLUMNS}
+          fixedColumnChips={FIXED_COLUMNS}
+        />
       }
     >
       {!ready ? (

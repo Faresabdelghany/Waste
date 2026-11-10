@@ -41,14 +41,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { type RecordOrdering } from "@/lib/prototype/business-filters"
 
 export type BusinessViewType = "table" | "list" | "board" | "timeline"
 
 export type BusinessViewOptions = {
   viewType: BusinessViewType
   density: "compact" | "comfortable"
-  /** `default`: the list's own order (a role's or a team's as the API lists them); `role`: a user's role, then name. */
-  ordering: "updated" | "name" | "status" | "role" | "default"
+  ordering: RecordOrdering
   groupBy: string
   factColumns: string[]
   staticColumns: string[]
@@ -344,7 +344,7 @@ export function BusinessViewOptionsPopover({
               </Select>
             </div>
 
-            {isRecordsVariant && (
+            {isRecordsVariant && groupOptions.length > 0 && (
               <div className="flex items-center justify-between gap-4">
                 <span className="text-xs font-medium">Group by</span>
                 <Popover open={groupByOpen} onOpenChange={setGroupByOpen}>

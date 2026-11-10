@@ -13,15 +13,7 @@ import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
-import {
-  AssetPanelShell,
-  AssetToolbar,
-  EmptyRow,
-  RecordsSection,
-  defaultAssetView,
-  sortByView,
-  type AssetView,
-} from "@/components/settings/settings-pane-kit"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -40,6 +32,10 @@ import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { useActorName } from "@/components/platform/shell-identity"
+import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { cn } from "@/lib/utils"
+import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
 import {
   useBusinessRecordStore,
   useBusinessRecordsHydrated,
@@ -72,7 +68,8 @@ import {
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-const STATUS_OPTIONS = ["Effective"] as const
+/** A row's status, the one value the list filters by. */
+const STATUS_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
 
 /** What the table's detail column says of a row: the fact its kind is known by. */
 function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
@@ -98,8 +95,8 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   const hydrated = useBusinessRecordsHydrated()
   const [kind, setKind] = useState<MasterDataKind>(isMasterDataKind(params.kind) ? params.kind : "waste-fraction")
   const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   // A write in flight: the form holds against a second submit until the API has answered.
@@ -159,7 +156,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   const filtered = sortByView(
     shown
       .filter(({ record, detail, scope }) => [record.name, record.context, detail, scope, record.facts["Waste code"] ?? ""].join(" ").toLowerCase().includes(needle))
-      .filter(({ record }) => statuses.length === 0 || statuses.includes(record.status)),
+      .filter(({ record }) => matchesBusinessFilters(record, filters, STATUS_READERS)),
     view,
     ({ record }) => record.name,
     // Records carry a fuzzy "updated" label, not a sortable timestamp — the
@@ -227,15 +224,19 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
         </Tabs>
       }
       toolbar={
-        <AssetToolbar
-          searchPlaceholder={`Search ${details.plural.toLowerCase()}`}
+        <RecordToolbar
+          placeholder={`Search ${details.plural.toLowerCase()}`}
           query={query}
           onQueryChange={setQuery}
-          statuses={statuses}
-          onStatusesChange={setStatuses}
-          statusOptions={STATUS_OPTIONS}
+          records={shown.map(({ record }) => record)}
+          readers={STATUS_READERS}
+          filters={filters}
+          onFiltersChange={setFilters}
           view={view}
           onViewChange={setView}
+          orderingOptions={RECENT_ORDERS}
+          defaults={listView("updated")}
+          detailsLabel="Details"
         />
       }
     >
@@ -250,7 +251,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
         }
       >
         <div className="overflow-x-auto">
-          <Table className="min-w-[880px]">
+          <Table className={cn("min-w-[880px]", densityClass(view))}>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
@@ -269,7 +270,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
                   <TableRow key={record.id}>
                     <TableCell className="min-w-[220px]">
                       <p className="text-sm font-medium text-foreground">{record.name}</p>
-                      {view.showDetails && (
+                      {view.showDescription && (
                         <p className="text-xs text-muted-foreground">{record.facts.Description ?? record.context}</p>
                       )}
                     </TableCell>
