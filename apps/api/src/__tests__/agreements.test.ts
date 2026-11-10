@@ -152,7 +152,14 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
     ...values,
   })
 
-  const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
+  /** A row a test stands on: its 201, parsed. Each read back is a request, and this file makes over a hundred of these rows, so the Location is followed (`located`) only where the create is what a test is about. */
+  const create = async <T>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> => {
+    const response = await call(path, { method: "POST", body: values })
+    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+    return schema.parse(await response.json())
+  }
+  /** A create a test is about: its 201, and its Location read back as the row it made (`created`). */
+  const located = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
     created(call, path, await call(path, { method: "POST", body: values }), schema)
   const agreement = (number: string, values: Record<string, unknown> = {}) => create(olivia, "/agreements", body(number, values), Agreement)
   const one = async (call: Call, id: string): Promise<Agreement> => {
@@ -199,7 +206,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
 
   describe("POST /agreements", () => {
     test("mints the id, defaults the status to draft, and keeps the period it was given", async () => {
-      const created = await agreement("AGR-2401", { notes: "Signed at the counter", validTo: NEXT_YEAR })
+      const created = await located(olivia, "/agreements", body("AGR-2401", { notes: "Signed at the counter", validTo: NEXT_YEAR }), Agreement)
       assert.equal(Id.parse(created.id), created.id, "a version 7 id the server minted")
       assert.equal(created.projectId, a.projects.copenhagen.id)
       assert.equal(created.status, "draft", "an agreement is written before it is signed")
@@ -254,7 +261,6 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
         409,
       )
       assert.equal(problem.detail, "An agreement numbered AGR-2410 is already valid over part of that period")
-      assert.doesNotMatch(problem.detail ?? "", /no_overlap/)
     })
 
     test("refuses a role that may view but not create", async () => {
@@ -453,7 +459,7 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
   describe("POST /agreements/:id/subscriptions", () => {
     test("writes one product at one place, taking the agreement and the project from the path", async () => {
       const created = await agreement("AGR-2450")
-      const written = await subscribe(created.id, { quantity: 2, validTo: NEXT_YEAR })
+      const written = await located(olivia, `/agreements/${created.id}/subscriptions`, { productId: residual.id, propertyId: parkvej.id, validFrom: JANUARY, quantity: 2, validTo: NEXT_YEAR }, Subscription)
       assert.equal(Id.parse(written.id), written.id)
       assert.equal(written.agreementId, created.id)
       assert.equal(written.projectId, created.projectId, "the project is the agreement's; a body cannot name a second one")
@@ -535,7 +541,6 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
         409,
       )
       assert.equal(problem.detail, "The agreement already subscribes to that product at that place over part of that period")
-      assert.doesNotMatch(problem.detail ?? "", /no_overlap/)
 
       const elsewhere = await subscribe(created.id, { sharedCollectionPointId: bank.id, propertyId: null, validFrom: APRIL, validTo: OCTOBER })
       assert.equal(elsewhere.sharedCollectionPointId, bank.id, "the same product at another place is another subscription")
@@ -807,7 +812,8 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
         [replacement.agreementId, replacement.projectId, replacement.productId, replacement.propertyId, replacement.sharedCollectionPointId, replacement.quantity, replacement.validFrom, replacement.validTo],
         [signed.id, signed.projectId, bulky.id, parkvej.id, null, 2, APRIL, null],
       )
-      assert.deepEqual([(await oneSubscription(olivia, written.id)).validTo, (await oneSubscription(olivia, written.id)).productId], [APRIL, residual.id], "the one it replaces ends on the day, as it was")
+      const replaced = await oneSubscription(olivia, written.id)
+      assert.deepEqual([replaced.validTo, replaced.productId], [APRIL, residual.id], "the one it replaces ends on the day, as it was")
       assert.deepEqual(await placementsOf(container.id), [[written.id, residualWaste.id, JANUARY, APRIL], [replacement.id, residualWaste.id, APRIL, null]], "the same container, the same fraction, from the day")
       const movements = Page(StockMovement).parse(await (await olivia(`/containers/${container.id}/movements`)).json()).items
       assert.deepEqual(movements.map((movement) => movement.kind), ["receipt", "issue"], "nothing moved physically, so the ledger is as it was")
