@@ -18,7 +18,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
-import { providerIdOf, reachesAssignments, reachesRoute, reachesThroughRoute, servesRoute } from "../auth/provider"
+import { reachesAssignments, reachesRoute, reachesThroughRoute, servesRoute } from "../auth/provider"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fixtures"
 import { FINANCE_YEAR, NORDREN_ASSIGNED_FROM, seedFinance, seedServiceArea, type FinanceFixtures } from "./finance-fixtures"
@@ -111,11 +111,6 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
           .orderBy(asc(serviceAreaAssignment.id))
       ).map((row) => row.id),
     )
-
-  test("providerIdOf is the Service Provider Access's provider, or null for an office account", () => {
-    assert.equal(providerIdOf(principalOf(tenant.serviceProviders.nordren, [])), tenant.serviceProviders.nordren.id)
-    assert.equal(providerIdOf(principalOf(null, [tenant.projects.copenhagen])), null)
-  })
 
   test("servesRoute reaches the routes of a scheme in the provider's planning area on a day inside the assignment and the area, and no other", async () => {
     const lars = principalOf(tenant.serviceProviders.nordren, [])

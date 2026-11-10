@@ -13,7 +13,6 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { Allowance, allowanceKey } from "../auth/public-door"
 import { createApp } from "../app"
-import { PUBLIC_CACHE } from "../routes/public"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -90,7 +89,7 @@ describe("a project's public slug and the public door", { skip: database.skip },
     test("GET /public/:slug names the published project with no token, by slug and never by id, and may be cached for a minute", async () => {
       const response = await anyone(`/public/${slug}`)
       assert.equal(response.status, 200)
-      assert.equal(response.headers.get("cache-control"), PUBLIC_CACHE)
+      assert.equal(response.headers.get("cache-control"), "public, max-age=60")
       assert.deepEqual(PublishedProject.parse(await response.json()), { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen", branding: UNBRANDED })
     })
 
