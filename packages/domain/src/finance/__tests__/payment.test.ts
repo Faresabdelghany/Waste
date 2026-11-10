@@ -5,10 +5,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BIC_PATTERN, dueOn, FIK_CREDITOR_PATTERN, fikLine, IBAN_PATTERN, modulus10, PAYMENT_REFERENCE_PATTERN, paymentReference, termsOf, VAT_NUMBER_PATTERN } from "../payment"
+import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, dueOn, FIK_CREDITOR_PATTERN, fikLine, IBAN_PATTERN, modulus10, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, paymentReference, termsOf, VAT_NUMBER_PATTERN } from "../payment"
 
 describe("an invoice's terms", () => {
   test("are the customer's own where it has them, else the project's; a new project's are thirty days", () => {
+    assert.equal(DEFAULT_PAYMENT_TERMS_DAYS, 30)
+    assert.equal(PAYMENT_TERMS_MAX, 365, "the project's terms are described as 0 to 365 days in @waste/contracts/organisation")
     assert.equal(termsOf(null, 30), 30)
     assert.equal(termsOf(14, 30), 14, "the customer's override")
     assert.equal(termsOf(0, 30), 0, "due on issue is a term too")

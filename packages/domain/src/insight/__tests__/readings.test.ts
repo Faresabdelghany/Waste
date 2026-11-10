@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 
 import { PICKUP_REASONS, PICKUP_STATUSES, type PickupReason, type PickupStatus } from "../../execution/vocabulary"
 import { WEIGHT_REVIEW_STATUSES } from "../../finance/vocabulary"
-import { pickupStanding, rate, unloadStanding, WITHDRAWN_REASONS } from "../readings"
+import { ON_TIME_GRACE_MINUTES, pickupStanding, rate, unloadStanding, WITHDRAWN_REASONS } from "../readings"
 
 describe("pickupStanding", () => {
   test("a completed stop is collected, a skipped or failed one missed, a planned one open", () => {
@@ -53,5 +53,11 @@ describe("rate", () => {
     assert.equal(rate(3, 4), 0.75)
     assert.equal(rate(0, 4), 0)
     assert.equal(rate(0, 0), null, "a rate of nothing is not zero")
+  })
+})
+
+describe("ON_TIME_GRACE_MINUTES", () => {
+  test("is a quarter of an hour", () => {
+    assert.equal(ON_TIME_GRACE_MINUTES, 15)
   })
 })

@@ -12,7 +12,8 @@
 // exported and left out of the naming object — which is what lets the API, a
 // form or another test walk them all — fails here; an array the module exports
 // that is a value of a vocabulary and not a vocabulary (`DEFAULT_WEEKEND`) is
-// named in `beside` so the walk knows to leave it alone.
+// named in `beside`, and held to being values of one list, so a list cannot
+// leave the walk by being named there.
 //
 // Not a suite of its own: the runner takes `src/**/*.test.ts`, so this file is
 // only ever imported.
@@ -39,13 +40,20 @@ export function defineVocabularyTests(context: string, module: Record<string, un
       }
     })
 
-    test("the naming object names exactly the lists the module exports, each the list itself", () => {
+    test("the naming object names exactly the lists the module exports, each the list itself, and what is beside them is a value of one", () => {
       assert.deepEqual(
         Object.keys(named).sort(),
         exported.map(([name]) => name).sort(),
       )
       for (const [name, values] of exported) assert.equal(named[name], values, `${name} is not the list the module exports`)
-      for (const name of beside) assert.ok(Array.isArray(module[name]), `${name} is named beside the lists but the module exports no such array`)
+      for (const name of beside) {
+        const values = module[name]
+        assert.ok(Array.isArray(values), `${name} is named beside the lists but the module exports no such array`)
+        assert.ok(
+          Object.values(named).some((list) => (values as unknown[]).every((value) => list.includes(value as string))),
+          `${name} is named beside the lists, but its values are not all of one list: name it in the vocabulary`,
+        )
+      }
     })
   })
 }

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { doesNotTake, loadReading, onBoardByUnload, refusalIssue, SAY_WHY_REFUSED, takesNoneSet, unloadNotAccepted } from "../unloads"
+import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, doesNotTake, loadReading, onBoardByUnload, refusalIssue, SAY_WHY_REFUSED, takesNoneSet, unloadNotAccepted } from "../unloads"
 
 describe("a refused load", () => {
   test("says it in words where the reason is other, and may anywhere; a note goes with a reason", () => {
@@ -92,6 +92,7 @@ describe("the load on board against the weighbridge", () => {
   })
 
   test("reads the difference from the on-board load, within the project's tolerance or above it", () => {
+    assert.equal(DEFAULT_WEIGHT_TOLERANCE_PERCENT, 5, "a project's tolerance is described as defaulting to 5 in @waste/contracts/organisation")
     assert.deepEqual(loadReading({ netKg: 8240, onBoardKg: 7644 }, 5), { onBoardKg: 7644, deviationPercent: 7.8, withinTolerance: false })
     assert.deepEqual(loadReading({ netKg: 4810, onBoardKg: 4753 }, 5), { onBoardKg: 4753, deviationPercent: 1.2, withinTolerance: true })
     assert.deepEqual(loadReading({ netKg: 950, onBoardKg: 1000 }, 5), { onBoardKg: 1000, deviationPercent: -5, withinTolerance: true }, "the bound itself is within")
