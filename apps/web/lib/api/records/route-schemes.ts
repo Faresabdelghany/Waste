@@ -19,9 +19,8 @@
 //
 // Relations. A project, an area and a provider are named by the web ids
 // their modules lend; the fleet, the depot, the unloading station and a
-// manual group's containers belong to modules still on fixtures (slices 5a
-// and 5b), so they are the API's ids as chips — `vehicle-<uuid>` — until
-// their module is read and the resolver names the row; a write reads a chip
+// manual group's containers are the API's ids as chips — `vehicle-<uuid>` —
+// until their module is read and the resolver names the row; a write reads a chip
 // back to its uuid and refuses a fixture's id, which names nothing the API
 // holds. A rule names its waste fractions, container types and vehicle type
 // by NAME, the words the domain matches containers by, so a write finds the
@@ -111,7 +110,6 @@ export const SERVER_GROUP_NAMES_KEY = "serverGroupNames"
  */
 export const RULE_MASTER_IDS_KEY = "ruleMasterIds"
 
-/** The master data ids a record's rules were read with. */
 type RuleMasterIds = Partial<Record<MasterDataKind, Record<string, string>>>
 
 /** What a group whose stop source a write would change is told: the wire sets it once. */
@@ -127,7 +125,6 @@ const isRefusal = isLocalRefusal
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** The web id of another module's row: the one its module lends once it is read, else the chip. */
 function webIdFor(context: MappingContext, prefix: string, serverId: string): string {
   return context.resolve.byServerId(serverId)?.id ?? webIdOf(prefix, serverId)
 }
@@ -172,7 +169,6 @@ function jsonObjectOf<T extends object>(record: BusinessRecord, key: string): T 
 
 const ruleMasterIdsOf = (record: BusinessRecord): RuleMasterIds => jsonObjectOf<RuleMasterIds>(record, RULE_MASTER_IDS_KEY)
 
-/** Every item mapped, or the first refusal. */
 function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRefusal): T[] | LocalRefusal {
   const out: T[] = []
   for (const item of items) {
@@ -190,11 +186,6 @@ function compact<T extends object>(object: T): T {
   return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined)) as T
 }
 
-// ---------------------------------------------------------------------------
-// Reading
-// ---------------------------------------------------------------------------
-
-/** A wire group as the prototype's group, under `group-<uuid>`. */
 function schemeGroupOf(group: WireGroup, context: MappingContext): SchemeGroup {
   const provider = group.serviceProviderId === null ? undefined : context.resolve.byServerId(group.serviceProviderId)
   const vehicle = group.vehicleId === null ? undefined : context.resolve.byServerId(group.vehicleId)
@@ -221,10 +212,6 @@ function schemeGroupOf(group: WireGroup, context: MappingContext): SchemeGroup {
   })
 }
 
-// ---------------------------------------------------------------------------
-// Writing: the scheme's fields
-// ---------------------------------------------------------------------------
-
 type SchemeFields = Omit<RouteSchemePatch, "status">
 
 /** A place's server id from the form's web id, null for none, or a refusal naming the field. */
@@ -245,7 +232,6 @@ function planAheadDaysOf(record: BusinessRecord): number | undefined | LocalRefu
   return planAheadDaysAllowed(days) ? days : refusal(PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL)
 }
 
-/** The scheme's own wire fields as the record spells them, or the first refusal. */
 function schemeFieldsOf(record: BusinessRecord, context: MappingContext): SchemeFields | LocalRefusal {
   const areaWebId = typed(record, "planningAreaId")
   const planningAreaId = areaWebId === undefined ? null : (serverIdFor(context, CHIP.area, areaWebId) ?? refusal("planningAreaId", "Pick a planning area the API holds"))
@@ -284,11 +270,6 @@ function schemeFieldsOf(record: BusinessRecord, context: MappingContext): Scheme
 /** The status token a record's status spells on the wire: one of the two a person decides. */
 const statusOf = (record: BusinessRecord): string => statusToken(record.status)
 
-// ---------------------------------------------------------------------------
-// Writing: the groups
-// ---------------------------------------------------------------------------
-
-/** A group's rule by id, from the names the record spells it by. */
 function ruleOf(group: SchemeGroup, context: MappingContext, known: RuleMasterIds = {}): StopMatchingRule | LocalRefusal {
   if (group.fractions.length === 0) return refusal("wasteFraction", "A group that matches by rule names a waste fraction")
   const wasteFractionIds = allOf(group.fractions, (name) => masterId(context, "waste-fraction", name, "wasteFraction", known))
@@ -359,10 +340,8 @@ function ruleAsRead(group: SchemeGroup, known: RuleMasterIds): StopMatchingRule 
 const sameRule = (a: SchemeGroup, b: SchemeGroup) =>
   JSON.stringify([a.fractions, a.containerTypes ?? [], a.ruleVehicleType ?? null]) === JSON.stringify([b.fractions, b.containerTypes ?? [], b.ruleVehicleType ?? null])
 
-/** The web group id to server id map a record carries. */
 const serverGroupIdsOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_IDS_KEY)
 
-/** The server's names of a record's groups, by server id. */
 const serverGroupNamesOf = (record: BusinessRecord) => jsonObjectOf<Record<string, string>>(record, SERVER_GROUP_NAMES_KEY)
 
 /** The groups of a record, with the day list the legacy shape reads them against. */
@@ -448,11 +427,6 @@ function changedFields(before: SchemeFields, after: SchemeFields): SchemeFields 
   return Object.fromEntries(Object.entries(after).filter(([key, value]) => value !== undefined && JSON.stringify(value) !== JSON.stringify(was[key]))) as SchemeFields
 }
 
-// ---------------------------------------------------------------------------
-// The adapter
-// ---------------------------------------------------------------------------
-
-/** A scheme's generate, by the name the adapter's `actions` holds it under. */
 export const GENERATE_ROUTES = "generate"
 
 /** What a generate answers: the run, and whether this request started it (202) or it is the scheme's run already queued or running (200) — two clicks are one run. */
@@ -530,7 +504,6 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       if (entry.previous !== null) previous[webId] = { rule: entry.previous.ruleSignature, containerIds: entry.previous.containerIds.map((id) => webIdFor(context, CHIP.container, id)) }
     }
     const fractions = new Set(groups.flatMap((group) => group.fractions))
-    // The ids each rule was read with, by the names the record spells them by (RULE_MASTER_IDS_KEY).
     const ruleIds: RuleMasterIds = {}
     const note = (kind: MasterDataKind, id: string) => {
       ruleIds[kind] = { ...ruleIds[kind], [masterName(context, kind, id)]: id }

@@ -23,7 +23,6 @@ import type { ModuleState, ServerRecordsState } from "./server-records"
 /** Where the store files the person's `/me` projects: a key no module has. */
 export const ME_PROJECTS = "me.projects"
 
-/** A project as `/me` names it. */
 export type MeProject = Me["projects"][number]
 
 /** The web id the organisation module gives a project. */

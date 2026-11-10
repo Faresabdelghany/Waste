@@ -162,14 +162,10 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
 
   const hydrate = (session: ApiSession | null) => store.set((state) => ({ ...state, session, hydrated: true }))
 
-  /** Ends the open session when it is the one `holds` picks out, for the reason given; a session opened since is left alone. */
   const endWhen = (holds: (current: ApiSession) => boolean, ending: SessionEnding) => {
     store.set((state) => (state.session !== null && holds(state.session) ? { ...state, session: null, me: null, meProblem: null, ended: ending } : state))
   }
 
-  // The rule, for a client of `session`: the account's refusal ends the
-  // session of that person — whichever token of theirs is held by now — and
-  // nothing else ends anything.
   const refused = (session: ApiSession, problem: Problem) => {
     if (!isAccountRefusal(problem)) return
     const who = whoOf(session)

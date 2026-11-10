@@ -201,7 +201,6 @@ describe("a live route", () => {
     const point = (lon: number, lat: number) => ({ location: { coordinates: [lon, lat] as [number, number] } })
     assert.equal(trackPath([], 100, 100), null)
     assert.equal(trackPath([point(12.5, 55.7)], 100, 100), null)
-    // A due-north line: centred across, top to bottom.
     assert.equal(trackPath([point(12.5, 55.7), point(12.5, 55.71)], 100, 100), "M50.0 100.0 L50.0 0.0")
     const path = trackPath([point(12.5, 55.7), point(12.52, 55.7), point(12.52, 55.71)], 200, 100) ?? ""
     assert.match(path, /^M\S+ \S+ L\S+ \S+ L\S+ \S+$/)

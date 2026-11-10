@@ -85,7 +85,6 @@ const CONTEXT_LINKS: ReadonlyArray<keyof TicketLinks> = ["customerId", "property
 /** The submitted value a ticket record carries its type's fields' values under (#545 of #544): the wire's object as JSON, which an edit of the fields replaces and the patch reads the change of. */
 export const TICKET_FIELD_VALUES_KEY = "fieldValuesJson"
 
-/** The ticket's commands, by the names the dialog sends: `assign` and the machine's six. */
 export const ASSIGN_TICKET = "assign"
 export type TicketCommandName = typeof ASSIGN_TICKET | TicketCommand
 
@@ -95,7 +94,6 @@ export const COMMENT_ON_TICKET = "comment"
 /** The reply quoting the stop's record, a command: with `complete` it closes the case `answered`. */
 export const REPLY_WITH_EVIDENCE = "reply-with-evidence"
 
-/** Whether a loaded row is a ticket: its id, or — a row made this session, under its minted id — its kind. */
 export const isTicketRecord = ofKind(TICKET_PREFIX, ["Ticket"])
 
 /** A customer of the contacts module, a person or an organisation, never the tenant's own company. */
@@ -117,7 +115,6 @@ export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, st
 /** The links an office's form names, each by a picker: the stop among its route's (M6 of #293), and the parent among the project's tickets (7.10 of #290). */
 export const OFFICE_TICKET_LINKS = TICKET_LINKS
 
-/** The project a ticket is in: its web id, its name, its clock. */
 function projectOf(projectId: string, context: MappingContext): { webId: string; name?: string; timezone?: string } {
   const record = context.resolve.byServerId(projectId)
   const { webId, name } = referenced(context, "project", projectId)
@@ -194,11 +191,6 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): RecordF
   }
 }
 
-// ---------------------------------------------------------------------------
-// The office's writes
-// ---------------------------------------------------------------------------
-
-/** A closed-list token a form typed, held to the list; undefined for blank. */
 function tokenIn(record: BusinessRecord, key: string, tokens: readonly string[], sentence: string): string | undefined | LocalRefusal {
   const text = typed(record, key)
   if (text === undefined) return undefined
@@ -206,14 +198,12 @@ function tokenIn(record: BusinessRecord, key: string, tokens: readonly string[],
   return tokens.includes(token) ? token : refusal(key, sentence)
 }
 
-/** An instant a form spelled on the project's clock; undefined for blank; a refusal for text that is no time. */
 function instantIn(record: BusinessRecord, key: string, timezone: string | undefined, sentence: string): string | undefined | LocalRefusal {
   const text = typed(record, key)
   if (text === undefined) return undefined
   return instantOn(text, timezone) ?? refusal(key, sentence)
 }
 
-/** The link a form names under `key`, as a server id held to its module's kind; undefined for blank or the picker's None; a refusal for a row the API does not hold. */
 function linkOf(record: BusinessRecord, key: string, prefix: string, fact: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): string | undefined | LocalRefusal {
   const webId = typed(record, key)
   if (webId === undefined || webId === NO_ONE) return undefined
@@ -221,7 +211,6 @@ function linkOf(record: BusinessRecord, key: string, prefix: string, fact: strin
   return referencedServerId(webId, prefix, context, { owns }) ?? refusal(key, `Pick ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun} the API holds`)
 }
 
-/** The server id of the route a loaded stop rides on; undefined where the stop's row, or its route's, is not loaded. */
 function routeOfStop(stopServerId: string, context: MappingContext): string | undefined {
   const routeWebId = context.resolve.byServerId(stopServerId)?.submittedValues?.routeId
   return typeof routeWebId === "string" && routeWebId !== "" ? context.resolve.serverIdOf(routeWebId) : undefined
@@ -243,7 +232,6 @@ function ticketProjectOf(record: BusinessRecord, context: MappingContext): strin
 /** Whether a loaded row is an alert — the alerts' own rule, spelled here since their adapter is built on this one's. */
 const isAlertRecord = ofKind("alert", ["Alert"])
 
-/** The assignee a form names, as a User Account's server id; null for nobody — blank, or the picker's None; a refusal for anyone the API does not hold. */
 function assigneeOf(webId: string | undefined, key: string, context: MappingContext): string | null | LocalRefusal {
   if (webId === undefined || webId === NO_ONE) return null
   return referencedServerId(webId, "user", context, { owns: userAdapter.owns }) ?? refusal(key, "Pick an account the API holds")
@@ -367,7 +355,6 @@ function teamOf(webId: string | undefined, context: MappingContext): string | nu
   return referencedServerId(webId, TICKET_TEAM_PREFIX, context, { owns: isTicketTeamRecord }) ?? refusal("teamId", "Pick a team the API holds")
 }
 
-/** The team a record names for a patch to compare: as `teamOf`, a team the API does not hold read as unsaid. */
 function teamRead(record: BusinessRecord, context: MappingContext): string | null | undefined {
   const team = teamOf(typed(record, "teamId"), context)
   return isLocalRefusal(team) ? undefined : team
@@ -413,10 +400,6 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
   return { ...(fields ?? {}), ...(fieldValues === null ? {} : { fieldValues }) }
 }
 
-// ---------------------------------------------------------------------------
-// The seven commands and the comment
-// ---------------------------------------------------------------------------
-//
 // Each command answers the ticket as it now stands, which replaces the row;
 // each body is the contracts' (`TicketAssign` … `TicketReopen`), always an
 // object, since the API reads every one as JSON. A note the command needs is
@@ -424,7 +407,6 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
 
 const RESOLUTION_SENTENCE = `Pick what the ticket ended in: ${TICKET_RESOLUTIONS.join(", ")}`
 
-/** A note the input says, or the refusal in the command's words where the command needs one. */
 const needed = (input: CommandInput, key: string, sentence: string): string | LocalRefusal => said(input, key) ?? refusal(key, sentence)
 
 const onTicket = (verb: string, past: string, toBody: NonNullable<RecordCommand<Ticket>["toBody"]>): RecordCommand<Ticket> => ({

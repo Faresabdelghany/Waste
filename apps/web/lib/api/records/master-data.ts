@@ -1,12 +1,13 @@
 // Master data on the prototype's records (Issue #176, slice 2 of #81): the
-// five catalogue resources — waste fractions, container types, service
-// frequencies, vehicle types and, since M5 of #293, contaminant codes — as the
-// rows of one module, `configure.master`,
+// six catalogue resources — waste fractions, container types, service
+// frequencies, vehicle types, since M5 of #293 contaminant codes and, since
+// O30 of #290, decommission reasons — as the rows of one module, `configure.master`,
 // which Settings › Operations › Master data reads and writes and the fixture
 // pickers point at. The wire shapes are the contracts'
-// (`@waste/contracts/catalogue`, `vehicle-types`), imported as types so no
-// zod reaches the bundle; the routes are apps/api/src/routes/catalogue.ts and
-// vehicle-types.ts.
+// (`@waste/contracts/catalogue`, `vehicle-types`, `pickup-exceptions`, `stock`),
+// imported as types so no zod reaches the bundle; the routes are
+// apps/api/src/routes/catalogue.ts, vehicle-types.ts, contaminant-codes.ts and
+// decommission-reasons.ts.
 //
 // Each kind is its own adapter; the module lists the container types before
 // the vehicle types, so a vehicle type names its container types by the
@@ -55,16 +56,13 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix
 const WASTE_FRACTION_PREFIX = MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix
 
-/** The first rule the record breaks, as a refusal naming the field; undefined when the body can be accepted. */
 function firstRefusal(kind: MasterDataKind, record: BusinessRecord): LocalRefusal | undefined {
   const [first] = Object.entries(masterDataFieldErrors(kind, record.submittedValues))
   return first === undefined ? undefined : refusal(first[0], first[1])
 }
 
-/** The kind's word for itself in a sentence. */
 const lower = (kind: MasterDataKind) => MASTER_DATA_KIND_DETAILS[kind].label.toLowerCase()
 
-/** The names the record's facts show, over what the store has loaded. */
 function lookupsOver(context: MappingContext): MasterDataLookups {
   return {
     projectName: (projectWebId) => context.resolve.byServerId(context.resolve.serverIdOf(projectWebId) ?? "")?.name,
@@ -79,7 +77,6 @@ function lookupsOver(context: MappingContext): MasterDataLookups {
   }
 }
 
-/** The fields a resource of a kind shows: the presentation the values give (lib/data/master-data.ts). */
 function recordOf(kind: MasterDataKind, values: BusinessFormValues, context: MappingContext): RecordFields {
   const details = MASTER_DATA_KIND_DETAILS[kind]
   const fields = masterDataFieldsOf(kind, values)
@@ -98,21 +95,14 @@ function recordOf(kind: MasterDataKind, values: BusinessFormValues, context: Map
   }
 }
 
-/** A wire number as the form spells it: blank for null. */
 const spelled = (value: number | null) => (value === null ? "" : String(value))
 
-/** The typed fields the pane's record carries, read for the kind the adapter is. */
 const fieldsOf = (kind: MasterDataKind, record: BusinessRecord) => masterDataFieldsOf(kind, record.submittedValues)
 
-/** Whether the row was moved to another kind: refused, since a row keeps its kind. */
 const rekinded = (kind: MasterDataKind, after: BusinessRecord) => {
   const typedKind = typed(after, "kind")
   return typedKind !== undefined && typedKind !== kind
 }
-
-// ---------------------------------------------------------------------------
-// Waste fractions
-// ---------------------------------------------------------------------------
 
 export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   prefix: MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix,
@@ -150,10 +140,6 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   update: (client, serverId, body) => patch<WasteFraction>(client, `/waste-fractions/${serverId}`, body),
 }
 
-// ---------------------------------------------------------------------------
-// Container types
-// ---------------------------------------------------------------------------
-
 export const containerTypeAdapter: ResourceAdapter<ContainerType, ContainerTypeCreate, ContainerTypePatch> = {
   prefix: CONTAINER_TYPE_PREFIX,
   auditTable: "container_type",
@@ -179,10 +165,6 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType, ContainerTypeC
   create: (client, body) => create<ContainerType>(client, "/container-types", body).then((created) => created.body),
   update: (client, serverId, body) => patch<ContainerType>(client, `/container-types/${serverId}`, body),
 }
-
-// ---------------------------------------------------------------------------
-// Service frequencies
-// ---------------------------------------------------------------------------
 
 export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch> = {
   prefix: MASTER_DATA_KIND_DETAILS["service-frequency"].prefix,
@@ -243,17 +225,12 @@ export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency, ServiceF
   update: (client, serverId, body) => patch<ServiceFrequency>(client, `/service-frequencies/${serverId}`, body),
 }
 
-// ---------------------------------------------------------------------------
-// Vehicle types
-// ---------------------------------------------------------------------------
-
 /** What a vehicle type's update carries: a patch of the type, the whole set of container types, or both, each to its own route. */
 type VehicleTypeWrite = {
   type?: { name?: string; description?: string | null }
   containerTypeIds?: string[]
 }
 
-/** The server ids the form's container types stand for, or a refusal for one the store does not hold. */
 function containerTypeServerIds(webIds: readonly string[], context: MappingContext): string[] | LocalRefusal {
   const ids: string[] = []
   for (const webId of webIds) {
@@ -329,17 +306,12 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType, unknown, VehicleTy
   },
 }
 
-// ---------------------------------------------------------------------------
-// Contaminant codes (M5 of #293)
-// ---------------------------------------------------------------------------
-
 /** What a code's update carries: a patch of its name or status, the whole set of fractions, or both, each to its own route. */
 type ContaminantCodeWrite = {
   code?: { name?: string; status?: "active" | "inactive" }
   wasteFractionIds?: string[]
 }
 
-/** The server ids the form's fractions stand for, or a refusal for one the store does not hold. */
 function fractionServerIds(webIds: readonly string[], context: MappingContext): string[] | LocalRefusal {
   const ids: string[] = []
   for (const webId of webIds) {
@@ -436,10 +408,6 @@ export const decommissionReasonAdapter: ResourceAdapter<DecommissionReason> = {
   create: (client, body) => create<DecommissionReason>(client, "/decommission-reasons", body).then((created) => created.body),
   update: (client, serverId, body) => patch<DecommissionReason>(client, `/decommission-reasons/${serverId}`, body),
 }
-
-// ---------------------------------------------------------------------------
-// The module
-// ---------------------------------------------------------------------------
 
 /** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them, the fractions before the contaminant codes that name them, and the decommission reasons (O30 of #290). */
 export const masterDataModule = {

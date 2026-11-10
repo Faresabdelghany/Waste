@@ -16,7 +16,6 @@ import { command, create, get, listAll, patch, type ApiClient } from "./client"
 /** The property's zones today, as the one row `useRowHistory` reads. */
 export const propertyZones = (client: ApiClient, serverId: string): Promise<PlanningAreasAt[]> => get<PlanningAreasAt>(client, `/properties/${serverId}/zones`).then((zones) => [zones])
 
-/** The path each place kind's history is under. */
 const PLACE_PATHS: Readonly<Record<ExceptionPlace, string>> = { property: "/properties", "shared-point": "/shared-collection-points" }
 
 /** The place's history, as the one row `useRowHistory` reads. */

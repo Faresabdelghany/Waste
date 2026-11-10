@@ -107,7 +107,6 @@ export type RecordStoreState = {
   loading: ExternalStore<boolean>
 }
 
-/** The state and the notices: what the controller's operations run over. */
 export type RecordStoreContext = RecordStoreState & { notices: RecordStoreNotices }
 
 /** A write's options: `report: false` leaves a refusal to the caller; `reason` rides in the change-reason header (#291). */
@@ -144,7 +143,6 @@ export type RecordStore = RecordStoreContext & {
 
 const NO_SERVER_MODULES: ServerRecordsState = new Map()
 
-/** A controller with an empty store, telling a person what it reports through `notices`. */
 export function createRecordStore(notices: RecordStoreNotices): RecordStore {
   const context: RecordStoreContext = {
     server: createExternalStore<ServerRecordsState>(NO_SERVER_MODULES),
@@ -288,7 +286,6 @@ function rereadModule(context: RecordStoreContext, module: ServerModule, outlive
       const problem = await readModuleInto(context.server, client, module, { alive })
       if (problem !== null && alive()) reportRead(context, key, problem)
     } catch (error) {
-      // Nothing thrown here goes unheard: the read's own failures come back above, anything else is told the same way.
       if (alive()) reportRead(context, key, problemOfError(error))
     }
   })
@@ -317,7 +314,6 @@ export async function rowAgain(context: RecordStoreContext, module: ServerModule
   return read === undefined || read.loadedAt === loadedAt ? undefined : read.records.find((candidate) => candidate.id === row.id)
 }
 
-/** A refusal of a command or an action asked of a module the store does not hold ready, or of a row it does not hold. */
 const notReadHere = (key: string, recordId: string) => genericProblem(400, `${key} is not read from the API, or holds no record ${recordId}`)
 
 /**
@@ -408,7 +404,6 @@ function sendCommand(context: RecordStoreContext, workspaceId: WorkspaceId, modu
     context.notices.refused(refused.what, refused.problem)
     return Promise.resolve(refused)
   }
-  // The session this command belongs to, as for a write.
   const generation = context.generation.getSnapshot()
   const outlived = () => context.generation.getSnapshot() !== generation
   const ended = (): CommandOutcome => ({ kind: "refused", what: `${record.name} was not changed`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the command was sent"), touches: [] })
@@ -468,7 +463,6 @@ function sendAction(context: RecordStoreContext, ...[workspaceId, moduleId, reco
     if (report) context.notices.refused(refused.what, refused.problem)
     return Promise.resolve(refused)
   }
-  // The session this action belongs to, as for a command.
   const generation = context.generation.getSnapshot()
   const outlived = () => context.generation.getSnapshot() !== generation
   const ended = (): ActionOutcome => ({ kind: "refused", what: `Nothing was done to ${record.name}`, recordId, problem: genericProblem(UNREACHABLE_STATUS, "The session ended before the action was sent") })

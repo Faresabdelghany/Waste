@@ -63,7 +63,6 @@ const MORNING = Date.parse("2026-10-24T23:00:00Z")
 const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: resolverOver(new Map()), now: EVENING })
 const organisation: ServerRecordsState = new Map([["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, EVENING.getTime())]])
 
-/** The module read on the evening's clock, filed in the store as its read lands. */
 function readOnTheEvening(module: ServerModule, lists: ModuleLists): ServerRecordsState {
   const result = mapModule(module, lists, { state: organisation, now: EVENING })
   return new Map([...organisation, [moduleKeyOf(module.workspaceId, module.moduleId), loaded(result, EVENING.getTime())]])

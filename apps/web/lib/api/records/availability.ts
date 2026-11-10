@@ -8,7 +8,7 @@
 // (`@waste/contracts/availability`), imported as types.
 //
 // A form spells a period by its last day away, the wire by its first day back
-// (`firstDayOut`, planning.ts), a blank last day being a return not known
+// (`firstDayOut`, `@waste/domain/periods`), a blank last day being a return not known
 // yet. What refuses a period over the work already planned is never this: the
 // API records it whatever is planned on its days, and refuses instead the
 // commands that name the driver or the vehicle afresh.
@@ -28,7 +28,6 @@ import { refusal } from "./places"
 import type { ActionOutcome, SendAction } from "./server-records"
 import { capitalised } from "@/lib/format/words"
 
-/** The two modules whose rows the periods belong to. */
 const DRIVERS = moduleAt("fleet.drivers")
 const VEHICLES = moduleAt("fleet.vehicles")
 
@@ -56,16 +55,13 @@ export function periodBody(input: CommandInput, reasons: readonly string[]): { v
   return { validFrom, validTo: lastDay === undefined ? null : firstDayOut(lastDay), reason, ...(note === undefined ? {} : { note }) }
 }
 
-/** The period a removal names, by its server id. */
 function removalBody(input: CommandInput): { periodId: string } | LocalRefusal {
   const periodId = said(input, "periodId")
   return periodId === undefined ? refusal("periodId", "Name the period to remove") : { periodId }
 }
 
-/** The periods earliest first: the order a person reads days in. */
 const byFirstDay = <P extends AwayPeriod>(periods: P[]): P[] => [...periods].sort((a, b) => a.validFrom.localeCompare(b.validFrom) || a.id.localeCompare(b.id))
 
-/** A driver's absences, by the driver's server id. */
 export function driverAbsences(client: Client, serverId: string): Promise<DriverAbsence[]> {
   return listAll<DriverAbsence>(client, "/driver-absences", { driverId: serverId }).then(byFirstDay)
 }
@@ -89,7 +85,6 @@ export const DRIVER_AVAILABILITY_ACTIONS: Readonly<Record<string, RecordAction<u
   }),
 }
 
-/** A vehicle's two actions, as a driver's. */
 export const VEHICLE_AVAILABILITY_ACTIONS: Readonly<Record<string, RecordAction<unknown>>> = {
   [RECORD_UNAVAILABILITY]: actionOf({
     toBody: (input: CommandInput) => periodBody(input, VEHICLE_UNAVAILABILITY_REASONS),
@@ -108,7 +103,6 @@ export function recordDriverAbsence(sendAction: SendAction, recordId: string, in
   return sendAction(DRIVERS.workspaceId, DRIVERS.moduleId, recordId, RECORD_ABSENCE, input) as Promise<ActionOutcome<DriverAbsence>>
 }
 
-/** Removes one of a driver's absences, by its server id. */
 export function removeDriverAbsence(sendAction: SendAction, recordId: string, periodId: string): Promise<ActionOutcome<null>> {
   return sendAction(DRIVERS.workspaceId, DRIVERS.moduleId, recordId, REMOVE_ABSENCE, { periodId }) as Promise<ActionOutcome<null>>
 }
@@ -118,7 +112,6 @@ export function recordVehicleUnavailability(sendAction: SendAction, recordId: st
   return sendAction(VEHICLES.workspaceId, VEHICLES.moduleId, recordId, RECORD_UNAVAILABILITY, input) as Promise<ActionOutcome<VehicleUnavailability>>
 }
 
-/** Removes one of a vehicle's periods out of use, by its server id. */
 export function removeVehicleUnavailability(sendAction: SendAction, recordId: string, periodId: string): Promise<ActionOutcome<null>> {
   return sendAction(VEHICLES.workspaceId, VEHICLES.moduleId, recordId, REMOVE_UNAVAILABILITY, { periodId }) as Promise<ActionOutcome<null>>
 }

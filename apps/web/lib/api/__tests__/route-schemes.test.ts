@@ -59,7 +59,7 @@ const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ..
 const COPENHAGEN_WEB_ID = webIdOf("project", copenhagen.id)
 const INDRE_BY_WEB_ID = webIdOf("area", indreBy.id)
 
-// Resources is still on fixtures here (slice 5a): the fleet and the places are named by the API's ids alone.
+// The fleet and the places are not loaded here: they are named by the API's ids alone.
 const WH24 = "01a0d2a4-a280-7021-8000-000000000001"
 const NR08 = "01a0d2a4-a280-7021-8000-000000000004"
 const MADS = "01a0d2a4-a280-7022-8000-000000000001"
@@ -125,7 +125,6 @@ const osterbro: RouteScheme = {
   validFrom: "2026-08-04",
 }
 
-// The modules the schemes resolve against, as the store has them when the schemes load.
 const projectRecord = recordFrom(projectAdapter, copenhagen, { resolve: resolverOver(new Map()), now: NOW })
 const organisationState = loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)
 const providerRecord = recordFrom(serviceProviderAdapter, nordren, { resolve: resolverOver(new Map()), now: NOW })
@@ -151,13 +150,11 @@ const context = (): MappingContext => ({ resolve: resolverOver(state), now: NOW 
 const recordOf = (scheme: RouteScheme): BusinessRecord => recordFrom(routeSchemeAdapter, scheme, context())
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
-/** The schemes module as the store holds it once a scheme has loaded: the row under its web id, beside its server id. */
 function schemesState(scheme: RouteScheme): { module: ModuleState; record: BusinessRecord } {
   const record = recordOf(scheme)
   return { record, module: loaded({ records: [record], serverIds: new Map([[record.id, scheme.id]]) }, 1) }
 }
 
-/** An edit of a loaded scheme through the store's seam: the record changed as the workspace changes it, the requests the API was sent. */
 async function edited(scheme: RouteScheme, change: (record: BusinessRecord) => BusinessRecord, answers: Array<(call: Call) => Response>, writeState: ServerRecordsState = state) {
   const { module, record } = schemesState(scheme)
   const { fetch, calls } = scripted(answers)

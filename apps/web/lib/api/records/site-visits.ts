@@ -33,7 +33,6 @@ const FRACTION_PREFIX = MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix
 /** How far back the ledger is read, by the visit's day: older visits are the reports' and the audit's, not the desk's. */
 export const SITE_VISITS_WINDOW_DAYS = 90
 
-/** The first day the ledger is read from, `from` on its list. */
 export function siteVisitsWindowFrom(now = new Date()): string {
   const from = new Date(now.getTime())
   from.setUTCDate(from.getUTCDate() - SITE_VISITS_WINDOW_DAYS)

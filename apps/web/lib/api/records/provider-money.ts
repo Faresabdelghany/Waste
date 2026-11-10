@@ -90,10 +90,6 @@ function assignmentNames(serverId: string, context: MappingContext): { name: str
   return { name: record.name, provider: record.facts["Service provider"] ?? record.name, area: record.facts["Service area"] }
 }
 
-// ---------------------------------------------------------------------------
-// Service provider prices
-// ---------------------------------------------------------------------------
-
 /** The submitted value a price record carries the project's day it was read on under: what Apply index is offered on (#281). */
 export const PRICE_DAY_KEY = "readOn"
 
@@ -124,7 +120,6 @@ export function providerPriceIndexHeldBack(record: Pick<BusinessRecord, "submitt
 }
 
 /** What Apply index's create carries: the row it indexes, and the body the contract accepts; a chain's first row is its body alone. */
-/** Apply index: the next row of the chain, posted under the row it indexes. */
 type IndexWrite = { indexes: string; body: ServiceProviderPriceIndex }
 
 export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice, IndexWrite | ServiceProviderPriceCreate> = {
@@ -251,10 +246,6 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice, IndexWr
 
 /** Price Engine › Service Provider Prices: read on the project's day, which a price's period reading and its Apply index are judged on. */
 export const providerPricesModule = { ...PROVIDER_PRICES_MODULE, resources: [providerPriceAdapter] } satisfies ServerModule
-
-// ---------------------------------------------------------------------------
-// Settlements
-// ---------------------------------------------------------------------------
 
 /** The submitted value a settlement record carries the project's day it was read on under: what its offers are judged on (#260). */
 export const SETTLEMENT_DAY_KEY = "readOn"

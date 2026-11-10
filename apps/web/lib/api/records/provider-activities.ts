@@ -129,7 +129,6 @@ function listOf(record: BusinessRecord, key: string, prefix: string, context: Ma
   return ids
 }
 
-/** The containers a form names, in the order picked. */
 const containersOf = (record: BusinessRecord, context: MappingContext) => listOf(record, "containerIds", CONTAINER_PREFIX, context, STOPS_REFUSED)
 
 /** The days a form names, each a weekday, Monday first; undefined for none, a refusal for a word that is no day. */
@@ -147,7 +146,6 @@ function serverIdAt(record: BusinessRecord, key: string, prefix: string, context
   return referencedServerId(webId, prefix, context) ?? refusal(key, refused)
 }
 
-/** What a create is about: a proposal's route's project, scheme and group, or a follow-up's or a note's award's project or the picked project. */
 function subjectOf(record: BusinessRecord, kind: ServiceProviderActivityCreate["kind"], context: MappingContext) {
   if (kind === "route-day-change" || kind === "vehicle-change" || kind === "stop-set-change" || kind === "waste-fraction-change") {
     const routeId = typed(record, "routeId")
@@ -218,7 +216,6 @@ export function toActivityCreateBody(record: BusinessRecord, context: MappingCon
   return { ...base, ...area, kind }
 }
 
-/** A correction: the words, a proposal's days and day, a follow-up's due day, each where it moved. */
 export function toActivityPatchBody(before: BusinessRecord, after: BusinessRecord, context: MappingContext): ServiceProviderActivityPatch | null | LocalRefusal {
   const kind = typed(before, ACTIVITY_KIND_KEY)
   const body: ServiceProviderActivityPatch = {}

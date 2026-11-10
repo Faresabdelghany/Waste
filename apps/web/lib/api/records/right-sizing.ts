@@ -19,11 +19,9 @@ import { shownOn } from "@/lib/format/clock"
 import { refusal } from "./places"
 import { nameVia, webIdVia } from "./references"
 
-/** The commands an open proposal's details offer. */
 export const APPROVE_PROPOSAL = "approve"
 export const DISMISS_PROPOSAL = "dismiss"
 
-/** The commands a proposal's details offer: Approve and Dismiss while it is open, none once decided. */
 export const proposalCommandsOffered = (record: { submittedValues?: Record<string, unknown> }): string[] => (record.submittedValues?.status === "open" ? [APPROVE_PROPOSAL, DISMISS_PROPOSAL] : [])
 
 /** Whether a proposal's approve changes the product, and so asks a day and a product. */

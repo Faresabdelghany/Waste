@@ -1,5 +1,5 @@
-// Ticket types on the adapter (#545 of #544): a type as Settings › Ticket
-// types and the tickets' Type picker read it, its create, its edit — its own
+// Ticket types on the adapter (#545 of #544): a type as Settings › Tickets'
+// Types tab and the tickets' Type picker read it, its create, its edit — its own
 // fields patched, its fields and its permissions each replaced through their
 // own route — and a ticket's type and values on the record, in the create and
 // in the patch; and a type's automation (#546 of #544), carried by web id

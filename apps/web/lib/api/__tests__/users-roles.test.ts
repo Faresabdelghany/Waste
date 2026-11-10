@@ -50,7 +50,6 @@ const olivia: User = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, em
 const lars: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000002", email: "lars.mikkelsen@nordren.example", fullName: "Lars Mikkelsen", status: "invited", roleId: nightShift.id, allProjects: false, serviceProviderId: nordren.id, primaryAdministrator: false }
 const mads: User = { ...olivia, id: "01a0d2a4-a280-7005-8000-000000000003", email: "mads.jensen@kystbyen.example", fullName: "Mads Jensen", status: "deactivated", roleId: dispatcher.id, allProjects: false, projectIds: [copenhagen.id], primaryAdministrator: false, deactivatedAt: "2026-09-25T10:00:00.000Z" }
 
-// The store's state once the organisation, the providers and the access module have loaded, in that order.
 const companyRecord = recordFrom(companyAdapter, company, context())
 const copenhagenRecord = recordFrom(projectAdapter, copenhagen, context())
 const harborRecord = recordFrom(projectAdapter, harbor, context())

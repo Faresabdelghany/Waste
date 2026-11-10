@@ -60,7 +60,6 @@ const CONTAMINANT_CODE_PREFIX = MASTER_DATA_KIND_DETAILS["contaminant-code"].pre
 
 const PICKUP_PREFIX = "pickup"
 
-/** "06:15": when an instant was, on the project's clock. */
 const clockOn = (instant: string, timezone: string | undefined) => wallClockIn(instant, timezone).slice(11, 16)
 
 /** Who put a stop on its route, under its Added by fact (#111): the office's alone, a generated stop saying nothing. */
@@ -104,7 +103,6 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): RecordF
   // The label a fixture container is linked by on the map; a container the store has not loaded has none to give.
   const label = containerRecord?.facts["Container ID"] ?? containerRecord?.name
   if (label !== undefined) facts["Container ID"] = label
-  // An address-only stop is collected at its place, which names it.
   if (container === undefined && place !== undefined) facts.Address = place.address ?? place.name
   // What a delivery, a removal or a swap books beside its container (O3b of #290): the ledger moves it so when the driver completes the stop.
   if (pickup.subscriptionId != null) facts.Subscription = nameVia(context, SUBSCRIPTION_PREFIX, pickup.subscriptionId)
@@ -159,10 +157,6 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): RecordF
   }
 }
 
-// ---------------------------------------------------------------------------
-// The dispatcher's commands on a stop
-// ---------------------------------------------------------------------------
-
 /** A command posted to its path on the stop, which answers the stop with its proofs. A stop removed or corrected moves its route's progress, on the Routes table and the Live board, and a bulky booking's stop where the booking stands (O11 of #290). */
 const onPickup = (path: string, verb: string, toBody: NonNullable<RecordCommand<Pickup>["toBody"]>): RecordCommand<Pickup> => ({
   toBody,
@@ -212,12 +206,10 @@ export async function pickupProofObjects(client: Client, serverId: string): Prom
   return (await get<ProofObjectLinks>(client, `/pickups/${serverId}/proof-objects`)).items
 }
 
-/** What a proof's object is to a person: a photo, a signature, or — for a kind that names one otherwise — a file. */
 export function proofObjectNoun(proof: Pick<ProofOfService, "kind">): string {
   return proof.kind === "photo" ? "photo" : proof.kind === "signature" ? "signature" : "file"
 }
 
-/** A stop's proof as one line on the project's clock: its kind and source, then the outcome a correction moved it to, a weight and a note where it has them. */
 export function proofLine(proof: ProofOfService, timezone: string | undefined): string {
   const parts = [shownOn(proof.occurredAt, timezone), statusLabel(proof.kind), statusLabel(proof.source)]
   if (proof.outcome) parts.push(statusLabel(proof.outcome))

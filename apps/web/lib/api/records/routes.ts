@@ -34,7 +34,7 @@
 // them in their sequence — the active Plan's order where there is one — with
 // its sessions and unloads, and the read's `activePlan` goes on the record
 // as JSON under `ROUTE_ACTIVE_PLAN_KEY`, which the map's legs layer reads
-// (#173): absent where the read carries none (the list, until #173 adds it).
+// (#173): absent where the read carries none.
 //
 // Since O5 of #290 the office's dispatch-day tooling: a day's routes, or a
 // selection, dispatched in one request (`dispatchRoutes`, each route answered
@@ -102,7 +102,6 @@ const PICKUPS_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "pickups")
 /** The bulky bookings (O11 of #290): a stop added for one routes it, and a stop of one skipped books it again. */
 const BULKY_KEY = moduleKeyOf("operate", "bulky-bookings")
 
-/** The route's commands, by the names the surfaces send. */
 export const ASSIGN_ROUTE = "assign"
 export const DISPATCH_ROUTE = "dispatch"
 export const RESCHEDULE_ROUTE = "reschedule"
@@ -147,7 +146,6 @@ function stopsValue({ planned, total }: Route["progress"]): string {
   return `${total - planned}/${total} stops`
 }
 
-/** The project a route is in: its web id, its name, its clock. */
 function projectOf(route: Route, context: MappingContext): { webId: string; name?: string; timezone?: string } {
   const record = context.resolve.byServerId(route.projectId)
   const { webId, name } = referenced(context, "project", route.projectId)
@@ -252,10 +250,6 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Record
   }
 }
 
-// ---------------------------------------------------------------------------
-// The dispatcher's commands
-// ---------------------------------------------------------------------------
-//
 // Each answers the route as it now stands (`RouteDetail`), which replaces the
 // row. A dialog names rows by web id; the body names them by server id,
 // through the resolver or the id chip a row of a module not loaded shows. An
@@ -415,7 +409,6 @@ export const ROUTE_COMMANDS = {
   },
 } satisfies Record<string, RecordCommand<Route>>
 
-/** The open stops a move or a split names, each by server id; a refusal where none is picked or one is not a stop the API holds. */
 function movedStops(input: Record<string, unknown>, context: MappingContext): { pickupIds: string[] } | ReturnType<typeof refusal> {
   const ids = Array.isArray(input.pickupIds) ? input.pickupIds.filter((id): id is string => typeof id === "string") : []
   if (ids.length === 0) return refusal("pickupIds", "Pick the stops to move")
@@ -424,7 +417,6 @@ function movedStops(input: Record<string, unknown>, context: MappingContext): { 
   return { pickupIds: serverIds as string[] }
 }
 
-/** The other route a move goes to or a merge takes in, by server id; a refusal where none is picked or it is not a route the API holds. */
 function otherRouteOf(input: Record<string, unknown>, field: "toRouteId" | "routeId", context: MappingContext): string | ReturnType<typeof refusal> {
   const picked = said(input, field)
   if (picked === undefined) return refusal(field, "Pick the other route")
@@ -433,7 +425,6 @@ function otherRouteOf(input: Record<string, unknown>, field: "toRouteId" | "rout
 
 const isOfficeStopService = (value: string): value is OfficeStopService => (OFFICE_STOP_SERVICES as readonly string[]).includes(value)
 
-/** What a stop's fraction is held to when the store holds the row: a waste fraction of the master data. */
 const FRACTION_RULE: ReferenceRule = { owns: (record) => masterDataKindOf(record) === "waste-fraction" }
 
 /** The places an address-only stop names, by what the form says it collects at: the field, the web id's prefix, the kind, the sentence a miss is told in. */
@@ -449,7 +440,6 @@ const BOOKINGS: Readonly<Record<BookedField, readonly [string, ReferenceRule, st
   warehouseId: ["warehouse", { owns: warehouseAdapter.owns }, "Pick the warehouse it goes back to", "Pick a warehouse the API holds"],
 }
 
-/** The bookings the service names (`BOOKED_WITH`), each by server id, and a delivery's fraction where the form names one; a refusal at the first field that will not do. */
 function bookedWith(service: OfficeStopService, input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
   const body: Record<string, string> = {}
   for (const field of BOOKED_WITH[service]) {
@@ -527,7 +517,6 @@ export function routePlans(client: Client, serverId: string): Promise<Plan[]> {
   return listAll<Plan>(client, `/routes/${serverId}/plans`)
 }
 
-/** Who ordered a Plan's stops, as its history reads it. */
 const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
   optimiser: "Optimised",
   manual: "The dispatcher's order",
@@ -623,7 +612,6 @@ export function dayLoadLine(load: RouteDayLoad): string {
   return `${kg} · ${work}`
 }
 
-/** What the office is told a balance moves: the stop, the route it leaves and the route it joins. */
 export const balanceMoveLine = (stop: string, from: string, to: string): string => `${stop}: ${from} → ${to}`
 
 /** What the driver's device sent for the route, applied and rejected, oldest first: its command log. */

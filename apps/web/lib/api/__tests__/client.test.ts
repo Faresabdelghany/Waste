@@ -14,7 +14,6 @@ import { ApiProblem, genericProblem, isApiProblem, problemOf, problemSentence } 
 
 type Call = { url: string; init: RequestInit }
 
-/** A `fetch` that answers from a script and records what it was asked. */
 function scripted(answers: Array<(call: Call) => Response | Promise<Response>>): { fetch: typeof fetch; calls: Call[] } {
   const calls: Call[] = []
   const fetchImpl = (async (input: RequestInfo | URL, init: RequestInit = {}) => {

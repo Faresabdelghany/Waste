@@ -48,22 +48,16 @@ const CUSTOMER_PREFIX = "customer"
 const STATION_PREFIX = "station"
 const FRACTION_PREFIX = MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix
 
-/** What a weight that is not a whole number of kilograms is told. */
 export const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
 
-/** What a ticket's or a tare's own fields are told when the patch would move them. */
 const KEPT = "What was weighed and for whom is what the ticket is: void it and weigh again"
 
-/** A whole number of kilograms a value says, NaN for one that is not, undefined for none. */
 function weightIn(value: string | undefined): number | undefined {
   if (value === undefined) return undefined
   const number = Number(value)
   return Number.isInteger(number) && number > 0 ? number : Number.NaN
 }
 
-// --- Tickets ----------------------------------------------------------------
-
-/** The commands a ticket's details offer. */
 export const COMPLETE_TICKET = "complete"
 export const VOID_TICKET = "void"
 
@@ -244,14 +238,10 @@ export const scaleTicketAdapter: ResourceAdapter<ScaleTicket, ScaleTicketCreate>
   commands: SCALE_TICKET_COMMANDS,
 }
 
-// --- Tares ------------------------------------------------------------------
-
-/** The commands a tare's details offer, each a patch of the tare. */
 export const REWEIGH_TARE = "reweigh"
 export const RETIRE_TARE = "retire"
 export const REACTIVATE_TARE = "reactivate"
 
-/** Re-weigh and Retire while active; Take back once retired. */
 export const tareCommandsOffered = (record: { submittedValues?: Record<string, unknown> }): string[] => (record.submittedValues?.status === "active" ? [REWEIGH_TARE, RETIRE_TARE] : [REACTIVATE_TARE])
 
 export function toVehicleTareRecord(tare: VehicleTare, context: MappingContext): RecordFields {

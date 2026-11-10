@@ -28,7 +28,7 @@
 //   shows what it saved; then the API's answer, mapped, replaces that, so
 //   the stamps and every field the wire owns are the server's. A refusal
 //   puts the row back as it was and the caller is told in the API's words
-//   (the store's `onProblem`), since a 409 duplicate or a 400 naming a
+//   (the store's `notices.refused`), since a 409 duplicate or a 400 naming a
 //   field is a person's to read, not a console's. A write that is several
 //   requests and is refused after one of them landed (`PartialWrite`) puts
 //   the row as the server now holds it instead, read back by the adapter.
@@ -91,11 +91,9 @@ export type ModuleState = {
   status: ModuleStatus
   /** The module's records, in list order: the server's rows as the prototype shows them. Empty until `ready`. */
   records: BusinessRecord[]
-  /** The server id behind each web id. */
   serverIds: ReadonlyMap<string, string>
   /** Why the last read or write failed, or why the module is not read at all; cleared by the next read. */
   problem: Problem | null
-  /** The clock of the last successful read. */
   loadedAt: number | null
   /** What the last read's mapping read beside the module's own rows; absent until a read has landed. */
   reads?: MappingReads
@@ -149,7 +147,6 @@ export function notGranted(moduleKey: string): ModuleState {
   return { ...IDLE, status: "not-granted", problem: genericProblem(403, `Your role does not allow view on ${moduleKey}`) }
 }
 
-/** The state with each of `modules` marked not granted and every other module as it stands; the same state when there are none. */
 export function withNotGranted(state: ServerRecordsState, modules: readonly ServerModule[]): ServerRecordsState {
   if (modules.length === 0) return state
   const next = new Map(state)
@@ -160,7 +157,6 @@ export function withNotGranted(state: ServerRecordsState, modules: readonly Serv
   return next
 }
 
-/** The state of a module the store has been asked for; `IDLE` for one it has not. */
 export function moduleState(state: ServerRecordsState, workspaceId: WorkspaceId, moduleId: string): ModuleState {
   return state.get(moduleKeyOf(workspaceId, moduleId)) ?? IDLE
 }
@@ -181,7 +177,6 @@ export function paneAnswerOf(module: ModuleState): PaneAnswer {
   return { records: [], ready: false, pending: module.status === "idle" || module.status === "loading", notGranted: module.status === "not-granted", problem: module.problem }
 }
 
-/** The adapter that owns a record, by the module's own order; undefined for a record no adapter claims. */
 export function adapterFor(module: ServerModule, record: BusinessRecord): ResourceAdapter<Resource> | undefined {
   return module.resources.find((resource) => resource.owns(record))
 }
@@ -189,7 +184,6 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
 /** The rows a load has mapped so far, under the key of the module it is loading. */
 export type MappingRows = { key?: string; records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string>; byServerId: ReadonlyMap<string, BusinessRecord> }
 
-/** The fields of one row a mapping is reading, as it reads them. */
 type FieldsNoted = Map<string, true | Set<string>>
 
 /** What a load's resolver and clock note as its mapping asks, before the read's stamp is put on it (`readsOf`). */
@@ -205,7 +199,6 @@ type Noted = {
 
 const noting = (): Noted => ({ rows: new Map(), views: new WeakMap(), scanned: new Set(), missedServerIds: new Set(), missedWebIds: new Set(), days: new Map() })
 
-/** The fields noted of one row of a module, made the first time the row is named. */
 function fieldsOf(noted: Noted, key: string, webId: string): FieldsNoted {
   const byId = noted.rows.get(key) ?? new Map<string, FieldsNoted>()
   noted.rows.set(key, byId)
@@ -365,7 +358,6 @@ export function resolverOver(state: ServerRecordsState, extra?: MappingRows, not
 
 const indexes = new WeakMap<readonly BusinessRecord[], ReadonlyMap<string, BusinessRecord>>()
 
-/** A module's rows by web id, indexed once per rows. */
 function rowsById(records: readonly BusinessRecord[]): ReadonlyMap<string, BusinessRecord> {
   let index = indexes.get(records)
   if (index === undefined) {
@@ -378,7 +370,6 @@ function rowsById(records: readonly BusinessRecord[]): ReadonlyMap<string, Busin
 export type LoadResult = { records: BusinessRecord[]; serverIds: Map<string, string>; reads?: MappingReads }
 
 export type LoadOptions = {
-  /** Everything loaded so far, for the resolver. */
   state: ServerRecordsState
   now?: Date
 }
@@ -455,7 +446,6 @@ export function mapModule(module: ServerModule, lists: ModuleLists, { state, now
   return { records: keptWhereSame(held?.status === "ready" ? held.records : [], records), serverIds, reads: readsOf(noted, began, key) }
 }
 
-/** Every row of a module: its lists, then their mapping against `state`. */
 export async function loadModule(client: ApiClient, module: ServerModule, options: LoadOptions): Promise<LoadResult> {
   return mapModule(module, await listModule(client, module), options)
 }
@@ -506,12 +496,10 @@ function readsOf(noted: Noted, began: ServerRecordsState, key: string): MappingR
   return { rows, scanned: noted.scanned, missed: { serverIds: noted.missedServerIds, webIds: noted.missedWebIds }, seen, days: noted.days }
 }
 
-/** The state after a read began. */
 export function loading(module: ModuleState): ModuleState {
   return { ...module, status: module.status === "ready" ? "ready" : "loading", problem: null }
 }
 
-/** The state after a read answered, with what its mapping read. */
 export function loaded(result: LoadResult, now: number): ModuleState {
   return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now, ...(result.reads === undefined ? {} : { reads: result.reads }) }
 }
@@ -532,7 +520,6 @@ function readTheSame(now: BusinessRecord | undefined, { record, fields }: RowRea
   return true
 }
 
-/** Whether a module holds a row by one of the ids a mapping found nowhere. */
 function holdsMissed(module: ModuleState, missed: MappingReads["missed"]): boolean {
   if (missed.serverIds.size === 0 && missed.webIds.size === 0) return false
   const held = serverIdsHeld(module.serverIds)
@@ -543,7 +530,6 @@ function holdsMissed(module: ModuleState, missed: MappingReads["missed"]): boole
 
 const heldServerIds = new WeakMap<ReadonlyMap<string, string>, ReadonlySet<string>>()
 
-/** The server ids a module holds rows by, gathered once per module's ids. */
 function serverIdsHeld(serverIds: ReadonlyMap<string, string>): ReadonlySet<string> {
   let held = heldServerIds.get(serverIds)
   if (held === undefined) {
@@ -599,7 +585,6 @@ export function readSourcesNow(state: ServerRecordsState, key: string): Readonly
   return new Map(readsChanged(state, key).map((source) => [source, readyRowsOf(state.get(source))] as const))
 }
 
-/** Whether two readings of the sources are the same rows. */
 export function sameSources(a: ReadonlyMap<string, readonly BusinessRecord[] | null> | undefined, b: ReadonlyMap<string, readonly BusinessRecord[] | null>): boolean {
   return a !== undefined && a.size === b.size && [...b].every(([key, rows]) => a.has(key) && a.get(key) === rows)
 }
@@ -677,7 +662,6 @@ export type ReadOptions = {
  */
 export const READ_RETRY_DELAYS_MS: readonly number[] = [300, 1_000]
 
-/** Whether a read failed on the way rather than by the API's answer: a 5xx or no answer at all. */
 const failedOnTheWay = (error: unknown): boolean => error instanceof ApiProblem && (error.problem.status === UNREACHABLE_STATUS || error.problem.status >= 500)
 
 /** The module's lists, asked again after each delay while the failure is on the way; undefined once the session ended during a wait. */
@@ -797,7 +781,6 @@ export type WriteOutcome =
    */
   | { kind: "landed"; recordId: string; serverId?: string; problem: Problem }
 
-/** The first field an edit moved, by the form's keys; the status where it moved none of them. */
 function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
   const was = before.submittedValues ?? {}
   const is = after.submittedValues ?? {}
@@ -826,7 +809,6 @@ export function spellsStatus(module: ServerModule, record: BusinessRecord, statu
   return adapter?.statuses?.includes(statusToken(status)) ?? false
 }
 
-/** The refusal a status move the wire cannot spell gets, naming the field and the words it has. */
 function statusRefusal(adapter: ResourceAdapter<Resource>, status: string): Problem {
   const words = adapter.statuses ?? []
   return refusalProblem({

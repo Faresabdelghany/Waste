@@ -79,7 +79,6 @@ const SERVICE_WINDOW_KEYS: WindowKeys = { from: "serviceWindowStart", to: "servi
 /** The wire's agreement statuses, the vocabulary's own tuple: exactly what a patch may say. */
 export const AGREEMENT_STATUSES: readonly AgreementStatus[] = WIRE_AGREEMENT_STATUSES
 
-/** The transitions a row offers, by its wire status: a draft is signed or cancelled, a running agreement cancelled, a cancelled one left as it is. */
 const TRANSITIONS: Readonly<Record<AgreementStatus, readonly string[]>> = { draft: ["Active", "Cancelled"], active: ["Cancelled"], cancelled: [] }
 
 /** What the agreement form's "Initial subscription" is refused with: the API takes a subscription as a row of its own, under a saved agreement. */
@@ -90,14 +89,12 @@ export const QUANTITY_REFUSAL = "A quantity is a whole number, 1 or more"
 /** `2026-01-01 – 2026-12-31`, or `– open` while it runs: the period as the form's last day in force. */
 const periodLabel = (validFrom: string, validTo: string | null) => `${validFrom} – ${validTo === null ? "open" : lastDayIn(validTo)}`
 
-/** A form's count: undefined for blank, the number for a whole positive one, NaN for anything else. */
 function countOf(value: string | undefined): number | undefined {
   if (value === undefined) return undefined
   const number = Number(value)
   return Number.isInteger(number) && number > 0 ? number : Number.NaN
 }
 
-/** The status the record's own label says, where it is one the wire has. */
 const wireStatusOf = (record: Pick<BusinessRecord, "status">): AgreementStatus | undefined => AGREEMENT_STATUSES.find((candidate) => candidate === statusToken(record.status))
 
 /** A row of another module the store may or may not hold: its web id and the name a person reads, the server's id as a chip when it holds none. */
@@ -112,9 +109,7 @@ function referenced(context: MappingContext, serverId: string, prefix: string): 
 const chipServerId = (value: string | undefined, prefix: string, context: MappingContext): string | undefined =>
   (value === undefined ? undefined : context.resolve.serverIdOf(value)) ?? referencedId(value, prefix)
 
-// ---------------------------------------------------------------------------
 // The lifecycle (#291, slice 10): a change of service, a pause, a termination
-// ---------------------------------------------------------------------------
 
 /** The actions, by name: each answers another resource than the row, so the surface re-reads what it changed (`refreshModule`). */
 export const CHANGE_SERVICE = "change-service"
@@ -126,9 +121,7 @@ export const TERMINATE = "terminate"
 /** What a change naming neither a product nor a quantity is refused with, before the API sees it. */
 export const CHANGE_NAMES_NOTHING = "Pick the product or the quantity the new service takes"
 
-/** A day as a date field holds it, `YYYY-MM-DD`; undefined for anything else. */
 const dayOf = (value: unknown): string | undefined => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined)
-/** A field's text, undefined where it is blank. */
 const textOf = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined)
 
 /** The change: its first day is the wire's `on`, the product the products module's row, a blank field the subscription's own. */
@@ -216,10 +209,6 @@ export const terminateAgreement = (sendAction: SendAction, recordId: string, inp
 
 /** A subscription's pauses, oldest first: what its details list, with what each offers. */
 export const subscriptionPauses = (client: Client, serverId: string): Promise<SubscriptionPause[]> => listAll<SubscriptionPause>(client, "/subscription-pauses", { subscriptionId: serverId })
-
-// ---------------------------------------------------------------------------
-// Agreements
-// ---------------------------------------------------------------------------
 
 /** The customer a party field names, as the server's id: the store's row, else the chip an unresolved row was shown as. */
 const partyServerId = (record: BusinessRecord, key: string, context: MappingContext) => chipServerId(typed(record, key), "customer", context)
@@ -356,10 +345,6 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
   actions: { [TERMINATE]: terminateAction },
 }
 
-// ---------------------------------------------------------------------------
-// Subscriptions
-// ---------------------------------------------------------------------------
-
 /** What a subscription's create carries: the agreement it is posted under, and the body the contract accepts. */
 type SubscriptionWrite = { agreementId: string; body: unknown }
 
@@ -429,7 +414,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription, SubscriptionWrit
     const agreementWebId = typed(record, "agreementId")
     const agreementId = agreementWebId === undefined ? undefined : context.resolve.serverIdOf(agreementWebId)
     if (agreementId === undefined) {
-      // A row the workspace minted this session (`<moduleId>-<kind>-<clock>`, adapter.ts) whose create has not answered yet holds no server id: the wait is the remedy, as the store's commands say.
+      // A row the workspace minted this session (`<moduleId>-<kind>-<clock>`, business-workspace.tsx) whose create has not answered yet holds no server id: the wait is the remedy, as the store's commands say.
       if (agreementWebId?.startsWith(`${AGREEMENTS_MODULE.moduleId}-`)) return refusal("agreementId", "The agreement is not on the API yet: wait for it to be saved, then try again")
       return refusal("agreementId", "Pick an agreement the API holds")
     }
@@ -488,10 +473,6 @@ export const subscriptionAdapter: ResourceAdapter<Subscription, SubscriptionWrit
   update: (client, serverId, body) => patch<Subscription>(client, `/subscriptions/${serverId}`, body),
   actions: { [CHANGE_SERVICE]: changeServiceAction, [PAUSE]: pauseAction, [MOVE_PAUSE]: movePauseAction, [CANCEL_PAUSE]: cancelPauseAction },
 }
-
-// ---------------------------------------------------------------------------
-// The module
-// ---------------------------------------------------------------------------
 
 /** Customers → Agreements and Subscriptions: the agreements before the subscriptions that name them. */
 export const agreementsModule = {

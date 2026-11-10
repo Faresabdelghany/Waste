@@ -43,7 +43,6 @@ import { driverAdapter, vehicleAdapter } from "./fleet"
 import { depotAdapter, projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia, type ReferenceRule } from "./references"
 
-/** The workspace module the allocations are the rows of. */
 export const VEHICLE_PLANNING_MODULE = moduleAt("fleet.vehicle-planning")
 
 /** The row's commands, by the names the dialogs send. */
@@ -55,18 +54,12 @@ const ALLOCATION_PREFIX = "allocation"
 /** "1 Oct" for a wall-clock time, as the fixtures name an allocation's day. */
 const dayLabel = (wall: string) => formatDayMonth(wall.slice(0, 10))
 
-// ---------------------------------------------------------------------------
-// The record, and the bodies it becomes
-// ---------------------------------------------------------------------------
-
-/** The project a record is in, and its clock. */
 function projectOf(record: BusinessRecord, context: MappingContext): { webId: string | undefined; serverId: string | undefined; timezone: string | undefined } {
   const webId = typed(record, "projectId") ?? record.projectIds?.[0]
   const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
   return { webId, serverId, timezone: projectTimezoneOf(record, context) }
 }
 
-// Each reference field: the prefix its id chip carries, the sentence a miss is refused in, and the kind a loaded row is held to.
 const isFraction = (record: BusinessRecord) => masterDataKindOf(record) === "waste-fraction"
 /** The fleet's and the depot's id chips a dialog may name — the prefix, the refusal a miss is told in, the kind a loaded row is held to — shared with the routes' assign (routes.ts, #179). */
 export const FLEET_AND_DEPOT_PICKS = {
@@ -93,7 +86,6 @@ function capacityOf(record: BusinessRecord): number | undefined | LocalRefusal {
   return /^\d+$/.test(value) && Number(value) >= 1 ? Number(value) : refusal("requiredCapacity", CAPACITY)
 }
 
-/** The window the form says, as the wire's two instants, or the refusal naming the bound that is wrong. */
 function windowOf(record: BusinessRecord, timezone: string | undefined): { plannedFrom: string; plannedTo: string } | LocalRefusal {
   const start = typed(record, "plannedStart")
   const end = typed(record, "plannedEnd")
@@ -106,7 +98,6 @@ function windowOf(record: BusinessRecord, timezone: string | undefined): { plann
   return Date.parse(plannedTo) > Date.parse(plannedFrom) ? { plannedFrom, plannedTo } : refusal("plannedEnd", "The planned end comes after the planned start")
 }
 
-/** Every reference the form names, as the wire's members, or the first refusal. */
 function referencesOf(record: BusinessRecord, context: MappingContext): Record<string, string | null> | LocalRefusal {
   const body: Record<string, string | null> = {}
   for (const field of Object.keys(PICK) as ReferenceField[]) {
@@ -118,7 +109,6 @@ function referencesOf(record: BusinessRecord, context: MappingContext): Record<s
   return body
 }
 
-/** What a change may move, read off a record for `patchOf`: the references by server id, the capacity, the window, the note. */
 function changeableOf(record: BusinessRecord, context: MappingContext, timezone: string | undefined): Record<string, unknown> {
   const references = referencesOf(record, context)
   const capacity = capacityOf(record)

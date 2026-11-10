@@ -31,7 +31,6 @@ const query = (window: ReportWindowQuery, extra: Readonly<Record<string, string 
   ...extra,
 })
 
-/** What one read of a report is told apart by: the report and every parameter it is asked with, so a filter added to a query is in its key too. */
 export function reportKey(report: "service" | "tickets" | "revenue" | "tonnage", window: ReportWindowQuery, filters: Readonly<Record<string, string | undefined>> = {}): string {
   return withQuery(`/reports/${report}`, query(window, filters))
 }
@@ -53,7 +52,6 @@ export function revenueReport(client: ApiClient, window: ReportWindowQuery): Pro
 
 const periodQuery = (query: WasteDataQuery) => ({ projectId: query.projectId, from: query.from, to: query.to })
 
-/** What one read of the waste-data report is told apart by. */
 export const wasteDataKey = (query: WasteDataQuery): string => withQuery("/reports/waste-data", periodQuery(query))
 
 /** A period's approved unloads by municipality, station and fraction, with the warnings to read before filing. */

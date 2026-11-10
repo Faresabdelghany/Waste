@@ -10,7 +10,6 @@
 import type { ApiSession } from "./auth"
 import { API_REFRESH_TOKEN_STORAGE_KEY, API_SESSION_STORAGE_KEY, readPersisted } from "../storage-keys"
 
-/** The tab-shared half of a session as it is persisted: everything but the refresh token. */
 export type PersistedSession = Omit<ApiSession, "refreshToken">
 
 function isPersistedSession(value: unknown): value is PersistedSession {

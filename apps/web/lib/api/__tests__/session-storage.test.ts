@@ -1,5 +1,5 @@
-// Where the API session is kept (Issue #81): the access token and its
-// company in one storage, the refresh token in another, the two read back as
+// Where the API session is kept (Issue #81): the access token, its expiry,
+// the e-mail and the user id in one storage, the refresh token in another, the two read back as
 // one session, and what a tab that never signed in itself gets.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"

@@ -24,13 +24,11 @@ const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMP
 const PROPERTIES = "customers.properties"
 const NOON = Date.parse("2026-10-24T10:00:00Z")
 
-/** The organisation holding the project under `name`. */
 const organisation = (name: string) => {
   const record = recordFrom(projectAdapter, { ...copenhagen, name }, { resolve: resolverOver(new Map()) })
   return loaded({ records: [record], serverIds: new Map([[record.id, copenhagen.id]]) }, NOON)
 }
 
-/** A fetch that answers the properties' list, or a refusal while `refusing` says so, counting what it was asked. */
 function propertiesApi() {
   const api = { asked: 0, refusing: false }
   const fetchImpl = (async () => {
@@ -40,7 +38,6 @@ function propertiesApi() {
   return { api, client: clientOver(fetchImpl) }
 }
 
-/** The store as a session holds it once its load has read the organisation and the properties, the watcher's to watch. */
 async function storesAfterTheLoad(client: ApiClient): Promise<RecordStoreContext> {
   const server = createExternalStore<ServerRecordsState>(new Map([["configure.organization", organisation("Copenhagen Central")]]))
   await readModuleInto(server, client, propertiesModule, { alive: () => true })
