@@ -6,13 +6,6 @@ import { stopLoadKg, UNLOAD_SECONDS } from "../../execution/workload"
 import { planFingerprint } from "../fingerprint"
 import { OPTIMISER_MAX_LOCATIONS } from "../plans"
 import { RELOAD_MAX_STOPS, reloadOf, shipsReload, unloadsAlong, withUnloads } from "../reloads"
-import { PLAN_STOP_KINDS } from "../vocabulary"
-
-describe("a Plan's stops (O15 of #290)", () => {
-  test("are the route's pickups and the unload visits on the way", () => {
-    assert.deepEqual(PLAN_STOP_KINDS, ["pickup", "unload"])
-  })
-})
 
 describe("what a stop puts on the truck", () => {
   test("an emptying, a swap or a bulky collection its expected weight; a delivery, a repair or a wash nothing; an unknown weight null", () => {

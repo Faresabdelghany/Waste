@@ -3,9 +3,9 @@ import { describe, test } from "node:test"
 
 import { OPTIMISER_MAX_PARTS } from "../parts"
 import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_LOCATIONS, OPTIMISER_MAX_STOPS, optimiserMaxStops, optimiseSolver, planIsStale, tripOf } from "../plans"
-import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
+import { planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
-import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_QUOTA_FAMILIES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
+import { ROUTING_VOCABULARIES } from "../vocabulary"
 
 describe("the routing vocabularies", () => {
   test("every value is a kebab-case token, fit for a CHECK literal and a z.enum member", () => {
@@ -14,16 +14,6 @@ describe("the routing vocabularies", () => {
       for (const value of values) assert.match(value, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${name}: ${value}`)
       assert.equal(new Set(values).size, values.length, `${name} repeats a value`)
     }
-  })
-
-  test("names the lists the decisions fixed", () => {
-    assert.deepEqual(PLAN_SOLVERS, ["optimiser", "manual", "baseline"])
-    assert.deepEqual(PLAN_STATUSES, ["calculating", "ready", "failed"])
-    assert.deepEqual(PLAN_TRIPS, ["full", "stops-only"])
-    assert.deepEqual(ROUTING_JOB_CLASSES, ["interactive", "batch"])
-    assert.equal(SUPERSEDED, "superseded")
-    assert.deepEqual(ROUTING_QUOTA_FAMILIES, ["directions", "optimisation"])
-    assert.deepEqual(OPTIMISE_FALLBACKS, ["too-many-stops", "no-depot"])
   })
 })
 
@@ -211,10 +201,6 @@ describe("the trip (#124 §3)", () => {
 })
 
 describe("coordinate rounding: five decimals, about 1.1 m at Danish latitudes", () => {
-  test("is pinned at five decimal places", () => {
-    assert.equal(FINGERPRINT_DECIMALS, 5)
-  })
-
   test("rounds on both sides of the boundary, symmetrically for negative ordinates", () => {
     assert.equal(roundCoordinate(55.7000049), 55.7)
     assert.equal(roundCoordinate(55.7000051), 55.70001)

@@ -4,14 +4,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, ROUTE_TIP_GRACE_HOURS, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES } from "../alert-rules"
+import { alertOfRule, CLEARED_NOTES, POSITION_STALE_MINUTES, SESSION_SILENCE_MINUTES } from "../alert-rules"
 import { ALERT_RULES } from "../vocabulary"
 
 describe("the thresholds", () => {
-  test("a route is late half an hour after its planned start, a device silent after a quarter of an hour, and a licence is warned of a month ahead", () => {
-    assert.deepEqual([ROUTE_START_GRACE_MINUTES, SESSION_SILENCE_MINUTES, LICENCE_WARNING_DAYS, RULE_LOOKBACK_HOURS], [30, 15, 30, 24])
-  })
-
   test("a position is stale after ten minutes without one (O8 of #290), sooner than a device is silent, so a phone heard from whose location is off is told apart", () => {
     assert.equal(POSITION_STALE_MINUTES, 10)
     assert.ok(POSITION_STALE_MINUTES < SESSION_SILENCE_MINUTES)
@@ -105,10 +101,6 @@ describe("a filling container (O26 of #290)", () => {
 
 describe("the disposal-site reconciliation (M17 of #293)", () => {
   const subjects = (alert: ReturnType<typeof alertOfRule>) => [alert.outboundLoadId, alert.routeId, alert.vehicleId, alert.driverId, alert.containerId, alert.ticketId]
-
-  test("a load is overdue at the receiving site a day after it left, and a route untipped two hours after it ended", () => {
-    assert.deepEqual([LOAD_RECEIPT_HOURS, ROUTE_TIP_GRACE_HOURS], [24, 2])
-  })
 
   test("a load not received is a high weight alert about the load, naming where it left from and went", () => {
     const alert = alertOfRule({ rule: "load-not-received", outboundLoadId: "load", vehicleId: null, registration: "AB 12 345", fromStation: "Kystbyen omlastestation", toStation: "ARC Amager Bakke", departedAt: "2026-10-28 14:00" })

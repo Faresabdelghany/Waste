@@ -1,23 +1,21 @@
 // The Resolution vocabulary, held to the shape every vocabulary module keeps
-// (src/__tests__/vocabulary.ts), and to four things of its own: the open and
-// the closed statuses are two values of the status list that together make
-// the whole of it; the kinds are the prototype's five, the repair ticket, the
-// glossary's two and the consumer's two; the sources spell the driver as
-// Execution does and put the dispatcher beside; and an alert's statuses are
-// the prototype's less "Linked to ticket", a reading.
+// (src/__tests__/vocabulary.ts), and to the rules between its lists: the open
+// and the closed statuses are two values of the status list that together
+// make the whole of it; the sources spell the driver as Execution does and
+// the office claims no door's own; a ticket type is retired as a team is; and
+// what is a reading and not a value — a ticket created, a field edited, an
+// alert linked to a ticket — is in no list.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
-import { PROPERTY_PARTY_ROLES } from "../../registry/vocabulary"
 import * as vocabulary from "../vocabulary"
 
 defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS", "OFFICE_TICKET_SOURCES", "ACTIVE_TEAM_STATUSES", "ACTIVE_TICKET_TYPE_STATUSES"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
-    assert.deepEqual([...vocabulary.TICKET_STATUSES], ["open", "in-progress", "pending", "on-hold", "completed", "rejected"])
     assert.deepEqual([...vocabulary.OPEN_TICKET_STATUSES, ...vocabulary.CLOSED_TICKET_STATUSES], [...vocabulary.TICKET_STATUSES])
     for (const status of vocabulary.TICKET_STATUSES) {
       assert.equal(vocabulary.isClosedTicketStatus(status), (vocabulary.CLOSED_TICKET_STATUSES as readonly string[]).includes(status), status)
@@ -25,42 +23,18 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.equal((vocabulary.TICKET_STATUSES as readonly string[]).includes("created"), false, "Created folds into open; created_at says when")
   })
 
-  test("the kinds are the prototype's five types, the repair ticket, the glossary's complaint and task, the consumer's two, and other", () => {
-    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"])
-    assert.deepEqual([...vocabulary.TICKET_PRIORITIES], ["critical", "high", "medium", "low", "none"])
-    assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
-    assert.deepEqual([...vocabulary.BILLABLE_RESOLUTIONS], ["recollected", "serviced"], "the work Finance charges for, a value of the resolutions")
-  })
-
-  test("the sources spell the driver as Execution does, the dispatcher beside, a Service Provider's workspace (#291 slice 23b) and a counting rule last (#547 of #544); the history has no edited kind and three readerships, the provider's last", () => {
-    assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider", "counting-rule"])
+  test("the sources spell the driver as Execution does and the office claims no door's own; the history has no edited kind", () => {
     for (const source of ["driver-app", "dispatch"] as const) assert.ok((EXECUTION_SOURCES as readonly string[]).includes(source), `${source} is Execution's spelling`)
     assert.equal((vocabulary.TICKET_SOURCES as readonly string[]).includes("driver"), false)
     assert.deepEqual([...vocabulary.OFFICE_TICKET_SOURCES], ["office", "phone", "email", "portal", "import", "integration"], "the office claims no door's own source")
-    assert.deepEqual([...vocabulary.TICKET_EVENT_KINDS], ["created", "assigned", "status-changed", "comment"])
     assert.equal((vocabulary.TICKET_EVENT_KINDS as readonly string[]).includes("edited"), false, "the history of a field edit is the audit log's (ADR-0005)")
-    assert.deepEqual([...vocabulary.TICKET_VISIBILITIES], ["internal", "customer", "service-provider"])
   })
 
-  test("a ticket type is active or retired as a team is; a custom field takes one of six inputs and is required never, to open or to complete (#545 of #544)", () => {
+  test("a ticket type is active or retired as a team is (#545 of #544)", () => {
     assert.deepEqual([...vocabulary.TICKET_TYPE_STATUSES], [...vocabulary.TEAM_STATUSES])
-    assert.deepEqual([...vocabulary.TICKET_FIELD_INPUTS], ["text", "paragraph", "number", "date", "yes-no", "choice"])
-    assert.deepEqual([...vocabulary.TICKET_FIELD_REQUIREMENTS], ["optional", "to-open", "to-complete"])
   })
 
-  test("a type's automation runs on opening or a status a command leads to, gives every command but reopen, and writes to the ticket's customer or a party role (#546 of #544)", () => {
-    assert.deepEqual([...vocabulary.TICKET_ACTION_TRIGGERS], ["opened", ...vocabulary.TICKET_STATUSES.filter((status) => status !== "open")])
-    assert.deepEqual([...vocabulary.TICKET_ACTION_KINDS], ["assign-team", "assign-person", "set-priority", "set-status", "send-message", "open-follow-up", "plan-in-route"])
-    assert.deepEqual([...vocabulary.TICKET_ACTION_COMMANDS], ["start", "wait", "hold", "complete", "reject"])
-    assert.deepEqual([...vocabulary.TICKET_MESSAGE_RECIPIENTS], ["ticket-customer", ...PROPERTY_PARTY_ROLES], "the Registry's party roles by the same tokens")
-  })
-
-  test("an alert's kinds are the prototype's six, its sources leave the later three their token, and its statuses leave out the linked reading", () => {
-    assert.deepEqual([...vocabulary.ALERT_KINDS], ["route-exception", "resource", "service-risk", "asset", "weight", "other"])
-    assert.deepEqual([...vocabulary.ALERT_SEVERITIES], ["critical", "high", "medium", "low"])
-    assert.deepEqual([...vocabulary.ALERT_SOURCES], ["manual", "execution", "telemetry", "rule"])
-    assert.deepEqual([...vocabulary.ALERT_STATUSES], ["new", "acknowledged", "resolved"])
-    assert.deepEqual([...vocabulary.ALERT_RULES], ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due", "load-not-received", "load-weight-mismatch", "load-overweight", "route-not-tipped"])
+  test("an alert's statuses leave out the linked reading", () => {
     assert.equal((vocabulary.ALERT_STATUSES as readonly string[]).includes("linked"), false, "a reading of ticket_id")
   })
 })

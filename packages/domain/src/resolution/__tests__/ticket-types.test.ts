@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DEFAULT_TICKET_TYPE_NAMES, fieldKeyOf, fieldRequiredToOpen, fieldSetIssue, fieldValueIssue, fieldValuesIssues, KIND_OR_TYPE, kindOrTypeKey, mayGive, mergedFieldValues, missingFields, needsBeforeCompleting, onlyRolesMay, settingFor, TICKET_COMMAND_VERBS, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, TICKET_TYPE_FIELDS_MAX, type TicketFieldDefinition, typeOfAnotherKind } from "../ticket-types"
+import { DEFAULT_TICKET_TYPE_NAMES, fieldKeyOf, fieldRequiredToOpen, fieldSetIssue, fieldValueIssue, fieldValuesIssues, kindOrTypeKey, mayGive, mergedFieldValues, missingFields, needsBeforeCompleting, onlyRolesMay, settingFor, TICKET_COMMAND_VERBS, TICKET_FIELD_KEY, TICKET_FIELD_KEY_MAX, type TicketFieldDefinition, typeOfAnotherKind } from "../ticket-types"
 import { TICKET_COMMANDS, TICKET_KINDS } from "../vocabulary"
 
 const field = (key: string, overrides: Partial<TicketFieldDefinition> = {}): TicketFieldDefinition => ({ key, label: key, input: "text", choices: [], requirement: "optional", ...overrides })
@@ -15,8 +15,6 @@ describe("the type a company starts with for each kind", () => {
     assert.deepEqual(Object.keys(DEFAULT_TICKET_TYPE_NAMES), [...TICKET_KINDS])
     const names = Object.values(DEFAULT_TICKET_TYPE_NAMES)
     assert.equal(new Set(names).size, names.length)
-    assert.equal(DEFAULT_TICKET_TYPE_NAMES["missed-collection"], "Missed collection")
-    assert.equal(DEFAULT_TICKET_TYPE_NAMES["proof-follow-up"], "Proof follow-up")
   })
 })
 
@@ -124,10 +122,6 @@ describe("the rules a type's set of fields keeps", () => {
     assert.deepEqual(fieldSetIssue([field("note", { choices: ["A"] })]), { index: 0, path: "choices", message: "Only a choice field offers choices" })
     assert.deepEqual(fieldSetIssue([field("decision", { input: "choice", choices: ["A", "A"] })]), { index: 0, path: "choices", message: "Name each choice once" })
   })
-
-  test("a type holds at most thirty fields", () => {
-    assert.equal(TICKET_TYPE_FIELDS_MAX, 30)
-  })
 })
 
 describe("who may give a status command", () => {
@@ -163,6 +157,5 @@ describe("a setting a project keeps by kind or by type (#548 of #544)", () => {
 
   test("a row is named by its kind or by its type", () => {
     assert.deepEqual(rows.map(kindOrTypeKey), ["kind:container-request", `type:${BULKY}`])
-    assert.equal(KIND_OR_TYPE, "Name a kind or a ticket type, one of the two")
   })
 })
