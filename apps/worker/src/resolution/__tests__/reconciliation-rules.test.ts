@@ -20,10 +20,10 @@ import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import type { UnloadingStationOwnership } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 
-import { runAlertRules } from "../resolution/alert-rules"
-import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import { runAlertRules } from "../alert-rules"
+import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 

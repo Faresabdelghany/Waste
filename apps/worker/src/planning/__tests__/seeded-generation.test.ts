@@ -22,10 +22,10 @@ import { generationRun } from "@waste/db/schema/generation"
 import { DEMO_IDS, seedDemo } from "@waste/db/seed/demo"
 import { asc, eq, inArray } from "drizzle-orm"
 
-import { runGeneration } from "../planning/generate-routes"
-import { planAhead } from "../planning/plan-ahead"
-import { databaseUnderTest, ownerUnderTest, withDatabaseName, workerUnderTest } from "./database"
-import { jobContext } from "./context"
+import { runGeneration } from "../generate-routes"
+import { planAhead } from "../plan-ahead"
+import { databaseUnderTest, ownerUnderTest, withDatabaseName, workerUnderTest } from "../../__tests__/database"
+import { jobContext } from "../../__tests__/context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()

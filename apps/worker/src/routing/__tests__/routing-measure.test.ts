@@ -20,10 +20,10 @@ import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { asc, eq } from "drizzle-orm"
 
-import { routingMeasure } from "../routing/measure"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
+import { routingMeasure } from "../measure"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()

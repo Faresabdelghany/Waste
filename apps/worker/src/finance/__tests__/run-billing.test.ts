@@ -40,10 +40,10 @@ import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 import { invoiceColumns } from "@waste/db/shapes/invoices"
 import { runColumns } from "@waste/db/shapes/billing-runs"
 
-import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../finance/run-billing"
-import { rolesUnderTest, withDatabaseName } from "./database"
-import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../run-billing"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { seedFinanceTenant, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const roles = rolesUnderTest()
 const skip = roles.skip

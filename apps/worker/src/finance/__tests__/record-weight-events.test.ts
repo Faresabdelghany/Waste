@@ -28,11 +28,11 @@ import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
-import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../runtime/outbox"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type SeededRoute } from "./finance-tenant"
-import { jobContext } from "./context"
+import { recordBillableEvents, type Recorded } from "../record-billable-events"
+import { consumerQueue, type RelayedJob } from "../../runtime/outbox"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type SeededRoute } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()

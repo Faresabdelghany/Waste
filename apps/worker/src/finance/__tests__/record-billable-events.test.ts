@@ -46,12 +46,12 @@ import type { Job } from "pg-boss"
 import { and, asc, eq } from "drizzle-orm"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
-import type { WorkerContext } from "../jobs"
-import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../runtime/outbox"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import type { WorkerContext } from "../../jobs"
+import { recordBillableEvents, type Recorded } from "../record-billable-events"
+import { consumerQueue, type RelayedJob } from "../../runtime/outbox"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()

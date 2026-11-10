@@ -31,14 +31,14 @@ import type { OutboxKind } from "@waste/contracts/outbox"
 import { asc } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, type Boss } from "../runtime/boss"
-import { CONSUMERS, relay, type WorkerContext } from "../jobs"
-import { defineJob } from "../runtime/definition"
-import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../runtime/relay-outbox"
-import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, routesOf, type RelayedEvent } from "../runtime/outbox"
-import { rolesUnderTest, withDatabaseName } from "./database"
-import { jobContext } from "./context"
-import { until } from "./until"
+import { createBoss, startBoss, type Boss } from "../boss"
+import { CONSUMERS, relay, type WorkerContext } from "../../jobs"
+import { defineJob } from "../definition"
+import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../relay-outbox"
+import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, routesOf, type RelayedEvent } from "../outbox"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { jobContext } from "../../__tests__/context"
+import { until } from "../../__tests__/until"
 
 const roles = rolesUnderTest()
 
