@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto"
 
 import { databaseUnderTest as variablesUnderTest, LOCAL_STACK_HINT } from "@waste/tooling/database-under-test"
 
-import { createDb } from "../client"
+import { createDb, type Database } from "../client"
 import { isLocalHost } from "../local-host"
 
 export type DatabaseUnderTest = {
@@ -78,13 +78,17 @@ export type FreshDatabase = {
  * `template` names a database to copy instead of an empty one: a file whose
  * tests each want a migrated (and seeded) database of their own migrates one
  * once and copies it per test, a file copy where a migration runs every file
- * again. Postgres refuses the copy while anyone is connected to the template.
+ * again. Postgres refuses the copy while anyone is connected to the template
+ * (55006), and a pool closed a moment ago can leave its backend behind it for
+ * longer than Postgres's own five seconds' wait under load: so the copy waits
+ * until the template has no session, and asks again, for `TEMPLATE_WAIT_MS`.
  */
 export async function freshDatabase(adminUrl: string, prefix: string, { template }: { template?: string } = {}): Promise<FreshDatabase> {
   const name = `${prefix}_${randomUUID().replaceAll("-", "")}`
   const admin = createDb(adminUrl, { max: 1 })
   try {
-    await admin.sql.unsafe(template === undefined ? `create database "${name}"` : `create database "${name}" template "${template}"`)
+    if (template === undefined) await admin.sql.unsafe(`create database "${name}"`)
+    else await copyTemplate(admin, name, template)
   } catch (error) {
     await admin.close()
     throw error
@@ -98,6 +102,58 @@ export async function freshDatabase(adminUrl: string, prefix: string, { template
       } finally {
         await admin.close()
       }
+    },
+  }
+}
+
+/** How long a template copy waits, in all, for the template's last session to go. */
+const TEMPLATE_WAIT_MS = 30_000
+const OBJECT_IN_USE = "55006"
+
+async function copyTemplate(admin: Database, name: string, template: string): Promise<void> {
+  const deadline = Date.now() + TEMPLATE_WAIT_MS
+  for (;;) {
+    try {
+      await admin.sql.unsafe(`create database "${name}" template "${template}"`)
+      return
+    } catch (error) {
+      if ((error as { code?: unknown }).code !== OBJECT_IN_USE || Date.now() > deadline) throw error
+    }
+    // The condition the copy needs: no session on the template, as Postgres counts them.
+    while (Date.now() <= deadline) {
+      const [{ sessions }] = await admin.sql<{ sessions: number }[]>`select count(*)::int as sessions from pg_stat_activity where datname = ${template}`
+      if (sessions === 0) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  }
+}
+
+/**
+ * A database a file or a suite makes once — fresh, then `prepare`d (migrated,
+ * seeded) — for its tests to read or to copy. `ready` is awaited by every test
+ * that uses it, so where making it failed each test fails with that cause,
+ * never on an undefined; a database that failed half-way is dropped at once.
+ */
+export function sharedDatabase(adminUrl: string, prefix: string, prepare: (url: string) => Promise<unknown>): { ready: () => Promise<FreshDatabase>; drop: () => Promise<void> } {
+  let made: Promise<FreshDatabase> | undefined
+  const ready = (): Promise<FreshDatabase> =>
+    (made ??= (async () => {
+      const fresh = await freshDatabase(adminUrl, prefix)
+      try {
+        await prepare(fresh.url)
+      } catch (error) {
+        await fresh.drop()
+        throw error
+      }
+      return fresh
+    })())
+  return {
+    ready,
+    drop: async () => {
+      await made?.then(
+        (fresh) => fresh.drop(),
+        () => undefined,
+      )
     },
   }
 }
