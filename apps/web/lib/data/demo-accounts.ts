@@ -5,7 +5,6 @@ export type DemoAccount = {
   email: string
   initials: string
   avatarSrc?: string
-  /** Route the account lands on after signing in. */
   homePath: string
   viewLabel: string
 }

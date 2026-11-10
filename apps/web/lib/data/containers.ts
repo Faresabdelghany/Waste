@@ -28,11 +28,8 @@ import { type BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { MASTER_DATA_MODULE } from "./master-data"
 
-/** Where the projects a form names live. */
 export const ORGANISATION_MODULE = moduleAt("configure.organization")
-/** Where the warehouses a command names live (slice 5a). */
 export const WAREHOUSES_MODULE = moduleAt("resources.warehouses")
-/** The workspace module the containers are the rows of. */
 export const CONTAINERS_MODULE = moduleAt("resources.containers")
 
 /** The container's commands as the dialogs offer them, in the ledger's order: into stock, into service, back, between places, out, and the correction door. */
@@ -68,7 +65,6 @@ export const CONTAINER_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The container was registered." },
 }
 
-/** The edit form: the identity, its project held, and — for a container with a placement — the placement's fraction, cadence and a ledger-set end. */
 export function containerEditForm(record: BusinessRecord): BusinessFormSchema {
   const values = record.submittedValues ?? {}
   const placed = typeof values.placementId === "string" && values.placementId !== ""
@@ -92,7 +88,6 @@ export function containerEditForm(record: BusinessRecord): BusinessFormSchema {
   }
 }
 
-/** The values the edit form opens with: the record's typed values for its fields. */
 export function containerFormValues(record: BusinessRecord): BusinessFormValues {
   const fieldIds = new Set(containerEditForm(record).sections.flatMap((section) => section.fields.map((field) => field.id)))
   return Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && typeof value === "string"))
@@ -107,7 +102,7 @@ export function createContainerRecord(values: BusinessFormValues, { now }: { now
 /**
  * A row a Pilot form has just made, before the API has answered: the
  * generic create path's id shape and the form's `recordKind`, which the
- * adapter owns it by (adapter.ts, `ofKind`), its values as its typed ones and
+ * adapter owns it by (`ofKind`), its values as its typed ones and
  * its project from them. The API's answer replaces everything but the id.
  */
 export function mintedRecord({ id, name, status, recordKind, facts = {}, values }: { id: string; name: string; status: string; recordKind: string; facts?: Record<string, string>; values: BusinessFormValues }): BusinessRecord {
@@ -131,15 +126,10 @@ export function mintedRecord({ id, name, status, recordKind, facts = {}, values 
   }
 }
 
-/** An edited container: its identity kept, the form's values over its typed ones. */
 export function updateContainerRecord(record: BusinessRecord, values: BusinessFormValues): BusinessRecord {
   const label = typeof values.containerId === "string" && values.containerId.trim() !== "" ? values.containerId.trim() : record.name
   return { ...record, name: label, submittedValues: { ...record.submittedValues, ...values } }
 }
-
-// ---------------------------------------------------------------------------
-// The command dialogs
-// ---------------------------------------------------------------------------
 
 const warehouse = (description?: string): BusinessFormField => ({ id: "warehouseId", label: "Warehouse", type: "select", required: true, relation: WAREHOUSES_MODULE, description })
 const occurredAt: BusinessFormField = { id: "occurredAt", label: "When it happened", type: "datetime", description: "Now when blank." }
@@ -148,7 +138,6 @@ const reason = (required: boolean): BusinessFormField => ({ id: "reason", label:
 const stockPlace: BusinessFormField = { id: "toKind", label: "Arrives in", type: "select", defaultValue: "warehouse", options: STOCK_PLACES.map((value) => ({ value, label: PLACE_LABELS[value] })) }
 const lastDay = (required: boolean, description: string): BusinessFormField => ({ id: "lastDay", label: "Last day in service", type: "date", required, description })
 
-/** One command's dialog. */
 const commandForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string): BusinessFormSchema => ({
   key: "resources.containers",
   mode: "action",

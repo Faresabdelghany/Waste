@@ -12,7 +12,6 @@ export type FixtureIdentity = {
   role?: SystemRoleKey
 }
 
-/** The project the office's shell works in, as its sidebar names it. */
 export const OPERATOR_PROJECT_NAME = "Copenhagen Central"
 
 export const OPERATOR_IDENTITY: FixtureIdentity = {

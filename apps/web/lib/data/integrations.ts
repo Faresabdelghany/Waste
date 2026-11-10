@@ -12,7 +12,6 @@ import { OPENROUTESERVICE, quotaBanner } from "@/lib/routing/readings"
 
 export type IntegrationTone = "healthy" | "warning" | "danger" | "neutral"
 
-/** One connection as the pane lists it. */
 export type IntegrationRow = { id: string; name: string; direction: string; description: string; state: string; tone: IntegrationTone }
 
 /** The register the API knows by name, as a person reads it. */
@@ -45,7 +44,6 @@ function storageRow(integrations: Integrations): IntegrationRow {
     : { ...base, state: "Not set up · photos and signatures are refused", tone: "warning" }
 }
 
-/** The latest import as one line: its file and how its rows came out; a refusal a warning, a run not yet complete said so. */
 export function importRow(latest: ImportRun | null): IntegrationRow {
   const base = { id: "imports", name: "CSV import", direction: "Inbound", description: "Customers, properties, containers and agreements from a file, each row's outcome kept." }
   if (latest === null) return { ...base, state: "No import yet", tone: "neutral" }
@@ -56,7 +54,6 @@ export function importRow(latest: ImportRun | null): IntegrationRow {
   return { ...base, state: `${latest.fileName} · ${latest.rowCount} rows imported`, tone: "healthy" }
 }
 
-/** The deployment's connections in the pane's order: the services it calls, then what comes in by file. */
 export function integrationRowsOf({ integrations, quota, now }: { integrations: Integrations; quota: RoutingQuota | null; now: Date }): IntegrationRow[] {
   return [routingRow(integrations, quota, now), registerRow(integrations), storageRow(integrations)]
 }
