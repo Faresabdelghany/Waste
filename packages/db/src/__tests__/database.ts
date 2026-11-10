@@ -106,8 +106,9 @@ export async function withFreshDatabase<T>(
   adminUrl: string,
   prefix: string,
   fn: (freshUrl: string, name: string) => Promise<T>,
+  options: { template?: string } = {},
 ): Promise<T> {
-  const fresh = await freshDatabase(adminUrl, prefix)
+  const fresh = await freshDatabase(adminUrl, prefix, options)
   try {
     return await fn(fresh.url, fresh.name)
   } finally {

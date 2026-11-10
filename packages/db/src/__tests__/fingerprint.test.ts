@@ -6,12 +6,12 @@
 // differs between databases that are the same — pg-boss's partitions named by
 // the day the migration ran — does not.
 import assert from "node:assert/strict"
-import { describe, test } from "node:test"
+import { after, before, describe, test } from "node:test"
 
 import { createDb } from "../client"
 import { compareFingerprints, committedFingerprint, fingerprintDatabase, fingerprintDigest, fingerprintLines, fingerprintText } from "../fingerprint"
 import { migrateDatabase } from "../migrate"
-import { databaseUnderTest, freshDatabase, withFreshDatabase } from "./database"
+import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 describe("a fingerprint's text", () => {
   test("drops its comments and blank lines, and compares line by line in each text's order", () => {
@@ -48,23 +48,32 @@ describe("the committed fingerprint", () => {
 
 const database = databaseUnderTest()
 
+// One fresh database migrated once: the first test reads it, and the second
+// changes a copy of it (`freshDatabase`'s template), not a second migration.
 describe("the fingerprint of a migrated database", { skip: database.skip }, () => {
-  test("is the committed file: regenerate it with `pnpm db:fingerprint --write` whenever a migration changes", () =>
-    withFreshDatabase(database.adminUrl, "waste_fingerprint", async (url) => {
-      await migrateDatabase(url)
-      const { missing, unexpected } = compareFingerprints(committedFingerprint(), await fingerprintDatabase(url))
-      assert.deepEqual(
-        { missing, unexpected },
-        { missing: [], unexpected: [] },
-        "the committed migrations/meta/_fingerprint.txt is not what these migrations make: run `pnpm db:fingerprint --write` on a freshly migrated database and review the difference",
-      )
-    }))
+  let migrated: FreshDatabase
+
+  before(async () => {
+    migrated = await freshDatabase(database.adminUrl, "waste_fingerprint")
+    await migrateDatabase(migrated.url)
+  })
+  after(async () => {
+    await migrated?.drop()
+  })
+
+  test("is the committed file: regenerate it with `pnpm db:fingerprint --write` whenever a migration changes", async () => {
+    const { missing, unexpected } = compareFingerprints(committedFingerprint(), await fingerprintDatabase(migrated.url))
+    assert.deepEqual(
+      { missing, unexpected },
+      { missing: [], unexpected: [] },
+      "the committed migrations/meta/_fingerprint.txt is not what these migrations make: run `pnpm db:fingerprint --write` on a freshly migrated database and review the difference",
+    )
+  })
 
   test("changes with a grant and with a journal row, and not with pg-boss's partitions of another day", async () => {
-    const fresh = await freshDatabase(database.adminUrl, "waste_fingerprint_changes")
+    const fresh = await freshDatabase(database.adminUrl, "waste_fingerprint_changes", { template: migrated.name })
     const owner = createDb(fresh.url, { max: 1 })
     try {
-      await migrateDatabase(fresh.url)
       const baseline = await fingerprintDatabase(fresh.url)
 
       await owner.sql`create table pgboss.queue_stats_20300101 partition of pgboss.queue_stats for values from ('2030-01-01 00:00:00+00') to ('2030-01-02 00:00:00+00')`
