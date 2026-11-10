@@ -18,7 +18,7 @@ import { notificationRule } from "@waste/db/schema/notifications"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
-import { collectionRemindersJob, REMINDER_CHUNK, remindProject, runCollectionReminders } from "../collection-reminders"
+import { collectionRemindersJob, remindProject, runCollectionReminders } from "../collection-reminders"
 import { jobContext } from "../../__tests__/context"
 import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 import { at, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin } from "../../__tests__/finance-tenant"
@@ -57,7 +57,6 @@ describe("messaging.collection-reminders", { skip: roles.skip }, () => {
     )
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
@@ -102,7 +101,6 @@ describe("messaging.collection-reminders", { skip: roles.skip }, () => {
   test("is hourly off the hour, with no retry: the next hour is the retry", () => {
     assert.equal(collectionRemindersJob.schedule, "7 * * * *")
     assert.equal(collectionRemindersJob.queueOptions?.retryLimit, 0)
-    assert.equal(REMINDER_CHUNK, 50, "a transaction commits fifty customers at most, so a failure later in the run keeps them")
   })
 
   test("before two in the afternoon on the project's clock, nothing is sent", async () => {

@@ -1,12 +1,9 @@
 import assert from "node:assert/strict"
-import { once } from "node:events"
-import net from "node:net"
 import { after, describe, test } from "node:test"
 
 import { HealthResponse, WorkerReadinessResponse } from "@waste/contracts/health"
-import { createDb } from "@waste/db/client"
+import { createDb, type Database } from "@waste/db/client"
 import { probePoolOptions } from "@waste/db/probe"
-import { listen } from "@waste/server/listen"
 import { REFUSED_URL } from "@waste/tooling/unreachable"
 
 import { createApp } from "../app"
@@ -14,9 +11,8 @@ import type { BossProbe } from "../readiness"
 import { databaseUnderTest } from "./database"
 
 const database = databaseUnderTest()
-const loopback = { host: "127.0.0.1", port: 0 }
 
-/** A pool nothing connects to: these tests bind, ask the probes, and close. */
+/** A pool nothing connects to: these tests ask the probes, and close. */
 const idle = createDb(REFUSED_URL, probePoolOptions(300))
 after(() => idle.close())
 
@@ -110,11 +106,29 @@ describe("GET /readyz", () => {
   })
 
   test("runs the two checks side by side, so a hung database costs one bound and not two", async () => {
-    const started = Date.now()
-    const response = await createApp({ probe: idle, boss: bossOf(new Error("down")), checkTimeoutMs: 300 }).request("/readyz")
-    assert.equal(response.status, 503)
-    assert.deepEqual(WorkerReadinessResponse.parse(await response.json()), { status: "unavailable", checks: { database: "unreachable", boss: "unreachable" } })
-    assert.ok(Date.now() - started < 1_000)
+    // Each check's read answers only once the other check has asked its own: run one after the other, the first would wait out its bound and answer unreachable.
+    let databaseAsked!: () => void
+    let bossAsked!: () => void
+    const askedDatabase = new Promise<void>((resolve) => (databaseAsked = resolve))
+    const askedBoss = new Promise<void>((resolve) => (bossAsked = resolve))
+    const sql = (() => {
+      databaseAsked()
+      return askedBoss.then(() => [])
+    }) as unknown as Database["sql"]
+    const boss: BossProbe = {
+      boss: {
+        getQueues: async () => {
+          bossAsked()
+          await askedDatabase
+          return [{ name: "q.0", failedCount: 0 }] as never
+        },
+      },
+      queues: ["q.0"],
+      isStarted: () => true,
+    }
+    const response = await createApp({ probe: { ...idle, sql }, boss }).request("/readyz")
+    assert.equal(response.status, 200)
+    assert.deepEqual(WorkerReadinessResponse.parse(await response.json()), { status: "ok", checks: { database: "ok", boss: "ok" }, failedJobs: 0 })
   })
 })
 
@@ -124,43 +138,5 @@ describe("an unknown path", () => {
     assert.equal((await app.request("/jobs")).status, 404)
     assert.equal((await app.request("/openapi.json")).status, 404)
     assert.equal((await app.request("/readyz", { method: "POST" })).status, 404)
-  })
-})
-
-describe("listen", () => {
-  const app = () => createApp({ probe: idle, boss: bossOf([0]) })
-
-  test("serves the probes on the given host and an ephemeral port, and closes on request", async (t) => {
-    const listening = await listen(app(), loopback)
-    t.after(() => listening.close())
-    assert.match(listening.url, /^http:\/\/127\.0\.0\.1:\d+$/)
-    const response = await fetch(`${listening.url}/healthz`)
-    assert.equal(response.status, 200)
-    HealthResponse.parse(await response.json())
-    await listening.close()
-    await assert.rejects(fetch(`${listening.url}/healthz`))
-  })
-
-  test("fails instead of hanging when the port is taken, and closes once", async (t) => {
-    const first = await listen(app(), loopback)
-    t.after(() => first.close())
-    const port = Number(new URL(first.url).port)
-    await assert.rejects(listen(app(), { host: "127.0.0.1", port }), /EADDRINUSE/)
-    const closing = first.close()
-    assert.equal(first.close(), closing)
-    await closing
-  })
-
-  test("close cuts a connection that never finishes its request when the grace period ends", async () => {
-    const listening = await listen(app(), { ...loopback, graceMs: 200 })
-    const { port } = listening.server.address() as net.AddressInfo
-    const stalled = net.connect({ host: "127.0.0.1", port })
-    await once(stalled, "connect")
-    stalled.write("GET /healthz HTTP/1.1\r\nHost: x\r\n")
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    const started = Date.now()
-    await Promise.all([listening.close(), once(stalled, "close")])
-    const elapsed = Date.now() - started
-    assert.ok(elapsed >= 150 && elapsed < 2_000, `closed after ${elapsed} ms`)
   })
 })

@@ -50,7 +50,6 @@ describe("the fill-driven emptying", { skip: roles.skip }, () => {
     withCompany(api.db, tenant.companyId, (tx) => tx.select().from(alert).where(and(eq(alert.companyId, tenant.companyId), eq(alert.containerId, containerId), eq(alert.rule, "fill-threshold"))).orderBy(asc(alert.id)))
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))

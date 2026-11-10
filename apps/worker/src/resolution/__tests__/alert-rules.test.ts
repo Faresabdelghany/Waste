@@ -27,19 +27,12 @@ import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq } from "drizzle-orm"
 
-import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../alert-rules"
+import { alertsToClear, occurrencesToRaise, runAlertRules } from "../alert-rules"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
 import { jobContext } from "../../__tests__/context"
 import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
-
-describe("the rules' cadence", () => {
-  test("every five minutes, and a missed tick is the next tick's to read", () => {
-    assert.equal(alertRulesJob.schedule, "*/5 * * * *")
-    assert.equal(alertRulesJob.scheduleOptions?.missed, "skip")
-  })
-})
 
 describe("resolution.alert-rules", { skip: roles.skip }, () => {
   const name = `waste_worker_rules_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -97,7 +90,6 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
   }
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))

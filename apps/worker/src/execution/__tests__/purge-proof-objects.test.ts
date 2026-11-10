@@ -74,7 +74,6 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
   let routeQuiet: string
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))

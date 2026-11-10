@@ -19,9 +19,8 @@
 // reads the right facts, writes through `openTicket` fenced as the tenant,
 // and is idempotent by the event's id. The handler is called directly with
 // the job's data, since what pg-boss does with a queue is boot.test.ts's to
-// prove; the one wiring fact this file holds is the registry's five entries,
-// one per kind on its own queue the relay sends to, and boot.test.ts holds that
-// a `RelayedEvent` sent there is worked by them.
+// prove, and the registry's five entries, one per kind on its own queue the
+// relay sends to, are registry.test.ts's.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -34,15 +33,14 @@ import { ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/
 import type { Tx } from "@waste/db/client"
 import { withCompany } from "@waste/db/tenant"
 import { stopMissed } from "@waste/domain/resolution/ticket-stops"
-import { RESOLUTION_EVENT_KINDS } from "@waste/domain/resolution/from-event"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
-import { JOBS } from "../../jobs"
-import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, type OpenTicketsOutcome } from "../open-tickets"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUE_OPTIONS, outboxQueue, relayedEventOf } from "../../runtime/outbox"
+import { openTicketFor, type OpenTicketsOutcome } from "../open-tickets"
+import { relayedEventOf } from "../../runtime/outbox"
 import { at, dropConsumerTenant, outboxJob, pickupPayload, proofPayload, receiptPayload, routePayload, seedConsumerTenant, seedReceipt, seedRoute, testId, type ConsumerTenant } from "../../__tests__/consumer-fixtures"
 import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { until } from "../../__tests__/until"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -75,21 +73,6 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
   const historyOf = async (ticketId: string) => withCompany(pool.db, tenant.companyId, (tx) => tx.select().from(ticketEvent).where(and(eq(ticketEvent.companyId, tenant.companyId), eq(ticketEvent.ticketId, ticketId))).orderBy(asc(ticketEvent.id)))
   const outboxAbout = async (ticketId: string) => withCompany(pool.db, tenant.companyId, (tx) => tx.select().from(outboxEvent).where(and(eq(outboxEvent.companyId, tenant.companyId), eq(outboxEvent.aggregateId, ticketId))).orderBy(asc(outboxEvent.id)))
   const ticketById = async (id: string) => withCompany(pool.db, tenant.companyId, async (tx) => (await tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, id))))[0])
-
-  test("is in the registry, one entry per kind Resolution reads on its own queue of the kind (#339) and none for route-cancelled, with a retry policy", () => {
-    assert.deepEqual(RESOLUTION_EVENT_KINDS, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"])
-    assert.deepEqual(
-      openTickets.map((job) => job.queue),
-      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.route-problem-reported.resolution", "outbox.command-rejected.resolution"],
-    )
-    for (const job of openTickets) {
-      assert.ok(JOBS.includes(job), job.queue)
-      assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
-      assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS }, "the consumer's retry policy over the seam's retry, dead letter and retention")
-    }
-    assert.deepEqual(OPEN_TICKETS_QUEUE_OPTIONS, { retryLimit: 3, retryDelay: 5, retryBackoff: true })
-    assert.ok(!openTickets.some((job) => job.inherits === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
-  })
 
   test("a pickup-failed opens one missed-collection ticket, high, from the driver app, naming the stop, its container, its address and the route's actual driver, with created_by null and the event's id, a created row and a ticket-opened event", async () => {
     const seeded = await seedRoute(pool, tenant)
@@ -436,11 +419,6 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     }
   })
 
-  const expectEventually = async (holds: () => Promise<boolean>, what: string) => {
-    for (const started = Date.now(); Date.now() - started < 5_000; await new Promise((resolve) => setTimeout(resolve, 25))) if (await holds()) return
-    assert.fail(what)
-  }
-
   /** A driver of the tenant's with no ticket yet, so a rejection of theirs opens one. */
   const driverOfItsOwn = async (name: string) => {
     const id = testId()
@@ -631,29 +609,35 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
 
   test("a problem whose stop's case the office closes while the fold waits on the case's row is a case of its own, never a comment on a closed case", async () => {
     const office = createDb(api.url, { max: 1 })
+    let release = () => {}
+    const settling: Promise<unknown>[] = []
     try {
       const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible" }] })
       const [stop] = seeded.pickupIds
       const caseId = ((await openTicketFor(failureOn(seeded, stop, "bin1"), context())) as { ticketId: string }).ticketId
       let held!: () => void
       const holding = new Promise<void>((resolve) => (held = resolve))
-      let release!: () => void
       const released = new Promise<void>((resolve) => (release = resolve))
+      let officePid!: number
       // The office's complete: the case's row lock, then the closing, committed once the job is waiting on it.
       const closing = withCompany(office.db, tenant.companyId, async (tx) => {
         await tx.select({ id: ticket.id }).from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, caseId))).for("update")
+        const [backend] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+        officePid = backend.pid
         held()
         await released
         await tx.update(ticket).set({ status: "completed", resolution: "recollected", closedAt: NOW }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, caseId)))
       })
+      settling.push(closing)
       await holding
       const job = openTicketFor(problemOn(seeded, stop, "bin1", "Please come back"), context())
-      // Until the job waits on the case's row lock: the read under `for no key update`, as the office holds the row.
-      const waiting = async () => {
-        const rows = (await pool.db.execute(sql`select count(*)::int as waiting from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%for no key update%'`)) as unknown as { waiting: number }[]
-        return rows[0]?.waiting ?? 0
+      settling.push(job)
+      // Until the job waits on the case's row lock: a session the office's session holds back, so no other session on the stack can stand in for it.
+      const blockedByOffice = async () => {
+        const [row] = await pool.sql<{ blocked: number }[]>`select count(*)::int as blocked from pg_stat_activity where ${officePid}::int = any(pg_blocking_pids(pid))`
+        return row.blocked > 0
       }
-      await expectEventually(async () => (await waiting()) > 0, "the job waits on the case's row lock")
+      await until(blockedByOffice, 10_000, "the job waiting on the office's row lock")
       release()
       await closing
       const outcome = await job
@@ -661,6 +645,9 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       assert.notEqual((outcome as { ticketId: string }).ticketId, caseId)
       assert.deepEqual((await historyOf(caseId)).map((entry) => entry.kind), ["created"], "nothing written on the case the office closed")
     } finally {
+      // A failure above leaves the office's transaction and the job in flight: let both settle before the pool closes under them.
+      release()
+      await Promise.allSettled(settling)
       await office.close()
     }
   })

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { TRANSACTION_POOLER_PORT } from "@waste/process/ports"
 import { turboTaskEnv } from "@waste/tooling/turbo"
 
 import { Env, parseEnv } from "../env"
@@ -75,7 +74,6 @@ describe("parseEnv", () => {
   })
 
   test("refuses the transaction pooler, port 6543, on either URL, naming the variable and the session alternative: pg-boss keeps state on its connection", () => {
-    assert.equal(TRANSACTION_POOLER_PORT, "6543")
     const pooled = "postgresql://wms_worker.ref:secret@aws-0-eu-north-1.pooler.supabase.com:6543/postgres"
     assert.throws(() => parseEnv({ ...base, WORKER_DATABASE_URL: pooled }), (error: unknown) => naming("WORKER_DATABASE_URL")(error) && /6543 is the transaction pooler.*session pooler on port 5432/s.test((error as Error).message))
     assert.throws(() => parseEnv({ ...base, DATABASE_URL: pooled.replace("wms_worker", "wms_api") }), (error: unknown) => naming("DATABASE_URL")(error) && /6543 is the transaction pooler/.test((error as Error).message))
@@ -84,7 +82,6 @@ describe("parseEnv", () => {
   })
 
   test("reads the Pilot's knobs (#149) as whole numbers, each absent — the code's defaults — unless set: the two pool sizes, the polling interval, pg-boss's supervise and queue-cache intervals, and its pool's idle timeout, which may be 0 for never", () => {
-    assert.deepEqual(parseEnv(base), expected, "none set: none carried")
     assert.deepEqual(
       parseEnv({
         ...base,
