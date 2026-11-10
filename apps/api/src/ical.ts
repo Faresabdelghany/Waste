@@ -21,7 +21,6 @@ export type CalendarEvent = { uid: string; date: string; summary: string; descri
 
 export type Calendar = { name: string; timezone: string; events: readonly CalendarEvent[]; now: Date }
 
-/** The media type a feed answers with. */
 export const CALENDAR_MEDIA_TYPE = "text/calendar; charset=utf-8"
 
 const escapeText = (text: string): string => text.replaceAll("\\", "\\\\").replaceAll(";", "\\;").replaceAll(",", "\\,").replace(/\r?\n/g, "\\n")
@@ -52,7 +51,6 @@ export function fold(line: string): string {
   return parts.join("\r\n ")
 }
 
-/** The feed, CRLF-terminated. */
 export function icsOf({ name, timezone, events, now }: Calendar): string {
   const stamp = stampOf(now)
   const lines = [

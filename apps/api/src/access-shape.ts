@@ -29,20 +29,17 @@ import type { Grant } from "@waste/contracts/permissions"
 import { normaliseGrants } from "@waste/domain/access/grants"
 import { ACTIONS, MODULE_KEYS } from "@waste/domain/access/modules"
 
-/** The row's two columns the status is read from. */
 export type StatusColumns = {
   /** `auth.users.id` once the hook has bound the account; null while invited. */
   authUserId: string | null
   deactivatedAt: Date | null
 }
 
-/** A user's status: deactivated if it is switched off, else invited until a login is bound, else active. */
 export function userStatus({ authUserId, deactivatedAt }: StatusColumns): UserStatus {
   if (deactivatedAt !== null) return "deactivated"
   return authUserId === null ? "invited" : "active"
 }
 
-/** The one way an account reaches something. */
 export type AccessShape =
   | { kind: "all-projects" }
   | { kind: "projects"; projectIds: string[] }

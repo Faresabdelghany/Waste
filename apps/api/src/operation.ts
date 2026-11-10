@@ -214,5 +214,4 @@ export class Routes {
 /** An operation declared apart from its route, where several routes share most of it; its types kept as written, for the handler's. */
 export const operation = <const S extends Operation>(declared: S): S => declared
 
-/** A route module's builder over the app's guards. */
 export const routes = (guards: Guards): Routes => new Routes(guards)
