@@ -63,6 +63,51 @@ export function withUser(url: string, user: string): string {
   return parsed.toString()
 }
 
+/**
+ * A test database's name: the file's prefix, the millisecond it was made
+ * (`Date.now()` in base 36, eight characters until 2059) and six random hex
+ * digits — the shape apps/worker's test databases take too, so either
+ * package's sweep reads the other's stamp the same way — fitting Postgres's
+ * 63 bytes beside any prefix of up to 47 and saying its own age.
+ */
+export function testDatabaseName(prefix: string, now: number = Date.now()): string {
+  return `${prefix}_${now.toString(36)}_${randomUUID().replaceAll("-", "").slice(0, 6)}`
+}
+
+const TEST_DATABASE = /^waste_[a-z0-9_]*_([0-9a-z]{8})_[0-9a-f]{6}$/
+/** How old a test database is before a later run may take it for abandoned: far past any file's budget. */
+export const ABANDONED_AFTER_MS = 6 * 60 * 60 * 1000
+
+/** This process's one sweep, which the first `freshDatabase` starts and every later one awaits. */
+let swept: Promise<string[]> | undefined
+
+/**
+ * Drops the test databases a timed-out or killed run left on the stack: a name
+ * `testDatabaseName` made, older than `ABANDONED_AFTER_MS`, with no session on
+ * it. Safe beside concurrent runs: no run keeps a database that long, a
+ * database with a session is left alone, and the drop is not forced, so one
+ * that a session reaches in between is refused (55006) and left too. Names
+ * of any other shape — the stack's own, an older run's — are never touched.
+ * Answers the names it dropped.
+ */
+export async function sweepAbandonedDatabases(admin: Database, now: number = Date.now()): Promise<string[]> {
+  const idle = await admin.sql<{ name: string }[]>`
+    select d.datname as name from pg_database d
+    where not d.datistemplate and not exists (select 1 from pg_stat_activity a where a.datname = d.datname)`
+  const dropped: string[] = []
+  for (const { name } of idle) {
+    const stamp = TEST_DATABASE.exec(name)?.[1]
+    if (stamp === undefined || now - Number.parseInt(stamp, 36) < ABANDONED_AFTER_MS) continue
+    try {
+      await admin.sql.unsafe(`drop database if exists "${name}"`)
+      dropped.push(name)
+    } catch {
+      // Someone reached it in between: it is not abandoned after all.
+    }
+  }
+  return dropped
+}
+
 export type FreshDatabase = {
   url: string
   name: string
@@ -82,11 +127,18 @@ export type FreshDatabase = {
  * (55006), and a pool closed a moment ago can leave its backend behind it for
  * longer than Postgres's own five seconds' wait under load: so the copy waits
  * until the template has no session, and asks again, for `TEMPLATE_WAIT_MS`.
+ *
+ * The name carries when it was made (`testDatabaseName`). A failed hook or test
+ * still reaches `drop`, but a file the runner times out, or a run killed
+ * outright, never does: so the first database a process makes sweeps the
+ * stack of the ones such runs left (`sweepAbandonedDatabases`).
  */
 export async function freshDatabase(adminUrl: string, prefix: string, { template }: { template?: string } = {}): Promise<FreshDatabase> {
-  const name = `${prefix}_${randomUUID().replaceAll("-", "")}`
+  const name = testDatabaseName(prefix)
   const admin = createDb(adminUrl, { max: 1 })
   try {
+    swept ??= sweepAbandonedDatabases(admin).catch(() => [])
+    await swept
     if (template === undefined) await admin.sql.unsafe(`create database "${name}"`)
     else await copyTemplate(admin, name, template)
   } catch (error) {
