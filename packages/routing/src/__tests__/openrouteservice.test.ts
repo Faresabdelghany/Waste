@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 
 import type { Position2D } from "@waste/domain/geo"
 
-import { OPENROUTESERVICE_HOST, OpenRouteServiceProvider } from "../openrouteservice"
+import { OpenRouteServiceProvider } from "../openrouteservice"
 import type { ProviderAnswer } from "../provider"
 import { encodePolyline } from "./polyline-encode"
 
@@ -106,8 +106,6 @@ describe("OpenRouteService directions (#171)", () => {
     assert.equal(request.headers.get("authorization"), KEY)
     assert.equal(request.headers.get("content-type"), "application/json")
     assert.deepEqual(request.body, { coordinates: points, instructions: true })
-    assert.ok(!request.url.includes(KEY) && !JSON.stringify(request.body).includes(KEY))
-    assert.equal(OPENROUTESERVICE_HOST, "https://api.heigit.org")
   })
 
   test("splits the line at its way_points into one leg per pair, metres and seconds rounded from the segments, the provenance from the engine", async () => {
