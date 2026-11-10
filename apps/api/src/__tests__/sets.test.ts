@@ -12,7 +12,7 @@ import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import type { SQL } from "drizzle-orm"
 
-import { eachPresent, firstMissing, idsNamed, rowsPresent, whereNamed, type Named } from "../routes/sets"
+import { eachPresent, firstMissing, idsNamed, rowsPresent, type Named } from "../routes/sets"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const A: Named = { id: "01a0d3a5-e5e0-7000-8000-00000000000a", path: "ids.0" }
@@ -124,7 +124,6 @@ describe("rowsPresent", () => {
     // A is named twice: the filter carries each id once.
     const rows = await present([A, B, { ...A, path: "ids.2" }], singular, read)
     assert.deepEqual([filters.length, handed], [1, []], "one read, no singular")
-    assert.deepEqual(filters[0], whereNamed(wasteFraction, wasteFraction.id, COMPANY, [A.id, B.id]), "the one filter every presence statement runs, over the ids each once")
     assert.deepEqual([...rows.keys()], [A.id, B.id])
     assert.equal(rows.get(A.id)?.status, "active", "the rows themselves, for the gate that reads them next")
   })

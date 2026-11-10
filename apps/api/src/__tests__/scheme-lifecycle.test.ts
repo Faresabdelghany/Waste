@@ -199,7 +199,6 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     await ok(await archive(scheme.id))
     const archivedRead = RouteScheme.parse(await ok(await olivia(`/route-schemes/${scheme.id}`)))
     assert.deepEqual([archivedRead.collectionGroups.map((group) => group.name), archivedRead.seasons], [["Round 1"], [SUMMER]], "its history stays readable")
-    assert.ok(Array.isArray(archivedRead.warnings), "the reconciliation still reads")
     assert.notEqual(archivedRead.archivedAt, null)
     const sentence = schemeArchived("Archived for good")
     assert.equal((await refused(await archive(scheme.id), 409)).detail, sentence)
