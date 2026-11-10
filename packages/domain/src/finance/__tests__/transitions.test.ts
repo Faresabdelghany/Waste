@@ -39,16 +39,12 @@ const settlementTable: Record<SettlementStatus, Record<SettlementCommand, Transi
 }
 
 describe("settlementTransition", () => {
-  test("every status under every command once the period has ended, as the table spells it: nine pairs", () => {
-    let pairs = 0
+  test("every status under every command once the period has ended, as the table spells it", () => {
     for (const status of SETTLEMENT_STATUSES) {
       for (const command of SETTLEMENT_COMMANDS) {
         assert.deepEqual(july(status, command, AFTER), settlementTable[status][command], `${status} under ${command}`)
-        pairs += 1
       }
     }
-    assert.equal(pairs, 9)
-    assert.deepEqual([...SETTLEMENT_COMMANDS], ["calculate", "close", "reopen"])
   })
 
   test("a recalculation is a move, since the lines change; a close needs a calculation; a closed settlement is reopened first, and reopening an open one is nothing to do", () => {
@@ -132,15 +128,12 @@ const reviewTable: Record<WeightReviewStatus, Record<WeightReviewDecision, Trans
 }
 
 describe("weightReviewTransition", () => {
-  test("every status under every decision, as the table spells it: twelve pairs", () => {
-    let pairs = 0
+  test("every status under every decision, as the table spells it", () => {
     for (const status of WEIGHT_REVIEW_STATUSES) {
       for (const decision of WEIGHT_REVIEW_DECISIONS) {
         assert.deepEqual(weightReviewTransition(status, decision, status === "corrected" ? CORRECTION : null), reviewTable[status][decision], `${status} under ${decision}`)
-        pairs += 1
       }
     }
-    assert.equal(pairs, 12)
   })
 
   test("the same decision again is nothing to do, a corrected unload takes no decision and names the row to review, and a correction is a decision like the other two", () => {

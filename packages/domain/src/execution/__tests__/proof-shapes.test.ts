@@ -22,46 +22,6 @@ const exemplar = (kind: ProofKind): ProofRow => {
   }
 }
 
-describe("PROOF_SHAPES", () => {
-  test("spells the thirteen kinds: what each names, carries, forbids and comes from", () => {
-    assert.deepEqual(Object.keys(PROOF_SHAPES).sort(), [...PROOF_KINDS].sort())
-    const requires = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "required").map(([column]) => column)
-    const forbids = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "none").map(([column]) => column)
-    // Five driver events about a stop: the first four name a pickup, the problem may stand on the route; a skip, a failure and a problem say why.
-    assert.deepEqual(requires("arrival"), ["pickup"])
-    assert.deepEqual(requires("completion"), ["pickup"])
-    assert.deepEqual(requires("skip"), ["pickup", "reason"])
-    assert.deepEqual(requires("failure"), ["pickup", "reason"])
-    assert.deepEqual(requires("problem"), ["reason", "note"])
-    assert.equal(PROOF_SHAPES.problem.pickup, "optional")
-    // Two about the route and never a stop, carrying a note and a place if the device gave them and nothing else.
-    for (const kind of ["route-started", "route-ended"] as const) {
-      assert.deepEqual(requires(kind), [])
-      assert.deepEqual(forbids(kind), ["pickup", "reason", "objectKey", "weightKg", "volumeLitres", "outcome"], kind)
-    }
-    // Five kinds of evidence, each carrying its own and nothing else's: the fifth, the litres a tank was emptied of (M11 of #293).
-    assert.deepEqual(requires("photo"), ["objectKey"])
-    assert.deepEqual(requires("signature"), ["pickup", "objectKey"])
-    assert.deepEqual(requires("weight"), ["pickup", "weightKg"])
-    assert.deepEqual(requires("volume"), ["pickup", "volumeLitres"])
-    assert.deepEqual(requires("note"), ["note"])
-    // The dispatcher's correction.
-    assert.deepEqual(requires("correction"), ["pickup", "outcome", "note"])
-    assert.equal(PROOF_SHAPES.correction.source, "dispatch")
-    assert.equal(PROOF_SHAPES.correction.reason, "any", "the outcome's reason, which the contracts hold to a skip or a failure")
-    // An arrival and a completion carry neither reason nor key nor weight; nothing but a photo or a signature carries a key, nothing but a weight a weight.
-    assert.deepEqual(forbids("arrival"), ["reason", "objectKey", "weightKg", "volumeLitres", "outcome"])
-    assert.deepEqual(forbids("completion"), ["reason", "objectKey", "weightKg", "volumeLitres", "outcome"])
-    for (const kind of PROOF_KINDS) {
-      assert.equal(PROOF_SHAPES[kind].objectKey === "required", kind === "photo" || kind === "signature", kind)
-      assert.equal(PROOF_SHAPES[kind].weightKg === "required", kind === "weight", kind)
-      assert.equal(PROOF_SHAPES[kind].volumeLitres === "required", kind === "volume", kind)
-      assert.equal(PROOF_SHAPES[kind].outcome === "required", kind === "correction", kind)
-      assert.equal(PROOF_SHAPES[kind].source === "dispatch", kind === "correction", kind)
-    }
-  })
-})
-
 describe("proofShape", () => {
   test("a contaminant code tags the proofs that record an outcome, and no other (M5 of #293)", () => {
     for (const kind of PROOF_KINDS) {

@@ -129,7 +129,11 @@ describe("VehiclePatch and VehicleCompartmentsSet", () => {
     const patch = { registration: "CN 42 019", status: "retired", requiredLicenceClass: "ce", homeDepotId: null, fuel: "electric" }
     assert.deepEqual(VehiclePatch.parse(patch), patch)
     refusesAnEmptyPatch(VehiclePatch)
-    for (const key of ["projectId", "kind", "compartments", "id"]) assert.match(refusal(VehiclePatch.safeParse({ notes: "x", [key]: "y" }))[0].message, new RegExp(key))
+    for (const key of ["projectId", "kind", "compartments", "id"]) {
+      const issues = refusal(VehiclePatch.safeParse({ notes: "x", [key]: "y" }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], key)
+      assert.match(issues[0].message, new RegExp(key), key)
+    }
     assert.deepEqual(refusal(VehiclePatch.safeParse({ ownership: "company", serviceProviderId: FOURTH })), [providerIssue])
     assert.deepEqual(VehiclePatch.parse({ serviceProviderId: FOURTH }), { serviceProviderId: FOURTH }, "the ownership is the stored row's to judge")
   })

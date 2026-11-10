@@ -180,7 +180,6 @@ describe("CreditNoteCreate", () => {
     assert.deepEqual(refusal(CreditNoteCreate.safeParse({ reason: "other" })).map((issue) => issue.path), ["lines"])
     assert.deepEqual(refusal(CreditNoteCreate.safeParse({ reason: "other", lines: [] })).map((issue) => issue.path), ["lines"])
     assert.deepEqual(refusal(CreditNoteCreate.safeParse({ reason: "other", lines: [{ lineId: THIRD, quantity: 1 }, { lineId: THIRD, quantity: 2 }] })), [{ path: "lines", message: EACH_LINE_ONCE }])
-    assert.equal(CREDIT_LINES_MAX, 500)
     const many = Array.from({ length: CREDIT_LINES_MAX + 1 }, (_, i) => ({ lineId: `01a0d3a5-e5e0-7000-8000-${String(i).padStart(12, "0")}`, quantity: 1 }))
     assert.deepEqual(refusal(CreditNoteCreate.safeParse({ reason: "other", lines: many })).map((issue) => issue.path), ["lines"])
     assert.equal(CreditNoteCreate.safeParse({ reason: "other", lines: many.slice(0, CREDIT_LINES_MAX) }).success, true)

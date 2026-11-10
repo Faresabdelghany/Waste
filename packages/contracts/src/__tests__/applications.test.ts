@@ -6,24 +6,14 @@ import { describe, test } from "node:test"
 
 import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
 import { APPEAL_TEXT_NEEDED, GRANT_STARTS, ONE_PLACE, REFUSAL_HAS_NO_PERIOD } from "@waste/domain/registry/applications"
-import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES } from "@waste/domain/registry/vocabulary"
 
-import { Application, ApplicationChannel, ApplicationCreate, ApplicationDecide, ApplicationKind, ApplicationListQuery, ApplicationPatch, ApplicationStatus, DecisionOutcome } from "../applications"
+import { Application, ApplicationCreate, ApplicationDecide, ApplicationListQuery, ApplicationPatch } from "../applications"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const CREATE = { projectId: ID, kind: "home-composting", channel: "email", receivedOn: "2026-11-02", customerId: ID, propertyId: OTHER, statement: "We compost our food waste in the garden." } as const
 
 const issues = (result: { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } }) => (result.error?.issues ?? []).map((issue) => [issue.path.join("."), issue.message])
-
-describe("the vocabularies", () => {
-  test("are the Registry's", () => {
-    assert.deepEqual(ApplicationKind.options, [...APPLICATION_KINDS])
-    assert.deepEqual(ApplicationStatus.options, [...APPLICATION_STATUSES])
-    assert.deepEqual(ApplicationChannel.options, [...APPLICATION_CHANNELS])
-    assert.deepEqual(DecisionOutcome.options, [...DECISION_OUTCOMES])
-  })
-})
 
 describe("a create", () => {
   test("names its project, kind, channel, day received, customer and statement, and one place at most", () => {

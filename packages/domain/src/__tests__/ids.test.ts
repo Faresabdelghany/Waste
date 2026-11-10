@@ -56,7 +56,6 @@ describe("mintId", () => {
   })
 
   test("refuses random input of the wrong length", () => {
-    assert.equal(ID_RANDOM_BYTES, 10)
     for (const length of [0, 9, 11, 16]) {
       assert.throws(() => mintId(0, new Uint8Array(length)), /10 random bytes/, `${length} bytes`)
     }

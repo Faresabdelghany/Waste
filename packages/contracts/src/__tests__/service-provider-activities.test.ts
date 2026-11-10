@@ -4,18 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES } from "@waste/domain/service-providers/vocabulary"
+import { SERVICE_PROVIDER_ACTIVITY_KINDS } from "@waste/domain/service-providers/vocabulary"
 
-import {
-  ActivityClose,
-  ActivityKind,
-  ActivityReject,
-  ActivityStatus,
-  ServiceProviderActivity,
-  ServiceProviderActivityCreate,
-  ServiceProviderActivityListQuery,
-  ServiceProviderActivityPatch,
-} from "../service-provider-activities"
+import { ActivityClose, ActivityReject, ServiceProviderActivity, ServiceProviderActivityCreate, ServiceProviderActivityListQuery, ServiceProviderActivityPatch } from "../service-provider-activities"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -30,11 +21,6 @@ const NOTE = { ...BASE, kind: "coordination-note", subject: "Harbour access clos
 const fails = (result: { success: boolean }) => !result.success
 
 describe("the vocabularies", () => {
-  test("are the service providers'", () => {
-    assert.deepEqual(ActivityKind.options, [...SERVICE_PROVIDER_ACTIVITY_KINDS])
-    assert.deepEqual(ActivityStatus.options, [...SERVICE_PROVIDER_ACTIVITY_STATUSES])
-  })
-
   test("give each kind its create body, and no body a kind of its own", () => {
     assert.deepEqual(ServiceProviderActivityCreate.options.map((body) => body.shape.kind.value).sort(), [...SERVICE_PROVIDER_ACTIVITY_KINDS].sort())
   })

@@ -16,8 +16,7 @@
 // resources/licence.ts spells the implication between them. The statuses of a
 // depot and of an unloading station are the same four, so
 // `UNLOADING_STATION_STATUSES` is `DEPOT_STATUSES` under a second name — one
-// tuple, two readers — which is why the walking test counts one name more
-// than lists. A Drop-off Point (Issue #293, M3) is a place residents
+// tuple, two readers. A Drop-off Point (Issue #293, M3) is a place residents
 // bring waste to themselves, of the two kinds the glossary names.
 // `DRIVER_ABSENCE_REASONS` and
 // `VEHICLE_UNAVAILABILITY_REASONS` (O6 of #290) say why a driver is away or a

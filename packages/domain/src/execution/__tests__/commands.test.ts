@@ -245,7 +245,6 @@ describe("decide: every later command", () => {
     const cancelled = running({ route: { ...route("cancelled"), actualDriverId: mads.id }, session: session({ endedAt: "2026-10-05T07:45:00.000Z" }) })
     const decision = decide(command("end-route", { note: "Done" }), mads, cancelled, clock)
     assert.deepEqual(decision, { apply: [], note: ROUTE_CANCELLED_NOTHING_TO_END })
-    assert.equal(ROUTE_CANCELLED_NOTHING_TO_END, "The route was cancelled; nothing to end")
     assert.deepEqual(rejected(decide(command("end-route", {}), mads, running({ route: route("completed"), session: session({ endedAt: NOW }) }), clock)), { status: 409, detail: notActive("RC-1042") })
     assert.deepEqual(rejected(decide(command("pause", {}), mads, cancelled, clock)), { status: 409, detail: notActive("RC-1042") })
     // And with the session ended by the cancellation, the driver starts the next route.

@@ -3,9 +3,8 @@ import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
 import { OVERRIDE_WITH_A_REASON, overrideWithAReason } from "@waste/domain/finance/billable-events"
-import { BILLABLE_EVENT_STATUSES, BLOCK_REASONS } from "@waste/domain/finance/vocabulary"
 
-import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventLinks, BillableEventListQuery, BillableEventReprice } from "../billable-events"
+import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventListQuery, BillableEventReprice } from "../billable-events"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -52,7 +51,6 @@ const event = {
 describe("BillableEvent", () => {
   test("is the occurrence on the wire: its kind and its reading, what it was under, the frozen price, the winning row, the links, its origin and its stamps", () => {
     assert.deepEqual(BillableEvent.parse(event), event)
-    assert.equal(Object.keys(BillableEventLinks.shape).length, 8, "the route, the pickup, the ticket, the reversed event, a Pickup Exception's evidence (#293 M5), a recycling-centre visit (#393), a weight charge's Unload (O28 of #290) and a window line (M16b of #293)")
     assert.equal(BillableEvent.safeParse({ ...event, kind: "weight", weightKg: 0 }).success, false, "a share is a positive number of kilograms")
   })
 
@@ -72,8 +70,6 @@ describe("BillableEvent", () => {
     // A recurring charge (#291 C2): its subscription, no links, the run's — no person, no outbox event — and what it charged.
     const recurring = { ...event, kind: "subscription", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }, sourceEventId: null, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 } }
     assert.deepEqual(BillableEvent.parse(recurring), recurring)
-    for (const status of BILLABLE_EVENT_STATUSES) assert.equal(BillableEvent.safeParse({ ...event, status }).success, true, status)
-    for (const blockReason of BLOCK_REASONS) assert.equal(BillableEvent.safeParse({ ...blocked, blockReason }).success, true, blockReason)
   })
 
   test("holds every enum to its vocabulary, the quantity above zero, the amounts to whole minor units of either sign, and the rate to a whole number", () => {

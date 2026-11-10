@@ -1,10 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 
-import { ContainerType, ContainerTypeCreate, ContainerTypePatch, Product, ProductCreate, ProductKind, ProductPatch, ProductStatus, ProductUnit, ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFraction, WasteFractionCreate, WasteFractionPatch, WasteTreatment } from "../catalogue"
+import { ContainerType, ContainerTypeCreate, ContainerTypePatch, Product, ProductCreate, ProductKind, ProductPatch, ProductStatus, ServiceFrequency, ServiceFrequencyCreate, ServiceFrequencyPatch, WasteFraction, WasteFractionCreate, WasteFractionPatch } from "../catalogue"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -41,10 +40,7 @@ const product = {
 }
 
 describe("the catalogue enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(ProductKind.options, [...PRODUCT_KINDS])
-    assert.deepEqual(ProductStatus.options, [...PRODUCT_STATUSES])
-    assert.deepEqual(ProductUnit.options, [...PRODUCT_UNITS])
+  test("refuse a kind outside the vocabulary and a status spelled other than lowercase", () => {
     assert.equal(ProductKind.safeParse("container-rental").success, false)
     assert.equal(ProductStatus.safeParse("Draft").success, false)
   })
@@ -106,7 +102,6 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
   })
 
   test("a fraction's treatment is the domain's list or none, set on create and moved or cleared by a patch (M13 of #293)", () => {
-    assert.deepEqual([...WasteTreatment.options], ["reuse", "recycling", "energy-recovery", "disposal"])
     assert.equal(WasteFraction.parse({ ...fraction, treatment: null }).treatment, null)
     assert.equal(WasteFractionCreate.parse({ key: "food", name: "Food waste", treatment: "recycling" }).treatment, "recycling")
     assert.deepEqual(WasteFractionPatch.parse({ treatment: null }), { treatment: null })

@@ -31,7 +31,9 @@ describe("FieldInspectionCreate", () => {
 
   test("leaves the server's members to the server", () => {
     for (const member of ["id", "projectId", "inspectorId", "status", "closedAt", "photos"]) {
-      assert.equal(FieldInspectionCreate.safeParse({ containerId: ID, outcome: "compliant", [member]: ID }).success, false, member)
+      const refused = issues(FieldInspectionCreate.safeParse({ containerId: ID, outcome: "compliant", [member]: ID }))
+      assert.deepEqual(refused.map(([path]) => path), [""], member)
+      assert.match(refused[0][1], new RegExp(member), member)
     }
   })
 })

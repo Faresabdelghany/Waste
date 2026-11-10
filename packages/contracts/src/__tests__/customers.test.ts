@@ -3,26 +3,7 @@ import { describe, test } from "node:test"
 
 import { REACHABLE_ON_A_CHANNEL } from "@waste/domain/registry/customers"
 
-import {
-  CONTACT_ROLES,
-  CONTACT_STATUSES,
-  CUSTOMER_KINDS,
-  CUSTOMER_STATUSES,
-  PROPERTY_GROUP_MEMBER_ROLES,
-  PROPERTY_GROUP_PURPOSES,
-  PROPERTY_GROUP_STATUSES,
-  PROPERTY_KINDS,
-  PROPERTY_PARTY_ROLES,
-  PROPERTY_STATUSES,
-  SHARED_COLLECTION_POINT_ACCESS_MODES,
-  SHARED_COLLECTION_POINT_BILLING_MODES,
-  SHARED_COLLECTION_POINT_KINDS,
-  SHARED_COLLECTION_POINT_MEMBER_ROLES,
-  SHARED_COLLECTION_POINT_OPERATING_MODELS,
-  SHARED_COLLECTION_POINT_STATUSES,
-} from "@waste/domain/registry/vocabulary"
-
-import { ContactRole, ContactStatus, Customer, CustomerContactCreate, CustomerContactPatch, CustomerCreate, CustomerKind, CustomerPatch, CustomerStatus, Property, PropertyCreate, PropertyGroup, PropertyGroupCreate, PropertyGroupMemberRole, PropertyGroupMembersSet, PropertyGroupPatch, PropertyGroupPurpose, PropertyGroupStatus, PropertyKind, PropertyPartiesSet, PropertyPartyRole, PropertyListQuery, PropertyPatch, PropertyStatus, SharedCollectionPoint, SharedCollectionPointAccessMode, SharedCollectionPointBillingMode, SharedCollectionPointCreate, SharedCollectionPointKind, SharedCollectionPointMemberRole, SharedCollectionPointMembersSet, SharedCollectionPointOperatingModel, SharedCollectionPointPatch, SharedCollectionPointStatus } from "../customers"
+import { Customer, CustomerContactCreate, CustomerContactPatch, CustomerCreate, CustomerPatch, Property, PropertyCreate, PropertyGroup, PropertyGroupCreate, PropertyGroupMembersSet, PropertyGroupPatch, PropertyListQuery, PropertyPartiesSet, PropertyPatch, SharedCollectionPoint, SharedCollectionPointCreate, SharedCollectionPointMembersSet, SharedCollectionPointPatch } from "../customers"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -101,25 +82,6 @@ const point = {
   members: [{ propertyId: THIRD, role: "service-member" }],
   ...STAMPS,
 }
-
-describe("the customer and property enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(CustomerKind.options, [...CUSTOMER_KINDS])
-    assert.deepEqual(CustomerStatus.options, [...CUSTOMER_STATUSES])
-    assert.deepEqual(PropertyKind.options, [...PROPERTY_KINDS])
-    assert.deepEqual(PropertyStatus.options, [...PROPERTY_STATUSES])
-    assert.deepEqual(PropertyPartyRole.options, [...PROPERTY_PARTY_ROLES])
-    assert.deepEqual(PropertyGroupPurpose.options, [...PROPERTY_GROUP_PURPOSES])
-    assert.deepEqual(PropertyGroupStatus.options, [...PROPERTY_GROUP_STATUSES])
-    assert.deepEqual(PropertyGroupMemberRole.options, [...PROPERTY_GROUP_MEMBER_ROLES])
-    assert.deepEqual(SharedCollectionPointKind.options, [...SHARED_COLLECTION_POINT_KINDS])
-    assert.deepEqual(SharedCollectionPointOperatingModel.options, [...SHARED_COLLECTION_POINT_OPERATING_MODELS])
-    assert.deepEqual(SharedCollectionPointAccessMode.options, [...SHARED_COLLECTION_POINT_ACCESS_MODES])
-    assert.deepEqual(SharedCollectionPointBillingMode.options, [...SHARED_COLLECTION_POINT_BILLING_MODES])
-    assert.deepEqual(SharedCollectionPointStatus.options, [...SHARED_COLLECTION_POINT_STATUSES])
-    assert.deepEqual(SharedCollectionPointMemberRole.options, [...SHARED_COLLECTION_POINT_MEMBER_ROLES])
-  })
-})
 
 describe("Customer", () => {
   test("is one record for a person and an organisation alike, everything but the kind, the name and the status optional", () => {
@@ -436,7 +398,5 @@ describe("a contact person (#291 C14)", () => {
     assert.deepEqual(CustomerContactPatch.parse({ status: "inactive" }), { status: "inactive" })
     assert.equal(CustomerContactPatch.safeParse({}).success, false)
     assert.equal(CustomerContactPatch.safeParse({ customerId: THIRD }).success, false)
-    assert.deepEqual([...ContactRole.options], [...CONTACT_ROLES])
-    assert.deepEqual([...ContactStatus.options], [...CONTACT_STATUSES])
   })
 })

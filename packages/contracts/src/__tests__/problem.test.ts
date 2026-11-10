@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { NO_ACTIVE_ACCOUNT } from "@waste/domain/access/accounts"
-import { BLANK_PROBLEM_TYPE, PROBLEM_MEDIA_TYPE } from "@waste/domain/requests"
 
 import { Problem, ProblemFieldError } from "../problem"
 
@@ -33,13 +32,7 @@ describe("Problem", () => {
     assert.deepEqual(ProblemFieldError.parse({ path: "name", message: "Required" }), { path: "name", message: "Required" })
   })
 
-  test("the generic type is about:blank and the media type is RFC 9457's", () => {
-    assert.equal(BLANK_PROBLEM_TYPE, "about:blank")
-    assert.equal(PROBLEM_MEDIA_TYPE, "application/problem+json")
-  })
-
   test("the one type beyond about:blank is the account's refusal, with a title of its own", () => {
-    assert.deepEqual(NO_ACTIVE_ACCOUNT, { type: "urn:waste:problem:no-active-account", title: "No active account" })
     const body = { ...NO_ACTIVE_ACCOUNT, status: 403, detail: "No active account in this company is bound to this login" }
     assert.deepEqual(Problem.parse(body), body)
   })

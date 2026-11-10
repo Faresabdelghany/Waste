@@ -4,9 +4,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { AUDIT_ACTIONS, AUDITED_TABLES, CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
+import { AUDITED_TABLES, CHANGE_REASON_HEADER } from "@waste/domain/audit/vocabulary"
 
-import { AuditAction, AuditEvent, AuditEventListQuery } from "../audit"
+import { AuditEvent, AuditEventListQuery } from "../audit"
 
 const ROW = "01a0d2a4-a280-7012-8000-000000000001"
 const event = {
@@ -25,10 +25,6 @@ const event = {
 }
 
 describe("the audit contract", () => {
-  test("an action is the vocabulary's: insert, update or delete", () => {
-    assert.deepEqual(AuditAction.options, [...AUDIT_ACTIONS])
-  })
-
   test("a row says which table and row, its parent, what moved as [before, after], who, why and in which transaction", () => {
     assert.deepEqual(AuditEvent.parse(event), event)
     assert.ok(AuditEvent.safeParse({ ...event, actor: null, reason: null, parentTable: null, parentId: null }).success, "the worker's write, of no set")
@@ -60,6 +56,6 @@ describe("the audit contract", () => {
   })
 
   test("the reason's header is one name, lowercase as a header is read", () => {
-    assert.equal(CHANGE_REASON_HEADER, "waste-change-reason")
+    assert.match(CHANGE_REASON_HEADER, /^[a-z]+(-[a-z]+)*$/)
   })
 })

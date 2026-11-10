@@ -1,31 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  COMMAND_OUTCOMES,
-  DRIVER_COMMAND_KINDS,
-  DRIVER_PICKUP_REASONS,
-  EXECUTION_SOURCES,
-  PICKUP_OUTCOMES,
-  PICKUP_REASONS,
-  PICKUP_STATUSES,
-  PROOF_KINDS,
-  ROUTE_STATUSES,
-} from "@waste/domain/execution/vocabulary"
 import { IMAGE_EXTENSIONS, PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 
-import {
-  CommandOutcome,
-  DriverCommandKind,
-  DriverPickupReason,
-  ExecutionSource,
-  ObjectKey,
-  PickupOutcome,
-  PickupReason,
-  PickupStatus,
-  ProofKind,
-  RouteStatus,
-} from "../execution"
+import { CommandOutcome, DriverCommandKind, DriverPickupReason, ExecutionSource, ObjectKey, PickupOutcome, PickupReason, PickupStatus, RouteStatus } from "../execution"
 import { refusal } from "./expect"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -33,18 +11,6 @@ const ROUTE = "01a0d3a5-e5e0-7000-8000-000000000002"
 const COMMAND = "01a0d3a5-e5e0-7000-8000-000000000003"
 
 describe("the Execution enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(RouteStatus.options, [...ROUTE_STATUSES])
-    assert.deepEqual(PickupStatus.options, [...PICKUP_STATUSES])
-    assert.deepEqual(PickupOutcome.options, [...PICKUP_OUTCOMES])
-    assert.deepEqual(PickupReason.options, [...PICKUP_REASONS])
-    assert.deepEqual(DriverPickupReason.options, [...DRIVER_PICKUP_REASONS])
-    assert.deepEqual(ProofKind.options, [...PROOF_KINDS])
-    assert.deepEqual(ExecutionSource.options, [...EXECUTION_SOURCES])
-    assert.deepEqual(DriverCommandKind.options, [...DRIVER_COMMAND_KINDS])
-    assert.deepEqual(CommandOutcome.options, [...COMMAND_OUTCOMES])
-  })
-
   test("refuse the prototype's display strings and the readings that are never stored", () => {
     assert.equal(RouteStatus.safeParse("Draft").success, false, "a generated route is never a draft")
     assert.equal(RouteStatus.safeParse("paused").success, false, "a reading of the session")

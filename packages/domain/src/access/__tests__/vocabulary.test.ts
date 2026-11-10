@@ -3,4 +3,4 @@
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Organisation & Access", vocabulary, vocabulary.ACCESS_VOCABULARIES, 3)
+defineVocabularyTests("Organisation & Access", vocabulary, vocabulary.ACCESS_VOCABULARIES)

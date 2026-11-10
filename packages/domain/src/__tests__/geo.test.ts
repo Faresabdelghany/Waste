@@ -2,13 +2,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { distinctConsecutive, EARTH_RADIUS_METRES, haversineMetres, type Position2D, samePosition } from "../geo"
+import { distinctConsecutive, haversineMetres, type Position2D, samePosition } from "../geo"
 
 describe("haversineMetres", () => {
   test("is the great circle on the IUGG mean radius", () => {
-    assert.equal(EARTH_RADIUS_METRES, 6_371_008.8)
-    // A degree of longitude on the equator is the radius times π/180.
-    assert.ok(Math.abs(haversineMetres([0, 0], [1, 0]) - (EARTH_RADIUS_METRES * Math.PI) / 180) < 1e-6)
+    // A degree of longitude on the equator is the radius, 6 371 008.8 m, times π/180.
+    assert.ok(Math.abs(haversineMetres([0, 0], [1, 0]) - 111_195.080_23) < 1e-3)
     assert.equal(haversineMetres([12.5683, 55.6761], [12.5683, 55.6761]), 0)
   })
 

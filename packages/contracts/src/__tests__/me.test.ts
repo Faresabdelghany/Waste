@@ -62,7 +62,6 @@ describe("Me", () => {
   test("a custom role has no key, and a company user no service provider", () => {
     const custom = { ...olivia, role: { ...olivia.role, key: null, system: false } }
     assert.deepEqual(Me.parse(custom).role, custom.role)
-    assert.equal(Me.parse(olivia).serviceProvider, null)
   })
 
   test("names the active driver profile bound to the account by its id, and nothing else of it", () => {

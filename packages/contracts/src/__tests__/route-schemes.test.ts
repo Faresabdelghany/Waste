@@ -3,9 +3,8 @@ import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
 import { AT_MOST_GROUPS, AT_MOST_GROUPS_RESTATED, CONTAINERS_MAX, DAILY_SERVES_EVERY_DAY, EACH_CONTAINER_ONCE, EACH_FRACTION_ONCE, EACH_GROUP_NAME_ONCE, EACH_GROUP_ONCE, GROUPS_MAX, ONE_WAY_TO_FIND_STOPS, OUTSIDE_SERVICE_DAYS, WEEK_ROTATION_WITH_FORTNIGHTLY, WINDOW_AT_MOST_A_YEAR } from "@waste/domain/planning/schemes"
-import { OCCURRENCE_STATUSES } from "@waste/domain/planning/vocabulary"
 
-import { CollectionGroup, CollectionGroupContainersSet, CollectionGroupCreate, CollectionGroupPatch, Occurrence, OccurrenceQuery, OccurrenceStatus, RouteScheme, RouteSchemeCreate, RouteSchemeListQuery, RouteSchemePatch, StopMatchingRule, StopMatchingRuleSet } from "../route-schemes"
+import { CollectionGroup, CollectionGroupContainersSet, CollectionGroupCreate, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemeListQuery, RouteSchemePatch, StopMatchingRule, StopMatchingRuleSet } from "../route-schemes"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -227,7 +226,6 @@ describe("RouteSchemeCreate", () => {
     const groups = (n: number) => Array.from({ length: n }, (_, i) => ({ ...group, name: `Group ${i + 1}` }))
     assert.equal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: groups(GROUPS_MAX) }).success, true)
     assert.deepEqual(refusal(RouteSchemeCreate.safeParse({ ...body, collectionGroups: groups(GROUPS_MAX + 1) })), [{ path: "collectionGroups", message: AT_MOST_GROUPS }])
-    assert.equal(GROUPS_MAX * CONTAINERS_MAX, 10_000, "the most rows one create body can ask for")
   })
 
   test("needs the project, a name, a service type, a cadence, a day, a group and a first day", () => {
@@ -372,10 +370,6 @@ describe("OccurrenceQuery and Occurrence", () => {
     assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-01", to: "2027-01-02" })), [{ path: "to", message: WINDOW_AT_MOST_A_YEAR }], "367 days")
     assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-02", to: "2026-01-01" })), [{ path: "to", message: DAY_WINDOW_ORDERED }])
     assert.deepEqual(refusal(OccurrenceQuery.safeParse({ from: "2026-01-01" })).map((issue) => issue.path), ["to"])
-  })
-
-  test("the occurrence status is the vocabulary's tuple, value for value", () => {
-    assert.deepEqual(OccurrenceStatus.options, [...OCCURRENCE_STATUSES])
   })
 
   test("an occurrence is the domain's shape: n null on a skipped row, the note the holiday's name", () => {

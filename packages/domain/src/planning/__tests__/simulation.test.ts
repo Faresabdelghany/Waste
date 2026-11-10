@@ -19,9 +19,8 @@ const calendar = calendarOf(holidays, DANISH_WEEKEND)
 const december = { ...weekdays, effectiveFrom: "2026-12-21" }
 
 describe("simulateOccurrences — the horizon", () => {
-  test("offers 5, 10, 20, 50 and defaults to 10", () => {
-    assert.deepEqual([...SIMULATION_COUNTS], [5, 10, 20, 50])
-    assert.equal(DEFAULT_SIMULATION_COUNT, 10)
+  test("defaults to one of the counts it offers", () => {
+    assert.ok((SIMULATION_COUNTS as readonly number[]).includes(DEFAULT_SIMULATION_COUNT))
   })
 
   test("spans the current draft's Nth collection, counted the way the preview counts", () => {

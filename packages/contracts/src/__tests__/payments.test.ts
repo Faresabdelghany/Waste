@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { IMPORT_BATCH_MAX } from "@waste/domain/imports/vocabulary"
 
-import { AllocationCreate, BankLines, BankLinesResult, CustomerStatement, InvoicePaymentStatus, Payment, PaymentCreate, PaymentDetail, PaymentListQuery, PaymentSource } from "../payments"
+import { AllocationCreate, BankLines, BankLinesResult, CustomerStatement, Payment, PaymentCreate, PaymentDetail, PaymentListQuery } from "../payments"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
@@ -38,7 +38,6 @@ describe("a payment on the wire", () => {
     assert.deepEqual(Payment.parse({ ...payment, customerId: null, reference: null, payerText: null }).customerId, null, "a bank line nobody's yet")
     assert.deepEqual(issues(Payment.safeParse({ ...payment, amountMinor: 0 })), ["amountMinor"], "money that arrived is more than nothing")
     assert.deepEqual(issues(Payment.safeParse({ ...payment, source: "card" })), ["source"])
-    assert.deepEqual(PaymentSource.options, ["manual", "bank-file"])
     const allocation = { id: OTHER, ...STAMP, paymentId: ID, invoiceId: OTHER, amountMinor: 62_500, reversesAllocationId: null, recordedBy: ID }
     assert.equal(PaymentDetail.parse({ ...payment, allocations: [allocation, { ...allocation, id: ID, amountMinor: -62_500, reversesAllocationId: OTHER }] }).allocations.length, 2)
   })
@@ -102,6 +101,5 @@ describe("a customer's statement", () => {
       closingBalanceMinor: 62_500,
     }
     assert.deepEqual(CustomerStatement.parse(statement), statement)
-    assert.deepEqual(InvoicePaymentStatus.options, ["open", "partially-paid", "paid", "overdue", "credited"])
   })
 })

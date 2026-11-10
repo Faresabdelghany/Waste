@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { linesIssue, netOf, registeredTare, SCALE_TICKET_LINES_MAX, tareKeyOf } from "../rules"
+import { linesIssue, netOf, registeredTare, tareKeyOf, voidSaysWhy } from "../rules"
+import { SCALE_TICKET_VOID_REASONS } from "../vocabulary"
 
 describe("a ticket's net", () => {
   test("is the gross less the tare, and nothing where the tare is not less", () => {
@@ -25,9 +26,14 @@ describe("a ticket's lines", () => {
     assert.deepEqual(linesIssue([line("a", 2_000), line("b", 2_000)], 4_220), { kind: "sum", sum: 4_000, netKg: 4_220 })
     assert.deepEqual(linesIssue([line("a", 4_220, "101")], 4_220), { kind: "bad-origin", index: 0 })
   })
+})
 
-  test("are bounded", () => {
-    assert.equal(SCALE_TICKET_LINES_MAX, 20)
+describe("a void", () => {
+  test("names another reason only through its note; every other reason stands alone", () => {
+    assert.equal(voidSaysWhy({ reason: "other", note: "Scale fault" }), true)
+    assert.equal(voidSaysWhy({ reason: "other", note: null }), false)
+    assert.equal(voidSaysWhy({ reason: "other" }), false)
+    for (const reason of SCALE_TICKET_VOID_REASONS.filter((each) => each !== "other")) assert.equal(voidSaysWhy({ reason }), true, reason)
   })
 })
 

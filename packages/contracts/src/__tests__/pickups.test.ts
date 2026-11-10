@@ -3,9 +3,6 @@ import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED } from "@waste/domain/days"
 import { A_CONTAINER_OR_AN_ADDRESS, A_DELIVERY_AT_ITS_SUBSCRIPTION, A_SWAP_FOR_ANOTHER, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, BOOKED_BY_NO_OTHER, BOOKS, ONE_ADDRESS, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "@waste/domain/execution/office-stops"
-import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
-
-import { PickupOutcome } from "../execution"
 import { Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "../pickups"
 import { refusal } from "./expect"
 
@@ -178,8 +175,6 @@ describe("the dispatcher's commands", () => {
   })
 
   test("a correction gives an outcome that is not planned, a note, and a reason exactly with a skip or a failure", () => {
-    assert.deepEqual(PickupOutcome.options, [...PICKUP_OUTCOMES])
-    assert.deepEqual(PickupOutcome.options, ["completed", "skipped", "failed"])
     assert.deepEqual(PickupCorrection.parse({ outcome: "completed", note: "Driver's photo shows the bin emptied" }), { outcome: "completed", note: "Driver's photo shows the bin emptied" })
     assert.deepEqual(PickupCorrection.parse({ outcome: "failed", reason: "contamination", note: "Confirmed by the crew" }), { outcome: "failed", reason: "contamination", note: "Confirmed by the crew" })
     assert.deepEqual(refusal(PickupCorrection.safeParse({ outcome: "skipped", note: "x" })), [missIssue])

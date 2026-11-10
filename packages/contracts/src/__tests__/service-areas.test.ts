@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
 import { EACH_FRACTION_ONCE } from "@waste/domain/registry/catalogue"
-import { EACH_PLANNING_AREA_ONCE, PROVIDER_NEEDS_A_DAY, SERVICE_AREA_CODE_MAX } from "@waste/domain/service-providers/service-areas"
+import { EACH_PLANNING_AREA_ONCE, PROVIDER_NEEDS_A_DAY } from "@waste/domain/service-providers/service-areas"
 
 import { ServiceArea, ServiceAreaAssignment, ServiceAreaAssignmentCreate, ServiceAreaAssignmentListQuery, ServiceAreaAssignmentPatch, ServiceAreaCreate, ServiceAreaCreated, ServiceAreaDetail, ServiceAreaListQuery, ServiceAreaPatch, ServiceAreaPlanningAreasSet, ServiceAreaWasteFractionsSet } from "../service-areas"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
@@ -48,7 +48,7 @@ describe("ServiceArea", () => {
   })
 
   test("holds the code to forty characters and a letter allowed — it is not a slug — and the period to running forwards", () => {
-    assert.equal(SERVICE_AREA_CODE_MAX, 40)
+    assert.equal(ServiceArea.parse({ ...area, code: "C".repeat(40) }).code, "C".repeat(40))
     assert.equal(ServiceArea.parse({ ...area, code: "CA-Ø-2 / Nord" }).code, "CA-Ø-2 / Nord")
     assert.deepEqual(refusal(ServiceArea.safeParse({ ...area, code: "C".repeat(41) })).map((issue) => issue.path), ["code"])
     assert.deepEqual(refusal(ServiceArea.safeParse({ ...area, code: "  " })).map((issue) => issue.path), ["code"])

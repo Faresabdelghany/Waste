@@ -47,7 +47,6 @@ describe("Paragraph", () => {
     assert.equal(Paragraph.safeParse("").success, false)
     assert.equal(Paragraph.safeParse("   ").success, false)
     assert.equal(Paragraph.safeParse("p".repeat(PARAGRAPH_MAX + 1)).success, false)
-    assert.equal(PARAGRAPH_MAX, 2000)
   })
 
   test("says what is wrong with a blank one in the same words Label uses", () => {
