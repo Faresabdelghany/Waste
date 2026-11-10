@@ -1122,25 +1122,28 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
           firstLocked.reject(error)
           throw error
         })
-      const secondStarted = Promise.withResolvers<number>()
       let secondUpdated = Number.NaN
-      const second = owner.db
-        .transaction(async (tx) => {
-          secondStarted.resolve(await backendOf(tx))
-          const number = await take(tx)
-          secondUpdated = performance.now()
-          return number
-        })
-        .catch((error: unknown) => {
-          secondStarted.reject(error)
-          throw error
-        })
-      /** Rejects if the second's update returns while the first still holds the row. */
-      const slippedThrough = second.then(() => Promise.reject(new Error("the second's update returned while the first still held the row: the lock did not hold it")))
-      void slippedThrough.catch(() => undefined)
+      let second: Promise<number> | undefined
       let releasedAt = Number.NaN
       try {
-        const [firstPid, secondPid] = await Promise.all([firstLocked.promise, secondStarted.promise])
+        // The second begins only once the first holds the row, so the order is forced and not merely likely.
+        const firstPid = await firstLocked.promise
+        const secondStarted = Promise.withResolvers<number>()
+        second = owner.db
+          .transaction(async (tx) => {
+            secondStarted.resolve(await backendOf(tx))
+            const number = await take(tx)
+            secondUpdated = performance.now()
+            return number
+          })
+          .catch((error: unknown) => {
+            secondStarted.reject(error)
+            throw error
+          })
+        /** Rejects if the second's update returns while the first still holds the row. */
+        const slippedThrough = second.then(() => Promise.reject(new Error("the second's update returned while the first still held the row: the lock did not hold it")))
+        void slippedThrough.catch(() => undefined)
+        const secondPid = await secondStarted.promise
         // Postgres names the backends a process blocks: the second's update is waiting on the first's transaction once this answers a row, and not before.
         const blocked = async (): Promise<boolean> => (await owner.sql`select pid from pg_stat_activity where pid = ${secondPid} and ${firstPid} = any(pg_blocking_pids(pid))`).length > 0
         const deadline = Date.now() + 10_000
