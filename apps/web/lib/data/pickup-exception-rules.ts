@@ -17,7 +17,7 @@ import { PICKUP_EXCEPTION_FREE_COUNT_MAX, PICKUP_EXCEPTION_LADDER_MAX, PICKUP_EX
 import { PICKUP_EXCEPTION_REASONS, type PickupOutcome } from "@waste/domain/execution/vocabulary"
 import { firstDayOut, lastDayIn } from "@waste/domain/periods"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 
 /** The reason and code pickers' value for any: the wire's null. */
@@ -172,10 +172,10 @@ export function rulesInOrder(rules: readonly PickupExceptionRule[]): PickupExcep
 }
 
 /** What the person's role lets them do with the rules — the price rows' module, the API's grant for them — and whether it reads the products and the codes the rules name. */
-export const ruleAccessOf = (grants: Grants | undefined) => ({
-  view: allows(grants, "commercial.price-rows", "view"),
-  create: allows(grants, "commercial.price-rows", "create"),
-  edit: allows(grants, "commercial.price-rows", "edit"),
-  products: allows(grants, "commercial.products", "view"),
-  codes: allows(grants, "configure.master", "view"),
+export const ruleAccessOf = (grants: Grants | null) => ({
+  view: mayOn(grants, "commercial.price-rows", "view"),
+  create: mayOn(grants, "commercial.price-rows", "create"),
+  edit: mayOn(grants, "commercial.price-rows", "edit"),
+  products: mayOn(grants, "commercial.products", "view"),
+  codes: mayOn(grants, "configure.master", "view"),
 })

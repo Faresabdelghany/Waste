@@ -8,15 +8,15 @@
 // mints the charge.
 import type { PickupException, PickupExceptionHistory } from "@waste/contracts/pickup-exceptions"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 
 /** The place kinds a history is read for (`placePickupExceptions`, lib/api/property-details.ts). */
 export type ExceptionPlace = "property" | "shared-point"
 
 /** Whether the role reads a place's history: the place's module and the stops', the API's two grants for it. */
-export const historyReadable = (grants: Grants | undefined, place: ExceptionPlace): boolean =>
-  allows(grants, place === "property" ? "customers.properties" : "customers.shared", "view") && allows(grants, "route-studio.pickups", "view")
+export const historyReadable = (grants: Grants | null, place: ExceptionPlace): boolean =>
+  mayOn(grants, place === "property" ? "customers.properties" : "customers.shared", "view") && mayOn(grants, "route-studio.pickups", "view")
 
 const ORDINALS = ["1st", "2nd", "3rd"]
 const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`

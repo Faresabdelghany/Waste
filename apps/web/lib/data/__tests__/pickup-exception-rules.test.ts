@@ -234,6 +234,6 @@ describe("the role", () => {
       { moduleKey: "configure.master", actions: ["view"] },
     ])
     assert.deepEqual(access, { view: true, create: true, edit: false, products: false, codes: true })
-    assert.deepEqual(ruleAccessOf(undefined), { view: false, create: false, edit: false, products: false, codes: false })
+    assert.deepEqual(ruleAccessOf([]), { view: false, create: false, edit: false, products: false, codes: false })
   })
 })

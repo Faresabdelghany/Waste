@@ -30,6 +30,7 @@ import { NO_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, ticketTeamsAccessOf, TI
 import { TICKET_TEAM_PREFIX } from "@/lib/modules/configure"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Deadlines and Charges tabs.
@@ -37,7 +38,7 @@ import { notShownSentence, readSentence } from "@/lib/api/read-state"
  */
 export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?: ReactNode; pick: ProjectPick; onOpenTeams?: () => void }) {
   const session = useApiSession()
-  const access = ticketTeamsAccessOf(session.me?.role.grants)
+  const access = ticketTeamsAccessOf(useGrants())
   const teamRecords = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)
   const teamIds = useServerModuleState(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId)?.serverIds
   const teams = teamRecords.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record))

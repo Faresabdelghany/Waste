@@ -75,7 +75,7 @@ describe("the kinds a role imports", () => {
     assert.equal(mayImport(role), true)
     assert.equal(mayView(grants(["improve.imports", "view"])), true)
     assert.equal(mayImport(grants(["improve.imports", "view"])), false)
-    assert.equal(mayView(undefined), false)
+    assert.equal(mayView([]), false)
   })
 })
 

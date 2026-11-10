@@ -23,7 +23,7 @@ import { ACTION_KIND_WORDS, actionIssue, plannedService, TRIGGER_WORDS } from "@
 import { fieldKeyOf, TICKET_COMMAND_VERBS } from "@waste/domain/resolution/ticket-types"
 import { isClosedTicketStatus, TICKET_ACTION_COMMANDS, TICKET_ACTION_KINDS, TICKET_COMMANDS, TICKET_FIELD_INPUTS, TICKET_FIELD_REQUIREMENTS, TICKET_KINDS, TICKET_MESSAGE_RECIPIENTS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, type TicketActionKind, type TicketActionTrigger, type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind, type TicketMessageRecipient } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormFieldType, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
@@ -306,8 +306,8 @@ export const FIELD_INPUT_OPTIONS: readonly BusinessFormOption[] = TICKET_FIELD_I
 export const FIELD_REQUIREMENT_OPTIONS: readonly BusinessFormOption[] = TICKET_FIELD_REQUIREMENTS.map((requirement) => ({ value: requirement, label: FIELD_REQUIREMENT_LABELS[requirement] }))
 
 /** What the person's role lets them do with the types: read them under `view` on the templates' module, change them under `edit`, add one under `create`. */
-export const ticketTypesAccessOf = (grants: Grants | undefined): { view: boolean; edit: boolean; create: boolean } => ({
-  view: allows(grants, "configure.templates", "view"),
-  edit: allows(grants, "configure.templates", "edit"),
-  create: allows(grants, "configure.templates", "create"),
+export const ticketTypesAccessOf = (grants: Grants | null): { view: boolean; edit: boolean; create: boolean } => ({
+  view: mayOn(grants, "configure.templates", "view"),
+  edit: mayOn(grants, "configure.templates", "edit"),
+  create: mayOn(grants, "configure.templates", "create"),
 })

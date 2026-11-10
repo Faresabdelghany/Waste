@@ -26,11 +26,12 @@ import { accessUnknownSentence } from "@/lib/api/session"
 import { typesListed } from "@/lib/data/ticket-scope"
 import { isSlaRefusal, newSlaRow, SLA_PRIORITY_OPTIONS, slaAccessOf, slaBodyOf, slaRowsOf, slaSavedSentence, slaScopeOptions, typesNamedBy, type SlaRefusal, type SlaRow } from "@/lib/data/ticket-sla"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 /** The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header, and the project is the page's, shared with the Default teams and Charges tabs. */
 export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: ProjectPick }) {
   const session = useApiSession()
-  const access = slaAccessOf(session.me?.role.grants)
+  const access = slaAccessOf(useGrants())
   const setting = useProjectSetting<TicketSla, SlaRow[], SlaRefusal>({ name: "ticket-sla", readable: access.view, read: (asking, projectId) => get<TicketSla>(asking, `/projects/${projectId}/ticket-sla`) }, pick)
   const { project, base, refusal, saving } = setting
   const editing = setting.draft !== null

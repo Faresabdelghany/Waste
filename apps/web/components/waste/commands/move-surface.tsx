@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore, useServerModuleState } from "@/components/platform/business-record-store"
 import { useModuleReady, useProjectRecords, useServerNames } from "@/components/platform/use-command-support"
 import { isLocalRefusal, typed } from "@/lib/records/fields"
@@ -32,15 +32,16 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { moveBodyOf, moveOffered, moveReview, movingOutOf, type MoveTyped } from "@/lib/data/property-moves"
 import { moveProperty } from "@/lib/api/property-details"
+import { useGrants } from "@/components/platform/use-grants"
 
 /** The select's token for the incoming customer as the payer: a select holds no empty value. */
 const INCOMING_PAYS = "incoming"
 
 /** Move occupant, on a property's details: offered to a role that edits both the properties and the agreements. */
 export function MovePropertySection({ record }: { record: BusinessRecord }) {
-  const { me } = useApiSession()
+  const grants = useGrants()
   const [open, setOpen] = useState(false)
-  if (!moveOffered(me?.role.grants)) return null
+  if (!moveOffered(grants)) return null
   return (
     <section className="space-y-2" data-testid="property-move" aria-label="Move">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Move</h3>

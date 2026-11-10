@@ -43,7 +43,7 @@ import { useApiSession } from "@/components/platform/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/platform/provider-account"
 import { PATCH_RECORD } from "@/lib/api/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { statusLabel, webIdOf } from "@/lib/records/fields"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
@@ -72,6 +72,7 @@ import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domai
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
 import { ResolutionCreateDialog } from "./resolution-surfaces"
+import { useGrants } from "@/components/platform/use-grants"
 
 const { workspaceId, moduleId } = TICKETS_MODULE
 
@@ -181,8 +182,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [saving, setSaving] = useState(false)
   // A sub-ticket is a create in this module: the create grant, and the office's alone.
   const { me } = useApiSession()
+  const grants = useGrants()
   const resolve = useServerResolver()
-  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, moduleKeyOf(workspaceId, moduleId), "create")
+  const opensTickets = threads === OFFICE_THREADS && mayOn(grants, moduleKeyOf(workspaceId, moduleId), "create")
 
   const value = (key: string) => (typeof live.submittedValues?.[key] === "string" ? (live.submittedValues[key] as string) : "")
   const projectId = value("projectId") || live.projectIds?.[0]

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { useServerModuleState } from "@/components/platform/business-record-store"
 import { useProjectRecords, useRowHistory, useServerNames } from "@/components/platform/use-command-support"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
@@ -30,11 +30,12 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { containersAtProperty, dueSentence, inspectionBodyOf, lastEmptyingSentence, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankBodyOf, tanksEditable, tanksReadable, tankSummary, type InspectionTyped, type TankTyped } from "@/lib/data/tanks"
 import { inspectionsOf, recordInspection, registerTank, tanksOfProperty } from "@/lib/api/property-details"
 import { readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 export function TanksSection({ record, module }: { record: BusinessRecord; module: ModuleLocation }) {
-  const { me } = useApiSession()
-  const readable = tanksReadable(me?.role.grants)
-  const editable = tanksEditable(me?.role.grants)
+  const grants = useGrants()
+  const readable = tanksReadable(grants)
+  const editable = tanksEditable(grants)
   const [version, setVersion] = useState(0)
   const reread = useCallback(() => setVersion((current) => current + 1), [])
   const tanks = useRowHistory(module.workspaceId, module.moduleId, record, readable ? `read|${version}` : "not-granted", readable ? tanksOfProperty : NO_TANKS)

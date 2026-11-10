@@ -9,7 +9,7 @@ import type { TicketSla, TicketSlaSet } from "@waste/contracts/ticket-sla"
 import { duplicateSlaTarget, SLA_TARGET_ONCE, slaTargetKey, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketPriority } from "@waste/domain/resolution/vocabulary"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 import { scopeOfValue, typeLabel, typeScope, valueOfScope, type TypeChoice } from "./ticket-scope"
 
@@ -76,7 +76,7 @@ export function slaSavedSentence(projectName: string, targets: number): string {
 }
 
 /** What the person's role lets them do with the SLA: read it under `view` on the templates' module, set it under `edit`. */
-export const slaAccessOf = (grants: Grants | undefined): { view: boolean; edit: boolean } => ({
-  view: allows(grants, "configure.templates", "view"),
-  edit: allows(grants, "configure.templates", "edit"),
+export const slaAccessOf = (grants: Grants | null): { view: boolean; edit: boolean } => ({
+  view: mayOn(grants, "configure.templates", "view"),
+  edit: mayOn(grants, "configure.templates", "edit"),
 })

@@ -101,6 +101,7 @@ import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 
 const roleScopeOptions = [
   "Company",
@@ -409,7 +410,7 @@ type TeamsTable = {
  */
 function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: PaneAnswer; rows: readonly BusinessRecord[]; table: TeamsTable }) {
   const session = useApiSession()
-  const access = ticketTeamsAccessOf(session.me?.role.grants)
+  const access = ticketTeamsAccessOf(useGrants())
   const { upsertRecord } = useBusinessRecordStore()
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)
   const [creating, setCreating] = useState(false)
