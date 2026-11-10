@@ -67,6 +67,7 @@ test("a hazardous fraction is marked in Master data, and an unload's details sav
   await expect(page.getByRole("row").filter({ hasText: name }).getByText("Hazardous", { exact: true })).toBeVisible()
   expect(((await (await api.get(`/waste-fractions/${fraction.id}`)).json()) as Fraction).hazardous).toBe(true)
 
+  // A station of this run's own takes it, so the seeded one is left as it is.
   const opened = await api.post("/unloading-stations", { data: { code: `E2E-WTN-${suffix}`.toUpperCase(), name: uniqueName("E2E hazardous waste depot"), address: "Kraftværksvej 1\n2300 København S", location: { type: "Point", coordinates: [12.61, 55.66] }, ownership: "external", weighbridge: true, wasteFractionIds: [fraction.id] } })
   expect(opened.status(), await opened.text()).toBe(201)
   const station = (await opened.json()) as Station

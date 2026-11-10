@@ -37,6 +37,7 @@ async function pick(page: Page, field: string, option: RegExp) {
   await page.getByRole("option", { name: option }).first().click()
 }
 
+/** A Monday of the first half of 2027, apart per run. */
 const aMonday = () => addDays("2027-01-04", 7 * Math.floor(Math.random() * 21))
 
 /** Removes, through the API, the owner's periods touching the week from `monday`: a leftover of a run that died before its removal. */

@@ -5,12 +5,12 @@ import { chainLanded, expect, test } from "./fixtures"
 import { schemeWithRoutes } from "./routes-support"
 
 // Map Planning on the API (slice 9b of #81, Issue #184): the map places the
-// server's containers where their placements in force today are delivered
-// at — the seeded tenant's placed containers at their properties' points —
-// so the fixture suite's Containers list test lives here now, against the
-// seeded registry, and since #186 its Create service area test too, and the
-// page's frame and its toolbar's opening state. Tile requests are aborted: the base map reports itself unavailable
-// and the markers still stand.
+// server's containers where their placements in force today are delivered at
+// — the seeded tenant's placed containers at their properties' points — so
+// the fixture suite's Containers list test lives here now, against the seeded
+// registry, and since #186 its Create service area test too, and the page's
+// frame and its toolbar's opening state. Tile requests are aborted: the base
+// map reports itself unavailable and the markers still stand.
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
 const CANVAS = '[data-testid="planning-map-canvas"]'

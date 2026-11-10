@@ -11,10 +11,9 @@ import { listAll, TESTER_PROJECT } from "./tester"
 // slice) port by behaviour: the seeded schemes are the API's rows under the
 // server's ids, a quick create is a POST the API answers with its Location,
 // and an edit is the scheme's PATCH — the stored policy lands and is read
-// back, a shaping edit and a rename save without a question (on the Pilot
-// the question over future routes waits for the routes on the API, slice 6),
-// and a refusal is the API's sentence over the dialog, still holding what
-// was typed. Schemes the tests make are uniquely named and never cleaned up.
+// back, a shaping edit and a rename save without a question, and a refusal is
+// the API's sentence over the dialog, still holding what was typed. Schemes
+// the tests make are uniquely named and never cleaned up.
 type Scheme = {
   id: string
   name: string

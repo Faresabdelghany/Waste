@@ -1,12 +1,12 @@
 // What a map selection amounts to (2026-09-16): the Selected area panel's
 // numbers, every one derived at render time from the selected container
-// records and the asset-management store's catalogue. Assumed weight and volume are one
-// emptying of each container — per the container type's fraction weight,
-// else its volume × the fraction's kg/L — multiplied by the collections
-// expected in the quantities range: generated route stops when a Route has
-// them, else the registry's next collection repeated at the container's
-// service frequency. Collected weight sums the Weight of completed Pickups
-// for those containers in the range. Pure data logic.
+// records and the asset-management store's catalogue. Assumed weight and
+// volume are one emptying of each container — per the container type's
+// fraction weight, else its volume × the fraction's kg/L — multiplied by the
+// collections expected in the quantities range: generated route stops when a
+// Route has them, else the registry's next collection repeated at the
+// container's service frequency. Collected weight sums the Weight of
+// completed Pickups for those containers in the range. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT, cleanFact, typedString } from "../record-values"

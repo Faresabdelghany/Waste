@@ -4,8 +4,9 @@
 // the worker runs), takes a planned route of today's out of the run, and
 // moves it with the office's route commands — assign the driver, reschedule
 // it onto today where the day has none (a weekend, a holiday, or a developer
-// stack whose earlier runs used today's up), dispatch. The Driver App's flow (driver-app.spec.ts) and
-// the office's specs read it, so it names nothing of the Driver App.
+// stack whose earlier runs used today's up), dispatch. The Driver App's flow
+// (driver-app.spec.ts) and the office's specs read it, so it names nothing of
+// the Driver App.
 //
 // On the seeded tenant `RS-Central · Week A` runs every weekday in
 // Copenhagen Central with WH-24 and Mads Jensen (packages/db/src/seed/
