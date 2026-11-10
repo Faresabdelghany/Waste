@@ -27,10 +27,10 @@ import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq } from "drizzle-orm"
 
-import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../resolution/alert-rules"
-import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import { alertRulesJob, alertsToClear, occurrencesToRaise, runAlertRules } from "../alert-rules"
+import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 

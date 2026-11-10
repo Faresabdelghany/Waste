@@ -18,10 +18,10 @@ import { notificationRule } from "@waste/db/schema/notifications"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
-import { collectionRemindersJob, REMINDER_CHUNK, remindProject, runCollectionReminders } from "../messaging/collection-reminders"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
-import { at, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin } from "./finance-tenant"
+import { collectionRemindersJob, REMINDER_CHUNK, remindProject, runCollectionReminders } from "../collection-reminders"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { at, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin } from "../../__tests__/finance-tenant"
 
 const roles = rolesUnderTest()
 /** The fixtures' Monday's next day, the day the afternoon's reminders are of. */

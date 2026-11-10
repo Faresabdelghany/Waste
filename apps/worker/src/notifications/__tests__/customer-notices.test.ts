@@ -34,11 +34,11 @@ import { and, eq, sql } from "drizzle-orm"
 import { alertColumns, alertOf } from "@waste/db/shapes/alerts"
 import { eventColumns, eventOf, ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { noticeCustomerFor } from "../notifications/customer-notices"
-import type { RelayedEvent, RelayedJob } from "../runtime/outbox"
-import { jobContext } from "./context"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "./finance-tenant"
+import { noticeCustomerFor } from "../customer-notices"
+import type { RelayedEvent, RelayedJob } from "../../runtime/outbox"
+import { jobContext } from "../../__tests__/context"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "../../__tests__/finance-tenant"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()

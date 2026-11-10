@@ -13,10 +13,10 @@ import { session, sessionPosition } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq, sql } from "drizzle-orm"
 
-import { PURGE_BATCH, purgePositions } from "../execution/purge-positions"
-import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import { PURGE_BATCH, purgePositions } from "../purge-positions"
+import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 

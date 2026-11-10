@@ -14,11 +14,11 @@ import { subscriptionPause } from "@waste/db/schema/agreements"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
-import { applyPauseGrant, grantReason } from "../registry/apply-pause-grants"
-import type { RelayedEvent } from "../runtime/outbox"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { dropFinanceTenant, placeBin, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import { applyPauseGrant, grantReason } from "../apply-pause-grants"
+import type { RelayedEvent } from "../../runtime/outbox"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { dropFinanceTenant, placeBin, seedFinanceTenant, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
