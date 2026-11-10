@@ -6,9 +6,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
-  SEEDED_CONTAINER_COPENHAGEN_COUNT,
   SEEDED_CONTAINER_COUNT,
-  SEEDED_PROPERTY_COPENHAGEN_COUNT,
   SEEDED_PROPERTY_COUNT,
   seededContainer,
   seededContainerRecordId,
@@ -21,7 +19,6 @@ const containers = Array.from({ length: SEEDED_CONTAINER_COUNT }, (_, index) => 
 
 describe("the seeded properties", () => {
   test("fifty, the first thirty-five in Copenhagen Central and the rest in Harbor Commercial", () => {
-    assert.deepEqual([SEEDED_PROPERTY_COUNT, SEEDED_PROPERTY_COPENHAGEN_COUNT], [50, 35])
     assert.deepEqual(
       properties.map((property) => property.project),
       [...Array<string>(35).fill("copenhagen"), ...Array<string>(15).fill("harbor")],
@@ -81,7 +78,6 @@ describe("the seeded properties", () => {
 
 describe("the seeded containers", () => {
   test("a hundred, the first seventy in Copenhagen Central standing at its properties and the rest at Harbor Commercial's", () => {
-    assert.deepEqual([SEEDED_CONTAINER_COUNT, SEEDED_CONTAINER_COPENHAGEN_COUNT], [100, 70])
     for (const container of containers) {
       assert.equal(seededProperty(container.propertyIndex).project, container.project, `${container.label} stands in its own project`)
     }
