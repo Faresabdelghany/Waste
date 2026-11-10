@@ -1568,8 +1568,9 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   // The generic registry keeps no create form for the master data module: its
-  // rows are four kinds — waste fractions, container types, service
-  // frequencies, vehicle types — each created under Settings › Operations ›
+  // rows are six kinds — waste fractions, container types, service
+  // frequencies, vehicle types, contaminant codes, decommission reasons —
+  // each created under Settings › Operations ›
   // Master data from that pane's own form (lib/data/master-data.ts, slice 2
   // of #81), so fixture mode gains no button here it never had.
   {

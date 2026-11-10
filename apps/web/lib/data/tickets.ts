@@ -30,7 +30,6 @@ import { ticketTypeFormFields, TICKET_TYPES_MODULE } from "./ticket-types"
 /** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
 export const ACCESS_MODULE = moduleAt("configure.access")
 
-/** The workspace module the tickets are the rows of. */
 export const TICKETS_MODULE = moduleAt("operate.tickets")
 
 /** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
@@ -42,10 +41,8 @@ export const TICKET_SLA_FACT = "SLA"
 /** The submitted value a ticket record carries its assignee's server id under, for the list's "Mine" (`/me`'s account). */
 export const ASSIGNEE_ACCOUNT_KEY = "assigneeAccountId"
 
-/** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
 export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)
 
-/** A closed list as a select offers it: the wire's token, the words a person reads. The alerts' forms read it too. */
 export const tokenOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((value) => ({ value, label: statusLabel(value) }))
 
 const project: BusinessFormField = { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE }
@@ -190,7 +187,6 @@ export function recollectionStopOptions(stops: readonly BusinessRecord[], routeW
   return [{ value: NO_ONE, label: "None: the route alone" }, ...ofRoute.map((stop) => ({ value: stop.id, label: stop.status === "Planned" ? stop.name : `${stop.name} · ${stop.status}` }))]
 }
 
-/** The stops a ticket may be about: the picked route's, whatever their outcome, after None; only None until a route is picked. */
 export function ticketStopOptions(stops: readonly BusinessRecord[], routeWebId: string | undefined): BusinessFormOption[] {
   const ofRoute = routeWebId === undefined || routeWebId === "" || routeWebId === NO_ONE ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId)
   return [{ value: NO_ONE, label: "None" }, ...ofRoute.map((stop) => ({ value: stop.id, label: `${stop.name} · ${stop.status}` }))]
@@ -214,7 +210,6 @@ export function createTicketRecord(values: BusinessFormValues, { now, extra = {}
   return mintedRecord({ id: `operate-ticket-${now}`, name, status: "Open", recordKind: "Ticket", values: { ...values, ...extra } })
 }
 
-/** A ticket after an edit in its details: its values over its typed ones, its name the subject. */
 export function updateTicketRecord(record: BusinessRecord, values: BusinessFormValues): BusinessRecord {
   const name = typeof values.subject === "string" && values.subject.trim() !== "" ? values.subject.trim() : record.name
   return { ...record, name, submittedValues: { ...record.submittedValues, ...values } }
@@ -237,7 +232,6 @@ const numberOf = (record: BusinessRecord): number => {
   return digits === null ? Number.POSITIVE_INFINITY : Number(digits[0])
 }
 
-/** A ticket's sub-tickets: the loaded tickets naming it as their parent, in number order. */
 export function subTicketsOf(tickets: readonly BusinessRecord[], parentWebId: string): BusinessRecord[] {
   return tickets.filter((record) => record.submittedValues?.parentTicketId === parentWebId).sort((a, b) => numberOf(a) - numberOf(b))
 }
@@ -256,7 +250,6 @@ export const opennessOf = (record: Pick<BusinessRecord, "status">): "Open" | "Cl
   return token === "created" || isOpenTicketStatus(token) ? "Open" : "Closed"
 }
 
-/** The value the Assignee category offers for the viewer's own tickets. */
 export const MINE = "Mine"
 
 /**
@@ -282,5 +275,4 @@ export function ticketListReaders(accountId: string | null): FilterValueReaders 
   }
 }
 
-/** The list opens on the open tickets. */
 export const TICKET_LIST_INITIAL = { openness: ["Open"] }

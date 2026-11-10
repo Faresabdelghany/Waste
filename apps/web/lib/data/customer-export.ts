@@ -6,7 +6,6 @@
 // person's role may not read is named as not included, with the API's
 // sentence, never left out silently. Pure: the document and its file name.
 
-/** The families the export reads, in the file's order. */
 export const CUSTOMER_EXPORT_SECTIONS = [
   { key: "customer", title: "The customer" },
   { key: "history", title: "Its history" },
@@ -26,19 +25,15 @@ export const CUSTOMER_EXPORT_SECTIONS = [
 
 export type CustomerExportSectionKey = (typeof CUSTOMER_EXPORT_SECTIONS)[number]["key"]
 
-/** What one family's read came to: its rows, or why the person's role was not answered them. */
 export type SectionOutcome = { included: true; data: unknown } | { included: false; reason: string }
 
 export type CustomerExportDocument = {
-  /** What this file is, for whoever opens it. */
   about: string
   customerId: string
   customerName: string
   exportedAt: string
   exportedBy: string
-  /** Each family the person's role was answered, in the file's order. */
   sections: Partial<Record<CustomerExportSectionKey, unknown>>
-  /** Each family it was not, and the API's reason. */
   notIncluded: { section: string; reason: string }[]
 }
 
@@ -67,7 +62,6 @@ export function customerExportOf(input: {
   }
 }
 
-/** `customer-export-osterbro-boligselskab-2026-10-28.json`: the customer's name in plain letters and the day. */
 export function customerExportFileName(customerName: string, day: string): string {
   const slug = customerName
     .normalize("NFKD")

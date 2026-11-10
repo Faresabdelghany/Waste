@@ -27,7 +27,7 @@ export const TEAM_MODULE = moduleAt("service-providers.service-provider-workspac
 /** The provider `/me` names, as the shell reads it: null for an office account. */
 export type ProviderOfMe = { id: string; legalName: string }
 
-/** What the shell reads off `/me`: whose workspace it is. Who acts in it is the shell's (`actorNameOf`), what its role allows `useGrants`'s. */
+/** What the shell reads off `/me`: whose workspace it is. */
 export type ProviderWorkspace = {
   /** The provider's server id. */
   providerId: string
@@ -45,12 +45,7 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
   }
 }
 
-/** What an office account is told on the provider's workspace on the Pilot: it is a provider's alone. */
 export const NOT_A_PROVIDER_ACCOUNT = "This workspace is a service provider's. Your account is the office's: the providers' routes, fleet, tickets and teams are in the office's own workspaces."
-
-// ---------------------------------------------------------------------------
-// The team
-// ---------------------------------------------------------------------------
 
 /** A team member is a user account; the module reads its roles beside them, which are never its rows. */
 export const isTeamMember = (record: Pick<BusinessRecord, "id" | "recordKind">): boolean =>
@@ -60,7 +55,6 @@ export const isTeamMember = (record: Pick<BusinessRecord, "id" | "recordKind">):
 export const isTeamRole = (record: Pick<BusinessRecord, "recordKind" | "submittedValues">): boolean =>
   record.recordKind === "Role" && record.submittedValues?.scope === PROVIDER_ROLE_SCOPE
 
-/** The roles the invite offers, by web id: a provider's, named as the company named them. */
 export const teamRoleOptions = (records: readonly BusinessRecord[]): BusinessFormOption[] =>
   records.filter(isTeamRole).map((record) => ({ value: record.id, label: record.name }))
 
@@ -107,10 +101,6 @@ export function createTeamMemberRecord(values: BusinessFormValues, serviceProvid
   return { ...record, serviceProviderId }
 }
 
-// ---------------------------------------------------------------------------
-// Tickets
-// ---------------------------------------------------------------------------
-
 /**
  * New ticket from a provider's account: the case and the route it is about,
  * one the provider runs — the API refuses any other — and the stop where
@@ -148,13 +138,11 @@ export const PROVIDER_TICKET_FORM: BusinessFormSchema = {
   ],
 }
 
-/** The project a route record is in, by web id: the ticket's project. */
 export const projectOfRoute = (route: Pick<BusinessRecord, "projectIds" | "submittedValues">): string | undefined => {
   const typed = route.submittedValues?.projectId
   return typeof typed === "string" && typed !== "" ? typed : route.projectIds?.[0]
 }
 
-/** A provider's ticket before the API answers it: the office's ticket, in its route's project, with no assignee. */
 export function createProviderTicketRecord(values: BusinessFormValues, routes: readonly BusinessRecord[], now: number): BusinessRecord {
   const route = routes.find((record) => record.id === values.routeId)
   const projectId = route === undefined ? undefined : projectOfRoute(route)

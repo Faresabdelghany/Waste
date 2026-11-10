@@ -17,7 +17,6 @@ export const RIGHT_SIZING_MODULE = moduleAt("customers.right-sizing")
 export const RIGHT_SIZING_PREFIX = "right-sizing-proposal"
 export const RIGHT_SIZING_RECORD_KIND = "Right-sizing proposal"
 
-/** What a proposal suggests, in the office's words. */
 export const DIRECTION_LABELS: Readonly<Record<RightSizingDirection, string>> = {
   smaller: "A size down",
   bigger: "A size up",
@@ -25,13 +24,11 @@ export const DIRECTION_LABELS: Readonly<Record<RightSizingDirection, string>> = 
   "more-frequent": "More collections",
 }
 
-/** A proposal's status as the queue reads it. */
 export const STATUS_LABELS: Readonly<Record<RightSizingStatus, string>> = { open: "Open", approved: "Approved", dismissed: "Dismissed" }
 
 /** The estimates a proposal read, newest first, in words. */
 export const evidenceSentence = (evidence: readonly FillLevel[]): string => evidence.map((fill) => FILL_LABELS[fill].toLowerCase()).join(", ")
 
-/** Approve a size: the day it takes effect and the product, the suggested one picked unless another is. */
 export const APPROVE_SIZE_FORM: BusinessFormSchema = {
   key: "customers.right-sizing",
   mode: "action",
@@ -53,7 +50,6 @@ export const APPROVE_SIZE_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Proposal approved." },
 }
 
-/** Dismiss: why the proposal is not taken. */
 export const DISMISS_FORM: BusinessFormSchema = {
   key: "customers.right-sizing",
   mode: "action",
@@ -65,7 +61,6 @@ export const DISMISS_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Proposal dismissed." },
 }
 
-/** The module's registry schema: proposals are the run's, never made by a form. */
 export const RIGHT_SIZING_SCHEMA: BusinessFormSchema = {
   key: "customers.right-sizing",
   mode: "disabled",

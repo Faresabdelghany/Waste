@@ -48,7 +48,6 @@ export type CountingRuleDraft = {
 /** A field the draft fills wrongly, and why, in the API's sentence. */
 export type CountingRuleRefusal = { field: keyof CountingRuleDraft; message: string }
 
-/** The editor's draft of a rule, or of a new one: monthly, inactive, nobody told. */
 export function countingRuleDraftOf(rule?: CountingRule): CountingRuleDraft {
   if (rule === undefined) return { name: "", active: false, period: "month", limit: "", wasteFractionId: null, containerTypeId: null, ticketTypeId: null, teamId: null, notifiesTeam: false }
   return {
@@ -64,7 +63,6 @@ export function countingRuleDraftOf(rule?: CountingRule): CountingRuleDraft {
   }
 }
 
-/** The limit as typed, a whole number from 1 to the domain's cap, or the refusal at it. */
 function limitOf(draft: Pick<CountingRuleDraft, "limit">): number | CountingRuleRefusal {
   const limit = Number(draft.limit.trim())
   if (draft.limit.trim() === "" || !Number.isInteger(limit) || limit < 1 || limit > COUNTING_LIMIT_MAX) return { field: "limit", message: `A limit is a whole number from 1 to ${COUNTING_LIMIT_MAX}` }
@@ -73,7 +71,6 @@ function limitOf(draft: Pick<CountingRuleDraft, "limit">): number | CountingRule
 
 export const isCountingRuleRefusal = (value: unknown): value is CountingRuleRefusal => typeof value === "object" && value !== null && "field" in value && "message" in value
 
-/** The create body a draft makes, or the first field it fills wrongly. */
 export function countingRuleBodyOf(draft: CountingRuleDraft): CountingRuleCreate | CountingRuleRefusal {
   const name = draft.name.trim()
   if (name === "") return { field: "name", message: "Name the rule" }
@@ -103,7 +100,6 @@ export function countingRulePatchOf(rule: CountingRule, draft: CountingRuleDraft
   return Object.keys(patch).length === 0 ? null : patch
 }
 
-/** The simulation body of a draft's terms over a window, or the refusal at the limit. */
 export function simulationBodyOf(draft: CountingRuleDraft, window: { from: string; to: string }): CountingSimulationBody | CountingRuleRefusal {
   const limit = limitOf(draft)
   if (isCountingRuleRefusal(limit)) return limit
@@ -123,12 +119,10 @@ export function simulationWindowOf(today: string, months: number): { from: strin
   return { from: addDays(to, -Math.round((months * 365) / 12)), to }
 }
 
-/** What a rule counts and up to what, as a sentence: `12 completed emptyings of Glass a month`. */
 export function countingRuleSentence(rule: Pick<CountingRule, "limit" | "period">, names: { wasteFraction: string | null; containerType: string | null }): string {
   return `${rule.limit} ${countedWhat(names, rule.limit)} a ${rule.period}`
 }
 
-/** A simulated ticket's period as a person reads it. */
 export const simulatedPeriod = (periodFrom: string, period: CountingPeriod): string => periodName(periodFrom, period)
 
 /** A simulation's answer as a sentence: its window from its first day through its last, the wire's `to` being the first day not counted; and how many of the tickets are listed where not all are. */
@@ -141,5 +135,4 @@ export function simulationSentence(answer: Pick<CountingSimulation, "from" | "to
   return answer.shown.length < answer.tickets ? `${found} The first ${answer.shown.length} are listed.` : found
 }
 
-/** What a rule's team picker says where the company has no active team: a rule's tickets wait with one, so a team comes first; a simulation needs none. */
 export const NO_TEAM_YET = "The company has no active team yet. A counting rule's tickets wait with a team, so add one on the Teams tab of Users & roles before saving the rule; you can simulate without one."

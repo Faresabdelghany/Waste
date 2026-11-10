@@ -4,7 +4,6 @@
 // office's side say the one the driver last gave.
 import { FILL_LEVELS, type FillLevel } from "@waste/domain/execution/vocabulary"
 
-/** Each level as a button and a fact read it. */
 export const FILL_LABELS: Readonly<Record<FillLevel, string>> = {
   empty: "Empty",
   quarter: "A quarter full",
@@ -14,5 +13,4 @@ export const FILL_LABELS: Readonly<Record<FillLevel, string>> = {
   overflowing: "Overflowing",
 }
 
-/** The levels in the order the Driver App offers them, emptiest first. */
 export const FILL_OPTIONS: readonly { value: FillLevel; label: string }[] = FILL_LEVELS.map((value) => ({ value, label: FILL_LABELS[value] }))

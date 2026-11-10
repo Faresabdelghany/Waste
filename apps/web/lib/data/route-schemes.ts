@@ -1,9 +1,8 @@
 /**
  * Route Schemes — the Route Studio module every scheme surface reads: the
  * list, the scheme page, the wizard, the map's coverage, generation. The
- * module is defined in the Plan workspace's registry and shown in Route
- * Studio only (business-modules.ts), so this is the one place that spells
- * where the records live.
+ * module is Route Studio's (lib/modules/route-studio.ts), and this is the one
+ * place that spells where the records live.
  */
 import { schemeLicenceDay, type JudgedDay } from "@waste/domain/planning/checks"
 import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
@@ -34,7 +33,6 @@ export function planAheadDaysOf(record: BusinessRecord): number {
   return planAheadDaysAllowed(days) ? days : PLAN_AHEAD_DAYS_DEFAULT
 }
 
-/** What turning a scheme's Plan Ahead on or off says, wherever it is turned: on, the scheme's own window. */
 export function planAheadToggledSentence(scheme: BusinessRecord, enabled: boolean): string {
   return enabled
     ? `${scheme.name} keeps its next ${count(planAheadDaysOf(scheme), "day")} planned through the nightly plan-ahead run.`
@@ -121,10 +119,8 @@ export function licenceDayOf(effectiveFrom: string, timezone: string | undefined
   return schemeLicenceDay(isIsoDate(effectiveFrom) ? effectiveFrom : today, today)
 }
 
-/** What stands in for the zero-match sentence where the API's containers are not placed. */
 export const PREVIEW_UNPLACED = "The containers' places are not read, so this preview cannot count them; the API matches containers when it generates routes."
 
-/** What the preview reads of a module's state in the store: whether its read is ready. */
 type ModuleRead = { readonly status: string }
 
 /**
@@ -156,19 +152,13 @@ export function validationWhenUnplaced(result: SchemeValidationResult, placed: b
 
 /** Why the Pilot's question offers "This collection only" disabled: the edit shapes more than one collection's routes can carry (#209). */
 export const ONE_OFF_ONLY = "Only the planned start, the depot, the unloading station and a group's vehicle or driver can change for one collection; this edit changes more, so it applies to future collections."
-/** Why it is disabled where no planned route the change reaches is left from today on. */
 export const ONE_OFF_NO_ROUTE = "No planned route of the scheme from today on can take this change for one collection."
-/** Why it is disabled where the groups a change reaches collect next on different days: one collection is one service date. */
 export const ONE_OFF_SPLIT = "This change reaches groups whose next collections fall on different days: apply it to future collections, or change one group at a time."
-/** Why it is disabled where the next collection's routes already stand as the edit has them. */
 export const ONE_OFF_ALREADY = "The next collection's routes already stand as this edit has them."
-/** Why a scheme whose stored policy is the one-off cannot work one out while the routes are not read. */
 export const ONE_OFF_UNREAD = "Its next collection's routes are not read from the API."
 /** What a scheme whose stored policy is the one-off says after the reason a shaping edit cannot apply so (#209). */
 export const STORED_ONE_OFF = "This scheme applies a change to its next collection only: set its changes to apply to future collections, or to ask each time, to save this one."
-/** What "This collection only" says it does on the Pilot. */
 const ONE_OFF_DESCRIPTION = "Only the next collection's routes follow the edit: they are moved as the office moves a route, and later generation runs keep them as moved. The scheme itself keeps its current configuration."
-/** Why a shaping edit that would ask is refused while the API's routes are not read. */
 export const ROUTES_NOT_READ = "How this change applies is asked over the scheme's routes, which are not read from the API yet: save again once they are."
 
 /** A value as the API reads it: JSON a form wrote (the groups, a rule by day) in one key order, so re-serialising it moves nothing. */
@@ -218,7 +208,6 @@ const ONE_OFF_SCHEME_KEYS = ["plannedStartTime", "depotId", "unloadingStationId"
 /** A group's fleet, by id and by the names saved beside them: in the legacy shape the scheme's own keys. */
 const ONE_OFF_GROUP_KEYS = ["vehicleId", "driverId", "vehicleName", "driverName"] as const
 const ONE_OFF_LEGACY_KEYS = ["plannedVehicleId", "plannedDriverId"] as const
-/** A value as a record carries it, "" for none. */
 const valueOf = (record: Pick<BusinessRecord, "submittedValues">, key: string): string => typed(record, key) ?? ""
 
 /** A scheme's `collectionGroups` JSON as stored, every member kept (the domain's reader keeps only the ones it knows), or null for the legacy shape. */
@@ -262,7 +251,6 @@ function withOneOffPutBack(before: BusinessRecord, after: BusinessRecord): Busin
   return { ...after, submittedValues: values }
 }
 
-/** Whether two records' values are the same as the API reads them. */
 function sameValues(a: BusinessRecord, b: BusinessRecord): boolean {
   const left = a.submittedValues ?? {}
   const right = b.submittedValues ?? {}
@@ -359,7 +347,6 @@ export function schemeEditOnApi(before: BusinessRecord, after: BusinessRecord, r
   if (before.status === "Draft" || !schemeGenerationRecorded(before) || !shapesCollections(before, after)) return { kind: "save", following: 0 }
   const policy = apply ?? schemeEditPolicy(before.submittedValues)
   if (policy === "future") return { kind: "save", following: following().length }
-  // A stored one-off says why this edit cannot apply so, then how to save it.
   const stored = apply === undefined
   if (routes === null) return { kind: "refuse", message: policy === "single" && stored ? `${ONE_OFF_UNREAD} ${STORED_ONE_OFF}` : ROUTES_NOT_READ }
   const oneOff = schemeOneOffOnApi(before, after, routes, today)

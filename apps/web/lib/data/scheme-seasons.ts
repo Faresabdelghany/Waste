@@ -9,12 +9,10 @@ import { seasonSpanLabel } from "@waste/domain/planning/seasons"
 import type { BusinessRecord } from "./business-modules"
 import { SCHEME_SEASONS_KEY, seasonsValue } from "@/lib/prototype/route-schemes/recurrence-values"
 
-/** "Summer · 1 May – 30 Sep · Every week": one season as the page lists it. */
 export function seasonLine(season: StoredSchemeSeason): string {
   return `${season.name} · ${seasonSpanLabel(season)} · ${recurrenceCadenceLabel({ frequency: season.frequency, ...(season.weekRotation === null ? {} : { weekRotation: season.weekRotation }) })}`
 }
 
-/** The record with its seasons replaced whole, its Seasons fact beside them. */
 export function withSeasons(record: BusinessRecord, given: readonly StoredSchemeSeason[]): BusinessRecord {
   // By the day each starts, as the API answers them.
   const seasons = [...given].sort((a, b) => a.startsOn.localeCompare(b.startsOn))

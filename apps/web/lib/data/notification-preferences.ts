@@ -18,7 +18,6 @@ import { type Grants, mayOn } from "@/lib/modules/grants"
 /** The module whose `view` an alert e-mail needs: the alerts' board. */
 export const ALERTS_MODULE_KEY = "operate.exceptions" satisfies ModuleKey
 
-/** The alert picker's value for no alert e-mails. */
 export const NO_ALERTS = "none"
 
 /** The alert picker, the most severe first: each option is that severity and every one more severe. */
@@ -30,10 +29,8 @@ export const ALERT_THRESHOLD_OPTIONS: ReadonlyArray<{ value: AlertSeverity | typ
   { value: "low", label: "Every alert" },
 ]
 
-/** The picker's value for a set of preferences. */
 export const alertThresholdOf = (preferences: NotificationPreferences): AlertSeverity | typeof NO_ALERTS => preferences.alertRaisedMinSeverity ?? NO_ALERTS
 
-/** The body a pick of the alert threshold and the assignment's switch sends. */
 export const preferencesBodyOf = (threshold: AlertSeverity | typeof NO_ALERTS, ticketAssigned: boolean): NotificationPreferences => ({
   alertRaisedMinSeverity: threshold === NO_ALERTS ? null : threshold,
   ticketAssigned,
@@ -43,7 +40,6 @@ export const preferencesBodyOf = (threshold: AlertSeverity | typeof NO_ALERTS, t
 export const alertsWithheldBecause = (grants: Grants | null): string | null =>
   mayOn(grants, ALERTS_MODULE_KEY, "view") ? null : "Your role does not read alerts, so no alert e-mail reaches you whatever you choose here."
 
-/** One notice as the list shows it: what it said, where it went, and how its sending stands. */
 export type NoticeRow = { id: string; subject: string; to: string; status: string; sentAt: string | null; reason: string | null }
 
 const STATUS_WORDS: Readonly<Record<Message["status"], string>> = { queued: "Queued", sent: "Sent", failed: "Failed", withheld: "Withheld" }

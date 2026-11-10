@@ -1,5 +1,5 @@
 // The master data pane's own rules (#176): which kind a record is, read the
-// way the adapters own it; the four forms; the records the pane writes; and
+// way the adapters own it; the forms; the records the pane writes; and
 // the cadence a frequency's numbers spell.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
@@ -40,7 +40,7 @@ describe("the master data module", () => {
     assert.deepEqual(MODULES["configure.master"].shown, { pane: "master-data" })
     assert.equal(settingsHref("master-data"), "/settings?pane=master-data")
     assert.equal(settingsHref("master-data", { kind: "container-type" }), "/settings?pane=master-data&kind=container-type")
-    // The generic registry keeps no create form for the module: the pane's four are local, so fixture mode gains no button it never had.
+    // The generic registry keeps no create form for the module: the pane's forms are local, so fixture mode gains no button it never had.
     assert.equal(getBusinessFormSchema("configure", "master")?.mode, "disabled")
   })
 

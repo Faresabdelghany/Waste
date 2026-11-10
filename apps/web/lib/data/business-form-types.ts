@@ -74,7 +74,6 @@ export type BusinessFormField = {
   addressLookup?: AddressLookupFields
 }
 
-/** The fields an address picked from the register fills: the address always, the registry identifier and the point where they are blank. */
 export type AddressLookupFields = {
   address: string
   registryId: string
@@ -140,9 +139,7 @@ export type BusinessFormExecution = {
  * dates as the planner edits.
  */
 export type BusinessFormRecurrencePreview = {
-  /** The section the preview renders beneath. */
   sectionId: string
-  /** How many upcoming dates to show. */
   count: number
   fieldIds: {
     frequency: string

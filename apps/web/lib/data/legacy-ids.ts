@@ -318,10 +318,6 @@ export function migrateLegacyHref(href: string): string {
   )
 }
 
-/**
- * Renames one object key (or a `fieldId` value, which names a key): the
- * caller's own renames first, then the shared key map, then the id rewrite.
- */
 function migrateKey(
   key: string,
   extraKeys: Readonly<Record<string, string>>,
@@ -401,7 +397,6 @@ export function migrateLegacyState<T>(
         const nextKey = migrateKey(key, extraKeys)
         if (nextKey !== key) {
           changed = true
-          // Stored-new wins: keep the value already held under the new key.
           if (Object.prototype.hasOwnProperty.call(source, nextKey)) continue
         }
         const nextChild =

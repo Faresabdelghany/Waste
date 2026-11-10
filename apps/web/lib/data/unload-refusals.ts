@@ -2,7 +2,6 @@
 // the Driver App both say it: the domain's reasons in a person's words.
 import type { UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 
-/** Why a station refused a load, as a person reads it. */
 export const REFUSAL_LABELS: Readonly<Record<UnloadRefusalReason, string>> = {
   contamination: "Contamination",
   "fraction-not-accepted": "Fraction not accepted",

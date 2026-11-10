@@ -1,5 +1,6 @@
-// The shape Settings › Asset management keeps in the browser, and how it is
-// read back (Issue #39, 2026-09-26) — beside the fixture catalogue in
+// The shape the asset management store
+// (components/platform/asset-management-store.tsx) keeps in the browser, and
+// how it is read back (Issue #39, 2026-09-26) — beside the fixture catalogue in
 // asset-catalogue.ts and out of the React store, so a test can hold the
 // hydration to its rules without a browser. The store persists the whole
 // state under one key; on load the stored state stands over the defaults,
@@ -139,7 +140,6 @@ export type AssetManagementState = {
   }
 }
 
-/** A stored value the store can take over: every list a list, the email a string, the flags an object; the ledger may be absent. */
 export function isAssetManagementState(value: unknown): value is AssetManagementState {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const candidate = value as Partial<AssetManagementState>
@@ -158,12 +158,6 @@ export function isAssetManagementState(value: unknown): value is AssetManagement
   )
 }
 
-/**
- * The catalogue with the fixture types it has never been seeded with
- * appended, in the fixtures' order, after everything it holds — nothing
- * held is touched — and the ledger brought up to every fixture id. A type
- * the ledger names but the catalogue lacks was deleted and is left deleted.
- */
 export function seedMissingContainerTypes<S extends Pick<AssetManagementState, "containerTypes" | "seededContainerTypeIds">>(
   state: S,
   fixtures: readonly ContainerType[] = FIXTURE_CONTAINER_TYPES,

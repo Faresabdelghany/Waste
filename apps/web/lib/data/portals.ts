@@ -10,7 +10,6 @@ import { dropOffHrefOf } from "@/lib/public/drop-off-points"
 import { isPublicSlug, PUBLIC_SLUG_LENGTH } from "@waste/domain/access/public-slug"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 
-/** One public page of a published project. */
 export type PublicPage = { label: string; href: string }
 
 /** The slug a project is published under, or null while it is not. */
@@ -19,7 +18,6 @@ export function publicSlugOf(project: BusinessRecord): string | null {
   return typeof slug === "string" && slug !== "" ? slug : null
 }
 
-/** A published project's public pages, in a resident's order: when the bins are emptied, where to bring things. */
 export function publicPagesOf(slug: string): PublicPage[] {
   return [
     { label: "Collection days", href: calendarHrefOf(slug) },
@@ -29,7 +27,6 @@ export function publicPagesOf(slug: string): PublicPage[] {
 
 const FOLDED: Record<string, string> = { æ: "ae", ø: "oe", å: "aa", ä: "ae", ö: "oe", ü: "ue", ß: "ss" }
 
-/** The slug a project's name suggests: lowercase, the Danish letters folded, everything else a single hyphen, at most 63 characters. */
 export function slugSuggestionOf(name: string): string {
   return name
     .normalize("NFC")
@@ -50,7 +47,6 @@ export function slugRefusalOf(slug: string): string | null {
   return "Use lowercase letters, digits and single hyphens, such as kystbyen or kystbyen-nord"
 }
 
-/** How many of a project's drivers may sign in to the Driver App, of how many it has, as a person reads it. */
 export function driverAppReadingOf(drivers: readonly BusinessRecord[], projectId: string): string {
   const own = drivers.filter((driver) => !isSoftDeleted(driver) && driver.submittedValues?.projectId === projectId)
   if (own.length === 0) return "No drivers"

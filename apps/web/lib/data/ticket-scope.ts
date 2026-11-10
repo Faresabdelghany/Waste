@@ -19,19 +19,15 @@ export type TicketScope = { kind: TicketKind | null; ticketTypeId: string | null
 
 const TYPE_PREFIX = "type:"
 
-/** A type's picker value. */
 export const typeScope = (ticketTypeId: string): string => `${TYPE_PREFIX}${ticketTypeId}`
 
-/** A picker value as the wire's scope: a type's, a kind's, or every kind's where the value is `every`. */
 export function scopeOfValue(value: string, every?: string): TicketScope {
   if (value.startsWith(TYPE_PREFIX)) return { kind: null, ticketTypeId: value.slice(TYPE_PREFIX.length) }
   return { kind: value === every ? null : (value as TicketKind), ticketTypeId: null }
 }
 
-/** A scope as its picker value, every kind as `every`. */
 export const valueOfScope = (scope: TicketScope, every: string): string => (scope.ticketTypeId !== null ? typeScope(scope.ticketTypeId) : (scope.kind ?? every))
 
-/** A scope's row key, the domain's `kindOrTypeKey`. */
 export const scopeKey = (scope: TicketScope): string => kindOrTypeKey(scope)
 
 /** How a type reads in a list of settings: its name, and its kind's beside it where the list told it. */
@@ -48,7 +44,6 @@ export function unknownTypeName(types: TypeChoices): string {
   return types === "failed" ? "A ticket type that could not be read" : "A ticket type not shown to your role"
 }
 
-/** A type a set names that the types do not hold, its kind unknown. */
 const unknownType = (id: string, types: TypeChoices): TypeChoice => ({ id, name: unknownTypeName(types), kind: null, status: "active" })
 
 /** The types a pane lists a row for: the active ones in the order given but each kind's default, whose setting is its kind's row, then any the set names already that are retired, a default or unread, so a setting kept is shown. */
@@ -64,7 +59,6 @@ export function typesListed(types: TypeChoices, named: Iterable<string>): TypeCh
   return listed
 }
 
-/** The label of a type a set names, read from the types where they hold it. */
 export function labelOfType(types: TypeChoices, id: string): string {
   const type = typesKnown(types).find((candidate) => candidate.id === id)
   return type === undefined ? unknownTypeName(types) : typeLabel(type)

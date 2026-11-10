@@ -18,7 +18,6 @@ import { masterDataKindOf } from "./master-data-kinds"
 import { isPlanningAreaRecord } from "./planning-areas"
 import { isAssignmentRecord, isServiceAreaRecord } from "./provider-money"
 
-/** The rows the store holds of the modules the chain's dialogs pick from. */
 export type CommercialPickerRows = {
   products: readonly BusinessRecord[]
   priceRows: readonly BusinessRecord[]
@@ -34,7 +33,6 @@ export type CommercialPickerRows = {
 
 const picked = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" && values[key] !== "" ? (values[key] as string) : undefined)
 
-/** The project a dialog names: its list's, its agreement's, its assignment's, its own project field, else the surface's. */
 function projectOf(values: BusinessFormValues, rows: CommercialPickerRows, projectId: string | undefined): string | undefined {
   const named = (key: string, among: readonly BusinessRecord[] | undefined) => {
     const id = picked(values, key)

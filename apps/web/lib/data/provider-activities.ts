@@ -35,7 +35,6 @@ export const ACTIVITY_RECORD_KIND = "Service provider activity"
 export const ACTIVITY_KIND_KEY = "kind"
 export const ACTIVITY_STATUS_KEY = "status"
 
-/** What a person calls each kind: the domain's words, capitalised. */
 export const kindLabel = (kind: string): string => {
   const words = KIND_WORDS[kind as ServiceProviderActivityKind]
   return words === undefined ? kind : capitalised(words)
@@ -43,7 +42,6 @@ export const kindLabel = (kind: string): string => {
 
 const DAY_LABELS: Readonly<Record<ServiceDay, string>> = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" }
 export const DAY_OPTIONS: readonly BusinessFormOption[] = SERVICE_DAYS.map((day) => ({ value: day, label: DAY_LABELS[day] }))
-/** Days in a sentence, Monday first: "Wednesday", "Monday · Thursday". */
 export const daysText = (days: readonly string[]): string => SERVICE_DAYS.filter((day) => days.includes(day)).map((day) => DAY_LABELS[day]).join(" · ")
 
 const kindOf = (record: Pick<BusinessRecord, "submittedValues">): ServiceProviderActivityKind | undefined => SERVICE_PROVIDER_ACTIVITY_KINDS.find((kind) => kind === record.submittedValues?.[ACTIVITY_KIND_KEY])
@@ -78,15 +76,6 @@ const VEHICLE = { fieldId: "kind", oneOf: ["vehicle-change"] }
 const FOLLOW_UP = { fieldId: "kind", oneOf: ["compliance-follow-up"] }
 const NOT_PROPOSAL = { fieldId: "kind", oneOf: [...without(SERVICE_PROVIDER_ACTIVITY_KINDS, ...PROPOSAL_KINDS)] }
 
-/**
- * Log activity: the kind, then what it is about. A proposal names a route of
- * the group and the first day, and a route-day change the days it should run
- * on, a vehicle change its truck and optionally its driver, a stop-set change
- * its containers in stop order, a waste-fraction change its rule's fractions;
- * a follow-up its
- * due day; a follow-up or a note the award, or for the office the project.
- * The office names the provider; a provider's account opens for its own.
- */
 export function activityOpenForm(side: ActivitySide, options: ActivityFormOptions): BusinessFormSchema {
   const office = side === "office"
   return {
@@ -135,7 +124,6 @@ export function activityOpenForm(side: ActivitySide, options: ActivityFormOption
   }
 }
 
-/** The correction a row's kind takes while it is open: its words, a route-day change's days, a vehicle change's truck and driver, a proposal's day, or a follow-up's due day. */
 export function activityCorrectionForm(kind: ServiceProviderActivityKind, options: Pick<ActivityFormOptions, "vehicles" | "drivers" | "containers" | "fractions"> = { vehicles: [], drivers: [], containers: [], fractions: [] }): BusinessFormSchema {
   return {
     key: `${PROVIDER_ACTIVITIES_MODULE.workspaceId}.${PROVIDER_ACTIVITIES_MODULE.moduleId}.correct`,
@@ -185,7 +173,6 @@ export function activityCorrectionForm(kind: ServiceProviderActivityKind, option
   }
 }
 
-/** The values the correction opens on: the row's own. */
 export const correctionValuesOf = (record: Pick<BusinessRecord, "submittedValues">): BusinessFormValues => {
   const values = record.submittedValues ?? {}
   return { subject: values.subject ?? "", body: values.body ?? "", serviceDays: values.serviceDays ?? "", effectiveFrom: values.effectiveFrom ?? "", dueOn: values.dueOn ?? "", vehicleId: values.vehicleId ?? "", driverId: values.driverId ?? "", containerIds: values.containerIds ?? "", wasteFractionIds: values.wasteFractionIds ?? "" }
@@ -210,7 +197,6 @@ const OFFERS: Readonly<Record<ActivityCommand, Omit<ActivityOffer, "command">>> 
 
 const COMMAND_ORDER: readonly ActivityCommand[] = ["approve", "reject", "withdraw", "complete", "cancel"]
 
-/** The commands a row offers the side looking at it: those its kind takes, from where it stands, from that side (`closesWith`). */
 export function activityCommandsOffered(record: Pick<BusinessRecord, "submittedValues">, side: ActivitySide): ActivityOffer[] {
   const kind = kindOf(record)
   const status = statusOf(record)
@@ -228,19 +214,16 @@ export function activityCorrectable(record: Pick<BusinessRecord, "submittedValue
 
 export const REASON_NEEDED = "Say why: the provider reads it"
 
-/** A close's body: its reason where one was given. */
 export function closeBodyOf(values: BusinessFormValues): ActivityClose {
   const reason = typeof values.reason === "string" && values.reason.trim() !== "" ? values.reason.trim() : undefined
   return reason === undefined ? {} : { reason }
 }
 
-/** A rejection's body: always why. */
 export function rejectBodyOf(values: BusinessFormValues): ActivityReject | LocalRefusal {
   const body = closeBodyOf(values)
   return body.reason == null ? { path: "reason", message: REASON_NEEDED } : { reason: body.reason }
 }
 
-/** The dialog a command asks its reason in. */
 export function reasonForm(offer: ActivityOffer): BusinessFormSchema {
   return {
     key: `${PROVIDER_ACTIVITIES_MODULE.workspaceId}.${PROVIDER_ACTIVITIES_MODULE.moduleId}.${offer.command}`,

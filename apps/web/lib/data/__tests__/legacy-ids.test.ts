@@ -15,7 +15,6 @@ import {
 // role access maps and `?record=` bookmarks all carry it — so the rename goes
 // through the same seam as every other retired id.
 const LEGACY_COMPANY_ID = "company-wastehero-dk"
-/** The id it migrates to. */
 const COMPANY_ID = "company-kystbyen-dk"
 
 describe("the demo tenant's record id: company-wastehero-dk → company-kystbyen-dk", () => {
@@ -26,7 +25,6 @@ describe("the demo tenant's record id: company-wastehero-dk → company-kystbyen
   test("the id is rewritten, and rewriting it twice changes nothing", () => {
     assert.equal(migrateLegacyId(LEGACY_COMPANY_ID), COMPANY_ID)
     assert.equal(migrateLegacyId(COMPANY_ID), COMPANY_ID)
-    // A different company keeps its id: only the listed pair is renamed.
     assert.equal(migrateLegacyId("company-harbor"), "company-harbor")
   })
 

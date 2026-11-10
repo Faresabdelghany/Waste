@@ -48,10 +48,6 @@ import { serviceAreaFormValues } from "./service-areas"
 const assignment: BusinessFormField = { id: "serviceAreaAssignmentId", label: "Service area assignment", type: "select", required: true, relation: SERVICE_AREAS_MODULE, description: "The provider and the area at once." }
 const lastDayIn = (label: string, description: string): BusinessFormField => ({ id: "validTo", label, type: "date", description })
 
-// ---------------------------------------------------------------------------
-// Service areas and assignments
-// ---------------------------------------------------------------------------
-
 export const SERVICE_AREA_FORM: BusinessFormSchema = {
   key: "service-providers.service-areas",
   mode: "create",
@@ -88,7 +84,6 @@ export const SERVICE_AREA_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The service area was created." },
 }
 
-/** What the map's Create service area is told of a selection that touches no planning area, before any form opens. */
 export const NO_PLANNING_AREA_SELECTED = "The selection touches no planning area, and a service area is the planning areas it covers: select containers inside one"
 
 /** The map's door on the Pilot: the award's form on the selection's planning areas and boundary, the drawn polygon dropped (#127); a selection of none refused. */
@@ -121,7 +116,6 @@ export function pilotProviderCreate(
   return { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, initialValues: { validFrom: today, ...(held.length === 1 ? { serviceAreaAssignmentId: held[0] } : {}) }, schemaOverride }
 }
 
-/** An award's edit: its name, text, sets, notes and period; its code and project held, its holders in the assignments. */
 export const serviceAreaEditForm = (record: BusinessRecord): BusinessFormSchema => {
   const editable = editableOnly(SERVICE_AREA_FORM, ["areaName", "boundary", "zoneIds", "wasteFractionIds", "notes", "validFrom", "validTo"], {
     title: "Edit service area",
@@ -131,11 +125,9 @@ export const serviceAreaEditForm = (record: BusinessRecord): BusinessFormSchema 
   return { ...editable, sections: editable.sections.map((section) => ({ ...section, fields: section.fields.filter((field) => field.id !== "serviceProviderId") })) }
 }
 
-/** An award the form made, minted for the session. */
 export const createServiceAreaRecord = (values: BusinessFormValues, now: number): BusinessRecord =>
   mintedRecord({ id: `service-areas-service-area-${now}`, name: text(values, "areaName"), status: "Active", recordKind: SERVICE_AREA_RECORD_KIND, values: blankNone(values) })
 
-/** An edited award, its name as the form says it. */
 export const updateServiceAreaRecord = (record: BusinessRecord, values: BusinessFormValues): BusinessRecord => editedRecord(record, values, { name: text(values, "areaName") || record.name })
 
 export const ASSIGNMENT_FORM: BusinessFormSchema = {
@@ -161,17 +153,11 @@ export const ASSIGNMENT_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The area was assigned." },
 }
 
-/** An assignment's end: its notes and its last day alone. */
 export const assignmentEndForm = (record: BusinessRecord): BusinessFormSchema =>
   editableOnly(ASSIGNMENT_FORM, ["notes", "validTo"], { title: "End or note the assignment", description: `${record.name}: give the last day it holds the area, or correct its notes.`, submitLabel: "Save" })
 
-/** An assignment the form made under an award, minted for the session. */
 export const createAssignmentRecord = (values: BusinessFormValues, now: number): BusinessRecord =>
   mintedRecord({ id: `service-areas-assignment-${now}`, name: "New assignment", status: "Active", recordKind: ASSIGNMENT_RECORD_KIND, values: blankNone(values) })
-
-// ---------------------------------------------------------------------------
-// Service provider prices
-// ---------------------------------------------------------------------------
 
 export const PROVIDER_PRICE_FORM: BusinessFormSchema = {
   key: "commercial.service-provider-prices",
@@ -198,11 +184,9 @@ export const PROVIDER_PRICE_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The price was added." },
 }
 
-/** A price's edit: its notes and its end alone. */
 export const providerPriceEditForm = (record: BusinessRecord): BusinessFormSchema =>
   editableOnly(PROVIDER_PRICE_FORM, ["notes", "validTo"], { title: "Edit price", description: `${record.name}: the fee moves by Apply index and the bid never; here, the notes and the end.`, submitLabel: "Save changes" })
 
-/** A price the form made, minted for the session. */
 export const createProviderPriceRecord = (values: BusinessFormValues, now: number): BusinessRecord =>
   mintedRecord({ id: `service-provider-prices-service-provider-price-${now}`, name: "New price", status: "Active", recordKind: PROVIDER_PRICE_RECORD_KIND, values: blankNone(values) })
 
@@ -228,15 +212,10 @@ export const INDEX_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The index was applied." },
 }
 
-/** The chain's next row Apply index makes from a price: it names the row it indexes. */
 export const createIndexedPriceRecord = (price: BusinessRecord, values: BusinessFormValues, now: number): BusinessRecord => ({
   ...mintedRecord({ id: `service-provider-prices-indexed-price-${now}`, name: `${price.name} (indexed)`, status: "Active", recordKind: INDEXED_PRICE_RECORD_KIND, values: { ...blankNone(values), indexesPriceId: price.id } }),
   projectIds: price.projectIds,
 })
-
-// ---------------------------------------------------------------------------
-// Settlements
-// ---------------------------------------------------------------------------
 
 export const SETTLEMENT_FORM: BusinessFormSchema = {
   key: "commercial.settlements",
@@ -256,7 +235,6 @@ export const SETTLEMENT_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The settlement was opened." },
 }
 
-/** A settlement the form opened, minted for the session. */
 export const createSettlementRecord = (values: BusinessFormValues, now: number): BusinessRecord =>
   mintedRecord({ id: `settlements-settlement-${now}`, name: "New settlement", status: "Open", recordKind: SETTLEMENT_RECORD_KIND, values: blankNone(values) })
 
@@ -270,10 +248,6 @@ export const REOPEN_FORM: BusinessFormSchema = {
   sections: [{ id: "reopen", title: "Reopen", fields: [{ id: "reason", label: "Why", type: "textarea", required: true }] }],
   execution: { kind: "append-event", completionMessage: "The settlement was reopened." },
 }
-
-// ---------------------------------------------------------------------------
-// Weight review
-// ---------------------------------------------------------------------------
 
 const review = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]): BusinessFormSchema => ({
   key: "route-studio.weights",

@@ -20,10 +20,8 @@ import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } 
 /** Configure › Tickets & communication: the module the teams are the records of on the Pilot. */
 export const TICKET_TEAMS_MODULE = moduleAt("configure.templates")
 
-/** A team's two statuses as the form offers them. */
 export const TEAM_STATUS_LABELS = ["Active", "Inactive"] as const
 
-/** The form a team is added and edited with: its name, whether it takes tickets, and who is in it. */
 export const TICKET_TEAM_FIELDS: readonly BusinessFormField[] = [
   { id: "name", label: "Name", type: "text", required: true },
   {
@@ -65,7 +63,6 @@ export function createTicketTeamRecord(values: BusinessFormValues, { now }: { no
   return mintedRecord({ id: `configure-team-${now}`, name, status, recordKind: "Ticket team", values: { ...values, status } })
 }
 
-/** A team after an edit: its identity kept, the form's values over its typed ones. */
 export function updateTicketTeamRecord(record: BusinessRecord, values: BusinessFormValues): BusinessRecord {
   const name = typeof values.name === "string" && values.name.trim() !== "" ? values.name.trim() : record.name
   return { ...record, name, submittedValues: { ...record.submittedValues, ...values } }
@@ -88,7 +85,6 @@ export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (server
   return [...TICKET_KINDS.map((kind) => row({ kind, ticketTypeId: null }, statusLabel(kind))), ...typesListed(types, named).map((type) => row({ kind: null, ticketTypeId: type.id }, typeLabel(type)))]
 }
 
-/** What a row naming a team the API does not hold is told. */
 export const PICK_A_HELD_TEAM = "Pick a team the API holds"
 
 /** The body the rows become: each kind or type with a team, by server id; or the first row whose team the API does not hold. */

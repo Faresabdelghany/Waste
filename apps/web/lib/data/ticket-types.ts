@@ -43,19 +43,14 @@ export const TICKET_TYPE_PERMISSIONS_KEY = "permissionsJson"
 /** The record's automation, as the wire's list of actions in JSON, each team, person, follow-up type and vehicle by its web id. */
 export const TICKET_TYPE_ACTIONS_KEY = "actionsJson"
 
-/** A type's two statuses as a person reads them. */
 export const TICKET_TYPE_STATUS_LABELS = ["Active", "Inactive"] as const
 
-/** The six inputs as a person reads them. */
 export const FIELD_INPUT_LABELS: Readonly<Record<TicketFieldInput, string>> = { text: "Text", paragraph: "Paragraph", number: "Number", date: "Date", "yes-no": "Yes or no", choice: "Choice" }
 
-/** When a field must be filled in, as a person reads it. */
 export const FIELD_REQUIREMENT_LABELS: Readonly<Record<TicketFieldRequirement, string>> = { optional: "Optional", "to-open": "To open", "to-complete": "To complete" }
 
-/** The commands a type names roles for, in the machine's order, as a column heads them. */
 export const COMMAND_HEADINGS: readonly { command: TicketCommand; heading: string }[] = TICKET_COMMANDS.map((command) => ({ command, heading: capitalised(TICKET_COMMAND_VERBS[command]) }))
 
-/** New ticket type: its name, its kind, what it is for, and whether it is its kind's default. Its fields and permissions are set once it exists. */
 export const TICKET_TYPE_FORM: BusinessFormSchema = {
   key: "configure.templates",
   mode: "create",
@@ -121,13 +116,10 @@ export function typeActionsOf(record: Pick<BusinessRecord, "submittedValues">): 
   }
 }
 
-/** Each trigger as its section heads it. */
 export const TRIGGER_HEADINGS: Readonly<Record<TicketActionTrigger, string>> = Object.fromEntries(Object.entries(TRIGGER_WORDS).map(([trigger, words]) => [trigger, capitalised(words)])) as Record<TicketActionTrigger, string>
 
-/** Each kind of action as a picker offers it. */
 export const ACTION_KIND_LABELS: Readonly<Record<TicketActionKind, string>> = Object.fromEntries(TICKET_ACTION_KINDS.map((kind) => [kind, capitalised(ACTION_KIND_WORDS[kind])])) as Record<TicketActionKind, string>
 
-/** Whom a message goes to, as a picker offers it. */
 export const RECIPIENT_LABELS: Readonly<Record<TicketMessageRecipient, string>> = {
   "ticket-customer": "The ticket's customer",
   owner: "The property's owner",
@@ -137,7 +129,6 @@ export const RECIPIENT_LABELS: Readonly<Record<TicketMessageRecipient, string>> 
   "service-contact": "The property's service contact",
 }
 
-/** The statuses an action moves a ticket to, the priorities and the resolutions, as pickers offer them. */
 export const ACTION_COMMAND_OPTIONS: readonly BusinessFormOption[] = TICKET_ACTION_COMMANDS.map((command) => ({ value: command, label: capitalised(TICKET_COMMAND_VERBS[command]) }))
 export const PRIORITY_OPTIONS: readonly BusinessFormOption[] = TICKET_PRIORITIES.map((priority) => ({ value: priority, label: statusLabel(priority) }))
 export const RESOLUTION_OPTIONS: readonly BusinessFormOption[] = TICKET_RESOLUTIONS.map((resolution) => ({ value: resolution, label: statusLabel(resolution) }))
@@ -154,10 +145,8 @@ export function actionKindsFor(trigger: TicketActionTrigger, kind: TicketKind): 
   return TICKET_ACTION_KINDS.filter((action) => (closes ? action === "send-message" || action === "open-follow-up" : action !== "plan-in-route" || plannedService(kind) !== undefined))
 }
 
-/** No parameter: what a new action starts from before its kind's are filled in. */
 const NO_PARAMETERS = { teamId: null, userAccountId: null, priority: null, command: null, resolution: null, messageTemplateName: null, recipient: null, followUpTypeId: null, vehicleId: null, daysAhead: null } as const
 
-/** A new action of a kind on a trigger, with what it needs that has a sensible start — a priority, a status, a recipient, the days ahead — and the rest for a person to pick. */
 export function newAction(trigger: TicketActionTrigger, kind: TicketActionKind): TicketTypeAction {
   const start: Partial<TicketTypeAction> =
     kind === "set-priority"
@@ -188,10 +177,8 @@ export type FieldDraft = { key: string; label: string; helpText: string; input: 
 
 export const draftOf = (field: TicketTypeField): FieldDraft => ({ key: field.key, label: field.label, helpText: field.helpText ?? "", input: field.input, choices: field.choices.join(", "), requirement: field.requirement, keyTouched: true })
 
-/** A new field's draft: a line of text, optional, its key following its label until a person types one. */
 export const newFieldDraft = (): FieldDraft => ({ key: "", label: "", helpText: "", input: "text", choices: "", requirement: "optional", keyTouched: false })
 
-/** A draft after its label changes: the key follows the label until a person types one of their own. */
 export const relabelled = (draft: FieldDraft, label: string): FieldDraft => ({ ...draft, label, key: draft.keyTouched ? draft.key : fieldKeyOf(label) })
 
 /** The wire's field from a draft: the choices split on commas, a choice field's alone, the help text null where blank. */
@@ -224,13 +211,11 @@ export function updatedTicketTypeRecord(
   }
 }
 
-/** The input a type's field is on a form. */
 const FORM_TYPE: Readonly<Record<TicketFieldInput, BusinessFormFieldType>> = { text: "text", paragraph: "textarea", number: "number", date: "date", "yes-no": "checkbox", choice: "select" }
 
 /** The form field id a type's field is under: the type's web id and the key, so two types' keys never meet. */
 export const typeFieldFormId = (typeWebId: string, key: string): string => `typeField:${typeWebId}:${key}`
 
-/** One of a type's fields as a form field: its input, its help text, a choice's options and yes or no starting at no. */
 function formFieldOf(type: BusinessRecord, field: TicketTypeField): BusinessFormField {
   const options: BusinessFormOption[] | undefined = field.input === "choice" ? field.choices.map((choice) => ({ value: choice, label: choice })) : undefined
   return {
@@ -290,17 +275,14 @@ export function fieldValuesAfterEdit(type: BusinessRecord, held: Readonly<Record
   return { ...next, ...fieldValuesFromForm(type, values) }
 }
 
-/** A ticket's values as a form's initial values for its type's fields, every value as the form holds it. */
 export function formValuesOfFields(typeWebId: string, fieldValues: Readonly<Record<string, unknown>>): BusinessFormValues {
   const values: BusinessFormValues = {}
   for (const [key, value] of Object.entries(fieldValues)) values[typeFieldFormId(typeWebId, key)] = typeof value === "boolean" ? value : String(value)
   return values
 }
 
-/** A value as a ticket's details show it: yes or no in words, the rest as written. */
 export const shownFieldValue = (value: unknown): string => (value === true ? "Yes" : value === false ? "No" : value === undefined || value === null || value === "" ? "—" : String(value))
 
-/** The inputs and requirements a field editor offers, in the vocabulary's order. */
 export const FIELD_INPUT_OPTIONS: readonly BusinessFormOption[] = TICKET_FIELD_INPUTS.map((input) => ({ value: input, label: FIELD_INPUT_LABELS[input] }))
 export const FIELD_REQUIREMENT_OPTIONS: readonly BusinessFormOption[] = TICKET_FIELD_REQUIREMENTS.map((requirement) => ({ value: requirement, label: FIELD_REQUIREMENT_LABELS[requirement] }))
 

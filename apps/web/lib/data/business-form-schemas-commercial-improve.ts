@@ -2333,9 +2333,8 @@ export const commercialImproveBusinessFormSchemas = [
 
 // Apply index is the service-provider-prices module's bulk maintenance workflow.
 // The module key now resolves to the New service provider price create schema, so
-// this action lives outside the registry and is offered via schemaOverride
-// (the Price Engine module header's secondary button). Unlike registry
-// schemas, it carries its execution policy inline.
+// this action lives outside the registry. Unlike registry schemas, it carries
+// its execution policy inline.
 export const serviceProviderPriceIndexationFormSchema: BusinessFormSchema = {
   key: "commercial.service-provider-prices.apply-index",
   mode: "action",

@@ -26,7 +26,6 @@ export type MoveTyped = { on: string; outgoing: string; incoming: string; payer:
 /** Whether the role may move a property's occupant: the move writes the parties and the agreements, so it asks edit on both, as the API does. */
 export const moveOffered = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "edit") && mayOn(grants, "customers.agreements", "edit")
 
-/** Who may move out: every customer the record names today, in any role, each once, in the order the roles are listed. */
 export function movingOutOf(record: Pick<BusinessRecord, "submittedValues">): string[] {
   const named = PROPERTY_PARTY_ROLES.flatMap((role) => {
     const value = record.submittedValues?.[PARTY_FIELDS[role]]
@@ -35,7 +34,6 @@ export function movingOutOf(record: Pick<BusinessRecord, "submittedValues">): st
   return [...new Set(named)]
 }
 
-/** The body the API is asked, or the refusal at the field the office has to fix first. */
 export function moveBodyOf(typed: MoveTyped, serverIdOf: (webId: string) => string | undefined, dryRun: boolean): MoveCreate | LocalRefusal {
   if (typed.on === "") return { path: "on", message: "Pick the day the incoming customer moves in" }
   if (typed.outgoing === "") return { path: "outgoing", message: "Pick who moves out" }
@@ -58,12 +56,10 @@ export function moveBodyOf(typed: MoveTyped, serverIdOf: (webId: string) => stri
   }
 }
 
-/** One charge the move leaves past its day, as the review lists it. */
 export type ChargeLeft = { id: string; label: string; invoiced: boolean; advice: string }
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
 
-/** The roles in the order a person reads them: the wire's tokens as words. */
 const ROLE_WORDS: Readonly<Record<string, string>> = { owner: "owner", payer: "payer", tenant: "tenant", administrator: "administrator", "service-contact": "service contact" }
 
 /**

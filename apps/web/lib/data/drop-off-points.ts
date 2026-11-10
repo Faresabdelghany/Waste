@@ -22,30 +22,25 @@ import { exceptionIssues, hoursIssues, type OpeningException, type WeeklyWindow 
 import { serviceDaysRangeLabel } from "@waste/domain/planning/recurrence"
 import { isIsoDate, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 
-/** A point's two kinds as the form offers them and the table names them. */
 export const DROP_OFF_KIND_OPTIONS: readonly { value: DropOffPointKind; label: string }[] = [
   { value: "recycling-centre", label: "Recycling centre" },
   { value: "bring-bank", label: "Bring bank" },
 ]
 
-/** What the form is told about a text it cannot take, in a sentence. */
 export type TextRefusal = { message: string }
 
 const TIME = String.raw`(\d{1,2}):(\d{2})`
 const WINDOW = String.raw`${TIME}\s*[–-]\s*${TIME}`
-/** A line's windows, the whole of what follows its days: one window, or several separated by commas. */
 const WINDOWS_ONLY = new RegExp(String.raw`^${WINDOW}(?:\s*,\s*${WINDOW})*$`)
 const EACH_WINDOW = new RegExp(WINDOW, "g")
 const FIRST_TIME = /\d{1,2}:\d{2}/
 const pad = (hours: string, minutes: string) => `${hours.padStart(2, "0")}:${minutes}`
 
-/** A day by its name or its first three letters, whatever the case. */
 function dayOf(word: string): ServiceDay | null {
   const lowered = word.trim().toLowerCase()
   return SERVICE_DAYS.find((day) => day === lowered || SERVICE_DAY_SHORT_LABELS[day].toLowerCase() === lowered) ?? null
 }
 
-/** The days a line names: `Mon`, `Mon–Fri`, `Thursday, Sun`; at least one. */
 function daysOf(text: string, line: number): ServiceDay[] | TextRefusal {
   const parts = text.split(",").map((piece) => piece.trim())
   if (parts.some((part) => part === "")) return { message: `Line ${line}: name the days before the hours, such as Mon–Fri or Sat, Sun` }
@@ -69,12 +64,10 @@ function daysOf(text: string, line: number): ServiceDay[] | TextRefusal {
   return days
 }
 
-/** The windows a text names, in the order written. */
 const windowsOf = (text: string) => [...text.matchAll(EACH_WINDOW)].map((match) => ({ opensAt: pad(match[1]!, match[2]!), closesAt: pad(match[3]!, match[4]!) }))
 
 const HOURS_LINE = "give the days, then their hours and nothing else, such as Mon–Fri 10:00–18:00 or Sat 09:00–12:00, 13:00–17:00"
 
-/** The weekly hours a text names, or why it cannot be taken. */
 export function weeklyHoursOf(text: string): WeeklyWindow[] | TextRefusal {
   const hours: WeeklyWindow[] = []
   for (const [index, raw] of text.split("\n").entries()) {
@@ -91,7 +84,6 @@ export function weeklyHoursOf(text: string): WeeklyWindow[] | TextRefusal {
   return issue === undefined ? hours : { message: issue }
 }
 
-/** The weekly hours as the form shows them: a line per run of days with the same windows, in the week's order. */
 export function weeklyHoursText(hours: readonly WeeklyWindow[]): string {
   const windowsByDay = new Map<ServiceDay, string>()
   for (const day of SERVICE_DAYS) {
@@ -113,7 +105,6 @@ export function weeklyHoursText(hours: readonly WeeklyWindow[]): string {
 const DATE = /^(\d{4})-(\d{2})-(\d{2})\b/
 const ONE_WINDOW = new RegExp(String.raw`^${WINDOW}`)
 
-/** The exceptions a text names, or why it cannot be taken. */
 export function exceptionsOf(text: string): OpeningException[] | TextRefusal {
   const exceptions: OpeningException[] = []
   for (const [index, raw] of text.split("\n").entries()) {
@@ -140,7 +131,6 @@ export function exceptionsOf(text: string): OpeningException[] | TextRefusal {
   return issue === undefined ? exceptions : { message: issue }
 }
 
-/** The exceptions as the form shows them: a line a date, in date order. */
 export function exceptionsText(exceptions: readonly OpeningException[]): string {
   return [...exceptions]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -148,11 +138,6 @@ export function exceptionsText(exceptions: readonly OpeningException[]): string 
     .join("\n")
 }
 
-/**
- * The exceptions a save keeps, from `today` on: one the point already held
- * (`held`, the dates it was read with) is history once its day has passed and
- * dropped; one typed for a day gone by is refused, never quietly lost.
- */
 export function exceptionsToSave(exceptions: readonly OpeningException[], today: string, held: ReadonlySet<string>): OpeningException[] | TextRefusal {
   const typedPast = exceptions.find((exception) => exception.date < today && !held.has(exception.date))
   if (typedPast !== undefined) return { message: `${typedPast.date} has gone by: an exception is for today or a day ahead` }

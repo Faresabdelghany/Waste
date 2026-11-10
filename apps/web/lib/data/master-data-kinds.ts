@@ -1,26 +1,20 @@
 // The six kinds of operational master data and the one rule that says
 // which kind a record is (Issue #176, slice 2 of #81; the contaminant codes
 // joined with M5 of #293, the decommission reasons with O30 of #290). A leaf on purpose:
-// business-links reads it to route a record's link, the adapters own by it,
-// the generic workspace filters pickers by it, and none of them may pull the
-// pane's forms or the fixture registry in with it.
+// the adapters own by it, the generic workspace filters pickers by it, and
+// none of them may pull the pane's forms or the fixture registry in with it.
 import type { BusinessRecord } from "./business-modules"
 
-/** The six kinds, as the typed `kind` value spells them. */
 export const MASTER_DATA_KINDS = ["waste-fraction", "container-type", "service-frequency", "vehicle-type", "contaminant-code", "decommission-reason"] as const
 export type MasterDataKind = (typeof MASTER_DATA_KINDS)[number]
 
-/** The typed value a row carries its kind under. */
 export const MASTER_DATA_KIND_KEY = "kind"
 
 export type MasterDataKindDetails = {
   /** The web id prefix of a row of the kind: `fraction`, as the seed's ids read. */
   prefix: string
-  /** The record kind the registry files a row under. */
   recordKind: string
-  /** `Waste fraction`, as a person reads it. */
   label: string
-  /** `Waste fractions`, the tab. */
   plural: string
 }
 
@@ -38,8 +32,8 @@ export const isMasterDataKind = (value: unknown): value is MasterDataKind => typ
 /**
  * Which kind a record of the module is: its id's prefix first, then the
  * typed kind it carries; null for a record of neither — the fixtures'
- * master-data sets. The adapters' ownership, the pickers' filter and the
- * record links are all this.
+ * master-data sets. The adapters' ownership and the pickers' filter are both
+ * this.
  */
 export function masterDataKindOf(record: Pick<BusinessRecord, "id"> & Partial<Pick<BusinessRecord, "submittedValues">>): MasterDataKind | null {
   for (const kind of MASTER_DATA_KINDS) {

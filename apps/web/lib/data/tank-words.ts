@@ -31,12 +31,10 @@ export const LITRES_MAX = 999_999
 
 export const thousands = new Intl.NumberFormat("en-GB")
 
-/** A tank in one line: what it is, what it holds and where it lets its water out. */
 export const tankSummary = (tank: { kind: TankKind; volumeLitres: number; outlet: TankOutlet }): string => `${TANK_KIND_LABELS[tank.kind]} · ${thousands.format(tank.volumeLitres)} L · ${TANK_OUTLET_LABELS[tank.outlet]}`
 
 const wholeNumber = (value: string): number | undefined => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : undefined)
 
-/** The litres the driver typed: a whole positive number up to `LITRES_MAX`, or nothing. */
 export function litresOf(value: string): number | undefined {
   const litres = wholeNumber(value)
   return litres === undefined || litres < 1 || litres > LITRES_MAX ? undefined : litres

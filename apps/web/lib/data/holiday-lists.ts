@@ -25,7 +25,6 @@ import {
 import { holidayNamesForCountry } from "@waste/domain/planning/holiday-names"
 import { type RecordOrdering } from "@/lib/prototype/business-filters"
 
-/* --------------------------- the company's lists --------------------------- */
 // Since 2026-11-05 a holiday list is the company's own record, one per
 // country (lib/prototype/route-schemes/holiday-list-records), which the pane
 // lists in a table and opens into a table of its holidays. These are the
@@ -38,7 +37,6 @@ export type HolidayListDraft = {
   name: string
 }
 
-/** The facts a list shows beside its typed values. */
 function holidayListFacts(record: BusinessRecord, country: string, entries: readonly HolidayEntry[]): Record<string, string> {
   return { ...record.facts, Country: country, Holidays: String(entries.length) }
 }
@@ -80,7 +78,6 @@ export function createHolidayListRecord(
   }
 }
 
-/** The list renamed or moved to another country, its holidays kept. */
 export function withHolidayListDraft(record: BusinessRecord, draft: HolidayListDraft): BusinessRecord {
   const name = draft.name.trim()
   return {
@@ -93,7 +90,6 @@ export function withHolidayListDraft(record: BusinessRecord, draft: HolidayListD
   }
 }
 
-/** The list with its holidays replaced by the entries, everything else kept. */
 export function withHolidayListEntries(record: BusinessRecord, entries: readonly HolidayEntry[]): BusinessRecord {
   const { holidayDates, holidayNames } = holidayEntryValues(entries)
   const submittedValues: SubmittedValues = { ...record.submittedValues, [HOLIDAY_LIST_KEYS.dates]: holidayDates }
@@ -131,8 +127,6 @@ export function nextYearEntries(record: BusinessRecord, fromYear: number): Holid
   return carryHolidaysToYear(thisYear, year, holidayNamesForCountry(holidayListCountry(record))).filter((entry) => !held.has(entry.date))
 }
 
-/* ------------------------------ The lists' table ------------------------------ */
-
 /**
  * A list's status in the table, laid out as the Routes table is (search,
  * Filter, View, and a status per row): in use while a project rests on it —
@@ -145,7 +139,6 @@ export type HolidayListStatus = (typeof HOLIDAY_LIST_STATUSES)[number]
 export const HOLIDAY_LIST_OPTIONAL_COLUMNS = ["Holidays", "Next holiday", "Projects"] as const
 export type HolidayListColumn = (typeof HOLIDAY_LIST_OPTIONAL_COLUMNS)[number]
 
-/** One list as its row reads. */
 export type HolidayListRow = {
   record: BusinessRecord
   name: string
@@ -159,12 +152,10 @@ export type HolidayListRow = {
   status: HolidayListStatus
 }
 
-/** The name a holiday reads as: its own, else what its country's known list calls the day, else "Holiday". */
 export function shownHolidayName(entry: HolidayEntry, country: string | undefined): string {
   return entry.name || holidayNamesForCountry(country)(entry.date) || "Holiday"
 }
 
-/** The lists as their rows read on `today`, a list's projects counted by `projectCount`. */
 export function holidayListRows(lists: readonly BusinessRecord[], projectCount: (list: BusinessRecord) => number, today: string): HolidayListRow[] {
   return lists.map((record) => {
     const country = holidayListCountry(record)
@@ -184,14 +175,12 @@ export function holidayListRows(lists: readonly BusinessRecord[], projectCount: 
   })
 }
 
-/** Whether the row holds the search, in any of its shown words; a blank search holds every row. */
 export function holidayListRowMatches(row: HolidayListRow, query: string): boolean {
   const needle = query.trim().toLowerCase()
   if (needle === "") return true
   return [row.name, row.countryLabel, row.country ?? "", row.nextHoliday, row.status, row.record.description].join(" ").toLowerCase().includes(needle)
 }
 
-/** The rows by the View's order: by list name, or the lists in use first and then by name. */
 export function orderHolidayListRows(rows: readonly HolidayListRow[], ordering: RecordOrdering): HolidayListRow[] {
   const byName = (a: HolidayListRow, b: HolidayListRow) => a.name.localeCompare(b.name)
   const rank = (row: HolidayListRow) => HOLIDAY_LIST_STATUSES.indexOf(row.status)

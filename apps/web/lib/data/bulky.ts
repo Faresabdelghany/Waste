@@ -27,7 +27,6 @@ import { mintedRecord } from "@/lib/data/containers"
 import { type Grants, mayOn } from "@/lib/modules/grants"
 import { itemsSentence } from "./pickup-services"
 
-/** Where the bookings are: Operate › Bulky Bookings. */
 export const BULKY_BOOKINGS_MODULE = moduleAt("operate.bulky-bookings") satisfies ModuleLocation
 
 /** The record's keys the surfaces read beside the facts. */
@@ -36,13 +35,11 @@ export const BULKY_STATUS_KEY = "bulkyStatus"
 export const BULKY_DAY_KEY = "day"
 export const BULKY_ITEMS_KEY = "items"
 
-/** A booking's status as a person reads it. */
 export const BULKY_STATUS_LABELS: Readonly<Record<BulkyBookingStatus, string>> = { booked: "Booked", routed: "Routed", collected: "Collected", cancelled: "Cancelled" }
 
 /** The items one booking lists at most, and the most of one item: the API's own caps. */
 export { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX as ITEMS_MAX }
 
-/** A product as the schedules pane offers it. */
 type OfferedProduct = { id: string; name: string; unit: ProductUnit; status: ProductStatus }
 
 /** The products a schedule may charge: the project's active ones sold by the job or by the item (#449), and the one it charges now whatever it is. */
@@ -72,7 +69,6 @@ export function itemsOf(rows: readonly ItemRow[]): { description: string; quanti
 
 export { itemsSentence }
 
-/** A day the place may be booked on, as the dialog offers it: its slots left, a full one said so and not offered. */
 export function dayOption(day: BulkyAvailableDay): { value: string; label: string; disabled: boolean } {
   return { value: day.day, label: `${formatShortDay(day.day)} · ${day.left === 0 ? "full" : `${day.left} of ${day.slots} left`}`, disabled: day.left === 0 }
 }
@@ -114,7 +110,6 @@ export function bookingRecordOf(draft: BookingDraft, placeName: string, now: num
   })
 }
 
-/** A row's typed value by key, empty where it has none. */
 const valueOf = (record: BusinessRecord, key: string): string => {
   const value = record.submittedValues?.[key]
   return typeof value === "string" ? value : ""
@@ -142,14 +137,12 @@ export function placesOfAgreement(subscriptions: readonly BusinessRecord[], agre
   return places
 }
 
-/** The routes a booking may be put on: its project's, running on its day, not started. */
 export function routesForBooking<T extends BusinessRecord>(routes: readonly T[], booking: BusinessRecord): T[] {
   const projectId = valueOf(booking, "projectId")
   const day = valueOf(booking, BULKY_DAY_KEY)
   return routes.filter((route) => valueOf(route, "projectId") === projectId && valueOf(route, "operatingDate") === day && isOneOf(valueOf(route, "status"), NOT_STARTED_ROUTE_STATUSES))
 }
 
-/** The bookings a route's Add stop may collect: booked ones of its project for the day it runs, as the picker offers them. */
 export function bookingsForRoute(bookings: readonly BusinessRecord[], route: BusinessRecord): { value: string; label: string }[] {
   const projectId = valueOf(route, "projectId")
   const day = valueOf(route, "operatingDate")
@@ -164,15 +157,10 @@ export function bookingPlaceOf(booking: BusinessRecord): { kind: "property" | "p
   return point === "" ? undefined : { kind: "point", webId: point }
 }
 
-/** The booking moved to another day: the row the store patches, its day alone changed. */
 export const withBookingDay = (booking: BusinessRecord, day: string): BusinessRecord => ({ ...booking, value: day, submittedValues: { ...booking.submittedValues, [BULKY_DAY_KEY]: day } })
 
 /** Whether a booking's details offer Route, Change day and Cancel: only a booked one moves. */
 export const bookingMoves = (record: BusinessRecord): boolean => valueOf(record, BULKY_STATUS_KEY) === "booked"
-
-// ---------------------------------------------------------------------------
-// Schedules
-// ---------------------------------------------------------------------------
 
 /** What the person's role lets them do with the schedules — the route schemes' module, the API's grant for them — and whether it reads the areas and the products they name. */
 export const scheduleAccessOf = (grants: Grants | null) => ({
@@ -196,7 +184,6 @@ export type ScheduleForm = {
   lastDay: string
 }
 
-/** What a schedule's dialog refuses, at the field it names. */
 export type ScheduleRefusal = { field: keyof ScheduleForm; message: string }
 
 export const isScheduleRefusal = (value: unknown): value is ScheduleRefusal => typeof value === "object" && value !== null && "field" in value && "message" in value
@@ -269,7 +256,6 @@ export function schedulePatchBodyOf(schedule: BulkySchedule, form: ScheduleForm)
   return Object.keys(patch).length === 0 ? null : patch
 }
 
-/** "Every week on Tuesday", "Every 2 weeks on Monday, odd weeks", "Daily": what a schedule's days are. */
 export function recurrenceSentence(schedule: Pick<BulkySchedule, "frequency" | "serviceDays" | "weekRotation">): string {
   if (schedule.frequency === "daily") return RECURRENCE_FREQUENCY_LABELS.daily
   const days = SERVICE_DAYS.filter((day) => schedule.serviceDays.includes(day)).map((day) => SERVICE_DAY_LABELS[day])
@@ -277,14 +263,12 @@ export function recurrenceSentence(schedule: Pick<BulkySchedule, "frequency" | "
   return `${RECURRENCE_FREQUENCY_LABELS[schedule.frequency]} on ${days.join(", ")}${rotation}`
 }
 
-/** "12 slots a day", "1 slot a day". */
 export const slotsSentence = (slots: number): string => `${count(slots, "slot")} a day`
 
 /** "From 2027-01-01", "2027-01-01 to 2027-06-30": a period by its last day in force. */
 export const periodSentence = (period: { validFrom: string; validTo: string | null }): string =>
   period.validTo === null ? `From ${period.validFrom}` : `${period.validFrom} to ${lastDayIn(period.validTo)}`
 
-/** The schedules a project holds, by their area's name then their start. */
 export function schedulesInOrder(schedules: readonly BulkySchedule[], areaName: (id: string) => string): BulkySchedule[] {
   return [...schedules].sort((a, b) => areaName(a.planningAreaId).localeCompare(areaName(b.planningAreaId)) || a.validFrom.localeCompare(b.validFrom))
 }

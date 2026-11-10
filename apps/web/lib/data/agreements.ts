@@ -11,7 +11,7 @@
 // Two kinds in one module, told apart by one rule: the id's prefix first
 // (`agreement-…`, `subscription-…`: a fixture's id, or what the adapters mint
 // from the server's), then the kind the form stamped on a row made this
-// session, before the API has answered (`recordKind`, adapter.ts `ofKind`).
+// session, before the API has answered (`recordKind`, `ofKind`).
 //
 // The agreement's form is the registry's own (business-form-schemas-customers-
 // resources.ts), trimmed on the API to what the wire takes, its price list
@@ -48,10 +48,8 @@ export const PROPERTY_PREFIX = "property"
 export const SHARED_POINT_PREFIX = "shared-point"
 export const PRICE_LIST_PREFIX = "price-list"
 
-/** Whether a record of the module is a subscription: the adapters' one ownership rule — its id's prefix, else the kind the form stamped on it. */
 export const isSubscriptionRecord: (record: Pick<BusinessRecord, "id" | "recordKind">) => boolean = ofKind(SUBSCRIPTION_PREFIX, [SUBSCRIPTION_RECORD_KIND])
 
-/** Whether a record of the module is an agreement: the same rule, for the other kind. */
 export const isAgreementRecord: (record: Pick<BusinessRecord, "id" | "recordKind">) => boolean = ofKind(AGREEMENT_PREFIX, [AGREEMENT_RECORD_KIND])
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -68,10 +66,6 @@ export function referencedId(value: string | undefined, prefix: string): string 
   const bare = text.startsWith(`${prefix}-`) ? text.slice(prefix.length + 1) : text
   return UUID.test(bare) ? bare.toLowerCase() : undefined
 }
-
-// ---------------------------------------------------------------------------
-// The agreement form on the API
-// ---------------------------------------------------------------------------
 
 /**
  * The agreement form's fields the wire has no home for: the prototype's
@@ -108,12 +102,6 @@ const SERVICE_WINDOW_SECTION: BusinessFormSection = {
   ],
 }
 
-/**
- * The registry's agreement form as the API takes it: the fields above gone,
- * the price list the API's, a section that lost fields losing the words that
- * were about them, and the one left holding the price list and the notes
- * called so, then the service window (O14 of #290).
- */
 export function agreementFormSchemaOnApi(schema: BusinessFormSchema): BusinessFormSchema {
   return {
     ...schema,
@@ -154,17 +142,11 @@ export function agreementPriceListOptions(records: readonly BusinessRecord[], va
   return current === undefined || options.some((option) => option.value === current) ? options : [...options, { value: current, label: current }]
 }
 
-/** The products a subscription may name: its agreement's project's (`subscriptionInitialValues`), or every project's where it names none. */
 export function subscriptionProductOptions(records: readonly BusinessRecord[], values: BusinessFormValues): BusinessFormOption[] {
   const project = valueOf(values, "projectId")
   return records.filter((record) => project === undefined || !record.projectIds?.length || record.projectIds.includes(project)).map(optionOf)
 }
 
-// ---------------------------------------------------------------------------
-// The subscription form
-// ---------------------------------------------------------------------------
-
-/** The two kinds of place a subscription is delivered at, as the form's `placeKind` spells them. */
 const PLACE_KINDS = [
   { value: "property", label: "A property" },
   { value: "shared-point", label: "A shared collection point" },

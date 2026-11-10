@@ -5,12 +5,13 @@
 // event and the event's two commands, Run billing's period, a credit note's
 // dialog over an invoice's lines, and a payment's registration, its match
 // and a customer's statement (#291 C6) — for the command surfaces
-// (components/waste/commands/commercial-surfaces.tsx, billing-surfaces.tsx)
-// and the Settings pane to render.
+// (components/waste/commands/pricing-surfaces.tsx, billing-surfaces.tsx,
+// payment-surfaces.tsx) and the Settings pane to render.
 //
 // Every field id here is a key the adapters read (lib/api/records/pricing.ts,
-// billing.ts): the form's values go onto the record as its typed values, or
-// into a command's input, and the adapter makes the contract's body of them.
+// billing.ts, payments.ts): the form's values go onto the record as its typed
+// values, or into a command's input, and the adapter makes the contract's body
+// of them.
 // lib/data/__tests__/commercial-forms.test.ts holds the two together through
 // the adapters themselves, so a renamed field cannot quietly send nothing.
 //
@@ -53,7 +54,6 @@ import { MASTER_DATA_MODULE } from "./master-data"
 import { PLANNING_AREAS_MODULE } from "./planning-areas"
 import { CONTACTS_MODULE, NO_ONE } from "./properties"
 
-/** The form's values with every None (`NO_ONE`) read as blank: what a record carries of an optional pick taken back. */
 export function blankNone(values: BusinessFormValues): BusinessFormValues {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === NO_ONE ? "" : value]))
 }
@@ -69,13 +69,11 @@ export function editableOnly(schema: BusinessFormSchema, editable: readonly stri
   }
 }
 
-/** The values an edit form opens with: the record's typed values for the form's fields. */
 export function formValuesOf(schema: BusinessFormSchema, record: BusinessRecord): BusinessFormValues {
   const fieldIds = new Set(schema.sections.flatMap((section) => section.fields.map((field) => field.id)))
   return Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && (typeof value === "string" || typeof value === "boolean")))
 }
 
-/** An edited row: its identity kept, the form's values over its typed ones. */
 export function editedRecord(record: BusinessRecord, values: BusinessFormValues, changes: Partial<BusinessRecord> = {}): BusinessRecord {
   return { ...record, ...changes, submittedValues: { ...record.submittedValues, ...blankNone(values) } }
 }
@@ -88,10 +86,6 @@ const priceList: BusinessFormField = { id: "priceListId", label: "Price list", t
 const planningArea: BusinessFormField = { id: "planningAreaId", label: "Zone (planning area)", type: "select", relation: PLANNING_AREAS_MODULE }
 const customerKind: BusinessFormField = { id: "customerKind", label: "Customer type", type: "select", options: CUSTOMER_KIND_OPTIONS }
 const customer = (label: string, description?: string): BusinessFormField => ({ id: "customerId", label, type: "select", relation: CONTACTS_MODULE, description })
-
-// ---------------------------------------------------------------------------
-// Products (Settings › Commercial › Products, on the Pilot)
-// ---------------------------------------------------------------------------
 
 export const PRODUCT_FORM: BusinessFormSchema = {
   key: "commercial.products",
@@ -134,7 +128,6 @@ export const PRODUCT_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The product was created." },
 }
 
-/** The product's edit: its project held. */
 export const productEditForm = (record: BusinessRecord): BusinessFormSchema =>
   editableOnly(PRODUCT_FORM, ["productName", "productType", "status", "priceUnit", "freeDays", "containerType", "wasteFraction", "serviceFrequencyId", "invoiceName", "invoiceCode", "vatPercent"], {
     title: "Edit product",
@@ -145,19 +138,13 @@ export const productEditForm = (record: BusinessRecord): BusinessFormSchema =>
 /** The values a product's edit opens with, its status the wire's token. */
 export const productFormValues = (record: BusinessRecord): BusinessFormValues => ({ ...formValuesOf(PRODUCT_FORM, record), status: record.status.toLowerCase() })
 
-/** A product the form made, minted for the session: its status the label of the token picked. */
 export function createProductRecord(values: BusinessFormValues, now: number): BusinessRecord {
   const said = blankNone(values)
   return mintedRecord({ id: `products-product-${now}`, name: text(said, "productName"), status: statusLabel(text(said, "status") || "draft"), recordKind: PRODUCT_RECORD_KIND, values: said })
 }
 
-/** An edited product: its name and status as the form says them. */
 export const updateProductRecord = (record: BusinessRecord, values: BusinessFormValues): BusinessRecord =>
   editedRecord(record, values, { name: text(values, "productName") || record.name, status: statusLabel(text(values, "status") || record.status.toLowerCase()) })
-
-// ---------------------------------------------------------------------------
-// Price lists (Settings › Commercial › Price lists, both modes)
-// ---------------------------------------------------------------------------
 
 export const PRICE_LIST_FORM: BusinessFormSchema = {
   key: "commercial.price-rows",
@@ -193,7 +180,6 @@ export const PRICE_LIST_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The price list was created." },
 }
 
-/** The list's edit: its project, code and currency held. */
 export const priceListEditForm = (record: BusinessRecord): BusinessFormSchema =>
   editableOnly(PRICE_LIST_FORM, ["name", "isDefault", "notes", "validFrom", "validTo"], { title: "Edit price list", description: `Correct ${record.name}. Its code and currency stay: its rows are quoted in them.`, submitLabel: "Save changes" })
 
@@ -217,15 +203,10 @@ export function createPriceListRecord(values: BusinessFormValues, { now, day }: 
   }
 }
 
-/** An edited list: its name and its status as the form leaves them. */
 export const updatePriceListRecord = (record: BusinessRecord, values: BusinessFormValues, day: string): BusinessRecord => {
   const edited = editedRecord(record, values)
   return { ...edited, name: text(values, "name") || record.name, status: priceListStatusOn(edited.submittedValues ?? {}, day) }
 }
-
-// ---------------------------------------------------------------------------
-// Price rows: Add price, a row's edit, Explain price
-// ---------------------------------------------------------------------------
 
 export const PRICE_ROW_FORM: BusinessFormSchema = {
   key: "commercial.price-rows",
@@ -266,11 +247,9 @@ export const PRICE_ROW_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The price was added." },
 }
 
-/** A row's edit: its price, its note and its end; its list, product, conditions and start held. */
 export const priceRowEditForm = (record: BusinessRecord): BusinessFormSchema =>
   editableOnly(PRICE_ROW_FORM, ["amount", "note", "validTo"], { title: "Edit price", description: `Change ${record.context}'s price for ${record.name}, its note or its end. A different condition or start is another row: end this one and add it.`, submitLabel: "Save changes" })
 
-/** A row Add price made, minted for the session. */
 export function createPriceRowRecord(values: BusinessFormValues, now: number): BusinessRecord {
   return mintedRecord({ id: `price-rows-price-row-${now}`, name: "New price", status: "Active", recordKind: PRICE_ROW_RECORD_KIND, values: blankNone(values) })
 }
@@ -299,10 +278,6 @@ export const EXPLAIN_PRICE_FORM: BusinessFormSchema = {
   ],
   execution: { kind: "preview", completionMessage: "The rows were judged." },
 }
-
-// ---------------------------------------------------------------------------
-// Billable events
-// ---------------------------------------------------------------------------
 
 export const EVENT_FORM: BusinessFormSchema = {
   key: "commercial.events",
@@ -336,12 +311,10 @@ export const EVENT_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The event was added." },
 }
 
-/** A manual event the form made, minted for the session. */
 export function createEventRecord(values: BusinessFormValues, now: number): BusinessRecord {
   return mintedRecord({ id: `events-billable-event-${now}`, name: "Manual event", status: "Ready", recordKind: EVENT_RECORD_KIND, values: blankNone(values) })
 }
 
-/** The commands of an event the dialogs offer, in order. */
 export const EVENT_COMMANDS = ["reprice", "cancel", "hold", "release"] as const
 export type EventCommand = (typeof EVENT_COMMANDS)[number]
 
@@ -398,10 +371,6 @@ export const EVENT_COMMAND_FORMS: Readonly<Record<EventCommand, BusinessFormSche
   },
 }
 
-// ---------------------------------------------------------------------------
-// Billing runs
-// ---------------------------------------------------------------------------
-
 export const RUN_BILLING_FORM: BusinessFormSchema = {
   key: "commercial.billing",
   mode: "action",
@@ -430,11 +399,6 @@ export function createBillingRunRecord(values: BusinessFormValues, now: number):
   return mintedRecord({ id: `billing-billing-run-${now}`, name: `Billing run ${text(values, "periodFrom")} – ${text(values, "periodTo")}`, status: "Requested", recordKind: BILLING_RUN_RECORD_KIND, values: blankNone(values) })
 }
 
-// ---------------------------------------------------------------------------
-// Credit notes
-// ---------------------------------------------------------------------------
-
-/** The field a line's credited quantity is typed under. */
 export const creditLineField = (lineId: string) => `${CREDIT_LINE_KEY}${lineId}`
 
 /** What remains to credit of each line of an invoice: its quantity less what its credit notes credited, none of a reversal's line. */
@@ -444,7 +408,6 @@ export function remainingByLine(detail: Pick<InvoiceDetail, "lines">, creditNote
   return new Map(detail.lines.map((line) => [line.id, line.netMinor < 0 ? 0 : Math.max(0, line.quantity - (credited.get(line.id) ?? 0))]))
 }
 
-/** The credit note's dialog over one invoice: the reason, a note, and every line or the named lines by quantity, each held to what remains of it. */
 export function creditNoteForm(invoice: Pick<BusinessRecord, "name">, detail: Pick<InvoiceDetail, "lines">, remaining: ReadonlyMap<string, number>): BusinessFormSchema {
   const lines: BusinessFormField[] = detail.lines
     .filter((line) => (remaining.get(line.id) ?? 0) > 0)
@@ -491,17 +454,12 @@ export function creditNoteForm(invoice: Pick<BusinessRecord, "name">, detail: Pi
   }
 }
 
-/** A credit note the dialog made against an invoice, minted for the session. */
 export function createCreditNoteRecord(invoice: BusinessRecord, values: BusinessFormValues, now: number): BusinessRecord {
   return {
     ...mintedRecord({ id: `invoices-credit-note-${now}`, name: `Credit note for ${invoice.name}`, status: "Credit note", recordKind: CREDIT_NOTE_RECORD_KIND, values: { ...blankNone(values), creditsInvoiceId: invoice.id } }),
     projectIds: invoice.projectIds,
   }
 }
-
-// ---------------------------------------------------------------------------
-// Payments (#291 C6)
-// ---------------------------------------------------------------------------
 
 const invoicePaid = (description: string): BusinessFormField => ({ id: "invoiceId", label: "Invoice", type: "select", relation: INVOICES_MODULE, description })
 
@@ -531,12 +489,10 @@ export const PAYMENT_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The payment was registered." },
 }
 
-/** A payment the dialog registered, minted for the session. */
 export function createPaymentRecord(values: BusinessFormValues, now: number): BusinessRecord {
   return mintedRecord({ id: `payments-payment-${now}`, name: "Payment", status: "Unmatched", recordKind: PAYMENT_RECORD_KIND, values: blankNone(values) })
 }
 
-/** Match: what remains of a payment, or part of it, applied to one invoice of its project. */
 export function allocateForm(payment: BusinessRecord): BusinessFormSchema {
   const remaining = payment.facts.Unallocated ?? ""
   return {
@@ -572,7 +528,6 @@ export const BANK_IMPORT_FORM: BusinessFormSchema = {
   execution: { kind: "preview", completionMessage: "The statement was read." },
 }
 
-/** A customer's statement: one currency over a window of days. */
 export const STATEMENT_FORM: BusinessFormSchema = {
   key: "customers.contacts",
   mode: "action",
