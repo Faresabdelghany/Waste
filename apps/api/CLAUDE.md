@@ -24,9 +24,9 @@ The Hono API (ADR-0001), run from TypeScript source through tsx. `src/app.ts` bu
 ## Rules the API holds
 
 - Take `lockRow` before reading a row whose rule the API holds, parent before child, and `lockRows` for a set (in id order). A command that may change a key column of the row it locks (a name or a code unique in its scope) passes `strengthFor(table, patch)` as `lockRow`'s strength. `wms_api` cannot row-lock a ledger row, since a row lock needs the UPDATE privilege it was denied, so lock the parent instead.
-- A status gates a new reference, never an existing one (`src/routes/statuses.ts`).
+- A status gates a new reference, never an existing one (`refuseUnless`, `@waste/domain/status-gates`).
 - A child's period sits inside its parent's (`src/routes/periods.ts`): a child placed outside is a 400 at the bound, and a parent shortened under its children is a 409 counting them.
-- Routes take the app's injected `now`. An instant becomes a day in the project's timezone through `src/routes/days.ts`, and a body's instant may run ahead of the clock by `OCCURRED_AT_SKEW_MS` at most.
+- Routes take the app's injected `now`. An instant becomes a day in the project's timezone through `dayInTimezone` (`@waste/domain/clock`), and a body's instant may run ahead of the clock by `OCCURRED_AT_SKEW_MS` at most.
 - News for another context goes into the outbox through `emit()` (`src/outbox.ts`), in the request's transaction, after the rows it describes, with the wire resource as the route answers it for its payload.
 - Every write is audited by the database's trigger under the Principal (`authenticate` → `writtenBy`, `src/auth/audit.ts`); a route writes no history itself. The office's reason is the `Waste-Change-Reason` header, percent-encoded and bounded, and `GET /audit-events` reads a row's history under its table's module (`AUDITED`).
 - A statement the worker runs too lives in `@waste/db/commands` and throws `Refused`, which the error handler answers as the 409 or 400 it names.
