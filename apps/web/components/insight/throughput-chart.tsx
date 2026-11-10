@@ -11,7 +11,8 @@
 
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipProps } from "recharts"
 
-import { countOf, type ThroughputPoint } from "@/lib/insight/dashboard"
+import { type ThroughputPoint } from "@/lib/insight/dashboard"
+import { countOf } from "@/lib/format/counts"
 
 function ThroughputTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || payload === undefined || payload.length === 0) return null

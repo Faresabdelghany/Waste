@@ -77,7 +77,7 @@ export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?:
       ? notShownSentence("default teams")
       : project === null
         ? "No project to set default teams for."
-        : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: false }, "default teams") ?? ""))
+        : readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: false }, "default teams"))
 
   return (
     <AssetPanelShell

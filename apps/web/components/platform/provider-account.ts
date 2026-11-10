@@ -9,7 +9,8 @@
 import { moduleKeyOf } from "@/lib/modules/keys"
 import { webIdVia } from "@/lib/api/records/references"
 import type { ModuleLocation } from "@/lib/data/business-modules"
-import { commandOffered, providerWorkspaceOf, type ProviderWorkspace } from "@/lib/api/provider-workspace"
+import { providerWorkspaceOf, type ProviderWorkspace } from "@/lib/data/provider-workspace"
+import { commandOffered } from "@/lib/api/provider-commands"
 
 import { useApiSession } from "@/components/platform/api-session-store"
 import { useServerResolver } from "@/components/platform/business-record-store"

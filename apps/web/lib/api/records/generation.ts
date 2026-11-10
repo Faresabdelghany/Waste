@@ -87,7 +87,6 @@ export function modulesAfterRun(run: Pick<GenerationRun, "status">): readonly Mo
   return run.status === "succeeded" ? [ROUTES_MODULE, PICKUPS_MODULE] : []
 }
 
-
 export type RunWatch = {
   /** The run's read, cut short when the watch stops. */
   read: (runId: string, signal: AbortSignal) => Promise<GenerationRun>

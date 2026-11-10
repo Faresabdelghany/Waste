@@ -69,6 +69,20 @@ test("the map opens on Any date with the search, filters, and window in the tool
   await expect(page.getByRole("status").filter({ hasText: "Base map unavailable" })).toBeVisible()
 })
 
+// Bug (#616's review): the container sheet showed the prototype's invented events, stamped Olivia Larsen, on the Pilot too.
+test("a container opened from the selection shows the API's audit log of it as its History, never the prototype's events", async ({ page }) => {
+  await openMapPlanning(page)
+  await selectRectangle(page)
+  const panel = page.getByRole("region", { name: "Selected area" })
+  await panel.getByTestId("selected-containers").locator("[data-container-row]").first().click()
+  const sheet = page.getByRole("dialog")
+  await sheet.getByRole("tab", { name: "History" }).click()
+  await expect(sheet.getByRole("heading", { name: "History", exact: true })).toBeVisible()
+  await expect(sheet).not.toContainText("Audited event history")
+  await expect(sheet).not.toContainText("Olivia Larsen")
+  await expect(sheet.getByRole("button", { name: "Download history PDF" })).toHaveCount(0)
+})
+
 test("the Containers list mirrors the selection of the server's placed containers and hover highlights run both ways between rows and markers", async ({ page }) => {
   await openMapPlanning(page)
   await selectRectangle(page)

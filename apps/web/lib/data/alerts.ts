@@ -17,7 +17,6 @@ import type { BusinessRecord } from "./business-modules"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { tokenOptions } from "./tickets"
 
-
 /** Raise alert on the Pilot: `AlertCreate` — what was seen, how severe, and what it is about, one of the four at least. */
 export const ALERT_FORM: BusinessFormSchema = {
   key: "operate.exceptions",

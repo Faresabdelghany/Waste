@@ -54,7 +54,6 @@ export const KILOGRAMS = "A weight is a whole number of kilograms, 1 or more"
 /** What a ticket's or a tare's own fields are told when the patch would move them. */
 const KEPT = "What was weighed and for whom is what the ticket is: void it and weigh again"
 
-
 /** A whole number of kilograms a value says, NaN for one that is not, undefined for none. */
 function weightIn(value: string | undefined): number | undefined {
   if (value === undefined) return undefined

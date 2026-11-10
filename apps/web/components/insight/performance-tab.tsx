@@ -21,19 +21,8 @@ import { statusLabel } from "@/lib/records/fields"
 import { reportKey, serviceReport, ticketReport, type ReportWindowQuery } from "@/lib/api/reports"
 import { csvFileName, csvOf, downloadCsv } from "@/lib/data/csv"
 import { pickupReasonLabel } from "@/lib/data/route-labels"
-import {
-  countChange,
-  countedOf,
-  countOf,
-  percentOf,
-  rateChange,
-  SCHEME_COLUMNS,
-  schemeKeyOf,
-  schemeNameOf,
-  schemeRowOf,
-  schemesByAttention,
-  throughputOf,
-} from "@/lib/insight/dashboard"
+import { countChange, percentOf, rateChange, SCHEME_COLUMNS, schemeKeyOf, schemeNameOf, schemeRowOf, schemesByAttention, throughputOf } from "@/lib/insight/dashboard"
+import { countedOf, countOf } from "@/lib/format/counts"
 
 import { ReportCard, ReportNotice } from "./report-card"
 import { comparisonOf, StatRow, StatTile } from "./stat-tile"

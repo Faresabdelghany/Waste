@@ -20,6 +20,17 @@ export function formatWeight(kilograms: number): string {
   return `${enUS(kilograms / 1000, 1)} t`
 }
 
+const tonnes = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const grouped = new Intl.NumberFormat("en")
+
+/** Kilograms as a person reads a load: in tonnes with one decimal from a tonne up, in kilograms below. */
+export function weightOf(kg: number): string {
+  return kg >= 1000 ? `${tonnes.format(kg / 1000)} t` : `${grouped.format(kg)} kg`
+}
+
+/** Kilograms as a chart's axis reads them: tonnes to one decimal from a tonne up, else kilograms as they are. */
+export const compactWeight = (kg: number): string => (kg >= 1000 ? `${Math.round(kg / 100) / 10} t` : `${kg} kg`)
+
 /** Whole kilograms as a weighing reads them, with thousands separators: "12,480 kg". */
 export const kilograms = (value: number): string => `${new Intl.NumberFormat("en").format(value)} kg`
 

@@ -38,6 +38,7 @@ import { patchOf, type Client, type MappingContext, type RecordCommand, type Res
 import { isLocalRefusal, ofKind, statusLabel, typed, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { projectTimezoneOf } from "./clock"
 import { instantOn, wallClockIn } from "@/lib/format/clock"
+import { kilograms } from "@/lib/format/measures"
 import { driverAdapter, vehicleAdapter } from "./fleet"
 import { depotAdapter, projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia, type ReferenceRule } from "./references"
@@ -146,7 +147,7 @@ export const allocationAdapter: ResourceAdapter<VehicleAllocation> = {
     const end = wallClockIn(allocation.plannedTo, timezone)
     const vehicle = nameVia(context, "vehicle", allocation.vehicleId)
     const driver = allocation.driverId === null ? undefined : nameVia(context, "driver", allocation.driverId)
-    const capacity = allocation.requiredCapacityKg === null ? "" : `${allocation.requiredCapacityKg.toLocaleString("en-GB")} kg`
+    const capacity = allocation.requiredCapacityKg === null ? "" : kilograms(allocation.requiredCapacityKg)
     const facts: Record<string, string> = {
       Vehicle: vehicle,
       Driver: driver ?? "No driver",

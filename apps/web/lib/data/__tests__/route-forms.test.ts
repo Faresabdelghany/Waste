@@ -18,7 +18,8 @@ import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import { ADD_STOP, ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { AGREEMENTS_MODULE } from "../agreements"
-import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "../allocations"
+import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "../allocations"
+import { isTrailerRecord } from "@/lib/modules/fleet"
 import { type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "../containers"
@@ -273,7 +274,7 @@ describe("the stop's dialogs", () => {
     assert.deepEqual(fieldOf(form, "outcome")?.options?.map((option) => option.value), [...PICKUP_OUTCOMES])
     assert.deepEqual(fieldOf(form, "reason")?.visibleWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
     assert.deepEqual(fieldOf(form, "reason")?.requiredWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
-    // The reasons in the Driver App's words (lib/driver/route-view.ts), the system's four spelled out.
+    // The reasons in the Driver App's words (lib/data/route-labels.ts), the system's four spelled out.
     const reasons = new Map(fieldOf(form, "reason")?.options?.map((option) => [option.value, option.label]))
     assert.equal(reasons.get("capacity"), "Over capacity")
     assert.equal(reasons.get("not-presented"), "Not presented")

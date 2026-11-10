@@ -11,10 +11,10 @@ export type ReadNoun = { readonly is?: boolean; readonly notShown?: string }
 export const notShownSentence = (noun: string, { is = false }: Pick<ReadNoun, "is"> = {}): string => `The ${noun} ${is ? "is" : "are"} not shown to your role.`
 
 /** "Reading the planning areas from the API…" */
-export const readingSentence = (noun: string): string => `Reading the ${noun} from the API…`
+const readingSentence = (noun: string): string => `Reading the ${noun} from the API…`
 
 /** "The planning areas could not be read from the API: <why>." */
-export const unreadSentence = (noun: string, why: string): string => `The ${noun} could not be read from the API: ${why}`
+const unreadSentence = (noun: string, why: string): string => `The ${noun} could not be read from the API: ${why}`
 
 /**
  * A module's records as a pane reads them (`useModuleRecords`): being read,
@@ -33,6 +33,8 @@ export function moduleReadSentence(answer: { pending: boolean; notGranted: boole
  * not the role's where `viewed` is false, not read with `problem` saying why,
  * or still on its way; null once `answered`.
  */
+export function readSentence(read: { viewed?: boolean; problem: string | null; answered: false }, noun: string, words?: ReadNoun): string
+export function readSentence(read: { viewed?: boolean; problem: string | null; answered: boolean }, noun: string, words?: ReadNoun): string | null
 export function readSentence(read: { viewed?: boolean; problem: string | null; answered: boolean }, noun: string, { is = false, notShown = noun }: ReadNoun = {}): string | null {
   if (read.viewed === false) return notShownSentence(notShown, { is })
   if (read.problem !== null) return unreadSentence(noun, read.problem)

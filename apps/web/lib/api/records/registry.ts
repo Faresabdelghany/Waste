@@ -82,7 +82,6 @@ function customerFields(record: BusinessRecord) {
   }
 }
 
-
 export const customerAdapter: ResourceAdapter<Customer> = {
   prefix: "customer",
   auditTable: "customer",

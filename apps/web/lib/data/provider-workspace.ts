@@ -9,21 +9,17 @@
 // through `POST /users` on a provider's role (`PROVIDER_ROLE_SCOPE`), and its
 // tickets, raised about a route it runs, in that route's project. Fixture
 // mode keeps NordRen ApS, its fixture role and its fixture forms untouched.
-import type { ModuleKey } from "@waste/domain/access/modules"
+// The commands its account sends are lib/api/provider-commands.ts'.
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
-import type { BusinessRecord } from "@/lib/data/business-modules"
-import { mintedRecord } from "@/lib/data/containers"
-import { PICKUPS_MODULE, ROUTES_MODULE } from "@/lib/data/routes"
-import { createTicketRecord, tokenOptions } from "@/lib/data/tickets"
-import { allows, type Grants } from "@/lib/modules/grants"
-import { moduleAt, moduleKeyOf } from "@/lib/modules/keys"
+import { moduleAt } from "@/lib/modules/keys"
 
-import { DEACTIVATE_USER, REACTIVATE_USER } from "./records/organisation"
-import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "./records/provider-activities"
-import { ASSIGN_ROUTE, DISPATCH_ROUTE } from "./records/routes"
+import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessRecord } from "./business-modules"
+import { mintedRecord } from "./containers"
+import { PICKUPS_MODULE, ROUTES_MODULE } from "./routes"
+import { createTicketRecord, tokenOptions } from "./tickets"
 
 /** Service Providers › Service Provider Workspace: a provider's own team, read and invited through `/users` (#291 C24). */
 export const TEAM_MODULE = moduleAt("service-providers.service-provider-workspace")
@@ -47,34 +43,6 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
     providerId: me.serviceProvider.id,
     legalName: me.serviceProvider.legalName,
   }
-}
-
-/**
- * The commands a Service Provider's account sends, by module (#291 slice
- * 23b): it crews a route it runs and sends it to its own driver, and switches
- * its own team's accounts off and on again. Every other command of a module —
- * a stop's, a ticket's, a ticket's patch — is the office's: the API finds no
- * row for a provider's, so no surface offers it one.
- */
-/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
-export const PATCH_RECORD = "patch"
-
-export const PROVIDER_COMMANDS: Readonly<Partial<Record<ModuleKey, readonly string[]>>> = {
-  "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
-  [moduleKeyOf(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)]: [DEACTIVATE_USER, REACTIVATE_USER],
-  // Its own proposals and notes (#474): withdrawn, completed and corrected; the office alone decides a proposal.
-  "service-providers.activities": [WITHDRAW_ACTIVITY, COMPLETE_ACTIVITY, PATCH_RECORD],
-}
-
-/**
- * Whether a surface offers a command of a module to the account signed in:
- * an office account every one, as before; a provider's account those the
- * API gives a provider (`PROVIDER_COMMANDS`), and only where its role allows
- * `edit` on the module.
- */
-export function commandOffered(account: { provider: boolean; grants: Grants | undefined }, moduleKey: ModuleKey, command: string): boolean {
-  if (!account.provider) return true
-  return (PROVIDER_COMMANDS[moduleKey] ?? []).includes(command) && allows(account.grants, moduleKey, "edit")
 }
 
 /** What an office account is told on the provider's workspace on the Pilot: it is a provider's alone. */

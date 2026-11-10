@@ -8,7 +8,7 @@
 // the store's toast in its words, over the form still holding what was
 // typed. The module is a provider's account's alone (`providersOnly`): the
 // office invites and switches accounts in Settings › Users & roles. The form
-// is lib/api/provider-workspace.ts's.
+// is lib/data/provider-workspace.ts's.
 import { useState } from "react"
 import { Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
@@ -22,7 +22,7 @@ import { useCommandRunner, useModuleReady, useOpenRecord } from "@/components/pl
 import { useCommandOffered, useProviderWebId, useProviderWorkspace } from "@/components/platform/provider-account"
 import { DEACTIVATE_USER, REACTIVATE_USER } from "@/lib/api/records/organisation"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/api/provider-workspace"
+import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/data/provider-workspace"
 
 /** Add user: a provider's account invites into its own team. */
 export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {

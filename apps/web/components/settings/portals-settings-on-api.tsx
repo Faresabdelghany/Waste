@@ -35,7 +35,6 @@ import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
 
-
 export function PortalsSettingsOnApi() {
   const organisation = useModuleRecords("configure", "organization")
   const drivers = useModuleRecords("fleet", "drivers")

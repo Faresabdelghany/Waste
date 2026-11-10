@@ -31,7 +31,7 @@ import { isServerBacked, type SwitchedModuleKey } from "@/lib/api/records/module
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"
 import { inspectionOpen } from "@/lib/data/inspections"
-import { isTeamMember } from "@/lib/api/provider-workspace"
+import { isTeamMember } from "@/lib/data/provider-workspace"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 
@@ -61,7 +61,6 @@ import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, ROUTES_PRIMA
 import { WarehouseStockSurface } from "./stock-surfaces"
 import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
-
 
 export type CommandSurface = {
   /**

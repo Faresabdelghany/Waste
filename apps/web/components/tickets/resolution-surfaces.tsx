@@ -25,7 +25,7 @@ import { createTicketRecord, TICKET_FORM, TICKETS_MODULE } from "@/lib/data/tick
 import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert, type AlertCommandWithForm } from "@/lib/data/alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
-import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/api/provider-workspace"
+import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/data/provider-workspace"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"

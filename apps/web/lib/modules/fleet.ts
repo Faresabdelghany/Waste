@@ -1,4 +1,18 @@
+import type { BusinessRecord } from "@/lib/prototype/prototype-record"
+
 import { workspaceSpec } from "./spec"
+
+/**
+ * Whether a fleet row is a trailer: its typed kind, which the server's rows
+ * and the fixture form carry (`resourceKind`), else the fixture id's
+ * `trailer-` prefix. The Vehicle pickers offer the rest, the Trailer pickers
+ * these alone (#179): the vehicles' `offers`, the reservations' pickers and a
+ * vehicle's compartments all read it.
+ */
+export function isTrailerRecord(record: BusinessRecord): boolean {
+  const kind = record.submittedValues?.resourceKind
+  return typeof kind === "string" && kind !== "" ? kind === "trailer" : record.id.startsWith("trailer-")
+}
 
 export const FLEET = workspaceSpec("fleet", {
   label: "Fleet",
@@ -10,10 +24,7 @@ export const FLEET = workspaceSpec("fleet", {
       providerOperated: true,
       picked: {
         // A trailer is a vehicle of the fleet: a trailer field offers the trailers alone, a vehicle field the rest.
-        offers: (fieldId, record) => {
-          const isTrailer = record.submittedValues?.resourceKind === "trailer" || record.id.startsWith("trailer-")
-          return fieldId === "trailerId" ? isTrailer : fieldId === "vehicleId" ? !isTrailer : true
-        },
+        offers: (fieldId, record) => (fieldId === "trailerId" ? isTrailerRecord(record) : fieldId === "vehicleId" ? !isTrailerRecord(record) : true),
         // A vehicle's name carries its registration plate; its facts show the callsign.
         named: (record) => record.name.split(" · ")[0],
       },
