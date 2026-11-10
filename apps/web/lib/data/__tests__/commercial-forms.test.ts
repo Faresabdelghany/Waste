@@ -86,10 +86,8 @@ const invoiceRecord = recordFrom(invoiceAdapter, { ...invoice, createdAt: invoic
 const state: ServerRecordsState = new Map([...withCatalogue, ["commercial.price-rows", moduleOf([listRecord], [list.id])], ["commercial.invoices", moduleOf([invoiceRecord], [invoice.id])]])
 const context = at(state)
 
-/** Every field id a form offers. */
 const fieldsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))
 
-/** Asserts a form offers exactly these fields: what the adapter reads, nothing it does not. */
 const offersExactly = (schema: BusinessFormSchema, ids: readonly string[]) => assert.deepEqual([...fieldsOf(schema)].sort(), [...ids].sort(), schema.title)
 
 const body = (made: unknown) => {

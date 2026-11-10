@@ -119,7 +119,6 @@ describe("seedMissingContainerTypes", () => {
     const first = seedMissingContainerTypes({ containerTypes: [...FIXTURE_CONTAINER_TYPES], seededContainerTypeIds: fixtureIds }, fixtures)
     assert.deepEqual(first.containerTypes.at(-1), later)
     assert.ok(first.seededContainerTypeIds.includes("igloo-3000"))
-    // Deleted after the seed: the next load leaves it deleted.
     const deleted = { ...first, containerTypes: first.containerTypes.filter((type) => type.id !== "igloo-3000") }
     assert.equal(seedMissingContainerTypes(deleted, fixtures), deleted)
   })

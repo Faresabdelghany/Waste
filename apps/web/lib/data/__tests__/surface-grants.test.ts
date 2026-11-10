@@ -25,7 +25,6 @@ import { slaAccessOf } from "../ticket-sla"
 import { ticketTeamsAccessOf } from "../ticket-teams"
 import { ticketTypesAccessOf } from "../ticket-types"
 
-/** Every surface's rule, read as the flags it answers. */
 const RULES = {
   scheduleAccessOf,
   countingRulesAccessOf,

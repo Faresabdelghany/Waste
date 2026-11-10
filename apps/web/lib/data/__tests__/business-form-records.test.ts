@@ -68,7 +68,6 @@ describe("clearedFactKeys", () => {
     // The dialog submits visible fields only; a conditional field hidden by
     // its controlling checkbox is absent from the values altogether.
     assert.deepEqual(clearedFactKeys(schema, omit({ ...initial, negotiated: false }, "note"), initial), [])
-    // A record fact with no field on the form is never on the list either.
     assert.deepEqual(clearedFactKeys(schema, omit(initial, "amount"), initial), [])
   })
 
