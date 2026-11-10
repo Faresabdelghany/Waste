@@ -47,3 +47,4 @@ The Hono API (ADR-0001), run from TypeScript source through tsx. `src/app.ts` bu
 ## Tests
 
 - `src/**/*.test.ts`. A suite on the shared local database mints its own tenant (`src/__tests__/tenant.ts`) and removes it with `dropTenant`; a suite that writes a ledger hands `dropTenant` the owner's pool (`DATABASE_ADMIN_URL`), since `wms_api` cannot delete ledger rows. Tokens are signed against a key set each test generates (`src/__tests__/tokens.ts`), and calls go through `callingAs` (`src/__tests__/calls.ts`).
+- The package's `--test-timeout` bounds each test file as well as each test: a suite that sends hundreds of requests stays well under it on a loaded machine, and asserts a create's `Location` only where the create is under test.
