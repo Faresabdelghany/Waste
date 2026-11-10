@@ -176,7 +176,7 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
 // into service, `issue`, which is the Registry's `POST
 // /containers/:id/placements`. Each dialog's input becomes the contract's
 // body here — a warehouse, a fraction, a frequency by web id through the
-// resolver, or by the id chip a row of a module not yet switched shows; the
+// resolver, or by the id chip a row of a module not yet read shows; the
 // form's last day in service as the wire's first day out — or a refusal
 // naming the field.
 // What the container's state allows is the API's to say: every command is
