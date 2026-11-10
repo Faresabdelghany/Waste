@@ -1,7 +1,7 @@
 // What every create answers, read the way a client reads it (Issue #74). A
 // route suite's own `create` helper posts the body and hands the response
-// here, so the three things a create promises are asserted in one place and
-// on every create the suites make:
+// here, so the three things a create promises are asserted in one place,
+// on every create a suite hands it:
 //
 //   201             — and the body, as the contracts schema parses it;
 //   Location        — the row's own single-row GET, relative to the origin:
