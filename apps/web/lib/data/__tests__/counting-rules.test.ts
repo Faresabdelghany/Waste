@@ -46,7 +46,7 @@ describe("who may do what", () => {
     const grants: Grants = [{ moduleKey: "configure.templates", actions: ["view", "create", "edit"] }]
     assert.deepEqual(countingRulesAccessOf(grants), { view: true, create: true, edit: true, delete: false, simulate: false })
     assert.equal(countingRulesAccessOf([...grants, { moduleKey: "route-studio.pickups", actions: ["view"] }]).simulate, true)
-    assert.equal(countingRulesAccessOf(undefined).view, false)
+    assert.equal(countingRulesAccessOf([]).view, false)
   })
 })
 

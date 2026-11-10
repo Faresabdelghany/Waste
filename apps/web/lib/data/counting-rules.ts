@@ -15,15 +15,15 @@ import { lastDayIn } from "@waste/domain/periods"
 import { COUNTING_PERIODS, type CountingPeriod } from "@waste/domain/resolution/vocabulary"
 import { count } from "@waste/domain/text"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 
 /** What the person may do here: the templates' grant, and the stops' besides to simulate, since a simulation reads them. */
-export const countingRulesAccessOf = (grants: Grants | undefined) => ({
-  view: allows(grants, "configure.templates", "view"),
-  create: allows(grants, "configure.templates", "create"),
-  edit: allows(grants, "configure.templates", "edit"),
-  delete: allows(grants, "configure.templates", "delete"),
-  simulate: allows(grants, "configure.templates", "view") && allows(grants, "route-studio.pickups", "view"),
+export const countingRulesAccessOf = (grants: Grants | null) => ({
+  view: mayOn(grants, "configure.templates", "view"),
+  create: mayOn(grants, "configure.templates", "create"),
+  edit: mayOn(grants, "configure.templates", "edit"),
+  delete: mayOn(grants, "configure.templates", "delete"),
+  simulate: mayOn(grants, "configure.templates", "view") && mayOn(grants, "route-studio.pickups", "view"),
 })
 
 const PERIOD_LABELS: Readonly<Record<CountingPeriod, string>> = { month: "Month", quarter: "Quarter", year: "Year" }

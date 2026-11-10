@@ -26,10 +26,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { notShownSentence, readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 import {
   CHANNEL_LABELS,
   isTemplateRefusal,
@@ -45,8 +45,7 @@ import {
 } from "@/lib/data/message-templates"
 
 export function MessageTemplatesSettings() {
-  const { me } = useApiSession()
-  const access = templatesAccessOf(me?.role.grants)
+  const access = templatesAccessOf(useGrants())
   const setting = useProjectSetting<MessageTemplate[], TemplateDraft, TemplateRefusal>({
     name: "message-templates",
     readable: access.view,

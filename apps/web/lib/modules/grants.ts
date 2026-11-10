@@ -2,7 +2,7 @@
 // typed by the domain's module keys and actions, which every page, the
 // record store's reads and the workspace's actions go through.
 import type { Grant } from "@waste/domain/access/grants"
-import type { Action, ModuleKey } from "@waste/domain/access/modules"
+import { MODULE_KEYS, type Action, type ModuleKey } from "@waste/domain/access/modules"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
 
 import { moduleKeyOf, type ModuleLocation } from "./keys"
@@ -13,6 +13,9 @@ export type Grants = readonly Grant[]
 /** Whether the grants allow the action on the module; nothing is allowed without grants. */
 export const allows = (grants: Grants | undefined, moduleKey: ModuleKey, action: Action): boolean =>
   (grants ?? []).some((grant) => grant.moduleKey === moduleKey && grant.actions.includes(action))
+
+/** The modules an account may view (`mayOn`'s rule): every one while nothing holds it back, else those its grants let it view. */
+export const modulesMayView = (grants: Grants | null): ReadonlySet<ModuleKey> => (grants === null ? new Set(MODULE_KEYS) : viewedModules(grants))
 
 /** The modules the grants let a role view: the API grants `view` wherever it grants anything, so it is the one action to look for. */
 export const viewedModules = (grants: Grants | undefined): ReadonlySet<ModuleKey> =>

@@ -52,7 +52,7 @@ describe("who reads and writes the register", () => {
     assert.equal(tanksReadable([{ moduleKey: "customers.properties", actions: ["view"] }]), true)
     assert.equal(tanksEditable([{ moduleKey: "customers.properties", actions: ["view"] }]), false)
     assert.equal(tanksEditable([{ moduleKey: "customers.properties", actions: ["view", "edit"] }]), true)
-    assert.equal(tanksReadable(undefined), false)
+    assert.equal(tanksReadable([]), false)
   })
 })
 

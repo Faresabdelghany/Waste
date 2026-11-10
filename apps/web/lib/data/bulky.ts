@@ -24,7 +24,7 @@ import { moduleAt } from "@/lib/modules/keys"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { itemsSentence } from "./pickup-services"
 
 /** Where the bookings are: Operate › Bulky Bookings. */
@@ -175,12 +175,12 @@ export const bookingMoves = (record: BusinessRecord): boolean => valueOf(record,
 // ---------------------------------------------------------------------------
 
 /** What the person's role lets them do with the schedules — the route schemes' module, the API's grant for them — and whether it reads the areas and the products they name. */
-export const scheduleAccessOf = (grants: Grants | undefined) => ({
-  view: allows(grants, "route-studio.schemes", "view"),
-  create: allows(grants, "route-studio.schemes", "create"),
-  edit: allows(grants, "route-studio.schemes", "edit"),
-  areas: allows(grants, "configure.areas", "view"),
-  products: allows(grants, "commercial.products", "view"),
+export const scheduleAccessOf = (grants: Grants | null) => ({
+  view: mayOn(grants, "route-studio.schemes", "view"),
+  create: mayOn(grants, "route-studio.schemes", "create"),
+  edit: mayOn(grants, "route-studio.schemes", "edit"),
+  areas: mayOn(grants, "configure.areas", "view"),
+  products: mayOn(grants, "commercial.products", "view"),
 })
 
 /** A schedule as its dialog edits it: every value a string, as the inputs hold them; the last day in force where the wire's `validTo` is the first day out. */

@@ -11,7 +11,7 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
 import { channelShapeIssue, unknownPlaceholders, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 
 /** The module the templates are granted under: Tickets & communication's. */
 export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates" satisfies ModuleKey
@@ -20,10 +20,10 @@ export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email:
 export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }
 
 /** What a role may do in the pane. */
-export const templatesAccessOf = (grants: Grants | undefined) => ({
-  view: allows(grants, MESSAGE_TEMPLATES_MODULE_KEY, "view"),
-  create: allows(grants, MESSAGE_TEMPLATES_MODULE_KEY, "create"),
-  edit: allows(grants, MESSAGE_TEMPLATES_MODULE_KEY, "edit"),
+export const templatesAccessOf = (grants: Grants | null) => ({
+  view: mayOn(grants, MESSAGE_TEMPLATES_MODULE_KEY, "view"),
+  create: mayOn(grants, MESSAGE_TEMPLATES_MODULE_KEY, "create"),
+  edit: mayOn(grants, MESSAGE_TEMPLATES_MODULE_KEY, "edit"),
 })
 
 /** A template as the dialog holds it: every field as typed, the template's id where it is an edit. */

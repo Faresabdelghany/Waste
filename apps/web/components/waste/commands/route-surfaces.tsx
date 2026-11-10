@@ -48,10 +48,10 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { useApiClient } from "@/components/platform/api-session-store"
 import { RouteMessagesSection } from "@/components/waste/commands/route-messages-section"
 import { useGrants } from "@/components/platform/use-grants"
-import { allows, mayTake, type ModuleAction } from "@/lib/modules/grants"
+import { mayOn, mayTake, type ModuleAction } from "@/lib/modules/grants"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/platform/business-record-store"
@@ -495,7 +495,7 @@ type RoutePageParts = { information: ReactNode; tickets: { count: number; conten
 
 function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "sheet" | "page"; page?: RoutePageParts }) {
   const pickers = useRelationPickers()
-  const { me } = useApiSession()
+  const grants = useGrants()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
   const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId)
   const moduleReady = useModuleReady(ROUTES_MODULE)
@@ -590,7 +590,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
     />
   )
   const sessionsBlock = <ReadRows read={{ rows: detail?.sessions ?? null, problem: reads.problem }} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="route-sessions" line={(session) => sessionLine(session, timezone)} />
-  const messagesBlock = <RouteMessagesSection record={record} timezone={timezone} canSend={allows(me?.role.grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
+  const messagesBlock = <RouteMessagesSection record={record} timezone={timezone} canSend={mayOn(grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
   const logBlock = (
     <ReadRows
       read={log}

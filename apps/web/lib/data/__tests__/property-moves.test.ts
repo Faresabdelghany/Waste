@@ -25,7 +25,7 @@ describe("moveOffered", () => {
     const grants = (keys: Partial<Record<ModuleKey, Action[]>>): Grants => (Object.entries(keys) as [ModuleKey, Action[]][]).map(([moduleKey, actions]) => ({ moduleKey, actions }))
     assert.equal(moveOffered(grants({ "customers.properties": ["view", "edit"], "customers.agreements": ["view", "edit"] })), true)
     assert.equal(moveOffered(grants({ "customers.properties": ["view", "edit"], "customers.agreements": ["view"] })), false)
-    assert.equal(moveOffered(undefined), false)
+    assert.equal(moveOffered([]), false)
   })
 })
 

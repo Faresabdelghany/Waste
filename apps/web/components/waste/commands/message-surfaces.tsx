@@ -17,18 +17,18 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiSession } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import type { RowSurfaceProps } from "@/components/platform/surface-props"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useModuleReady, useRowHistory } from "@/components/platform/use-command-support"
-import { allows } from "@/lib/modules/grants"
+import { mayOn } from "@/lib/modules/grants"
 import { problemSentence } from "@/lib/api/problem"
 import { customerContacts } from "@/lib/api/records/customer-contacts"
 import { activeTemplates, customerMessages, MESSAGE_STATUS_LABELS, messageLine, recipientOptions, sendMessage, type MessageDraft } from "@/lib/api/records/messages"
 import { typed } from "@/lib/records/fields"
 import { CHANNEL_LABELS } from "@/lib/data/message-templates"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
+import { useGrants } from "@/components/platform/use-grants"
 
 const STATUS_TONES: Readonly<Record<string, string>> = {
   sent: "border-success/30 bg-success/10 text-success-foreground",
@@ -40,9 +40,9 @@ const STATUS_TONES: Readonly<Record<string, string>> = {
 /** A customer's newest messages, and the dialog that sends one. */
 export function MessagesSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
-  const { me } = useApiSession()
+  const grants = useGrants()
   const moduleReady = useModuleReady(CONTACTS_MODULE)
-  const sends = me !== null && allows(me.role.grants, "customers.contacts", "create")
+  const sends = mayOn(grants, "customers.contacts", "create")
   const [version, setVersion] = useState(0)
   const messages = useRowHistory(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, record, version, customerMessages)
   const contacts = useRowHistory(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, record, version, customerContacts)

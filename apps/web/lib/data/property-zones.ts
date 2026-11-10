@@ -8,10 +8,10 @@
 // collect them.
 import type { PlanningAreasAt } from "@waste/contracts/planning-areas"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 
 /** Whether the role reads a property's zones: the property's own grant, the API's for the read. */
-export const zonesReadable = (grants: Grants | undefined): boolean => allows(grants, "customers.properties", "view")
+export const zonesReadable = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "view")
 
 /** What the details say of the zones: their names in code order, or why there are none. */
 export function zonesSentence(read: Pick<PlanningAreasAt, "on" | "items">, placed: boolean): string {

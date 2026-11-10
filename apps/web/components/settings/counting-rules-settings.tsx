@@ -39,6 +39,7 @@ import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { accessUnknownSentence } from "@/lib/api/session"
 import { unknownTypeName, type TypeChoice } from "@/lib/data/ticket-scope"
 import { readSentence } from "@/lib/api/read-state"
+import { useGrants } from "@/components/platform/use-grants"
 import {
   COUNTING_PERIOD_OPTIONS,
   countingRuleBodyOf,
@@ -86,7 +87,7 @@ async function choicesOf(client: Parameters<typeof listAll>[0]): Promise<Omit<Ch
 export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode; onOpenTeams?: () => void } = {}) {
   const client = useApiClient()
   const session = useApiSession()
-  const access = countingRulesAccessOf(session.me?.role.grants)
+  const access = countingRulesAccessOf(useGrants())
   // Read again after every write: the key carries how many there have been.
   const [writes, setWrites] = useState(0)
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))

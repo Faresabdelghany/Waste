@@ -24,6 +24,7 @@ import { useApiClient, useApiSession } from "@/components/platform/api-session-s
 import { get, listPage, put } from "@/lib/api/client"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { ALERT_THRESHOLD_OPTIONS, alertsWithheldBecause, alertThresholdOf, noticeRowOf, preferencesBodyOf, type NO_ALERTS } from "@/lib/data/notification-preferences"
+import { useGrants } from "@/components/platform/use-grants"
 
 /** How many of the newest notices the pane shows. */
 const NOTICES_SHOWN = 20
@@ -33,6 +34,7 @@ type Threshold = AlertSeverity | typeof NO_ALERTS
 export function NotificationsSettingsOnApi() {
   const client = useApiClient()
   const { me } = useApiSession()
+  const grants = useGrants()
   const read = useReport<NotificationPreferences>(me === null ? null : "notification-preferences", (asking) => get<NotificationPreferences>(asking, "/me/notification-preferences"))
   const [reading, setReading] = useState(0)
   const notices = useReport(me === null ? null : `my-notices:${reading}`, (asking) => listPage<Message>(asking, "/me/notices", { limit: NOTICES_SHOWN }))
@@ -45,7 +47,7 @@ export function NotificationsSettingsOnApi() {
   const threshold: Threshold = editing ? edits.threshold : base === null ? "none" : alertThresholdOf(base)
   const ticketAssigned = editing ? edits.ticketAssigned : (base?.ticketAssigned ?? false)
   const [saving, setSaving] = useState(false)
-  const withheld = alertsWithheldBecause(me?.role.grants)
+  const withheld = alertsWithheldBecause(grants)
 
   const change = (values: Partial<{ threshold: Threshold; ticketAssigned: boolean }>) => {
     if (base === null) return

@@ -13,7 +13,7 @@ import type { Message } from "@waste/contracts/messaging"
 import type { NotificationPreferences } from "@waste/contracts/notifications"
 import type { AlertSeverity } from "@waste/contracts/resolution"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 
 /** The module whose `view` an alert e-mail needs: the alerts' board. */
 export const ALERTS_MODULE_KEY = "operate.exceptions" satisfies ModuleKey
@@ -40,8 +40,8 @@ export const preferencesBodyOf = (threshold: AlertSeverity | typeof NO_ALERTS, t
 })
 
 /** Why an alert e-mail will not reach this role, or null where it will. */
-export const alertsWithheldBecause = (grants: Grants | undefined): string | null =>
-  allows(grants, ALERTS_MODULE_KEY, "view") ? null : "Your role does not read alerts, so no alert e-mail reaches you whatever you choose here."
+export const alertsWithheldBecause = (grants: Grants | null): string | null =>
+  mayOn(grants, ALERTS_MODULE_KEY, "view") ? null : "Your role does not read alerts, so no alert e-mail reaches you whatever you choose here."
 
 /** One notice as the list shows it: what it said, where it went, and how its sending stands. */
 export type NoticeRow = { id: string; subject: string; to: string; status: string; sentAt: string | null; reason: string | null }

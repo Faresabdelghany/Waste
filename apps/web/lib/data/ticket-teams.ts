@@ -10,7 +10,7 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { moduleAt } from "@/lib/modules/keys"
 
-import { allows, type Grants } from "@/lib/modules/grants"
+import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
@@ -105,8 +105,8 @@ export function teamDefaultsBodyOf(rows: readonly TeamDefaultRow[], serverIdOf: 
 }
 
 /** What the person's role lets them do with the teams: read them under `view` on the templates' module, change them under `edit`, add one under `create`. */
-export const ticketTeamsAccessOf = (grants: Grants | undefined): { view: boolean; edit: boolean; create: boolean } => ({
-  view: allows(grants, "configure.templates", "view"),
-  edit: allows(grants, "configure.templates", "edit"),
-  create: allows(grants, "configure.templates", "create"),
+export const ticketTeamsAccessOf = (grants: Grants | null): { view: boolean; edit: boolean; create: boolean } => ({
+  view: mayOn(grants, "configure.templates", "view"),
+  edit: mayOn(grants, "configure.templates", "edit"),
+  create: mayOn(grants, "configure.templates", "create"),
 })
