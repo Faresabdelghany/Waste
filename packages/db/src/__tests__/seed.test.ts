@@ -20,7 +20,6 @@ import { migrateDatabase } from "../migrate"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { agreement, subscription } from "../schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
-import { collectionCalendar } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
 import {
   customer,
@@ -31,66 +30,16 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "../schema/customers"
-import { priceList, priceListRow } from "../schema/finance"
-import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
-import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
+import { driver } from "../schema/fleet"
 import { company, project, serviceProvider } from "../schema/organisation"
-import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
-import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { DEMO_IDS, seedDemo } from "../seed/demo"
 import { DEMO_KINDS, demoId, type DemoKind } from "../seed/ids"
+import { TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
 
 const UUIDV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-
-/** The tables the seed writes rows into, in the order it writes them. */
-const SEEDED_TABLES = [
-  company,
-  project,
-  serviceProvider,
-  role,
-  userAccount,
-  roleGrant,
-  projectAccess,
-  serviceProviderAccess,
-  wasteFraction,
-  containerType,
-  serviceFrequency,
-  product,
-  customer,
-  property,
-  propertyParty,
-  propertyGroup,
-  propertyGroupMember,
-  sharedCollectionPoint,
-  sharedCollectionPointMember,
-  agreement,
-  subscription,
-  container,
-  containerServicePlacement,
-  vehicleType,
-  containerTypeVehicleType,
-  depot,
-  warehouse,
-  unloadingStation,
-  unloadingStationFraction,
-  vehicle,
-  vehicleCompartment,
-  vehicleCompartmentFraction,
-  driver,
-  planningArea,
-  planningAreaBoundary,
-  collectionCalendar,
-  routeScheme,
-  collectionGroup,
-  collectionGroupFraction,
-  collectionGroupContainer,
-  priceList,
-  priceListRow,
-]
 
 /** What the Registry seed holds per table, pinned so a fixture that grows or shrinks is noticed. */
 const REGISTRY_COUNTS = {
@@ -300,10 +249,16 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     await fresh?.drop()
   })
 
-  /** Every seeded row of every seeded table, ordered, with the timestamps: two snapshots are equal only if nothing was written. */
+  /**
+   * Every row of every table of the schema (`TABLES`, table-policies.ts),
+   * ordered, with the timestamps: two snapshots are equal only if nothing was
+   * written. Every table, not the ones the seed is known to write, so a table
+   * the seed comes to write is in it without asking, and so is the audit
+   * trail a write would leave.
+   */
   const snapshot = async () => {
     const rows = await Promise.all(
-      SEEDED_TABLES.map((table) =>
+      TABLES.map((table) =>
         owner.db
           .select()
           .from(table)
