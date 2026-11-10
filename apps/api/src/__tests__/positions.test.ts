@@ -79,7 +79,6 @@ describe("a route's track and estimates", { skip: database.skip || owner.skip },
     theirs = callingAs(app, keys, b.users.olivia, b.companyId)
 
     const mads = { plannedDriverId: fleet.drivers.mads.id, plannedVehicleId: fleet.vehicles.wh24.id, plannedStartTime: "06:00" }
-    // Started at 06:00; the first stop completed at 06:20, the other two still to come.
     running = await seedRoute(pool, a, fleet, ex, {
       status: "active",
       ...mads,

@@ -64,7 +64,6 @@ describe("driver absences and vehicle unavailability", { skip: database.skip || 
   let other: Call
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
-  /** NR-12, a powered vehicle of Copenhagen Central. */
   const nr12 = { id: testId(), label: "NR-12" }
   /** A trailer of Copenhagen Central with no callsign: its registration is its label. */
   const trailer = { id: testId(), label: "TR 12 012" }
@@ -164,7 +163,6 @@ describe("driver absences and vehicle unavailability", { skip: database.skip || 
       assert.equal((await refused(await olivia(`/driver-absences/${holiday.id}`, { method: "PATCH", body: {} }), 400)).status, 400)
       assert.equal((await refused(await olivia(`/driver-absences/${holiday.id}`, { method: "PATCH", body: { driverId: fleet.drivers.mads.id } }), 400)).status, 400, "never whose it is")
 
-      // The removal: 204 with no body, then it is not there.
       const removed = await olivia(`/driver-absences/${back.id}`, { method: "DELETE" })
       assert.equal(removed.status, 204)
       assert.equal(await removed.text(), "")

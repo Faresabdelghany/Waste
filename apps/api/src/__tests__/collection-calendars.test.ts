@@ -33,7 +33,6 @@ const year = (y: number) => ({ validFrom: `${y}-01-01`, validTo: `${y + 1}-01-01
 describe("the collection calendar endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -46,7 +45,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
   let other: Call
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
-  /** The other company's. */
   let theirCalendar: CollectionCalendar
 
   before(async () => {

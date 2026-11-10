@@ -38,7 +38,6 @@ const inReadOrder = (ids: readonly string[]): string[] => [...ids].sort()
 describe("the unloading station endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -56,7 +55,6 @@ describe("the unloading station endpoints", { skip: database.skip }, () => {
   let residual: WasteFraction
   let glass: WasteFraction
   let food: WasteFraction
-  /** The other company's. */
   let theirFraction: WasteFraction
   let theirStation: UnloadingStation
 

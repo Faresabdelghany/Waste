@@ -101,15 +101,12 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
   const hold = async (...ids: string[]) => {
     for (const id of ids) assert.equal((await commanded(id, "reschedule", { plannedStartTime: nextStart() })).heldAt, HELD)
   }
-  /** Which of the routes are held, by id, as the list reads them. */
   const holds = async (schemeId: string): Promise<Record<string, boolean>> => {
     const page = RoutePage.parse(await ok(await olivia(`/routes?limit=200&routeSchemeId=${schemeId}`)))
     return Object.fromEntries(page.items.map((row) => [row.id, row.heldAt !== null]))
   }
 
-  /** A rule group on the residual fraction over the days given. */
   const ruleGroup = (name: string, days: string[]) => ({ name, days, stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null } })
-  /** A scheme of Copenhagen Central over Mondays and Tuesdays, starting at six from Nordhavn and unloading at Amager, with the groups named, each on Mondays; a draft unless `validated`, whose groups run both days. */
   const schemeWith = async (name: string, groups: string[], validated = false): Promise<{ scheme: RouteScheme; groups: CollectionGroup[] }> => {
     const response = await olivia("/route-schemes", {
       method: "POST",
@@ -323,7 +320,6 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
 
   describe("release-hold (#226)", () => {
     type Sent = { name: string; data: unknown; singletonKey: unknown }
-    /** The office — or the user named — through an app whose job sender answers as `send` does, each send recorded. */
     const officeWith = (send: (sent: Sent) => Promise<string | null>, user = a.users.olivia) => {
       const sent: Sent[] = []
       const jobs: { send: Send } = { send: (name, data, options) => send({ name, data, singletonKey: options?.singletonKey }).then((answer) => (sent.push({ name, data, singletonKey: options?.singletonKey }), answer)) }

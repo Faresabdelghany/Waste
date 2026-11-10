@@ -163,7 +163,6 @@ describe("the Pickup Exceptions (M5 of #293)", { skip: database.skip || owner.sk
 
   describe("the correction's tag and a place's history", () => {
     const correct = (pickupId: string, body: Record<string, unknown>) => post(olivia, `/pickups/${pickupId}/correct-outcome`, body)
-    /** A completed route on a service date, its one stop at Parkvej failed for contamination, recorded by the driver. */
     const missedAtParkvej = async (day: string): Promise<SeededRoute> =>
       await seedRoute(pool, a, fleet, ex, {
         status: "completed",

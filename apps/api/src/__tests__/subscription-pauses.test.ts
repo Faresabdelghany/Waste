@@ -296,7 +296,7 @@ describe("a subscription's pause (#291, slice 10)", { skip: database.skip || own
       assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
       return RouteScheme.parse(await response.json())
     }
-    /** A route of the scheme on a day, in the status given, stopping at the container unless `stop` is false — written as generation would write it. */
+    /** A route of the scheme on a day, in the status given, stopping at the container unless `at` is null — written as generation would write it. */
     const routeAt = async (of: RouteScheme, day: string, at: { containerId: string; propertyId: string } | null, status: "planned" | "ready" = "planned") => {
       const id = testId()
       const pickupId = testId()

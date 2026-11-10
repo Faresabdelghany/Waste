@@ -10,7 +10,6 @@ import type { Call } from "./calls"
 /** Copenhagen town hall, the point every located fixture sits on. */
 export const TOWN_HALL = { type: "Point", coordinates: [12.5683, 55.6761] }
 
-/** A shared collection point body in the status a test names: a municipal surface point, open to anybody, at an address made from its name. */
 export const pointBody = (projectId: string, name: string, status: string) => ({
   projectId,
   name,

@@ -42,7 +42,6 @@ const NOW = new Date(`${FIXTURE_DAY}T14:00:00Z`)
 let tick = Date.now()
 const mint = (): string => testId((tick += 1))
 
-/** A Storage that signs what the test lets it: keys it holds, keys it does not, and silence or a refusal on demand. */
 function fakeStorage() {
   const held = new Set<string>()
   const asked: string[] = []
@@ -85,7 +84,6 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
   let madsWithout: Call
   let oliviaWithout: Call
 
-  /** The routes under test, their door and the office's read, over one Storage or none. */
   const mounted = (storage: ProofStorage | null) => {
     const app = new Hono()
     app.onError(errorHandler())
@@ -228,7 +226,6 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
   })
 
   describe("GET /pickups/:id/proof-objects", () => {
-    /** A route whose first stop carries a photo, a signature and a completion, run and ended through the door; answers the stop and the two keys. */
     const stopWithObjects = async () => {
       const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads, pickups: 2 })
       const [stop] = route.pickupIds

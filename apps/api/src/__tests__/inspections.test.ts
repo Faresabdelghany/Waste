@@ -51,7 +51,6 @@ const mint = (): string => testId((tick += 1))
 type Envelope = { id: string; kind: DriverCommandKind; routeId: string; occurredAt: string; deviceId: string; body: unknown }
 const envelope = (kind: DriverCommandKind, routeId: string, body: unknown, occurredAt = at("07:00")): Envelope => ({ id: mint(), kind, routeId, occurredAt, deviceId: "device-mads-01", body })
 
-/** A Storage that signs what it is asked, holds the keys the test puts, and is the deployment's or absent. */
 function fakeStorage() {
   const held = new Set<string>()
   const storage: ProofStorage = {

@@ -116,7 +116,6 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
     return await readProblem(response)
   }
 
-  /** A draft weekly scheme of Copenhagen Central in Centrum, serving Tuesdays from the start of the year, its one group on Tuesday. */
   const schemeNamed = async (name: string, values: Record<string, unknown> = {}): Promise<RouteScheme> =>
     RouteScheme.parse(
       await ok(
@@ -234,7 +233,6 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
         successor.collectionGroups.map((group) => [group.name, group.days]),
         [["Organic", ["wednesday"]]],
       )
-      // Decided once: nothing moves it again.
       assert.equal((await refused(await commanded(olivia, proposal.id, "reject", { reason: "Changed mind" }), 409)).detail, `ACT-${proposal.number} is approved; reject takes one pending approval`)
     })
 
@@ -335,7 +333,6 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
   })
 
   describe("a stop-set change (#474, part 3)", () => {
-    /** A draft scheme whose one group picks its stops: bin 1, then bin 2. */
     const picked = (name: string) =>
       schemeNamed(name, { collectionGroups: [{ name: "Picked", days: ["tuesday"], stopSource: "manual", containerIds: [ex.containers.bin1.id, ex.containers.bin2.id] }] })
     const stopsBody = (scheme: RouteScheme, containerIds: string[], values: Record<string, unknown> = {}) => ({

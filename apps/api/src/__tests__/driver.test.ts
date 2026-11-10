@@ -45,7 +45,6 @@ import { testId, type Tenant } from "./tenant"
 
 describe("the driver door", { skip: database.skip || owner.skip }, () => {
   const now = MORNING
-  /** Where the door's log goes, for the two things it notes. */
   const logged: unknown[] = []
   const door = driverDoor({ now: () => now, logged })
   let pool: Database

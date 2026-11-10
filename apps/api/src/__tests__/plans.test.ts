@@ -322,7 +322,6 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
   test("the optimiser's fingerprint keys the route's depot, which orders its stops: another depot is another Plan", async () => {
     const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
     const first = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
-    // A second depot of the route's own project, elsewhere in the city: the route moves to it.
     const elsewhere = testId()
     await ownerPool.db.execute(
       sql`insert into wms.depot (id, company_id, project_id, code, name, address, location, ownership, status)
@@ -376,7 +375,6 @@ describe("the Plan endpoints and the manual reorder", { skip: database.skip || o
     test("a waiting optimisation the optimiser's own newer answer has passed is failed by it, so the same request again is a new Plan", async () => {
       const seeded = await seedRoute(pool, a, fleet, ex, { depotId: fleet.depots.nordhavn.id })
       const older = OptimiseAnswer.parse(await (await olivia(`/routes/${seeded.id}/optimise`, { method: "POST" })).json())
-      // The stops move, a second request answers and becomes active as the worker would make it, and the stops move back.
       const [moved] = await ownerPool.db.execute<{ location: string }>(sql`select extensions.st_asgeojson(location) as location from wms.property where id = ${ex.properties.havnegade.id}`)
       await ownerPool.db.execute(sql`update wms.property set location = extensions.st_geomfromgeojson('{"type":"Point","coordinates":[12.59,55.69]}') where id = ${ex.properties.havnegade.id}`)
       try {

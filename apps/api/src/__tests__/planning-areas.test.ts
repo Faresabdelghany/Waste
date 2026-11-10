@@ -22,7 +22,6 @@ const BoundaryPage = Page(PlanningAreaBoundary)
 
 const MODULE = "configure.areas"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const APRIL = "2026-04-01"
 const JULY = "2026-07-01"
@@ -76,7 +75,6 @@ const BOUNDARY_RUNNING = "This planning area already has a boundary in force ove
 describe("the planning area and boundary endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -166,7 +164,6 @@ describe("the planning area and boundary endpoints", { skip: database.skip }, ()
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return PlanningAreaBoundary.parse(await response.json())
   }
-  /** One version of an area: the square from January unless a test says otherwise. */
   const addBoundary = (areaId: string, values: Record<string, unknown> = {}) =>
     create(olivia, `/planning-areas/${areaId}/boundaries`, { boundary: SQUARE, validFrom: JANUARY, ...values }, PlanningAreaBoundary, "/planning-area-boundaries")
   const patchBoundary = async (call: Call, id: string, values: unknown): Promise<PlanningAreaBoundary> => {

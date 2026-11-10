@@ -25,7 +25,6 @@ const PricePage = Page(ServiceProviderPrice)
 
 const MODULE = "commercial.service-provider-prices"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const MARCH = "2026-03-01"
 const JUNE = "2026-06-30"
@@ -44,7 +43,6 @@ const priceEnded = (lastDay: string) => `This price was valid to ${lastDay}; ind
 describe("the service provider price endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant

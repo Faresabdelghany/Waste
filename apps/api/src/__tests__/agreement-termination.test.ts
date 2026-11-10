@@ -91,7 +91,6 @@ describe("a termination's generation runs and the stops it leaves (#291, slice 1
   }
 
   type Sent = { name: string; singletonKey: unknown }
-  /** The caller named — the office unless said otherwise — through an app whose job sender answers as `send` does, each send recorded. */
   const callerWith = (send: () => Promise<string | null>, user = a.users.olivia) => {
     const sent: Sent[] = []
     const jobs: { send: Send } = { send: (name, _data, options) => send().then((answer) => (sent.push({ name, singletonKey: options?.singletonKey }), answer)) }
@@ -99,7 +98,6 @@ describe("a termination's generation runs and the stops it leaves (#291, slice 1
   }
   const runsOf = async (schemeId: string) => Page(GenerationRun).parse(await (await olivia(`/route-schemes/${schemeId}/generation-runs?limit=200`)).json()).items
 
-  /** A validated scheme of Copenhagen Central over Mondays, one rule group on the residual fraction. */
   const scheme = async (name: string): Promise<RouteScheme> => {
     const response = await olivia("/route-schemes", {
       method: "POST",
@@ -122,7 +120,6 @@ describe("a termination's generation runs and the stops it leaves (#291, slice 1
     return RouteScheme.parse(await response.json())
   }
 
-  /** An agreement of its own with one subscription at a property of its own, a bin issued under it from January: what the termination ends. */
   const served = async (number: string) => {
     const agreement = await create(
       olivia,
@@ -137,7 +134,6 @@ describe("a termination's generation runs and the stops it leaves (#291, slice 1
     return { agreement, property, container }
   }
 
-  /** A route of the scheme's group on a day, in the status given, with one planned stop at the container, written as generation (or, for an office stop, the office) would write it. */
   const routeAt = async (of: RouteScheme, day: string, stop: { containerId: string; propertyId: string; origin?: PickupOrigin }, status: "planned" | "ready" = "planned") => {
     const id = testId()
     const pickupId = testId()

@@ -165,7 +165,6 @@ export type FleetFixtures = {
 /** The last day Sofie's licence holds. */
 export const SOFIE_LICENCE_EXPIRY = "2026-09-05"
 
-/** Copenhagen Central's fleet and places, of the vehicle type Planning's fixtures seeded. */
 export async function seedFleet(pool: Database, tenant: Tenant, planning: PlanningFixtures): Promise<FleetFixtures> {
   const { companyId } = tenant
   const copenhagen = tenant.projects.copenhagen.id

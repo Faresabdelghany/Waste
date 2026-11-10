@@ -52,7 +52,6 @@ describe("a route scheme's seasons", { skip: database.skip }, () => {
     await pool?.close()
   })
 
-  /** A draft garden-waste scheme on Mondays, even weeks all year but where its seasons say otherwise. */
   const body = (name: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     name,
@@ -133,7 +132,6 @@ describe("a route scheme's seasons", { skip: database.skip }, () => {
     const read = await ok(await olivia(`/route-schemes/${written.id}`))
     assert.equal(read.frequency, "every-2-weeks")
     assert.deepEqual(read.seasons, [SUMMER])
-    // Turning daily and clearing the seasons in one patch is taken.
     const daily = await ok(await patch(written.id, { frequency: "daily", weekRotation: null, serviceDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], seasons: [] }))
     assert.equal(daily.frequency, "daily")
     assert.deepEqual(daily.seasons, [])

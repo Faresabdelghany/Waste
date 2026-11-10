@@ -97,7 +97,6 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
   const place = placed ?? (reach === "company" ? "in this company" : IN_PROJECTS)
   const read: Read<Row> = readOwn ?? ((tx: Tx) => tx.select(columns as SelectedFields).from(table as PgTable) as unknown as ReturnType<Read<Row>>)
 
-  /** One row by id under a fence; undefined when it is not there. */
   async function within(tx: Tx, principal: Principal, where: SQL | undefined, id: string): Promise<Row | undefined> {
     const [row] = await read(tx, principal)
       .where(and(where, eq(table.id, id)))
@@ -105,7 +104,6 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
     return row
   }
 
-  /** The 404 for a row outside the reach. */
   const noSuch = (id: string) => noSuchRow(noun, id, place)
 
   return {

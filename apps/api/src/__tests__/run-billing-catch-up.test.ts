@@ -84,7 +84,6 @@ describe("a billing run's catch-up (#447)", { skip: database.skip || owner.skip 
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return InvoiceDetail.parse(await response.json())
   }
-  /** What the company has written so far — runs, invoices, invoice events and the counter — to prove a preview writes nothing. */
   const written = () =>
     withCompany(pool.db, a.companyId, async (tx: Tx) => {
       const [runs] = await tx.select({ rows: count() }).from(billingRun).where(eq(billingRun.companyId, a.companyId))
@@ -107,7 +106,6 @@ describe("a billing run's catch-up (#447)", { skip: database.skip || owner.skip 
     assert.deepEqual([first.eventCount, first.invoiceCount], [1, 1], "July's run takes its one ready event and passes over the held and the blocked")
     assert.equal((await readEvent(own.id)).status, "invoiced")
 
-    // After July's run: the hold released, the bulky product given its rate and the event repriced.
     assert.equal((await olivia(`/billable-events/${held.id}/release`, { method: "POST", body: {} })).status, 200)
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       await tx.update(product).set({ vatPercent: 25 }).where(and(eq(product.companyId, a.companyId), eq(product.id, fx.products.bulky.id)))

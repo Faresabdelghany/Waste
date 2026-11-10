@@ -27,7 +27,6 @@ const JANUARY = "2026-01-01"
 describe("the collection group endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -51,7 +50,6 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
   let bin3: Container
   /** A container of Harbor Commercial, which a Copenhagen group may not pick. */
   let harborBin: Container
-  /** The other company's. */
   let theirFraction: WasteFraction
   let theirScheme: RouteScheme
 

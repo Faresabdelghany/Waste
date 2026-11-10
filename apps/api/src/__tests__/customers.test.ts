@@ -22,7 +22,6 @@ const MODULE = "customers.contacts"
 describe("the customer endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant

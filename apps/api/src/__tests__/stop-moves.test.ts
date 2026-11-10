@@ -200,7 +200,6 @@ describe("moving stops, splitting and merging routes", { skip: database.skip || 
       // BIN-3 is emptied on the other route already: the two would be one collection.
       const withBin3 = await route({ pickups: [{ containerId: ex.containers.bin3.id, propertyId: ex.properties.norrebrogade.id }] })
       assert.equal((await refused(await move(from.id, { pickupIds: [bin1, from.pickupIds[2]], toRouteId: withBin3.id }), 409)).detail, emptiedThereAlready(ex.containers.bin3.label, withBin3.label))
-      // Nothing written by any of them.
       assert.deepEqual(
         (await read(from.id)).pickups.map((stop) => stop.status),
         ["planned", "planned", "planned"],

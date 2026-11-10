@@ -26,7 +26,6 @@ const inReadOrder = <Entry extends { propertyId: string }>(members: readonly Ent
 describe("the property group endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -40,14 +39,11 @@ describe("the property group endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** Copenhagen properties, what a group of that project may gather. */
   let parkvej: Property
   let strandvej: Property
   /** A property of this company in another project: not this group's to gather. */
   let pier: Property
-  /** This company's customer, who a group may answer to. */
   let housing: Customer
-  /** The other company's. */
   let theirCustomer: Customer
   let theirGroup: PropertyGroup
 

@@ -172,7 +172,6 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
       ],
     })
     assert.deepEqual(allYear.warnings, [])
-    // The season cleared, the weekly scheme is in step again.
     const cleared = await olivia(`/route-schemes/${beforeWinter.id}`, { method: "PATCH", body: { seasons: [] } })
     assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
     assert.deepEqual(RouteScheme.parse(await cleared.json()).warnings, [])

@@ -32,7 +32,6 @@ const inReadOrder = <Entry extends { propertyId: string }>(members: readonly Ent
 describe("the shared collection point endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -53,7 +52,6 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
   let pier: Property
   /** This company's customer, who a point may answer to. */
   let housing: Customer
-  /** The other company's. */
   let theirCustomer: Customer
   let theirPoint: SharedCollectionPoint
 

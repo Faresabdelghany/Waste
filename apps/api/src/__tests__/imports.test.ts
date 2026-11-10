@@ -138,7 +138,6 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.headers.get("location"), null, "the rows are appended to the run's ledger and read there")
     return ImportBatchResult.parse(await response.json())
   }
-  /** A whole file through one run and one batch. */
   const commit = async (call: Call, kind: ImportKind, rows: ReturnType<typeof rowsOf>, projectId?: string): Promise<ImportBatchResult> =>
     sendBatch(call, await startRun(call, kind, rows.length, projectId), rows)
   const customersNamed = async (name: string): Promise<Customer[]> => {

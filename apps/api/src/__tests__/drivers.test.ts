@@ -33,7 +33,6 @@ const MODULE = "fleet.drivers"
 describe("the driver endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -48,7 +47,6 @@ describe("the driver endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** The other company's. */
   let theirDriver: Driver
 
   /** Every workforce reference is one driver's across the company, so each test that gives one takes the next. */

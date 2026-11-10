@@ -39,7 +39,6 @@ import type { PgColumn } from "drizzle-orm/pg-core"
 import { invalidRequest, noSuchRow } from "../problem"
 import type { Principal } from "./principal"
 
-/** The ids of the projects the caller works in; empty for an account that works in none. */
 export function projectIdsOf(principal: Principal): string[] {
   return principal.projects.map((project) => project.id)
 }

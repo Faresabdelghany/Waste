@@ -28,7 +28,6 @@ const OPENED = new Date("2026-10-05T12:00:01Z")
 
 type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown>; locked?: string }
 
-/** A `tx` that records each statement by kind and table, answering the counter, the inserted rows, the ticket as inserted, no actions of its type, the alert `alertRow` describes and, once linked, that alert as the update leaves it. */
 const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
   const statements: Statement[] = []
   let inserted: Record<string, unknown> | undefined
