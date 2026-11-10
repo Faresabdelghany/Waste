@@ -46,18 +46,13 @@ import { pickupReasonLabel } from "./route-labels"
 import { NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 import { SERVICE_PROVIDERS_MODULE } from "./provider-money"
 
-/** The workspace module the routes are the rows of. */
 export const ROUTES_MODULE = moduleAt("route-studio.routes")
 
-/** The workspace module the pickups are the rows of. */
 export const PICKUPS_MODULE = moduleAt("route-studio.pickups")
 
-/** The route's commands that take a dialog. */
 export type RouteCommandWithForm = "assign" | "reschedule" | "cancel" | "add-stop"
-/** The stop's commands, both with a dialog. */
 export type PickupCommandWithForm = "remove" | "correct"
 
-/** One command's dialog. */
 const commandForm = (key: BusinessFormSchema["key"], recordKind: string, title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[], warning?: string): BusinessFormSchema => ({
   key,
   mode: "action",
@@ -207,7 +202,6 @@ export function createRouteRecord(values: BusinessFormValues, { now }: { now: nu
 
 const MISSED = { fieldId: "outcome", oneOf: MISSED_PICKUP_STATUSES } as const
 
-/** Each stop command's dialog. */
 export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, BusinessFormSchema>> = {
   remove: pickupForm("Remove stop", "The stop comes off a route that has not started: skipped, removed by the dispatcher, never deleted.", "Remove stop", [
     { id: "reason", label: "Reason", type: "textarea", required: true },

@@ -24,10 +24,8 @@ import { formatMinor } from "@/lib/commercial/money"
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { statusLabel } from "@/lib/records/fields"
 
-/** Where the register is: Customers › Site access. */
 export const SITE_ACCESS_MODULE = moduleAt("customers.site-access") satisfies ModuleLocation
 
-/** Where the ledger is: Operate › Site visits. */
 export const SITE_VISITS_MODULE = moduleAt("operate.site-visits") satisfies ModuleLocation
 
 /** The attendant's phone-first page, where a Site attendant lands. */
@@ -49,7 +47,6 @@ export const REFUSAL_LABELS: Readonly<Record<SiteVisitRefusalReason, string>> = 
   "credential-blocked": "Blocked",
 }
 
-/** What the attendant reads on a refused visit's card: why the visitor is turned away. */
 export const REFUSAL_SENTENCES: Readonly<Record<SiteVisitRefusalReason, string>> = {
   "unknown-identifier": "No plate or card of that number is registered for this project's recycling centres.",
   "not-fee-paying": "The household pays for no collection at this address, so its visits are not covered.",
@@ -59,21 +56,17 @@ export const REFUSAL_SENTENCES: Readonly<Record<SiteVisitRefusalReason, string>>
 /** A visit's status as the ledger lists it: voided first, since a voided visit stays on the record. */
 export const visitStatusOf = (visit: Pick<SiteVisit, "outcome" | "voidedAt">): string => (visit.voidedAt !== null ? "Voided" : OUTCOME_LABELS[visit.outcome])
 
-/** A credential's status on a day: blocked first, then ended, not yet started, or in force. */
 export function credentialStatusOf(credential: Pick<AccessCredential, "blockedAt" | "validFrom" | "validTo">, today: string): string {
   if (credential.blockedAt !== null) return "Blocked"
-  // Upcoming, In force or Ended: the standing as a status reads.
   return statusLabel(periodOn(credential, today))
 }
 
-/** "1st", "2nd", "3rd", "11th", "22nd": a visit's place in its year. */
 export function ordinal(n: number): string {
   const tens = n % 100
   if (tens >= 11 && tens <= 13) return `${n}th`
   return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`
 }
 
-/** Why a visit costs nothing or what it costs, in a few words: the basis and the visit's place in its year. */
 export function chargeBasisSentence(basis: VisitChargeBasis, n: number | null): string {
   const nth = n === null ? "" : `${ordinal(n)} visit this year`
   switch (basis) {
@@ -92,7 +85,6 @@ export function chargeBasisSentence(basis: VisitChargeBasis, n: number | null): 
   }
 }
 
-/** A blocked charge's tail: why the visit's product has no price yet. */
 const blockedTail = (blockReason: BlockReason | null, labels: Readonly<Record<BlockReason, string>>) => (blockReason === null ? "price not set yet" : `price not set yet (${labels[blockReason].toLowerCase()})`)
 
 /** The answer card's line for an admitted visit — "3rd visit this year: 70,00 kr" — the price where its product has one under the visit's Agreement on its day. */
@@ -103,7 +95,6 @@ export function chargeSentence(charge: VisitChargeReading, blockLabels: Readonly
   return `${basis}: ${formatMinor(charge.price.netMinor + charge.price.vatMinor, charge.price.currency)}`
 }
 
-/** What the answer card says first: admitted or turned away, and why. */
 export function answerHeadline(answer: Pick<SiteVisitCheckInAnswer, "visit">): { tone: "admitted" | "refused"; title: string; detail: string | null } {
   const { visit } = answer
   if (visit.outcome === "admitted") return { tone: "admitted", title: "Admitted", detail: null }
@@ -111,11 +102,6 @@ export function answerHeadline(answer: Pick<SiteVisitCheckInAnswer, "visit">): {
   return { tone: "refused", title: `Turned away: ${REFUSAL_LABELS[reason].toLowerCase()}`, detail: REFUSAL_SENTENCES[reason] }
 }
 
-// ---------------------------------------------------------------------------
-// The check-in
-// ---------------------------------------------------------------------------
-
-/** How the attendant identifies the visitor: a plate or a card typed, or a Property found by its address. */
 export type CheckInMode = AccessCredentialKind | "address"
 
 export const CHECK_IN_MODES: readonly { value: CheckInMode; label: string }[] = [
@@ -124,13 +110,10 @@ export const CHECK_IN_MODES: readonly { value: CheckInMode; label: string }[] = 
   { value: "address", label: "Address" },
 ]
 
-/** What the check-in holds once filled in. */
 export type CheckInDraft = {
   siteId: string
   mode: CheckInMode
-  /** The plate or the card as typed. */
   value: string
-  /** The Property picked from the address search. */
   propertyId: string
   wasteFractionIds: readonly string[]
   note: string
@@ -150,7 +133,6 @@ export function checkInBodyOf(draft: CheckInDraft): SiteVisitCheckIn | string {
   return { siteId: draft.siteId, identifier: { kind: draft.mode, value }, ...rest }
 }
 
-/** The fractions picked, with one toggled: chips, each once. */
 export const toggled = (picked: readonly string[], id: string): string[] => (picked.includes(id) ? picked.filter((candidate) => candidate !== id) : [...picked, id])
 
 /** The site the device remembers, if the project still offers it; else the only one, else none. */
@@ -158,10 +140,6 @@ export function rememberedSite(sites: readonly { id: string }[], remembered: str
   if (remembered !== null && sites.some((site) => site.id === remembered)) return remembered
   return sites.length === 1 ? sites[0].id : ""
 }
-
-// ---------------------------------------------------------------------------
-// Visit Rules
-// ---------------------------------------------------------------------------
 
 /** What the person's role lets them do with the Visit Rules — the products' module, the API's grant for them — and whether it reads the fractions they name. */
 export const visitRuleAccessOf = (grants: Grants | null) => ({
@@ -189,12 +167,10 @@ export type VisitRuleForm = {
   tradeWindowDays: string
 }
 
-/** What a rule's dialog refuses, at the field it names. */
 export type VisitRuleRefusal = { field: keyof VisitRuleForm; message: string }
 
 export const isVisitRuleRefusal = (value: unknown): value is VisitRuleRefusal => typeof value === "object" && value !== null && "field" in value && "message" in value
 
-/** No product picked: the select's value for "none". */
 export const NO_PRODUCT = "none"
 
 export const newVisitRuleForm = (today: string): VisitRuleForm => ({
@@ -221,13 +197,11 @@ export const visitRuleFormOf = (rule: VisitRule): VisitRuleForm => ({
   tradeWindowDays: rule.tradeWindowDays === null ? "" : String(rule.tradeWindowDays),
 })
 
-/** A whole number from `min` to `max` the form holds, or the refusal at its field. */
 function wholeOf(form: VisitRuleForm, field: "freeVisits" | "tradeThreshold" | "tradeWindowDays", min: number, max: number, what: string): number | VisitRuleRefusal {
   const n = Number(form[field])
   return form[field].trim() !== "" && Number.isInteger(n) && n >= min && n <= max ? n : { field, message: `Give ${what} as a whole number from ${min} to ${max}` }
 }
 
-/** The values both bodies share, or the first refusal. */
 function valuesOf(form: VisitRuleForm): Omit<VisitRuleCreate, "projectId" | "validFrom" | "validTo"> & { validTo: string | null } | VisitRuleRefusal {
   const freeVisits = wholeOf(form, "freeVisits", FREE_VISITS.min, FREE_VISITS.max, "the free visits a year")
   if (isVisitRuleRefusal(freeVisits)) return freeVisits
@@ -290,7 +264,6 @@ export function visitRulePatchBodyOf(rule: VisitRule, form: VisitRuleForm): Visi
   return Object.keys(patch).length === 0 ? null : patch
 }
 
-/** "2 free, then Visit 70, then Visit 620 for every visit after": a household's year as the rule charges it. */
 export function householdSentence(rule: Pick<VisitRule, "freeVisits" | "ladder">, productName: (id: string) => string): string {
   const free = rule.freeVisits === 0 ? "No free visits" : `${rule.freeVisits} free ${rule.freeVisits === 1 ? "visit" : "visits"} a year`
   if (rule.ladder.length === 0) return rule.freeVisits === 0 ? "Every visit included" : `${free}, then every visit included`
@@ -298,9 +271,7 @@ export function householdSentence(rule: Pick<VisitRule, "freeVisits" | "ladder">
   return `${free}, then ${steps.join(", then ")}${steps.length === 1 ? " for each visit after" : " for every visit after"}`
 }
 
-/** "8 visits in 30 days", or none: the likely-trade threshold. */
 export const tradeSentence = (rule: Pick<VisitRule, "tradeThreshold" | "tradeWindowDays">): string =>
   rule.tradeThreshold === null || rule.tradeWindowDays === null ? "Not flagged" : `${count(rule.tradeThreshold, "visit")} in ${count(rule.tradeWindowDays, "day")}`
 
-/** A project's rules, latest start first. */
 export const rulesInOrder = (rules: readonly VisitRule[]): VisitRule[] => [...rules].sort((a, b) => b.validFrom.localeCompare(a.validFrom))

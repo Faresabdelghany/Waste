@@ -10,7 +10,6 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 
 export type PairableContainer = { value: string; label: string }
 
-/** The containers of the sensor's project, by label, in label order: the ones a pairing may name. */
 export function pairableContainers(containers: readonly BusinessRecord[], projectId: string | undefined): PairableContainer[] {
   return containers
     .filter((container) => projectId !== undefined && (container.projectIds ?? []).includes(projectId))
@@ -18,7 +17,6 @@ export function pairableContainers(containers: readonly BusinessRecord[], projec
     .sort((a, b) => a.label.localeCompare(b.label))
 }
 
-/** What Pair opens on: no container, today, the default threshold, no booking. */
 export const pairDraft = (today: string) => ({ containerId: "", validFrom: today, fullThresholdPercent: String(DEFAULT_FULL_THRESHOLD_PERCENT), booksEmptying: false })
 
 /** What Change pairing opens on: the pairing in force as the record carries it, its end the last day in force (blank while it runs). */
@@ -31,5 +29,4 @@ export function changeDraft(record: BusinessRecord) {
   }
 }
 
-/** Whether the sensor can be paired from its details: active, and measuring nothing today. */
 export const pairOffered = (record: BusinessRecord): boolean => record.status.toLowerCase() === "active" && (record.submittedValues?.pairingId ?? "") === ""
