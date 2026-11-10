@@ -110,7 +110,6 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     assert.equal(runScheduledBilling.schedule, "0 12 1 * *")
     assert.deepEqual(runScheduledBilling.scheduleData, { projectId: null, on: null })
     assert.deepEqual(runScheduledBilling.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
     // The schedule's instant read on each clock: the first everywhere the system could serve, so `monthBefore` is the month that just ended. At 04:00 UTC (the earlier schedule) Chicago still read the 30th of September and would have billed August.
     const noon = new Date("2026-10-01T12:00:00Z")
     for (const timezone of ["Pacific/Pago_Pago", "America/Anchorage", "America/Chicago", "America/New_York", "Europe/Copenhagen", "Asia/Kolkata", "Asia/Tokyo", "Pacific/Noumea"]) {

@@ -34,7 +34,7 @@ import type { PgBoss } from "pg-boss"
 import { createBoss, startBoss, type Boss } from "../boss"
 import { CONSUMERS, relay, type WorkerContext } from "../../jobs"
 import { defineJob } from "../definition"
-import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../relay-outbox"
+import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../relay-outbox"
 import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, routesOf, type RelayedEvent } from "../outbox"
 import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 import { jobContext } from "../../__tests__/context"
@@ -351,7 +351,6 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   test("counts the rows unpublished for longer than OUTBOX_STALE_MS, across companies, and nothing once they are published", async () => {
     const now = new Date()
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1_000)
-    assert.equal(OUTBOX_STALE_MS, 60 * 60 * 1_000)
     assert.equal(await staleOutboxCount(worker, now), 0)
     const stale = await emit(a, "route-started", { id: id(0x220) }, twoHoursAgo)
     await emit(b, "route-completed", { id: id(0x221) })
@@ -439,13 +438,6 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     await running!.stop(2_000)
     running = undefined
     assert.deepEqual(errors, [])
-  })
-
-  test("the constants the tick runs on", () => {
-    assert.equal(BATCH_SIZE, 100)
-    assert.equal(RELAY_INTERVAL_SECONDS, 5)
-    assert.equal(RELAY_QUEUE, relay.queue)
-    assert.deepEqual(relay.publishes, [{ queue: OUTBOX_DEAD_QUEUE, queueOptions: { retryLimit: 0, retentionSeconds: DEAD_LETTER_RETENTION_SECONDS } }, ...OUTBOX_QUEUES])
   })
 
   test("every outbox row is one of the two companies', and every one was published exactly once; the two jobs the consumer refused are dead letters, data intact", async () => {

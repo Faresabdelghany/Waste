@@ -57,7 +57,6 @@ describe("the disposal-site reconciliation", { skip: roles.skip }, () => {
     withCompany(api.db, tenant.companyId, (tx) => tx.update(outboundLoad).set(values).where(and(eq(outboundLoad.companyId, tenant.companyId), eq(outboundLoad.id, id))))
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
