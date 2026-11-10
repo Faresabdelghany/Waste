@@ -62,7 +62,7 @@ import { dayInTimezone } from "@waste/domain/clock"
 import { aheadOfClock } from "@waste/domain/execution/commands"
 import { projectTimezones, projectToday, projectTodays } from "@waste/db/query/project-clock"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
-import { and, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
+import { and, desc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm"
 import { inForceOn } from "@waste/domain/periods"
 import { ACTIVE_SENSOR_STATUSES, type SensorStatus } from "@waste/domain/resources/vocabulary"
 import { refuseUnless, takesReference } from "@waste/domain/status-gates"
@@ -76,7 +76,7 @@ import type { AuthEnv, Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
@@ -315,6 +315,9 @@ async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at:
   }
   return outcomes
 }
+
+/** A sensor's readings, newest first, each with the pairing it was tied to, read once the sensor is the caller's. */
+const { list: listReadings } = scoped(fillReading, { noun: "fill reading", reach: "company", read: (tx, principal) => readingsFrom(tx, principal.companyId), order: "desc" })
 
 export function sensorRoutes(deps: RouteDeps) {
   const { now } = deps
@@ -604,13 +607,9 @@ export function sensorRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const tx = c.get("tx")
         await getSensor(tx, principal, id)
-        const after = afterCursor(cursor)
-        const rows = await readingsFrom(tx, principal.companyId)
-          .where(and(eq(fillReading.companyId, principal.companyId), eq(fillReading.sensorId, id), after === undefined ? undefined : lt(fillReading.id, after)))
-          .orderBy(desc(fillReading.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
-        return c.json({ ...page, items: page.items.map(readingOf) })
+        const at = pageAt({ cursor, limit })
+        const page = await listReadings(tx, principal, at, eq(fillReading.sensorId, id))
+        return c.json(mapPage(page, readingOf))
       },
     )
     .post(

@@ -36,7 +36,7 @@
 import { inArray, sql, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 
-import { invalidRequest, problem } from "../problem"
+import { invalidRequest, noSuchRow } from "../problem"
 import type { Principal } from "./principal"
 
 /** The ids of the projects the caller works in; empty for an account that works in none. */
@@ -54,6 +54,9 @@ export function inProjects(column: PgColumn, principal: Principal): SQL {
   const ids = projectIdsOf(principal)
   return ids.length === 0 ? sql`false` : inArray(column, ids)
 }
+
+/** Where a 404 says a project-scoped row out of reach is not: "No depot <id> in the projects this account works in". */
+export const IN_PROJECTS = "in the projects this account works in"
 
 /** What a request that names a project out of reach is told; the same sentence wherever the id came from. */
 const NOT_A_PROJECT = "Not a project this account works in"
@@ -78,5 +81,5 @@ export function requireProject(principal: Principal, projectId: string, path = "
  */
 export function requireOwnProject(principal: Principal, id: string): void {
   if (projectIdsOf(principal).includes(id)) return
-  throw problem(404, { detail: `No project ${id} in the projects this account works in` })
+  throw noSuchRow("project", id, IN_PROJECTS)
 }

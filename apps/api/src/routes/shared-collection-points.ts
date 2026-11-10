@@ -148,7 +148,7 @@ async function pointWithMembers(tx: Tx, companyId: string, row: Row): Promise<Sh
 const NAME_TAKEN = "shared_collection_point_project_id_name_key"
 const nameTaken = (name: string) => `This project already has a shared collection point called ${JSON.stringify(name)}`
 
-export const { scope: pointScope, noSuch: noSuchPoint, find: findPoint, get: getPoint, list: listPoints } = scoped(sharedCollectionPoint, { noun: "shared collection point", reach: "projects", columns })
+export const { scope: pointScope, noSuch: noSuchPoint, get: getPoint, list: listPoints } = scoped(sharedCollectionPoint, { noun: "shared collection point", reach: "projects", columns })
 
 export function sharedCollectionPointRoutes(deps: RouteDeps) {
   return routes(deps)

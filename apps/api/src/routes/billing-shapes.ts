@@ -14,6 +14,6 @@ export const {
   list: listEvents,
 } = scoped(billableEvent, { noun: "billable event", reach: "projects", read: (tx, principal) => eventsFrom(tx, principal.companyId).query })
 
-export const { noSuch: noSuchRun, find: findRun, get: getRun, list: listRuns } = scoped(billingRun, { noun: "billing run", reach: "projects", columns: runColumns })
+export const { find: findRun, get: getRun, list: listRuns } = scoped(billingRun, { noun: "billing run", reach: "projects", columns: runColumns })
 
-export const { scope: invoiceScope, noSuch: noSuchInvoice, find: findInvoice, get: getInvoice, list: listInvoices } = scoped(invoice, { noun: "invoice", reach: "projects", columns: invoiceColumns })
+export const { scope: invoiceScope, get: getInvoice, list: listInvoices } = scoped(invoice, { noun: "invoice", reach: "projects", columns: invoiceColumns })

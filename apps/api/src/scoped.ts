@@ -1,6 +1,7 @@
-// A family's rows as a route reaches them (#574): one declaration per table
-// gives the fence every statement carries, the 404 for a row outside it, the
-// read of one row, the read of one row under its lock, and a page of a list.
+// A family's rows as a route reaches them (#574): one declaration per family
+// — a table, read one way — gives the fence every statement carries, the 404
+// for a row outside it, the read of one row, the read of one row under its
+// lock, and a page of a list.
 //
 // The reach is the tenant and, for a project-scoped family, the projects the
 // caller works in (auth/projects.ts): a row outside either is the family's 404,
@@ -8,13 +9,13 @@
 // this account works in", or "… in this company" for a company-wide one. A
 // family whose reach is something else — the fleet an office's projects or a
 // Service Provider's own admit (`reachesFleet`) — names its fence in place of
-// the projects' and keeps their sentence. One whose reads reach further than
-// its commands — a Service Provider's account reads the rows it is assigned
-// and commands none of them — names its read fence (`reads`) beside the
-// commands', and the place its 404 says where that is not the projects ("this
-// account reaches"); its commands read through `commanded` and `locked`. One
-// whose row is read with a join names its read (`read`) instead of its
-// columns.
+// the projects' and keeps their sentence. One whose reads reach other rows
+// than its commands — a Service Provider's account reads the rows it is
+// assigned and commands none of them, or reads only its team's roles — names
+// its read fence (`reads`) beside the commands', and the place its 404 says
+// where that is not the projects ("this account reaches"); its commands read
+// through `commanded` and `locked`. One whose row is read with a join names
+// its read (`read`) instead of its columns.
 //
 // A page is the list rule of pagination.ts applied once: the rows after the
 // cursor in `id` order, one more than the page asked for to see whether there
@@ -28,9 +29,9 @@ import type { PgColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core"
 import type { SelectResultFields } from "drizzle-orm/query-builders/select.types"
 
 import type { Principal } from "./auth/principal"
-import { inProjects } from "./auth/projects"
+import { IN_PROJECTS, inProjects } from "./auth/projects"
 import { fetchLimit, pageOf, type PageAt, type Paged } from "./pagination"
-import { problem, type ProblemError } from "./problem"
+import { noSuchRow, type ProblemError } from "./problem"
 
 /** What a family declaration gives its routes. */
 export type Scoped<Row> = {
@@ -42,7 +43,7 @@ export type Scoped<Row> = {
   find: (tx: Tx, principal: Principal, id: string) => Promise<Row | undefined>
   /** One row by id, or the family's 404. */
   get: (tx: Tx, principal: Principal, id: string) => Promise<Row>
-  /** One row by id inside what the caller commands, which is `find` unless the family's reads reach further: a command's read where its lock is held already or it takes none; undefined when it is not there. */
+  /** One row by id inside what the caller commands, which is `find` unless the family reads other rows than it commands: a command's read where its lock is held already or it takes none; undefined when it is not there. */
   commanded: (tx: Tx, principal: Principal, id: string) => Promise<Row | undefined>
   /** One row by id under its lock, taken before the read since a rule the API holds over the row is held per transaction (`@waste/db/commands/shared`), inside what the caller commands; or the family's 404. */
   locked: (tx: Tx, principal: Principal, id: string, strength?: LockStrength) => Promise<Row>
@@ -65,7 +66,7 @@ type Options = {
   also?: SQL
   /** A page's order: oldest first unless the family reads newest first. */
   order?: "asc" | "desc"
-  /** What the caller reads where it is more than what it commands: a provider's account reads the rows it is assigned. */
+  /** What the caller reads where it is not what it commands: more for a provider's account, which reads the rows it is assigned and commands none of them, or less, as a provider's account reads only its team's roles. */
   reads?: (tx: Tx, principal: Principal) => SQL | undefined
   /** Where the 404 says the row is not, where the reach is the family's own: "this account reaches". */
   place?: string
@@ -93,7 +94,7 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
     return and(tenant, reach(principal), also)
   }
   const readable = (tx: Tx, principal: Principal): SQL | undefined => (reads === undefined ? fence(principal) : reads(tx, principal))
-  const place = placed ?? (reach === "company" ? "in this company" : "in the projects this account works in")
+  const place = placed ?? (reach === "company" ? "in this company" : IN_PROJECTS)
   const read: Read<Row> = readOwn ?? ((tx: Tx) => tx.select(columns as SelectedFields).from(table as PgTable) as unknown as ReturnType<Read<Row>>)
 
   /** One row by id under a fence; undefined when it is not there. */
@@ -105,7 +106,7 @@ export function scoped<Columns extends SelectedFields, Row = SelectResultFields<
   }
 
   /** The 404 for a row outside the reach. */
-  const noSuch = (id: string) => problem(404, { detail: `No ${noun} ${id} ${place}` })
+  const noSuch = (id: string) => noSuchRow(noun, id, place)
 
   return {
     scope: fence,

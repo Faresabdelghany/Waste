@@ -29,14 +29,15 @@ import type { Tx } from "@waste/db/client"
 import { proofOfService, route, session } from "@waste/db/schema/execution"
 import { todayOnClock } from "@waste/db/query/project-clock"
 import { project } from "@waste/db/schema/organisation"
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm"
 import { progressByRoute, progressFor, routeColumns, routeOf } from "@waste/db/shapes/routes"
 import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
-import { getSession, listSessions, openSessionsByRoute, routeScope, sessionOf } from "./execution-shapes"
+import { scoped } from "../scoped"
+import { getSession, listSessions, openSessionsByRoute, sessionOf } from "./execution-shapes"
 import { activePlansByRoute } from "./plan-shapes"
 import { liveEtaOf, newestPositionsBySession } from "./positions"
 import { requireRoute } from "./references"
@@ -56,6 +57,13 @@ async function lastLocationsByRoute(tx: Tx, companyId: string, routeIds: readonl
     .orderBy(asc(proofOfService.routeId), desc(proofOfService.id))
   return new Map(rows.flatMap((row) => (row.location === null ? [] : [[row.routeId, row.location as FlatPoint] as const])))
 }
+
+/** The routes the live board watches: the office's (`routeScope`), each joined to its project for today on the project's clock. */
+const { list: listLiveRoutes } = scoped(route, {
+  noun: "route",
+  reach: "projects",
+  read: (tx) => tx.select(routeColumns).from(route).innerJoin(project, and(eq(project.companyId, route.companyId), eq(project.id, route.projectId))),
+})
 
 export function liveRoutes(deps: RouteDeps) {
   const { now } = deps
@@ -77,27 +85,19 @@ export function liveRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const pageFrom = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         // Today on each route's project's clock at the request's instant.
         const today = todayOnClock(now(), project.timezone)
-        const rows = await tx
-          .select(routeColumns)
-          .from(route)
-          .innerJoin(project, and(eq(project.companyId, route.companyId), eq(project.id, route.projectId)))
-          .where(
-            and(
-              routeScope(principal),
-              projectId === undefined ? undefined : eq(route.projectId, projectId),
-              or(eq(route.status, "active"), and(eq(route.status, "ready"), eq(route.operatingDate, today))),
-              after === undefined ? undefined : gt(route.id, after),
-            ),
-          )
-          .orderBy(asc(route.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listLiveRoutes(
+          tx,
+          principal,
+          pageFrom,
+          projectId === undefined ? undefined : eq(route.projectId, projectId),
+          or(eq(route.status, "active"), and(eq(route.status, "ready"), eq(route.operatingDate, today))),
+        )
         const ids = items.map((row) => row.id)
         const [progress, sessions, locations, plans] = await Promise.all([
           progressByRoute(tx, principal.companyId, ids),

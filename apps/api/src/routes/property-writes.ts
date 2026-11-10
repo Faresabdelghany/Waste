@@ -223,7 +223,7 @@ export async function createProperty(tx: Tx, principal: Principal, body: Propert
 export async function patchProperty(tx: Tx, principal: Principal, id: string, body: PropertyPatch, now: () => Date, found?: Address | null): Promise<Property> {
   const { serviceWindow, addressId, ...given } = body
   // The path's row first (404), then the body's id (400), as a route judges them.
-  if (addressId != null && (await findProperty(tx, principal, id)) === undefined) throw noSuchProperty(id)
+  if (addressId != null) await getProperty(tx, principal, id)
   const patch = {
     ...given,
     // A typed address, or an id let go, is no longer the register's; an id named is the register's whole.

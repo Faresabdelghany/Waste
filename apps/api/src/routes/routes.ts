@@ -96,14 +96,14 @@ import { ACTIVE_VEHICLE_STATUSES, type VehicleStatus } from "@waste/domain/resou
 import { refuseUnless } from "@waste/domain/status-gates"
 import { count } from "@waste/domain/text"
 import { refuseUnavailableDriver } from "@waste/domain/resources/fleet"
-import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
+import { and, count as countRows, eq, gte, inArray, isNull, lte } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { labelOf, routeColumns, routesOf, type RouteRow } from "@waste/db/shapes/routes"
 import { lockRow, lockRows, nextNumber } from "@waste/db/commands/shared"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
-import { receiptColumns, receiptOf } from "@waste/db/shapes/driver-commands"
+import { receiptOf } from "@waste/db/shapes/driver-commands"
 import { routeFitStops } from "@waste/db/commands/fleet-fit"
 import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { handBackWindow } from "@waste/db/commands/route-holds"
@@ -115,9 +115,9 @@ import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
-import { detailOf, getReachedRoute, listRoutes, lockedRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
+import { detailOf, getReachedRoute, listReceipts, listRoutes, lockedRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
 import { findDriver, findVehicle, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
@@ -1014,17 +1014,12 @@ export function routeRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         await getReachedRoute(tx, principal, id)
-        const rows = await tx
-          .select(receiptColumns)
-          .from(driverCommand)
-          .where(and(eq(driverCommand.companyId, principal.companyId), eq(driverCommand.routeId, id), after === undefined ? undefined : gt(driverCommand.id, after)))
-          .orderBy(asc(driverCommand.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(receiptOf), limit))
+        const page = await listReceipts(tx, principal, at, eq(driverCommand.routeId, id))
+        return c.json(mapPage(page, receiptOf))
       },
     )
 }

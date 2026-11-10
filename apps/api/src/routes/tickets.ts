@@ -68,7 +68,7 @@ import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, typ
 import { OPEN_ROUTE_STATUSES, pickupMissed, type MissedPickupStatus } from "@waste/domain/execution/vocabulary"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
+import { and, eq, exists, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { appendTicketEvent, BY_SLA, openTicket } from "@waste/db/commands/open-ticket"
 import { alertOf } from "@waste/db/shapes/alerts"
@@ -82,8 +82,9 @@ import { requireProject } from "../auth/projects"
 import { providerIdOf, providerNameOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { findReachedRoute } from "./execution-shapes"
 import { partyInForce } from "./property-writes"
 import {
@@ -301,6 +302,9 @@ function overdueAt(overdue: boolean, at: Date): SQL | undefined {
   const pastDue = and(inArray(ticket.status, [...OPEN_TICKET_STATUSES]), lt(ticket.dueAt, at))
   return overdue ? pastDue : or(notInArray(ticket.status, [...OPEN_TICKET_STATUSES]), isNull(ticket.dueAt), gte(ticket.dueAt, at))
 }
+
+/** A ticket's history, read once the ticket is one the caller reads. */
+const { list: listEvents } = scoped(ticketEvent, { noun: "ticket event", reach: "company", columns: eventColumns })
 
 export function ticketRoutes(deps: RouteDeps) {
   const { now, jobs } = deps
@@ -834,26 +838,20 @@ export function ticketRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, kind, visibility } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         await getReachedTicket(tx, principal, id)
-        const rows = await tx
-          .select(eventColumns)
-          .from(ticketEvent)
-          .where(
-            and(
-              eq(ticketEvent.companyId, principal.companyId),
-              eq(ticketEvent.ticketId, id),
-              historyReadable(principal),
-              kind === undefined ? undefined : eq(ticketEvent.kind, kind),
-              visibility === undefined ? undefined : eq(ticketEvent.visibility, visibility),
-              after === undefined ? undefined : gt(ticketEvent.id, after),
-            ),
-          )
-          .orderBy(asc(ticketEvent.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(eventOf), limit))
+        const page = await listEvents(
+          tx,
+          principal,
+          at,
+          eq(ticketEvent.ticketId, id),
+          historyReadable(principal),
+          kind === undefined ? undefined : eq(ticketEvent.kind, kind),
+          visibility === undefined ? undefined : eq(ticketEvent.visibility, visibility),
+        )
+        return c.json(mapPage(page, eventOf))
       },
     )
     .post(

@@ -71,7 +71,7 @@ import { allocationOverPayload, carriesFraction, fractionsCarried, noCompartment
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "@waste/domain/resources/fleet"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import { LIVE_ALLOCATION_STATUSES, type AllocationAction, type AllocationStatus } from "@waste/domain/resources/vocabulary"
-import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
+import { and, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
 import { dayInTimezone, lastDayInside } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
 import { refuseOverlap } from "@waste/db/commands/shared"
@@ -84,7 +84,7 @@ import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { daysThrough, refuseCrewAway } from "./availability-rules"
@@ -400,6 +400,9 @@ async function setStatus(tx: Tx, principal: Principal, id: string, status: Alloc
 const RESERVATION_RULES =
   "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The vehicle carries what the allocation plans (O7 of #290): its waste fraction in one of its compartments (a vehicle whose compartments name none carries any), refused at `wasteFractionId` (`WH-24 has no compartment for Glass`), and its `requiredCapacityKg` within what one trip takes — of the fraction where it names one, the capacity of the compartments carrying it within the vehicle's payload — refused at `requiredCapacityKg` (`WH-24 takes 3000 kg of Glass on one trip, less than the 3500 kg required`); judged when the vehicle, the fraction or the capacity moves. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there; and then whether each is there over the window's days on the project's clock (O6 of #290) — a vehicle or a trailer out of use, or a driver absent, on any of them is refused (409) naming the period — asked of what the body names afresh, and of the whole crew where the window moves."
 
+/** An allocation's events, read once the allocation is the caller's. */
+const { list: listEvents } = scoped(vehicleAllocationEvent, { noun: "vehicle allocation event", reach: "company", columns: eventColumns })
+
 export function vehicleAllocationRoutes(deps: RouteDeps) {
   return routes(deps)
     .get(
@@ -625,24 +628,12 @@ export function vehicleAllocationRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         await getAllocation(tx, principal, id)
-        const rows = await tx
-          .select(eventColumns)
-          .from(vehicleAllocationEvent)
-          .where(
-            and(
-              eq(vehicleAllocationEvent.companyId, principal.companyId),
-              eq(vehicleAllocationEvent.vehicleAllocationId, id),
-              after === undefined ? undefined : gt(vehicleAllocationEvent.id, after),
-            ),
-          )
-          .orderBy(asc(vehicleAllocationEvent.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(eventOf), nextCursor })
+        const page = await listEvents(tx, principal, at, eq(vehicleAllocationEvent.vehicleAllocationId, id))
+        return c.json(mapPage(page, eventOf))
       },
     )
 }

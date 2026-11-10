@@ -15,11 +15,12 @@
 import type { RouteDetail } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import type { Tx } from "@waste/db/client"
+import { receiptColumns } from "@waste/db/shapes/driver-commands"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { routeColumns, routeWithProgress, type RouteRow } from "@waste/db/shapes/routes"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import { unloadsAnswered, unloadsFrom, unloadsOfRoute } from "@waste/db/shapes/unloads"
-import { pickup, route, session, unload } from "@waste/db/schema/execution"
+import { driverCommand, pickup, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 
@@ -120,7 +121,7 @@ export function sessionOf(row: SessionRow): Session {
 }
 
 /** The sessions of this company, in the projects the caller works in. */
-export const { noSuch: noSuchSession, get: getSession, list: listSessions } = scoped(session, { noun: "session", reach: "projects", columns: sessionColumns })
+export const { get: getSession, list: listSessions } = scoped(session, { noun: "session", reach: "projects", columns: sessionColumns })
 
 /** One route's sessions, oldest first. */
 export async function sessionsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<SessionRow[]> {
@@ -142,12 +143,7 @@ export async function openSessionsByRoute(tx: Tx, companyId: string, routeIds: r
 }
 
 /** The unloads of this company, in the projects the caller works in, each with its reading. */
-export const {
-  noSuch: noSuchUnload,
-  find: findUnload,
-  get: getUnload,
-  list: listUnloads,
-} = scoped(unload, { noun: "unload", reach: "projects", read: (tx, principal) => unloadsFrom(tx, principal.companyId).query })
+export const { get: getUnload, list: listUnloads } = scoped(unload, { noun: "unload", reach: "projects", read: (tx, principal) => unloadsFrom(tx, principal.companyId).query })
 
 /**
  * What hangs off a route beside its stops: the route with its progress, the
@@ -175,6 +171,9 @@ export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promis
   const [context, shifts] = await Promise.all([planContextOf(tx, companyId, row, pickups), shiftsByRoute(tx, companyId, [row], workloads)])
   return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan, workload: workloads.get(row.id) ?? NO_WORKLOAD, shift: shifts.get(row.id) ?? NO_SHIFT }
 }
+
+/** The receipts of the driver's commands, a ledger read once what it hangs off is the caller's: a route the office reads, or the driver's own. */
+export const { list: listReceipts } = scoped(driverCommand, { noun: "command receipt", reach: "company", columns: receiptColumns })
 
 // The driver door's scope (routes/driver.ts): the tenant and the assignment,
 // never `inProjects`. A route reaches a device because the dispatcher assigned
