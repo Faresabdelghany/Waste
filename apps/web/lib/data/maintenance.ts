@@ -12,7 +12,6 @@ import { takesReference } from "@waste/domain/status-gates"
 
 import type { BusinessFormSchema } from "./business-form-types"
 
-/** Add plan, from a vehicle's details. */
 export const PLAN_FORM: BusinessFormSchema = {
   key: "fleet.vehicles",
   mode: "action",
@@ -45,7 +44,6 @@ export const PLAN_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "The plan was added." },
 }
 
-/** Open order, from a vehicle's details: its active plans offered by name, or none for a one-off. */
 export function orderFormOf(plans: readonly Pick<MaintenancePlan, "id" | "name" | "status">[]): BusinessFormSchema {
   return {
     key: "fleet.vehicles",
@@ -76,7 +74,6 @@ export function orderFormOf(plans: readonly Pick<MaintenancePlan, "id" | "name" 
   }
 }
 
-/** Complete, from an open order in a vehicle's details. */
 export const COMPLETE_FORM: BusinessFormSchema = {
   key: "fleet.vehicles",
   mode: "action",

@@ -2,12 +2,13 @@
 // #81): the `configure.master` module — the prototype's "Operational Master
 // Data", whose two fixture records are coarse master-data sets that only the
 // fixture pickers point at — becomes, on the API, the company's own
-// catalogue vocabulary in five kinds: waste fractions, container types,
+// catalogue vocabulary in six kinds: waste fractions, container types,
 // service frequencies, vehicle types (`@waste/contracts/catalogue`,
-// `vehicle-types`) and, since M5 of #293, contaminant codes
+// `vehicle-types`), since M5 of #293 contaminant codes
 // (`@waste/contracts/pickup-exceptions`) — the company's names for the wrong
 // waste in a bin, each for every fraction or the ones it names, retired by its
-// status rather than deleted. Settings › Operations › Master data reads and writes the
+// status rather than deleted — and, since O30 of #290, decommission reasons
+// (`@waste/contracts/stock`), retired the same way. Settings › Operations › Master data reads and writes the
 // module through the record store (components/settings/master-data-settings.tsx),
 // and the adapters that speak to the API are lib/api/records/master-data.ts.
 //
@@ -16,10 +17,8 @@
 // (`fraction-…`, `container-type-…`, `frequency-…`, `vehicle-type-…`: what
 // the adapters mint from the server's id and the pane mints for a new row),
 // then the typed `kind` the pane's forms write. The adapters' `owns` is that
-// rule, so is the filter the generic workspace applies to a picker that
-// points at the module, and so is the link to a row: a renamed row stays in
-// its list, and a fixture master-data set, which is of no kind, keeps its
-// old home under Operations setup.
+// rule, and so is the filter the generic workspace applies to a picker that
+// points at the module: a renamed row stays in its list.
 //
 // The rules a write is held to are spelled here once — a key's shape, a
 // count, the contract's one cadence rule in the contract's own sentence — and
@@ -34,7 +33,7 @@
 // it carries its treatment too — reuse, recycling, energy recovery or
 // disposal — or "Not recorded".
 //
-// The four forms are the pane's own, not the generic registry's: the
+// The forms are the pane's own, not the generic registry's: the
 // registry's `configure.master` schema stays disabled, since the prototype
 // never had a create button for the module and fixture mode gains none. A
 // key (a fraction's, a vehicle type's) is set once and a frequency stays in
@@ -64,15 +63,10 @@ export {
   type MasterDataKindDetails,
 } from "./master-data-kinds"
 
-/** A record's typed values, as the registry keeps them. */
 type SubmittedValues = NonNullable<BusinessRecord["submittedValues"]>
 
 /** Where the master data lives — the one seam callers resolve the module through, never the pair spelled by hand. */
 export const MASTER_DATA_MODULE = moduleAt("configure.master")
-
-// ---------------------------------------------------------------------------
-// The rules a write is held to, spelled once
-// ---------------------------------------------------------------------------
 
 export const KEY_REFUSAL = "A key is a lowercase slug of letters, digits and single hyphens, such as hard-plastic"
 /** A key as the wire takes it (`@waste/domain/text`): a lowercase slug of at most `KEY_MAX` characters. */
@@ -80,7 +74,6 @@ export const isKey = (value: string | undefined): value is string => value !== u
 
 export const VOLUME_REFUSAL = "A volume is a whole number of litres"
 
-/** The domain's sentence for a waste code of another shape (`@waste/domain/registry/waste-code`). */
 export const WASTE_CODE_REFUSAL = WASTE_CODE_SHAPE
 
 export const COUNT_LABELS = { collectionsPerWeek: "Collections per week", weeksBetween: "Weeks between", daysBetween: "Days between" } as const
@@ -88,28 +81,20 @@ export type CountKey = keyof typeof COUNT_LABELS
 const COUNT_KEYS = Object.keys(COUNT_LABELS) as CountKey[]
 export const countRefusal = (key: CountKey) => `${COUNT_LABELS[key]} is a whole number, 1 or more`
 
-/** `A waste fraction needs a name`. */
 export const nameRefusal = (kind: MasterDataKind) => `A ${MASTER_DATA_KIND_DETAILS[kind].label.toLowerCase()} needs a name`
 
-/** `The key is set once: a waste fraction that needs another key is another waste fraction`. */
 export const keyMovedRefusal = (kind: MasterDataKind) => {
   const lower = MASTER_DATA_KIND_DETAILS[kind].label.toLowerCase()
   return `The key is set once: a ${lower} that needs another key is another ${lower}`
 }
 
-/** The domain's cadence rule (`serviceFrequencyShape`) over the three numbers as stored, an absent one the null the row holds. */
 export const cadenceHolds = ({ collectionsPerWeek, weeksBetween, daysBetween }: Pick<MasterDataFields, "collectionsPerWeek" | "weeksBetween" | "daysBetween">): boolean =>
   serviceFrequencyShape({ collectionsPerWeek: collectionsPerWeek ?? null, weeksBetween: weeksBetween ?? null, daysBetween: daysBetween ?? null })
-
-// ---------------------------------------------------------------------------
-// The fields of a row, typed
-// ---------------------------------------------------------------------------
 
 /** What a row of any kind carries, typed; a field another kind has no use for is absent. A count that is no count is NaN, refused by name. */
 export type MasterDataFields = {
   kind: MasterDataKind
   name: string
-  /** A fraction's or a vehicle type's stable slug. */
   key?: string
   /** A fraction's waste code, compact (`200301`); null where it has none. */
   wasteCode?: string | null
@@ -137,7 +122,6 @@ export type MasterDataFields = {
   wasteFractionIds?: string[]
 }
 
-/** The names a row's facts show for the rows it names. */
 export type MasterDataLookups = {
   projectName: (projectId: string) => string | undefined
   containerTypeName: (containerTypeId: string) => string | undefined
@@ -145,7 +129,6 @@ export type MasterDataLookups = {
   wasteFractionName?: (wasteFractionId: string) => string | undefined
 }
 
-/** The form's own field ids per kind: what the typed values carry, in the form's order. */
 const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "waste-fraction": ["name", "key", "wasteCode", "treatment", "densityKgPerCubicMetre"],
   "container-type": ["name", "volumeLitres", "serviceSeconds"],
@@ -155,13 +138,11 @@ const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "decommission-reason": ["name", "key", "status"],
 }
 
-/** A fraction's treatment as a person reads it. */
 export const TREATMENT_LABELS: Readonly<Record<WasteTreatment, string>> = { reuse: "Reuse", recycling: "Recycling", "energy-recovery": "Energy recovery", disposal: "Disposal" }
 
 /** The form's value for a fraction with no treatment recorded: a select holds no empty value. */
 export const NO_TREATMENT = "none"
 
-/** A form's treatment: one of the domain's, else none. */
 const treatmentOf = (value: string | undefined): WasteTreatment | null => WASTE_TREATMENTS.find((treatment) => treatment === value) ?? null
 
 const text = (values: BusinessFormValues | SubmittedValues | undefined, key: string): string | undefined => {
@@ -169,7 +150,6 @@ const text = (values: BusinessFormValues | SubmittedValues | undefined, key: str
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined
 }
 
-/** A form's checkbox, or a record's typed flag: true only where it says so. */
 const flag = (values: BusinessFormValues | SubmittedValues | undefined, key: string): boolean => values?.[key] === true || values?.[key] === "true"
 
 /** A form's number: null for blank, the number for a whole positive one (`240`, `240.0`), NaN for anything else. */
@@ -180,7 +160,6 @@ const count = (values: BusinessFormValues | SubmittedValues | undefined, key: st
   return Number.isInteger(number) && number > 0 ? number : Number.NaN
 }
 
-/** The typed fields a form's values, or a record's typed values, spell for a kind. */
 export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormValues | SubmittedValues | undefined): MasterDataFields {
   const name = text(values, "name") ?? ""
   switch (kind) {
@@ -232,10 +211,8 @@ export const DENSITY_REFUSAL = `A density is a whole number of kilograms a cubic
 /** What a container type's seconds at the kerb outside the domain's bounds are told (O10 of #290). */
 export const SERVICE_SECONDS_REFUSAL = `Seconds at the kerb are a whole number, ${SERVICE_SECONDS.min} to ${SERVICE_SECONDS.max.toLocaleString("en")}`
 
-/** Whether a form's optional figure is unset or a whole number within the bounds. */
 const within = (value: number | null | undefined, bounds: { min: number; max: number }) => value == null || (!Number.isNaN(value) && value >= bounds.min && value <= bounds.max)
 
-/** The typed values a row keeps: the kind, then the form's own text for the kind's fields, trimmed, blanks left out. */
 export function masterDataTypedValues(kind: MasterDataKind, values: BusinessFormValues | SubmittedValues | undefined): SubmittedValues {
   const typed: SubmittedValues = { [MASTER_DATA_KIND_KEY]: kind }
   for (const key of KIND_FIELD_IDS[kind]) {
@@ -243,7 +220,6 @@ export function masterDataTypedValues(kind: MasterDataKind, values: BusinessForm
     // A fraction's treatment not recorded is no value, as a cleared waste code is.
     if (value !== undefined && !(key === "treatment" && value === NO_TREATMENT)) typed[key] = value
   }
-  // A fraction's hazardous flag is a checkbox, kept as the boolean the form holds, and only where it is ticked.
   if (kind === "waste-fraction" && flag(values, "hazardous")) typed.hazardous = true
   return typed
 }
@@ -294,7 +270,6 @@ export function cadenceLabel({ collectionsPerWeek, weeksBetween, daysBetween }: 
   return perWeek ? `${perWeek} a week` : "Once a month"
 }
 
-/** What the fields show as a record: its context line, headline value, facts and project scope. */
 export function presentMasterData(fields: MasterDataFields, lookups: MasterDataLookups): Pick<BusinessRecord, "context" | "value" | "facts" | "projectIds" | "recordKind"> {
   const details = MASTER_DATA_KIND_DETAILS[fields.kind]
   const base = { recordKind: details.recordKind, projectIds: [] as string[] }
@@ -376,10 +351,6 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// The forms
-// ---------------------------------------------------------------------------
 
 /** The create form of one kind: the pane's own, keyed to the module. The dialog shows no field guidance on a create form, so the rules speak inline through `masterDataFieldErrors`. */
 export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
@@ -521,24 +492,17 @@ export function masterDataFormValues(record: BusinessRecord): BusinessFormValues
     if (typeof value === "string" && value.trim() !== "") values[key] = value
     if (typeof value === "boolean") values[key] = value
   }
-  // The select shows a fraction with no treatment as not recorded.
   if (masterDataKindOf(record) === "waste-fraction" && values.treatment === undefined) values.treatment = NO_TREATMENT
   return values
 }
 
-// ---------------------------------------------------------------------------
-// The records the pane writes
-// ---------------------------------------------------------------------------
-
 export type MasterDataWriteContext = {
-  /** Who is saving — stamped as the creator. */
   actorName: string
   /** Milliseconds since the epoch — the id suffix. */
   now: number
   lookups: MasterDataLookups
 }
 
-/** A new row from the create form: minted under its kind's prefix, in force, sourced from Settings. */
 export function createMasterDataRecord(kind: MasterDataKind, values: BusinessFormValues, context: MasterDataWriteContext): BusinessRecord {
   const details = MASTER_DATA_KIND_DETAILS[kind]
   const fields = masterDataFieldsOf(kind, values)
@@ -562,7 +526,6 @@ export function createMasterDataRecord(kind: MasterDataKind, values: BusinessFor
   }
 }
 
-/** An edited row: its identity and stamps kept, the form's values over the typed ones, the presentation rebuilt from them. */
 export function updateMasterDataRecord(existing: BusinessRecord, values: BusinessFormValues, lookups: MasterDataLookups): BusinessRecord {
   const kind = masterDataKindOf(existing)
   if (kind === null) return existing
