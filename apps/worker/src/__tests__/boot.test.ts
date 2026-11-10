@@ -31,14 +31,14 @@ import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../resolution/open-tick
 import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../finance/record-billable-events"
 import { CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUES, outboxQueue, UNCONSUMED_RETENTION_SECONDS, type RelayedEvent } from "../runtime/outbox"
 import { checkBoss } from "../readiness"
-import { ownerUnderTest, withDatabaseName } from "./database"
+import { createTestDatabase, ownerUnderTest, testDatabaseName, withDatabaseName } from "./database"
 import { jobContext } from "./context"
 import { until } from "./until"
 
 const owner = ownerUnderTest()
 
 describe("the worker booted against a migrated database", { skip: owner.skip }, () => {
-  const name = `waste_worker_boot_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("boot")
   let admin: Database
   let fresh: Database
   let url: string
@@ -58,7 +58,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     url = withDatabaseName(owner.url, name)
     await migrateDatabase(url)
     fresh = createDb(url, { max: 2 })

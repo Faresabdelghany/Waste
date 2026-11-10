@@ -23,14 +23,14 @@ import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { runAlertRules } from "../alert-rules"
 import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
 import { jobContext } from "../../__tests__/context"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 
 const HOUR_MS = 3_600_000
 
 describe("the disposal-site reconciliation", { skip: roles.skip }, () => {
-  const name = `waste_worker_haul_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("haul")
   let admin: Database
   let api: Database
   let worker: Database
@@ -58,7 +58,7 @@ describe("the disposal-site reconciliation", { skip: roles.skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 2 })
     worker = createDb(withDatabaseName(roles.workerUrl, name), { max: 2 })

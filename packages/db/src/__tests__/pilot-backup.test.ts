@@ -12,7 +12,7 @@ import { backupMembers, checkRestoreTarget, dumpPlan, majorOf, restorePlan, veri
 import { createDb } from "../client"
 import { migrateDatabase } from "../migrate"
 import { libpqEnvironment, shellExports } from "../pilot/pg-env"
-import { databaseUnderTest, freshDatabase, withFreshDatabase, type FreshDatabase } from "./database"
+import { databaseUnderTest, sharedDatabase, withFreshDatabase } from "./database"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
 
@@ -83,17 +83,12 @@ describe("majorOf", () => {
 const database = databaseUnderTest()
 
 describe("a backup's manifest", { skip: database.skip }, () => {
-  let migrated: FreshDatabase
+  const migrated = sharedDatabase(database.adminUrl, "waste_backup_migrated", (url) => migrateDatabase(url))
 
-  before(async () => {
-    migrated = await freshDatabase(database.adminUrl, "waste_backup_migrated")
-    await migrateDatabase(migrated.url)
-  })
-  after(async () => {
-    await migrated?.drop()
-  })
+  before(() => migrated.ready())
+  after(() => migrated.drop())
 
-  test("records the dumps, the journal and the fingerprint, and verifies until one byte changes", () =>
+  test("records the dumps, the journal and the fingerprint, and verifies until one byte changes", async () =>
     withFreshDatabase(database.adminUrl, "waste_backup_manifest", async (url) => {
       // A database from before migration 0011, which has no pg-boss schema to back up.
       const owner = createDb(url, { max: 1 })
@@ -137,7 +132,7 @@ describe("a backup's manifest", { skip: database.skip }, () => {
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }
-    }, { template: migrated.name }))
+    }, { template: (await migrated.ready()).name }))
 
   test("refuses what cannot be a backup: a database without the domain, a dump the database's schemas want and do not have, an empty file, a wms schema with no table", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "waste-backup-"))
@@ -158,7 +153,7 @@ describe("a backup's manifest", { skip: database.skip }, () => {
         await assert.rejects(writeManifest(dir, input(url)), /pgboss-data\.sql is empty/)
         writeFileSync(path.join(dir, "pgboss-data.sql"), "-- rows\n")
         await assert.rejects(writeManifest(dir, input(url)), /wms-schema\.sql defines no table/)
-      }, { template: migrated.name })
+      }, { template: (await migrated.ready()).name })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

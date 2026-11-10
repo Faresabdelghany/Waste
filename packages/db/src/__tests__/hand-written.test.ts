@@ -10,13 +10,12 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { is } from "drizzle-orm"
+import { getTableName, is } from "drizzle-orm"
 import { pgTable, PgTable, text, uuid } from "drizzle-orm/pg-core"
 
 import { ALLOCATION_STATUSES, LIVE_ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { qualifiedTable } from "../names"
 import { vehicleAllocation } from "../schema/allocations"
 import { id, isLedger, orderedWindow, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
 import { wms } from "../schema/wms"
@@ -357,11 +356,12 @@ describe("the migrations carry every table's hand-written statements", () => {
   test("each table of the schema is created by exactly one migration, and that file or a later one carries its statements", async () => {
     const files = await migrations()
     for (const table of await tables()) {
-      // Every statement asked of a table, its CREATE TABLE among them, names it as qualifiedTable spells it, and dropping
-      // comments or collapsing whitespace never makes that text appear: a file that does not spell it holds none of them,
-      // so only the files that do are read for the table, not every file for every table.
-      const named = qualifiedTable(table, "the hand-written gate")
-      const naming = files.filter((file) => file.text.includes(named))
+      // A statement about a table names the table — quoted or not, in any case, inside a DO block or a string — so a
+      // file that never names it holds none, and only the files that do are read for the table, not
+      // every file for every table. The test is the bare name: it can only read more files than it needs, never fewer,
+      // and which statements count is the parse's to say.
+      const named = getTableName(table).toLowerCase()
+      const naming = files.filter((file) => file.text.toLowerCase().includes(named))
       const creating = naming.filter((file) => createsTable(table, file.text))
       assert.equal(creating.length, 1, `${createTableStatement(table)} appears in ${creating.map((file) => file.name).join(", ") || "no migration"}`)
       // A table that gains a statement's reason later — an undated table dated (#374: `property_party`'s exclusion constraint) — carries it in the file that changed it, which runs after the one that created it.

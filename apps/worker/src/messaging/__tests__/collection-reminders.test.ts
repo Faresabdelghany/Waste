@@ -20,7 +20,7 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { collectionRemindersJob, remindProject, runCollectionReminders } from "../collection-reminders"
 import { jobContext } from "../../__tests__/context"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 import { at, FIXTURE_DAY, placeBin, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin } from "../../__tests__/finance-tenant"
 
 const roles = rolesUnderTest()
@@ -29,7 +29,7 @@ const TUESDAY = "2026-10-06"
 const WEDNESDAY = "2026-10-07"
 
 describe("messaging.collection-reminders", { skip: roles.skip }, () => {
-  const name = `waste_worker_reminders_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("reminders")
   let admin: Database
   let api: Database
   let worker: Database
@@ -58,7 +58,7 @@ describe("messaging.collection-reminders", { skip: roles.skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 2 })
     worker = createDb(withDatabaseName(roles.workerUrl, name), { max: 2 })

@@ -6,6 +6,14 @@
 // (schema/policies.ts), gathered as `AUDITED` and `EXEMPT` in
 // table-policies.ts; __tests__/audit-trail.test.ts holds the schema and the
 // migrated database to them, and what the function writes.
+//
+// The function itself is 0019's own text. That file's comment names it here as
+// `AUDIT_ROW_FUNCTION`, the constant it was copied from, which went once 0019
+// merged (migrations/README.md: a merged file is its hash's). What holds it now:
+// the fingerprint (its definition's digest), audit-trail.test.ts's fresh
+// database (what a row of the log holds), and the same file's check that the
+// function reads the actor and the reason under the setting names `actAs`
+// writes (`ACTOR_SETTING`, `REASON_SETTING`, src/tenant.ts).
 import { getTableName } from "drizzle-orm"
 
 import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"

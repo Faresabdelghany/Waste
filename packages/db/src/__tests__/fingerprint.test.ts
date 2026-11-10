@@ -11,7 +11,7 @@ import { after, before, describe, test } from "node:test"
 import { createDb } from "../client"
 import { compareFingerprints, committedFingerprint, fingerprintDatabase, fingerprintDigest, fingerprintLines, fingerprintText } from "../fingerprint"
 import { migrateDatabase } from "../migrate"
-import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
+import { databaseUnderTest, freshDatabase, sharedDatabase } from "./database"
 
 describe("a fingerprint's text", () => {
   test("drops its comments and blank lines, and compares line by line in each text's order", () => {
@@ -51,18 +51,14 @@ const database = databaseUnderTest()
 // One fresh database migrated once: the first test reads it, and the second
 // changes a copy of it (`freshDatabase`'s template), not a second migration.
 describe("the fingerprint of a migrated database", { skip: database.skip }, () => {
-  let migrated: FreshDatabase
+  const migrated = sharedDatabase(database.adminUrl, "waste_fingerprint", (url) => migrateDatabase(url))
 
-  before(async () => {
-    migrated = await freshDatabase(database.adminUrl, "waste_fingerprint")
-    await migrateDatabase(migrated.url)
-  })
-  after(async () => {
-    await migrated?.drop()
-  })
+  before(() => migrated.ready())
+  after(() => migrated.drop())
 
   test("is the committed file: regenerate it with `pnpm db:fingerprint --write` whenever a migration changes", async () => {
-    const { missing, unexpected } = compareFingerprints(committedFingerprint(), await fingerprintDatabase(migrated.url))
+    const { url } = await migrated.ready()
+    const { missing, unexpected } = compareFingerprints(committedFingerprint(), await fingerprintDatabase(url))
     assert.deepEqual(
       { missing, unexpected },
       { missing: [], unexpected: [] },
@@ -71,7 +67,7 @@ describe("the fingerprint of a migrated database", { skip: database.skip }, () =
   })
 
   test("changes with a grant and with a journal row, and not with pg-boss's partitions of another day", async () => {
-    const fresh = await freshDatabase(database.adminUrl, "waste_fingerprint_changes", { template: migrated.name })
+    const fresh = await freshDatabase(database.adminUrl, "waste_fingerprint_changes", { template: (await migrated.ready()).name })
     const owner = createDb(fresh.url, { max: 1 })
     try {
       const baseline = await fingerprintDatabase(fresh.url)

@@ -138,8 +138,8 @@ describe("the job registry", () => {
     assert.deepEqual(planAheadJob.scheduleData, { source: "schedule" })
     assert.deepEqual(planAheadJob.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.deepEqual(planAheadJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
-    // Every queue's name, as pg-boss keeps its jobs and schedules under it and the API sends to it; the order is the wiring's and nothing reads it.
-    assert.deepEqual(JOBS.map((job) => job.queue).sort(), [
+    // Every queue's name, as pg-boss keeps its jobs and schedules under it and the API sends to it, in the order the registry brings them up.
+    assert.deepEqual(JOBS.map((job) => job.queue), [
       "worker.heartbeat",
       "planning.generate-routes",
       "planning.plan-ahead",
@@ -160,7 +160,30 @@ describe("the job registry", () => {
       "messaging.send",
       "messaging.collection-reminders",
       "customers.propose-right-sizing",
-    ].sort())
+    ])
+  })
+
+  test("runs each scheduled job on its decided clock and keeps each job's finished runs as long as decided", () => {
+    const own = JOBS.filter((job) => !job.queue.startsWith("outbox."))
+    assert.deepEqual(
+      Object.fromEntries(own.map((job) => [job.queue, { schedule: job.schedule ?? null, deleteAfterSeconds: job.queueOptions?.deleteAfterSeconds ?? null }])),
+      {
+        "worker.heartbeat": { schedule: "* * * * *", deleteAfterSeconds: 86_400 },
+        "planning.generate-routes": { schedule: null, deleteAfterSeconds: null },
+        "planning.plan-ahead": { schedule: "0 3 * * *", deleteAfterSeconds: 604_800 },
+        "routing.measure": { schedule: null, deleteAfterSeconds: 604_800 },
+        "routing.optimise": { schedule: null, deleteAfterSeconds: 604_800 },
+        "routing.sweep-horizon": { schedule: "30 3 * * *", deleteAfterSeconds: 604_800 },
+        "execution.relay-outbox": { schedule: "* * * * *", deleteAfterSeconds: 3_600 },
+        "finance.run-billing": { schedule: "0 12 1 * *", deleteAfterSeconds: 2_592_000 },
+        "execution.purge-proof-objects": { schedule: "45 3 * * *", deleteAfterSeconds: 604_800 },
+        "resolution.alert-rules": { schedule: "*/5 * * * *", deleteAfterSeconds: 86_400 },
+        "execution.purge-positions": { schedule: "40 3 * * *", deleteAfterSeconds: 604_800 },
+        "messaging.send": { schedule: null, deleteAfterSeconds: null },
+        "messaging.collection-reminders": { schedule: "7 * * * *", deleteAfterSeconds: 86_400 },
+        "customers.propose-right-sizing": { schedule: "23 3 * * *", deleteAfterSeconds: 604_800 },
+      },
+    )
   })
 
   test("never retries a scheduled run whose next one covers what it missed — the heartbeat, the alert rules, the two purges — nor the horizon sweep, whose retry would re-ask the routes that failed and pay the provider twice", () => {

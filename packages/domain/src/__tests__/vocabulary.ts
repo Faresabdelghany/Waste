@@ -12,8 +12,9 @@
 // exported and left out of the naming object — which is what lets the API, a
 // form or another test walk them all — fails here; an array the module exports
 // that is a value of a vocabulary and not a vocabulary (`DEFAULT_WEEKEND`) is
-// named in `beside`, and held to being values of one list, so a list cannot
-// leave the walk by being named there.
+// named in `beside` with the list it is drawn from, and held to being some of
+// that list's values, so a list leaves the walk only by a test naming where
+// it comes from.
 //
 // Not a suite of its own: the runner takes `src/**/*.test.ts`, so this file is
 // only ever imported.
@@ -26,10 +27,10 @@ export const TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 /**
  * Registers the two tests for one vocabulary module: `module` read as a
  * namespace, `named` its naming object, `beside` the arrays it exports that
- * are not lists.
+ * are not lists, each with the name of the list it is drawn from.
  */
-export function defineVocabularyTests(context: string, module: Record<string, unknown>, named: Record<string, readonly string[]>, beside: readonly string[] = []): void {
-  const exported = Object.entries(module).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]) && !beside.includes(entry[0]))
+export function defineVocabularyTests(context: string, module: Record<string, unknown>, named: Record<string, readonly string[]>, beside: Readonly<Record<string, string>> = {}): void {
+  const exported = Object.entries(module).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]) && !(entry[0] in beside))
 
   describe(`the ${context} vocabulary`, () => {
     test("every list has values, each a kebab-case token, and names none of them twice", () => {
@@ -40,19 +41,19 @@ export function defineVocabularyTests(context: string, module: Record<string, un
       }
     })
 
-    test("the naming object names exactly the lists the module exports, each the list itself, and what is beside them is a value of one", () => {
+    test("the naming object names exactly the lists the module exports, each the list itself, and what is beside them is drawn from the list it names", () => {
       assert.deepEqual(
         Object.keys(named).sort(),
         exported.map(([name]) => name).sort(),
       )
       for (const [name, values] of exported) assert.equal(named[name], values, `${name} is not the list the module exports`)
-      for (const name of beside) {
+      for (const [name, from] of Object.entries(beside)) {
         const values = module[name]
         assert.ok(Array.isArray(values), `${name} is named beside the lists but the module exports no such array`)
-        assert.ok(
-          Object.values(named).some((list) => (values as unknown[]).every((value) => list.includes(value as string))),
-          `${name} is named beside the lists, but its values are not all of one list: name it in the vocabulary`,
-        )
+        assert.ok(values.length > 0, `${name} is empty`)
+        assert.ok(from in named, `${name} is drawn from ${from}, which the naming object does not name`)
+        const outside = (values as string[]).filter((value) => !named[from].includes(value))
+        assert.deepEqual(outside, [], `${name} is named beside the lists as drawn from ${from}, but has values of its own: name it in the vocabulary`)
       }
     })
   })
