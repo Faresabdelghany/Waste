@@ -54,7 +54,16 @@ export type BusinessFilters = {
   paymentStatuses: string[]
   /** What an unload's load on board reads as against its project's tolerance: within, above or not measured (O9 of #290). */
   tolerance: string[]
+  /** The Settings lists': a user's organisation, a role's or a product's type, a role's scope, a calendar's project, a planning area's purpose. */
+  organizations: string[]
+  types: string[]
+  scopes: string[]
+  projects: string[]
+  purposes: string[]
 }
+
+/** The orders a list's view offers: `default` the list's own (a role's or a team's as the API lists them), `role` a user's role, then name. */
+export type RecordOrdering = "updated" | "name" | "status" | "role" | "default"
 
 export type BusinessFilterKey = keyof BusinessFilters
 
@@ -100,6 +109,11 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   billingRuns: "Billing run",
   paymentStatuses: "Payment",
   tolerance: "Tolerance",
+  organizations: "Organization",
+  types: "Type",
+  scopes: "Scope",
+  projects: "Project",
+  purposes: "Purpose",
 }
 
 export const BUSINESS_FILTER_KEYS = Object.keys(

@@ -99,6 +99,7 @@ import {
   WEIGHT_REVIEW_FORMS,
 } from "@/lib/data/provider-money-forms"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /**
  * One row of a module read back: a write that moves another row of it (an
@@ -203,7 +204,7 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="service-area-commands">
       <h3 className="text-sm font-semibold">{isAssignment ? "Assignment" : "Service area"}</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The service areas are being read from the API; their actions follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("service areas", "their actions follow")}</p>}
       {isAssignment ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => end(record)}>
@@ -327,7 +328,7 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
       title="Apply index to provider prices"
       withBase
       defaultDay={dayIn(new Date(), scopeProject === undefined ? undefined : typed(scopeProject, "timezone"))}
-      waiting={pricesReady ? undefined : "The provider prices are being read from the API; Preview follows."}
+      waiting={pricesReady ? undefined : waitingSentence("provider prices", "Preview follows")}
       scopeKey={scope === undefined ? "" : scopeValue(scope)}
       scope={{
         ready: scope !== undefined && serverIdOf(scope) !== undefined,
@@ -427,7 +428,7 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="provider-price-commands">
       <h3 className="text-sm font-semibold">Service provider price</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The prices are being read from the API; their actions follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("prices", "their actions follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(edit)} onClick={() => setDialog("edit")}>
           Edit price
@@ -510,7 +511,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="settlement-commands">
       <h3 className="text-sm font-semibold">Settlement</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The settlements are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("settlements", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {offered.map((name) => (
           <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => (name === "calculate" ? send(name) : setAsking(name))}>
@@ -644,7 +645,7 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
     <>
       <section className="space-y-3" data-testid="weight-review-commands">
         <h3 className="text-sm font-semibold">Weight review</h3>
-        {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
+        {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("weights", "their reviews follow")}</p>}
         {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
         {duplicate !== undefined && (
           <p className="text-sm font-medium text-warning-foreground" data-testid="possible-duplicate">

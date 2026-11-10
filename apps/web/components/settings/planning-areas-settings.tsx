@@ -12,15 +12,7 @@ import { useMemo, useState } from "react"
 import { ListBullets, PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import {
-  AssetPanelShell,
-  AssetToolbar,
-  EmptyRow,
-  RecordsSection,
-  defaultAssetView,
-  sortByView,
-  type AssetView,
-} from "@/components/settings/settings-pane-kit"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { Badge } from "@/components/ui/badge"
@@ -48,6 +40,10 @@ import {
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
 import { useActorName } from "@/components/platform/shell-identity"
+import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { cn } from "@/lib/utils"
+import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -62,7 +58,6 @@ import {
   PLANNING_AREAS_MODULE,
   createPlanningAreaRecord,
   planningAreaFormValues,
-  planningAreaPurposeOptions,
   planningAreaSchema,
   planningAreaTableRow,
   planningAreasModule,
@@ -81,9 +76,8 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [purposes, setPurposes] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingArea, setEditingArea] = useState<BusinessRecord | null>(null)
   // On the Pilot an area's boundary versions, with the next one from a day (O21 of #290).
@@ -91,7 +85,6 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
 
   const schema = planningAreaSchema()
   const areasModule = planningAreasModule()
-  const purposeOptions = planningAreaPurposeOptions()
 
   // Live records of any module (fixtures merged with stored records) — the
   // relation targets the form offers and the names the facts display.
@@ -158,9 +151,8 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
     record,
     row: planningAreaTableRow(record, lookups),
   }))
-  const statusOptions = Array.from(
-    new Set([...areasModule.lifecycle, ...areaRecords.map((record) => record.status)]),
-  )
+  const purposeOf = new Map(rows.map(({ record, row }) => [record.id, row.purpose]))
+  const readers: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status), purposes: (record) => singleFilterValue(purposeOf.get(record.id)) }
   const filtered = sortByView(
     rows
       .filter(({ record, row }) =>
@@ -169,8 +161,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
           .toLowerCase()
           .includes(query.trim().toLowerCase()),
       )
-      .filter(({ record }) => statuses.length === 0 || statuses.includes(record.status))
-      .filter(({ row }) => purposes.length === 0 || purposes.includes(row.purpose)),
+      .filter(({ record }) => matchesBusinessFilters(record, filters, readers)),
     view,
     ({ record }) => record.name,
     // Records carry a fuzzy "updated" label, not a sortable timestamp — the
@@ -211,23 +202,19 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   return (
     <AssetPanelShell
       toolbar={
-        <AssetToolbar
-          searchPlaceholder="Search planning areas"
+        <RecordToolbar
+          placeholder="Search planning areas"
           query={query}
           onQueryChange={setQuery}
-          statuses={statuses}
-          onStatusesChange={setStatuses}
-          statusOptions={statusOptions}
-          extraFilters={[
-            {
-              label: "Purpose",
-              options: purposeOptions.map((option) => option.label),
-              value: purposes,
-              onChange: setPurposes,
-            },
-          ]}
+          records={areaRecords}
+          readers={readers}
+          filters={filters}
+          onFiltersChange={setFilters}
           view={view}
           onViewChange={setView}
+          orderingOptions={RECENT_ORDERS}
+          defaults={listView("updated")}
+          detailsLabel="Details"
         />
       }
     >
@@ -242,7 +229,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
         }
       >
         <div className="overflow-x-auto">
-          <Table className="min-w-[1080px]">
+          <Table className={cn("min-w-[1080px]", densityClass(view))}>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
@@ -263,7 +250,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
                   <TableRow key={record.id}>
                     <TableCell className="min-w-[220px]">
                       <p className="text-sm font-medium text-foreground">{record.name}</p>
-                      {view.showDetails && (
+                      {view.showDescription && (
                         <p className="text-xs text-muted-foreground">{record.context}</p>
                       )}
                     </TableCell>

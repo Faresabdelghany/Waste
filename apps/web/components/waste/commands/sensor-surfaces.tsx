@@ -26,6 +26,7 @@ import { useCommandRunner, useModuleReady, useProjectTimezone, useRowHistory } f
 import { dayAndTimeOn, wallClockIn } from "@/lib/format/clock"
 import { CHANGE_PAIRING, PAIR_SENSOR, readingLine, sensorReadings, SENSORS_MODULE } from "@/lib/api/records/sensors"
 import { changeDraft, pairableContainers, pairDraft, pairOffered } from "@/lib/data/sensors"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const CONTAINERS = moduleAt("resources.containers")
 
@@ -60,7 +61,7 @@ export function SensorPairingSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="sensor-pairing">
       <h3 className="text-sm font-semibold">Container</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The sensors are being read from the API; their pairings follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("sensors", "their pairings follow")}</p>}
       <p className="text-sm">{record.facts.Container ?? "Not paired today"}</p>
       <div className="flex flex-wrap gap-2">
         {pairOffered(record) && (

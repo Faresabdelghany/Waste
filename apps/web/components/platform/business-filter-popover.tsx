@@ -111,6 +111,11 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   billingRuns: Receipt,
   paymentStatuses: Coins,
   tolerance: Scales,
+  organizations: Buildings,
+  types: Tag,
+  scopes: Database,
+  projects: Buildings,
+  purposes: MapTrifold,
 }
 
 /**

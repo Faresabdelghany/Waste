@@ -3,10 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import {
   DotsThree,
-  Funnel,
-  MagnifyingGlass,
   Plus,
-  Sliders,
 } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
@@ -24,7 +21,6 @@ import { NewRoleDialog } from "@/components/settings/new-role-dialog"
 import { PilotRolePermissionsPanel } from "@/components/settings/pilot-role-permissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -39,20 +35,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -65,7 +47,8 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs } from "@/components/ui/tabs"
+import { PillTab, PillTabsList } from "@/components/page-layout"
 import {
   DEACTIVATE_USER,
   REACTIVATE_USER,
@@ -99,9 +82,12 @@ import {
 } from "@/lib/api/users-roles"
 import { settingsTabsOf, type SettingsTabOf } from "@/lib/modules/settings-panes"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
+import { type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
+import { listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
 const roleScopeOptions = [
   "Company",
@@ -170,185 +156,30 @@ function statusClassName(status: string) {
   return "border-border bg-muted text-muted-foreground"
 }
 
-type TableView = {
-  ordering: string
-  showDetails: boolean
+const defaultUserView = listView("name")
+const defaultRoleView = listView("default")
+const defaultTeamView = listView("default")
+
+/** A team's values the shared filter reads: its status. */
+const TEAM_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
+
+/** Whether the row a record among `records` stands for passes the filters; a row no record stands for passes. */
+const shownIn = (records: readonly BusinessRecord[], filters: BusinessFilters, readers: FilterValueReaders, id: string): boolean => {
+  const record = records.find((candidate) => candidate.id === id)
+  return record === undefined || matchesBusinessFilters(record, filters, readers)
 }
 
-type FilterGroup = {
-  label: string
-  options: readonly string[]
-  value: string[]
-  onChange: (value: string[]) => void
-}
+/** A row's padding by the view's density, as every list's. */
+const rowPadding = (view: BusinessViewOptions) => (view.density === "compact" ? "py-1.5" : "py-3")
 
-function FilterPopover({ groups }: { groups: FilterGroup[] }) {
-  const activeCount = groups.reduce((sum, group) => sum + group.value.length, 0)
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-2 rounded-lg border-border/60 bg-transparent px-3"
-        >
-          <Funnel className="h-4 w-4" />
-          Filter
-          {activeCount > 0 && (
-            <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
-              {activeCount}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 rounded-xl p-0">
-        <div className="space-y-3 p-4">
-          <div>
-            <p className="text-sm font-semibold">Filter</p>
-          </div>
-          {groups.map((group) => (
-            <div key={group.label} className="space-y-2">
-              {groups.length > 1 && (
-                <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
-              )}
-              {group.options.map((option) => (
-                <label key={option} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={group.value.includes(option)}
-                    onCheckedChange={(checked) =>
-                      group.onChange(
-                        checked
-                          ? [...group.value, option]
-                          : group.value.filter((item) => item !== option),
-                      )
-                    }
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-          ))}
-          {activeCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => groups.forEach((group) => group.onChange([]))}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function ViewPopover({
-  value,
-  onChange,
-  orderingOptions,
-  detailsLabel,
-}: {
-  value: TableView
-  onChange: (value: TableView) => void
-  orderingOptions: Array<{ value: string; label: string }>
-  detailsLabel: string
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-2 rounded-lg border-border/60 bg-transparent px-3"
-        >
-          <Sliders className="h-4 w-4" />
-          View
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 rounded-xl p-0">
-        <div className="space-y-4 p-4">
-          <div>
-            <p className="text-sm font-semibold">Table view</p>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm">Ordering</span>
-            <Select
-              value={value.ordering}
-              onValueChange={(ordering) => onChange({ ...value, ordering })}
-            >
-              <SelectTrigger className="h-8 w-44 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {orderingOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <label className="flex items-center justify-between gap-4 text-sm">
-            {detailsLabel}
-            <Switch
-              checked={value.showDetails}
-              onCheckedChange={(showDetails) => onChange({ ...value, showDetails })}
-            />
-          </label>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function Toolbar({
-  searchPlaceholder,
-  query,
-  onQueryChange,
-  filterGroups,
-  view,
-  onViewChange,
-  orderingOptions,
-  detailsLabel,
-}: {
-  searchPlaceholder: string
-  query: string
-  onQueryChange: (value: string) => void
-  filterGroups: FilterGroup[]
-  view: TableView
-  onViewChange: (value: TableView) => void
-  orderingOptions: Array<{ value: string; label: string }>
-  detailsLabel: string
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] max-w-sm flex-1">
-          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={searchPlaceholder}
-            className="h-8 pl-9 text-sm"
-          />
-        </div>
-        <FilterPopover groups={filterGroups} />
-        <ViewPopover
-          value={view}
-          onChange={onViewChange}
-          orderingOptions={orderingOptions}
-          detailsLabel={detailsLabel}
-        />
-      </div>
-    </div>
-  )
-}
-
-const defaultUserView: TableView = { ordering: "name", showDetails: true }
-const defaultRoleView: TableView = { ordering: "default", showDetails: true }
-const defaultTeamView: TableView = { ordering: "default", showDetails: true }
+const USER_ORDERS: readonly BusinessOrderingOption[] = [
+  { value: "name", label: "Name" },
+  { value: "role", label: "Role" },
+]
+const LIST_ORDERS: readonly BusinessOrderingOption[] = [
+  { value: "default", label: "Default order" },
+  { value: "name", label: "Name" },
+]
 
 function TeamRowActions({
   team,
@@ -391,10 +222,10 @@ function TeamRowActions({
 type TeamsTable = {
   query: string
   onQueryChange: (query: string) => void
-  statuses: string[]
-  onStatusesChange: (statuses: string[]) => void
-  view: TableView
-  onViewChange: (view: TableView) => void
+  filters: BusinessFilters
+  onFiltersChange: (filters: BusinessFilters) => void
+  view: BusinessViewOptions
+  onViewChange: (view: BusinessViewOptions) => void
   filtered: readonly BusinessRecord[]
   pagination: ReturnType<typeof useTablePagination<BusinessRecord>>
 }
@@ -415,7 +246,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
-  const { query, onQueryChange: setQuery, statuses, onStatusesChange: setStatuses, view, onViewChange: setView, filtered } = table
+  const { query, onQueryChange: setQuery, filters, onFiltersChange: setFilters, view, onViewChange: setView, filtered } = table
   const { page, setPage, pageCount, pageRows, totalCount } = table.pagination
 
   // The accounts a member may be: the company's own people, never a provider's.
@@ -453,18 +284,19 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
       <AssetPanelShell
         tabs={tabs}
         toolbar={
-          <Toolbar
-            searchPlaceholder="Search teams"
+          <RecordToolbar
+            placeholder="Search teams"
             query={query}
             onQueryChange={setQuery}
-            filterGroups={[{ label: "Status", options: ["Active", "Inactive"], value: statuses, onChange: setStatuses }]}
+            records={rows}
+            readers={TEAM_READERS}
+            filters={filters}
+            onFiltersChange={setFilters}
             view={view}
             onViewChange={setView}
-            orderingOptions={[
-              { value: "default", label: "Default order" },
-              { value: "name", label: "Name" },
-            ]}
-            detailsLabel="Show members"
+            orderingOptions={LIST_ORDERS}
+            defaults={defaultTeamView}
+            detailsLabel="Members"
           />
         }
         title="Teams"
@@ -483,7 +315,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="h-10">Team</TableHead>
-                {view.showDetails && <TableHead className="h-10">Members</TableHead>}
+                {view.showDescription && <TableHead className="h-10">Members</TableHead>}
                 <TableHead className="h-10">Status</TableHead>
                 <TableHead className="h-10 w-12">
                   <span className="sr-only">Actions</span>
@@ -493,8 +325,8 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
             <TableBody>
               {pageRows.map((team) => (
                 <TableRow key={team.id}>
-                  <TableCell className="min-w-52 py-3 font-medium text-foreground">{team.name}</TableCell>
-                  {view.showDetails && <TableCell className="min-w-64 text-muted-foreground">{team.facts.Members ?? "None"}</TableCell>}
+                  <TableCell className={cn("min-w-52 font-medium text-foreground", rowPadding(view))}>{team.name}</TableCell>
+                  {view.showDescription && <TableCell className="min-w-64 text-muted-foreground">{team.facts.Members ?? "None"}</TableCell>}
                   <TableCell>
                     <Badge variant="outline" className={cn("whitespace-nowrap", statusClassName(team.status))}>
                       {team.status}
@@ -507,7 +339,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
               ))}
               {filtered.length === 0 && (
                 <EmptyRow
-                  colSpan={view.showDetails ? 4 : 3}
+                  colSpan={view.showDescription ? 4 : 3}
                   message={emptyMessage}
                   hint={teams.notGranted ? teams.problem?.detail : undefined}
                   narrowed={rows.length > 0}
@@ -554,18 +386,16 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   )
 
   const [userQuery, setUserQuery] = useState("")
-  const [userStatuses, setUserStatuses] = useState<string[]>([])
-  const [userOrganizations, setUserOrganizations] = useState<string[]>([])
-  const [userView, setUserView] = useState<TableView>(defaultUserView)
+  const [userFilters, setUserFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [userView, setUserView] = useState<BusinessViewOptions>(defaultUserView)
 
   const [roleQuery, setRoleQuery] = useState("")
-  const [roleTypes, setRoleTypes] = useState<string[]>([])
-  const [roleScopes, setRoleScopes] = useState<string[]>([])
-  const [roleView, setRoleView] = useState<TableView>(defaultRoleView)
+  const [roleFilters, setRoleFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [roleView, setRoleView] = useState<BusinessViewOptions>(defaultRoleView)
 
   const [teamQuery, setTeamQuery] = useState("")
-  const [teamStatuses, setTeamStatuses] = useState<string[]>([])
-  const [teamView, setTeamView] = useState<TableView>(defaultTeamView)
+  const [teamFilters, setTeamFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [teamView, setTeamView] = useState<BusinessViewOptions>(defaultTeamView)
 
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [newRoleOpen, setNewRoleOpen] = useState(false)
@@ -602,17 +432,24 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const pilotReady = accessModuleState.status === "ready"
   const selfEmail = me?.user.email.toLowerCase()
 
-  const userStatusOptions = useMemo(
-    () => [...new Set(userRows.map((user) => user.status))].sort(),
-    [userRows],
+  // The lists' rows by the access records they are read from: what the shared filter reads each row's values off.
+  const userById = useMemo(() => new Map(userRows.map((user) => [user.id, user])), [userRows])
+  const roleById = useMemo(() => new Map(roleRows.map((roleDefinition) => [roleDefinition.id, roleDefinition])), [roleRows])
+  const userRecords = useMemo(() => accessRecords.filter((record) => userById.has(record.id)), [accessRecords, userById])
+  const roleRecords = useMemo(() => accessRecords.filter((record) => roleById.has(record.id)), [accessRecords, roleById])
+  const userReaders = useMemo<FilterValueReaders>(
+    () => ({
+      statuses: (record) => singleFilterValue(userById.get(record.id)?.status),
+      organizations: (record) => singleFilterValue(userById.get(record.id)?.organization),
+    }),
+    [userById],
   )
-  const userOrganizationOptions = useMemo(
-    () => [...new Set(userRows.map((user) => user.organization))].sort(),
-    [userRows],
-  )
-  const roleScopeFilterOptions = useMemo(
-    () => [...new Set(roleRows.map((roleDefinition) => roleDefinition.scope))].sort(),
-    [roleRows],
+  const roleReaders = useMemo<FilterValueReaders>(
+    () => ({
+      types: (record) => singleFilterValue(roleById.get(record.id)?.type),
+      scopes: (record) => singleFilterValue(roleById.get(record.id)?.scope),
+    }),
+    [roleById],
   )
 
   // A promise chain rather than try/finally, which the React Compiler skips.
@@ -641,15 +478,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const normalizedUserQuery = userQuery.trim().toLowerCase()
   const filteredUsers = useMemo(() => {
     const matches = userRows.filter((user) => {
-      if (userStatuses.length > 0 && !userStatuses.includes(user.status)) {
-        return false
-      }
-      if (
-        userOrganizations.length > 0 &&
-        !userOrganizations.includes(user.organization)
-      ) {
-        return false
-      }
+      if (!shownIn(userRecords, userFilters, userReaders, user.id)) return false
       if (!normalizedUserQuery) return true
       return [
         user.name,
@@ -668,17 +497,12 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         ? a.role.localeCompare(b.role) || a.name.localeCompare(b.name)
         : a.name.localeCompare(b.name),
     )
-  }, [normalizedUserQuery, userOrganizations, userRows, userStatuses, userView])
+  }, [normalizedUserQuery, userFilters, userRecords, userReaders, userRows, userView])
 
   const normalizedRoleQuery = roleQuery.trim().toLowerCase()
   const filteredRoles = useMemo(() => {
     const matches = roleRows.filter((roleDefinition) => {
-      if (roleTypes.length > 0 && !roleTypes.includes(roleDefinition.type)) {
-        return false
-      }
-      if (roleScopes.length > 0 && !roleScopes.includes(roleDefinition.scope)) {
-        return false
-      }
+      if (!shownIn(roleRecords, roleFilters, roleReaders, roleDefinition.id)) return false
       if (!normalizedRoleQuery) return true
       return [
         roleDefinition.name,
@@ -694,7 +518,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
       return [...matches].sort((a, b) => a.name.localeCompare(b.name))
     }
     return matches
-  }, [normalizedRoleQuery, roleRows, roleScopes, roleTypes, roleView])
+  }, [normalizedRoleQuery, roleFilters, roleReaders, roleRecords, roleRows, roleView])
 
   const {
     page: usersPage,
@@ -714,11 +538,11 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const filteredTeams = useMemo(() => {
     const matches = teamRows.filter(
       (team) =>
-        (teamStatuses.length === 0 || teamStatuses.includes(team.status)) &&
+        matchesBusinessFilters(team, teamFilters, TEAM_READERS) &&
         (normalizedTeamQuery === "" || [team.name, team.facts.Members ?? ""].join(" ").toLowerCase().includes(normalizedTeamQuery)),
     )
     return teamView.ordering === "name" ? [...matches].sort((a, b) => a.name.localeCompare(b.name)) : matches
-  }, [normalizedTeamQuery, teamRows, teamStatuses, teamView])
+  }, [normalizedTeamQuery, teamRows, teamFilters, teamView])
   const teamsPagination = useTablePagination(filteredTeams)
 
   const roleUserCount = (roleName: string) =>
@@ -734,16 +558,16 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           setSelectedRoleId(null)
         }}
       >
-        <TabsList className="inline-flex h-8 bg-muted rounded-full px-1 py-0.5 text-xs border border-border/50">
+        <PillTabsList>
           {settingsTabsOf("access").map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="rounded-full px-3 whitespace-nowrap">
+            <PillTab key={tab.value} value={tab.value} nav>
               {tab.label}
               <span className="ml-1.5 text-[10px] text-muted-foreground">
                 {tabCounts[tab.value]}
               </span>
-            </TabsTrigger>
+            </PillTab>
           ))}
-        </TabsList>
+        </PillTabsList>
       </Tabs>
     </div>
   )
@@ -758,8 +582,8 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           table={{
             query: teamQuery,
             onQueryChange: setTeamQuery,
-            statuses: teamStatuses,
-            onStatusesChange: setTeamStatuses,
+            filters: teamFilters,
+            onFiltersChange: setTeamFilters,
             view: teamView,
             onViewChange: setTeamView,
             filtered: filteredTeams,
@@ -770,31 +594,19 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         <AssetPanelShell
           tabs={tabs}
           toolbar={
-            <Toolbar
-              searchPlaceholder="Search users"
+            <RecordToolbar
+              placeholder="Search users"
               query={userQuery}
               onQueryChange={setUserQuery}
-              filterGroups={[
-                {
-                  label: "Status",
-                  options: userStatusOptions,
-                  value: userStatuses,
-                  onChange: setUserStatuses,
-                },
-                {
-                  label: "Organization",
-                  options: userOrganizationOptions,
-                  value: userOrganizations,
-                  onChange: setUserOrganizations,
-                },
-              ]}
+              records={userRecords}
+              readers={userReaders}
+              filters={userFilters}
+              onFiltersChange={setUserFilters}
               view={userView}
               onViewChange={setUserView}
-              orderingOptions={[
-                { value: "name", label: "Name" },
-                { value: "role", label: "Role" },
-              ]}
-              detailsLabel="Show emails"
+              orderingOptions={USER_ORDERS}
+              defaults={defaultUserView}
+              detailsLabel="Emails"
             />
           }
           title="Users"
@@ -830,7 +642,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               <TableBody>
                 {usersPageRows.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="min-w-52 py-3">
+                    <TableCell className={cn("min-w-52", rowPadding(userView))}>
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         {user.name}
                         {user.primaryAdministrator && (
@@ -839,7 +651,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                           </Badge>
                         )}
                       </div>
-                      {userView.showDetails && (
+                      {userView.showDescription && (
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           {user.email}
                         </div>
@@ -897,31 +709,19 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
         <AssetPanelShell
           tabs={tabs}
           toolbar={
-            <Toolbar
-              searchPlaceholder="Search roles"
+            <RecordToolbar
+              placeholder="Search roles"
               query={roleQuery}
               onQueryChange={setRoleQuery}
-              filterGroups={[
-                {
-                  label: "Type",
-                  options: ["System", "Custom"],
-                  value: roleTypes,
-                  onChange: setRoleTypes,
-                },
-                {
-                  label: "Scope",
-                  options: roleScopeFilterOptions,
-                  value: roleScopes,
-                  onChange: setRoleScopes,
-                },
-              ]}
+              records={roleRecords}
+              readers={roleReaders}
+              filters={roleFilters}
+              onFiltersChange={setRoleFilters}
               view={roleView}
               onViewChange={setRoleView}
-              orderingOptions={[
-                { value: "default", label: "Default order" },
-                { value: "name", label: "Name" },
-              ]}
-              detailsLabel="Show access summary"
+              orderingOptions={LIST_ORDERS}
+              defaults={defaultRoleView}
+              detailsLabel="Access summary"
             />
           }
           title="Roles"
@@ -948,7 +748,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                   <TableHead className="h-10">Type</TableHead>
                   <TableHead className="h-10">Users</TableHead>
                   <TableHead className="h-10">Scope</TableHead>
-                  {roleView.showDetails && (
+                  {roleView.showDescription && (
                     <TableHead className="h-10">Access</TableHead>
                   )}
                 </TableRow>
@@ -969,7 +769,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                       }
                     }}
                   >
-                    <TableCell className="min-w-48 py-3 font-medium text-foreground">
+                    <TableCell className={cn("min-w-48 font-medium text-foreground", rowPadding(roleView))}>
                       {roleDefinition.name}
                     </TableCell>
                     <TableCell>
@@ -979,7 +779,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                     <TableCell className="min-w-40">
                       {roleDefinition.scope}
                     </TableCell>
-                    {roleView.showDetails && (
+                    {roleView.showDescription && (
                       <TableCell className="min-w-64 text-muted-foreground">
                         {roleDefinition.permissions}
                       </TableCell>
@@ -988,7 +788,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                 ))}
                 {filteredRoles.length === 0 && (
                   <EmptyRow
-                    colSpan={roleView.showDetails ? 5 : 4}
+                    colSpan={roleView.showDescription ? 5 : 4}
                     message={pilotRolesEmpty?.message ?? "No roles match your search."}
                     hint={pilotRolesEmpty?.hint}
                     narrowed={roleRows.length > 0}

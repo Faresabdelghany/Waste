@@ -23,6 +23,7 @@ import { containerMovements } from "@/lib/api/records/containers"
 import { CONTAINERS_MODULE } from "@/lib/data/containers"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { waitingSentence } from "@/lib/api/read-state"
 import {
   CONTAINER_COMMAND_FORMS,
   CONTAINER_COMMANDS_OFFERED,
@@ -99,7 +100,7 @@ export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="container-commands">
       <h3 className="text-sm font-semibold">Container commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The containers are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("containers", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!offered(editForm)} onClick={() => openEdit(record)}>
           Edit

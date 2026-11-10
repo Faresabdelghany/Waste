@@ -37,11 +37,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { RouteMapPanel } from "@/components/waste/route-map-panel"
 import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { PageActions } from "@/components/page-layout"
+import { PageActions, PillTab, PillTabsList } from "@/components/page-layout"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 import { recordStatusTone } from "@/components/platform/business-record-views"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -79,6 +79,7 @@ import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import { pickupReasonLabel } from "@/lib/data/route-labels"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
@@ -667,17 +668,17 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
       <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
           <div className="min-w-0 overflow-x-auto">
-            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
+            <PillTabsList>
               {tabs.map(([value, label, count]) => (
-                <TabsTrigger key={value} value={value} className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground">
+                <PillTab key={value} value={value}>
                   {label}
                   {count !== undefined && <span className="ml-1.5 text-[10px] text-muted-foreground">{count}</span>}
-                </TabsTrigger>
+                </PillTab>
               ))}
-            </TabsList>
+            </PillTabsList>
           </div>
         </div>
-        {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+        {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">{waitingSentence("routes", "their commands follow")}</p>}
 
         <TabsContent value="overview" forceMount className={tabContent}>
           <div className="grid min-h-[640px] min-[1180px]:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.95fr)]">
@@ -865,7 +866,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   return (
     <section className="space-y-4" data-testid="route-commands">
       <h3 className="text-sm font-semibold">Route commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("routes", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {commands.map((command) => (
           <Button key={command.name} variant="outline" size="sm" disabled={command.disabled} onClick={command.select}>
@@ -1070,7 +1071,7 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="pickup-commands">
       <h3 className="text-sm font-semibold">Stop commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The stops are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("stops", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {offered(REMOVE_PICKUP) && (
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen("remove")}>

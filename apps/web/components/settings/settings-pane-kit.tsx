@@ -1,20 +1,16 @@
 "use client"
 
 // The frame and the list kit every Settings pane draws with: the pane's shell
-// (its heading bar, tabs, toolbar, title and ⓘ), the list's toolbar and
-// count, the empty row, and the field and section of a pane's own dialogs.
+// (its heading bar, tabs, toolbar, title and ⓘ), the list's count, the empty
+// row, and the field and section of a pane's own dialogs. A list's toolbar is
+// every list's: RecordToolbar (components/platform/record-toolbar.tsx).
 
 import type { ReactNode } from "react"
-import { Funnel, Info, MagnifyingGlass, Sliders } from "@phosphor-icons/react/dist/ssr"
+import { Info, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageActions, TableCard } from "@/components/page-layout"
@@ -59,201 +55,6 @@ export function DialogSection({
       <h3 className="text-sm font-semibold">{title}</h3>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </section>
-  )
-}
-
-export type AssetView = {
-  ordering: "updated" | "name"
-  showDetails: boolean
-}
-
-export const defaultAssetView: AssetView = { ordering: "updated", showDetails: true }
-
-const assetStatusOptions = ["Active", "Inactive"] as const
-
-export function sortByView<T>(
-  items: T[],
-  view: AssetView,
-  name: (item: T) => string,
-  updated: (item: T) => string,
-) {
-  return [...items].sort((a, b) =>
-    view.ordering === "name"
-      ? name(a).localeCompare(name(b))
-      : updated(b).localeCompare(updated(a)),
-  )
-}
-
-export type AssetFilterGroup = {
-  label: string
-  options: readonly string[]
-  value: string[]
-  onChange: (value: string[]) => void
-}
-
-function AssetFilterPopover({ groups }: { groups: AssetFilterGroup[] }) {
-  const activeCount = groups.reduce((sum, group) => sum + group.value.length, 0)
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-2 rounded-lg border-border/60 bg-transparent px-3"
-        >
-          <Funnel className="h-4 w-4" />
-          Filter
-          {activeCount > 0 && (
-            <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
-              {activeCount}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 rounded-xl p-0">
-        <div className="space-y-3 p-4">
-          <div>
-            <p className="text-sm font-semibold">Filter</p>
-          </div>
-          {groups.map((group) => (
-            <div key={group.label} className="space-y-2">
-              {groups.length > 1 && (
-                <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
-              )}
-              {group.options.map((option) => (
-                <label key={option} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={group.value.includes(option)}
-                    onCheckedChange={(checked) =>
-                      group.onChange(
-                        checked
-                          ? [...group.value, option]
-                          : group.value.filter((item) => item !== option),
-                      )
-                    }
-                  />
-                  {option}
-                </label>
-              ))}
-            </div>
-          ))}
-          {activeCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => groups.forEach((group) => group.onChange([]))}
-            >
-              Clear filters
-            </Button>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function AssetViewPopover({
-  value,
-  onChange,
-}: {
-  value: AssetView
-  onChange: (value: AssetView) => void
-}) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-2 rounded-lg border-border/60 bg-transparent px-3"
-        >
-          <Sliders className="h-4 w-4" />
-          View
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 rounded-xl p-0">
-        <div className="space-y-4 p-4">
-          <div>
-            <p className="text-sm font-semibold">Table view</p>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm">Ordering</span>
-            <Select
-              value={value.ordering}
-              onValueChange={(ordering: AssetView["ordering"]) =>
-                onChange({ ...value, ordering })
-              }
-            >
-              <SelectTrigger className="h-8 w-44 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="updated">Recently updated</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <label className="flex items-center justify-between gap-4 text-sm">
-            Show details
-            <Switch
-              checked={value.showDetails}
-              onCheckedChange={(showDetails) => onChange({ ...value, showDetails })}
-            />
-          </label>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-export function AssetToolbar({
-  searchPlaceholder,
-  query,
-  onQueryChange,
-  statuses,
-  onStatusesChange,
-  statusOptions = assetStatusOptions,
-  extraFilters,
-  view,
-  onViewChange,
-}: {
-  searchPlaceholder: string
-  query: string
-  onQueryChange: (value: string) => void
-  statuses: string[]
-  onStatusesChange: (value: string[]) => void
-  statusOptions?: readonly string[]
-  extraFilters?: AssetFilterGroup[]
-  view: AssetView
-  onViewChange: (value: AssetView) => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] max-w-sm flex-1">
-          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder={searchPlaceholder}
-            className="h-8 pl-9 text-sm"
-          />
-        </div>
-        <AssetFilterPopover
-          groups={[
-            {
-              label: "Status",
-              options: statusOptions,
-              value: statuses,
-              onChange: onStatusesChange,
-            },
-            ...(extraFilters ?? []),
-          ]}
-        />
-        <AssetViewPopover value={view} onChange={onViewChange} />
-      </div>
-    </div>
   )
 }
 

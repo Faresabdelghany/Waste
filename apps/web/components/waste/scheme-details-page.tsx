@@ -106,11 +106,11 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { StatRow } from "@/components/ui/stat-row"
-import { PageActions, PageTopBar, TableCard } from "@/components/page-layout"
+import { PageActions, PageTopBar, PillTab, PillTabsList, TableCard } from "@/components/page-layout"
 import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
 import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
 import { dayIn } from "@/lib/format/clock"
@@ -365,7 +365,7 @@ export function SchemeDetailsPage({
       <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
           <div className="min-w-0 overflow-x-auto">
-            <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs">
+            <PillTabsList>
               {(
                 [
                   ["details", "Details", null],
@@ -374,20 +374,16 @@ export function SchemeDetailsPage({
                   ["holidays", "Holidays", null],
                 ] as const
               ).map(([value, label, count]) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="h-7 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground"
-                >
+                <PillTab key={value} value={value}>
                   {label}
                   {count !== null && (
                     <span className="ml-1.5 text-[10px] text-muted-foreground">
                       {count}
                     </span>
                   )}
-                </TabsTrigger>
+                </PillTab>
               ))}
-            </TabsList>
+            </PillTabsList>
           </div>
           <PageActions>
             {!readOnly && (

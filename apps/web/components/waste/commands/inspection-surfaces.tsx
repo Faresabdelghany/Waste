@@ -19,6 +19,7 @@ import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { addInspectionPhoto, CLOSE_INSPECTION, inspectionPhotoLinks } from "@/lib/api/records/inspections"
 import { inspectionOpen, INSPECTIONS_MODULE } from "@/lib/data/inspections"
 import { photoOf } from "@/lib/driver/proof-images"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /** An inspection's photos, its Add photo and its Close. */
 export function InspectionSurface({ record }: RowSurfaceProps) {
@@ -84,7 +85,7 @@ export function InspectionSurface({ record }: RowSurfaceProps) {
           ))}
         </ul>
       )}
-      {!moduleReady && <p className="text-sm text-muted-foreground">The inspections are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("inspections", "their commands follow")}</p>}
       {open ? (
         <div className="flex flex-wrap gap-2">
           <input
