@@ -18,11 +18,6 @@
 // `resources.inventory`'s: what stands where and what moved is the
 // inventory's question, while a command on a container is
 // `resources.containers`'.
-//
-// The two things a command on a container needs of it here and in
-// containers.ts — its scope and its 404 — are spelled here. A warehouse a
-// query names is `requireWarehouse` in routes/references.ts, the containers
-// list's helper too.
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { Adjust, Decommission, Receive, Return, StockMovement, StockMovementListQuery, Transfer } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
@@ -46,7 +41,6 @@ const MODULE = "resources.containers"
 const INVENTORY = "resources.inventory"
 const MovementPage = Page(StockMovement)
 
-/** One container of this company by id, inside the caller's projects, as a command names it; undefined when it is neither. */
 async function findContainerRef(tx: Tx, principal: Principal, id: string): Promise<ContainerRef | undefined> {
   const [row] = await tx
     .select({ id: container.id, projectId: container.projectId, label: container.label })
@@ -56,10 +50,8 @@ async function findContainerRef(tx: Tx, principal: Principal, id: string): Promi
   return row
 }
 
-/** The rows of this company, in the projects the caller works in: what every ledger statement is bounded by. */
 const { list: listMovements } = scoped(stockMovement, { noun: "stock movement", reach: "projects", columns: stockMovementColumns })
 
-/** What every command describes the same way: no usable token, no grant, no such container. */
 const commandProblems = {
   404: describeProblem("No container with that id in the projects this account works in."),
 }

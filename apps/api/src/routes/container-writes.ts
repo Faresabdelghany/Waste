@@ -100,7 +100,6 @@ export function containerOf(row: ContainerRow): Container {
 export const LABEL_TAKEN = "container_label_key"
 export const labelTaken = (label: string) => `This company already has a container labelled ${label}`
 
-/** The containers of this company, in the projects the caller works in: what every container statement is bounded by, here, in containers.ts and in lifecycle.ts; each read with the ledger's reading. */
 export const {
   scope: containerScope,
   noSuch: noSuchContainer,

@@ -110,7 +110,6 @@ const runColumns = {
 
 type RunRow = Pick<typeof importRun.$inferSelect, keyof typeof runColumns>
 
-/** The run on the wire: its counts as one object, and whether it is complete, which they say. `kind` is text with a CHECK in the database and an enum here. */
 function runOf(row: RunRow): ImportRun {
   const counts: ImportCounts = { created: row.createdCount, updated: row.updatedCount, unchanged: row.unchangedCount, refused: row.refusedCount }
   const recorded = counts.created + counts.updated + counts.unchanged + counts.refused
@@ -149,13 +148,11 @@ const resultOf = (row: RowRow): ImportRowResult => ({
 
 const runRowOf = (row: RowRow): ImportRunRow => ({ id: row.id, ...resultOf(row), recordedAt: row.recordedAt.toISOString() })
 
-/** The kinds whose runs a caller reads: those whose module the caller views. */
 const readableKinds = (principal: Principal): ImportKind[] => IMPORT_KINDS.filter((kind) => allows(principal.grants, IMPORT_MODULES[kind], "view"))
 
 /** A run of one of these kinds; `false` when there are none, never an `in ()`. */
 const kindsIn = (kinds: readonly ImportKind[]): SQL => (kinds.length === 0 ? sql`false` : inArray(importRun.kind, [...kinds]))
 
-/** The runs this caller reads, newest first: the runs of the company's kinds, and the runs of the projects they work in. */
 const {
   get: getRun,
   locked: lockedRun,
@@ -171,7 +168,6 @@ const {
 /** A run's rows, read once the run is the caller's. */
 const { list: listRunRows } = scoped(importRunRow, { noun: "import run row", reach: "company", columns: rowColumns })
 
-/** How many rows each way. */
 function countsOf(results: readonly ImportRowResult[]): ImportCounts {
   const counts: ImportCounts = { created: 0, updated: 0, unchanged: 0, refused: 0 }
   for (const result of results) counts[result.outcome] += 1
@@ -251,7 +247,6 @@ export function importRoutes(deps: RouteDeps) {
         requireColumns(kind, rows, "rows")
         const results: ImportRowResult[] = []
         try {
-          // The dry run: one savepoint around every row's own, rolled back once the last row has answered.
           await tx.transaction(async (dry) => {
             for (const row of rows) results.push(await importRow({ ...context, tx: dry }, kind, row))
             dry.rollback()
@@ -308,7 +303,6 @@ export function importRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, kind, projectId } = c.req.valid("query")
-        // Newest first, so the next page is the runs below the cursor.
         const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")

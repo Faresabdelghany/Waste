@@ -25,7 +25,6 @@ import { INT4_MAX } from "@waste/domain/requests"
 import { and, eq, inArray } from "drizzle-orm"
 import { lockRows, type TenantTable } from "@waste/db/commands/shared"
 
-
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
 import { invalidRequest, problem } from "../problem"
@@ -43,7 +42,6 @@ export const INDEX_TOO_LARGE = `An indexed price would be more than ${INT4_MAX} 
  */
 export const WRITE_BATCH = 1_000
 
-/** `items` in batches of `size`, in order. */
 export function batchesOf<T>(items: readonly T[], size = WRITE_BATCH): T[][] {
   const batches: T[][] = []
   for (let start = 0; start < items.length; start += size) batches.push(items.slice(start, start + size))
@@ -75,13 +73,11 @@ export async function productStatuses(tx: Tx, principal: Principal, ids: readonl
       .select({ id: product.id, status: product.status })
       .from(product)
       .where(and(eq(product.companyId, principal.companyId), inProjects(product.projectId, principal), inArray(product.id, batch)))
-    // The column's CHECK holds it to the Registry's tuple.
     for (const row of rows) statuses.set(row.id, row.status)
   }
   return statuses
 }
 
-/** The answer: the body's index again and a line per verdict, the successor's id once written. */
 export function answerOf(
   index: { label: string; basisPoints: number; appliedFrom: string; dryRun?: boolean },
   plan: IndexPlan,

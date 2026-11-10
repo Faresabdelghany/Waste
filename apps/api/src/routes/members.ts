@@ -67,16 +67,13 @@ export type MemberTable = PgTable & { companyId: PgColumn; projectId: PgColumn; 
 /** The roles a set's rows may carry, as its table's column declares them. */
 type RoleOf<Table extends MemberTable> = Table["$inferInsert"] extends { role: infer Role } ? Extract<Role, string> : never
 
-/** What reading and deleting a set need: the table and the two ids it is made of. */
 export type SetColumns = {
   table: MemberTable
-  /** The column naming the record the set belongs to. */
   parentId: PgColumn
   /** The column naming what an entry points at: a Customer, or a Property. */
   entryId: PgColumn
 }
 
-/** One family's set: the columns above, how a row of it is written, and what holds its entries to what their key allows. */
 export type MemberSet<Table extends MemberTable> = SetColumns & {
   table: Table
   /** One entry as a row of the table; the module spells it, since only it knows what its two id columns are called. */
@@ -88,7 +85,6 @@ export type MemberSet<Table extends MemberTable> = SetColumns & {
 /** The entries as the plural check names them: by id, at the path the body spelled each at. A caller fixes one field at a time and the list is ordered, so the first wrong entry is the one to name. */
 const named = (entries: readonly Entry[], path: (index: number) => string): Named[] => entries.map((entry, index) => ({ id: entry.id, path: path(index) }))
 
-/** A Property's parties: every entry names a Customer of this company, checked in one statement, the one that is not handed to `requireCustomer`. */
 export async function requirePartyCustomers(tx: Tx, parent: Parent, entries: readonly Entry[]): Promise<void> {
   await eachPresent(tx, customer, customer.id, parent.companyId, named(entries, (index) => `parties.${index}.customerId`), (entry) =>
     requireCustomer(tx, parent.companyId, entry.id, entry.path),
@@ -128,7 +124,6 @@ export async function entriesFor(tx: Tx, set: SetColumns, companyId: string, par
   return (await entriesOf(tx, set, companyId, [parentId])).get(parentId) ?? []
 }
 
-/** Writes the set a record starts with. Nothing to write is no statement. */
 export async function writeEntries<Table extends MemberTable>(
   tx: Tx,
   set: MemberSet<Table>,

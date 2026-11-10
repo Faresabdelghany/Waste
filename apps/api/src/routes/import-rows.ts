@@ -82,7 +82,6 @@ import { createProperty, patchProperty, propertiesAt, propertyWithParties, setPr
 import { createVehicleType, patchVehicleType, replaceVehicleTypeContainerTypes, vehicleTypeByKey } from "./vehicle-types"
 import { createVehicle, patchVehicle, replaceVehicleCompartments, vehicleByRegistration } from "./vehicles"
 
-/** The module each kind writes, whose grants a row is asked for. */
 export const IMPORT_MODULES: Readonly<Record<ImportKind, ModuleKey>> = {
   customers: "customers.contacts",
   properties: "customers.properties",
@@ -193,7 +192,6 @@ const SUBSCRIPTION_COLUMNS: Columns = {
   validTo: "subscription to",
 }
 
-/** Field errors as one sentence, each at the column its field is read from; the problem's own sentence when it names no field. */
 function sentenceOf(errors: readonly { path: string; message: string }[], columns: Columns, fallback: string): string {
   if (errors.length === 0) return fallback
   return errors
@@ -211,7 +209,6 @@ function rowRefusalOf(error: unknown, columns: Columns): RowRefused | undefined 
   return refused === undefined ? undefined : new RowRefused(sentenceOf(refused.body.errors ?? [], columns, refused.body.detail ?? refused.body.title))
 }
 
-/** A family's write, its refusal named by the columns its body was read from. */
 async function step<T>(columns: Columns, write: () => Promise<T>): Promise<T> {
   try {
     return await write()
@@ -220,14 +217,12 @@ async function step<T>(columns: Columns, write: () => Promise<T>): Promise<T> {
   }
 }
 
-/** The body a schema makes of what the row gave, or the row's refusal at the columns the issues name. */
 function parsed<T>(schema: z.ZodType<T>, raw: unknown, columns: Columns): T {
   const result = schema.safeParse(raw)
   if (result.success) return result.data
   throw new RowRefused(sentenceOf(result.error.issues.map((issue) => ({ path: issue.path.map(String).join("."), message: issue.message })), columns, "The row is invalid"))
 }
 
-/** A cell every row must give. */
 function required(cells: Cells, header: string): string {
   const value = cells[header]
   if (value === undefined) throw refuse(header, "give it on every row")
@@ -240,7 +235,6 @@ const coded = (value: string | undefined): string | undefined => value?.toLowerC
 const YES = new Set(["yes", "y", "true", "1", "ja"])
 const NO = new Set(["no", "n", "false", "0", "nej"])
 
-/** A yes-or-no cell. */
 function yesNo(cells: Cells, header: string): boolean | undefined {
   const value = coded(cells[header])
   if (value === undefined) return undefined
@@ -268,19 +262,16 @@ function whole(cells: Cells, header: string): number | undefined {
   return Number(value)
 }
 
-/** The fields of `body` the row gave a cell for that differ from the record's: the patch an update writes, empty when nothing changed. */
 function changes<T extends object>(current: object, body: T, given: ReadonlySet<string>): Partial<T> {
   const stored = current as Record<string, unknown>
   return Object.fromEntries(Object.entries(body).filter(([field, value]) => given.has(field) && stored[field] !== value)) as Partial<T>
 }
 
-/** The fields whose cells the row gave, by the columns they are read from. */
 const givenFields = (cells: Cells, columns: Columns): Set<string> =>
   new Set(Object.entries(columns).filter(([, header]) => cells[header] !== undefined).map(([field]) => field))
 
 const isEmpty = (patch: object): boolean => Object.keys(patch).length === 0
 
-/** A customer named in a cell: by e-mail when it holds an @, by registration number otherwise; exactly one, or the row is refused at the column. */
 async function customerNamed(context: ImportContext, header: string, key: string): Promise<string> {
   const byEmail = key.includes("@")
   const found = await customersByKey(context.tx, context.principal.companyId, byEmail ? { email: key } : { registrationNumber: key })
@@ -289,7 +280,6 @@ async function customerNamed(context: ImportContext, header: string, key: string
   return found[0]!.id
 }
 
-/** The one row of a table with this name, in its scope; the row's refusal at the column otherwise. */
 async function namedId(lookup: Promise<{ id: string }[]>, header: string, missing: string): Promise<string> {
   const [row] = await lookup
   if (row === undefined) throw refuse(header, missing)
@@ -300,8 +290,6 @@ const projectOf = (context: ImportContext): string => {
   if (context.projectId === null) throw new Error("a project's kind of import ran without its project")
   return context.projectId
 }
-
-// Customers ---------------------------------------------------------------
 
 async function importCustomer(context: ImportContext, cells: Cells): Promise<Written> {
   const { tx, principal } = context
@@ -337,8 +325,6 @@ async function importCustomer(context: ImportContext, cells: Cells): Promise<Wri
   await step(CUSTOMER_COLUMNS, () => patchCustomer(tx, principal, current.id, parsed(CustomerPatch, patch, CUSTOMER_COLUMNS)))
   return { outcome: "updated", resourceId: current.id }
 }
-
-// Properties --------------------------------------------------------------
 
 /** `role: customer; role: customer`, each customer named as `customerNamed` reads it. */
 async function partiesNamed(context: ImportContext, text: string): Promise<PropertyParty[]> {
@@ -404,8 +390,6 @@ async function importProperty(context: ImportContext, cells: Cells): Promise<Wri
   return { outcome: "updated", resourceId: current.id }
 }
 
-// Containers --------------------------------------------------------------
-
 async function importContainer(context: ImportContext, cells: Cells): Promise<Written> {
   const { tx, principal } = context
   const projectId = projectOf(context)
@@ -452,8 +436,6 @@ async function importContainer(context: ImportContext, cells: Cells): Promise<Wr
   return { outcome: "updated", resourceId: row.id }
 }
 
-// Agreements and their subscriptions --------------------------------------
-
 /** The columns that make a row's subscription; any of them without a product is a row that cannot say what it subscribes to. */
 const SUBSCRIPTION_CELLS = ["property", "shared collection point", "quantity", "subscription from", "subscription to"] as const
 
@@ -462,7 +444,6 @@ async function currencyOf(context: ImportContext, projectId: string): Promise<st
   return context.memo.currency
 }
 
-/** The outcome of two writes in one row: made if either made, changed if either changed. */
 const combined = (a: Written["outcome"], b: Written["outcome"] | undefined): Written["outcome"] =>
   a === "created" || b === "created" ? "created" : a === "updated" || b === "updated" ? "updated" : "unchanged"
 
@@ -715,7 +696,6 @@ async function importVehicleType(context: ImportContext, cells: Cells): Promise<
 // capacities recorded on them. The kind is set once: a row naming another
 // for a vehicle it matches is refused.
 
-/** The project's depot with this name; the row's refusal at the column otherwise. */
 const depotNamed = (context: ImportContext, header: string, name: string): Promise<string> =>
   namedId(
     context.tx
@@ -727,7 +707,6 @@ const depotNamed = (context: ImportContext, header: string, name: string): Promi
     `No depot of this project is named ${name}`,
   )
 
-/** The company's service provider with this registration number; the row's refusal at the column otherwise. */
 const providerNamed = (context: ImportContext, header: string, registrationNumber: string): Promise<string> =>
   namedId(
     context.tx
@@ -760,7 +739,6 @@ async function compartmentsNamed(context: ImportContext, text: string): Promise<
   return compartments
 }
 
-/** Whether a vehicle's compartments are the ones a row names: the same names in the same order, each with the same fractions. */
 const sameCompartments = (current: readonly CompartmentCells[], named: readonly CompartmentCells[]): boolean =>
   current.length === named.length && current.every((compartment, index) => compartment.name === named[index]!.name && sameIds(compartment.wasteFractionIds, named[index]!.wasteFractionIds))
 
@@ -901,7 +879,6 @@ function boundaryCell(cells: Cells): unknown {
   }
 }
 
-/** Whether two polygons are one outline: their rings, position by position. */
 const sameOutline = (a: unknown, b: unknown): boolean => JSON.stringify((a as { coordinates?: unknown }).coordinates) === JSON.stringify((b as { coordinates?: unknown }).coordinates)
 
 async function importPlanningArea(context: ImportContext, cells: Cells): Promise<Written> {
@@ -938,8 +915,6 @@ async function importPlanningArea(context: ImportContext, cells: Cells): Promise
   }
   return { outcome: "updated", resourceId: current.area.id }
 }
-
-// One row -----------------------------------------------------------------
 
 const IMPORTERS: Readonly<Record<ImportKind, (context: ImportContext, cells: Cells) => Promise<Written>>> = {
   customers: importCustomer,

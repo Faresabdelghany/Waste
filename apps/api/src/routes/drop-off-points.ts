@@ -72,7 +72,6 @@ const columns = {
 
 type Row = Pick<typeof dropOffPoint.$inferSelect, keyof typeof columns>
 
-/** A point's three sets, as the wire spells them. */
 type Sets = { wasteFractionIds: string[]; hours: WeeklyWindow[]; exceptions: OpeningException[] }
 
 const NO_SETS: Sets = { wasteFractionIds: [], hours: [], exceptions: [] }
@@ -80,10 +79,8 @@ const NO_SETS: Sets = { wasteFractionIds: [], hours: [], exceptions: [] }
 /** The weekdays in the week's order, Monday first, for the hours' read order. */
 const WEEKDAY_ORDER = new Map<string, number>(SERVICE_DAYS.map((day, index) => [day, index]))
 
-/** The hours as every read gives them: by weekday in the week's order, then by opening. */
 const byWeekdayThenOpening = (a: WeeklyWindow, b: WeeklyWindow) => (WEEKDAY_ORDER.get(a.weekday) ?? 0) - (WEEKDAY_ORDER.get(b.weekday) ?? 0) || a.opensAt.localeCompare(b.opensAt)
 
-/** The exceptions as every read gives them: by date. */
 const byDate = (a: OpeningException, b: OpeningException) => a.date.localeCompare(b.date)
 
 /** The sets of a body or a create in the order the next read gives them. */
@@ -113,7 +110,6 @@ function pointOf(row: Row, sets: Sets): DropOffPoint {
   }
 }
 
-/** The sets of a page of points, one query a set, grouped by point. */
 async function setsOf(tx: Tx, companyId: string, pointIds: readonly string[]): Promise<Map<string, Sets>> {
   const [fractions, hours, exceptions] = [
     await groupedBy(tx, dropOffPointFraction, dropOffPointFraction.dropOffPointId, { id: dropOffPointFraction.wasteFractionId }, [dropOffPointFraction.wasteFractionId], companyId, pointIds),
@@ -163,7 +159,6 @@ type Owner = { companyId: string; projectId: string; id: string }
 
 const requireFractions = requireEachOf(wasteFraction, "wasteFractionIds", requireWasteFraction)
 
-/** Each set replaced whole: what the point had is deleted and the body's rows written, inside the request's transaction. */
 const writers = {
   async wasteFractionIds(tx: Tx, owner: Owner, ids: readonly string[]) {
     // The contracts hold each id to being named once (`eachOnce`); a body that reached here otherwise is a bug, thrown, never a second row or the key's 23505.
@@ -196,7 +191,6 @@ const CHECKS = pointInvalid("drop_off_point_location_valid")
 
 const { scope, noSuch: noSuchPoint, get: getPoint, list: listPoints } = scoped(dropOffPoint, { noun: "drop-off point", reach: "projects", columns })
 
-/** Stamps the point and answers its row, or undefined where the caller reaches no such point: a set's PUT does this before it writes. */
 async function stampPoint(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
     .update(dropOffPoint)
@@ -260,7 +254,6 @@ export function dropOffPointRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const { items, nextCursor } = await listPoints(tx, principal, at, projectId === undefined ? undefined : eq(dropOffPoint.projectId, projectId), status === undefined ? undefined : eq(dropOffPoint.status, status), kind === undefined ? undefined : eq(dropOffPoint.kind, kind))
-        // Paged first, so the row that only proves there is a next page is not one whose sets are loaded.
         const sets = await setsOf(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => pointOf(row, sets.get(row.id) ?? NO_SETS)), nextCursor })
       },

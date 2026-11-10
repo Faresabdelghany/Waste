@@ -79,7 +79,6 @@ async function areasIn(tx: Tx, companyId: string, projectId: string): Promise<Ar
     .where(and(eq(notificationRuleArea.companyId, companyId), eq(notificationRuleArea.projectId, projectId)))
 }
 
-/** Each broadcast's areas held to the project's `notification` areas (400 at their field). */
 async function requireAreas(tx: Tx, companyId: string, projectId: string, rules: Rules): Promise<void> {
   const ids = [...new Set(rules.flatMap((rule) => rule.planningAreaIds ?? []))]
   if (ids.length === 0) return
@@ -102,7 +101,6 @@ async function rulesIn(tx: Tx, companyId: string, projectId: string): Promise<Ro
     .where(and(eq(notificationRule.companyId, companyId), eq(notificationRule.projectId, projectId)))
 }
 
-/** Each rule's template held to the project and to service (400 at its field), then to active (409). */
 async function requireTemplates(tx: Tx, companyId: string, projectId: string, rules: Rules): Promise<void> {
   const ids = [...new Set(rules.map((rule) => rule.templateId))]
   if (ids.length === 0) return
@@ -184,7 +182,6 @@ export function notificationRuleRoutes(deps: RouteDeps) {
         const kept = new Set<string>(rules.map((rule) => rule.event))
         const gone = [...current.values()].filter((row) => !kept.has(row.event)).map((row) => row.id)
         if (gone.length > 0) {
-          // A rule's areas go with it.
           await tx.delete(notificationRuleArea).where(and(eq(notificationRuleArea.companyId, principal.companyId), inArray(notificationRuleArea.ruleId, gone)))
           await tx.delete(notificationRule).where(and(eq(notificationRule.companyId, principal.companyId), inArray(notificationRule.id, gone)))
         }
@@ -207,7 +204,6 @@ export function notificationRuleRoutes(deps: RouteDeps) {
             .returning(columns)
           rows.push(row)
         }
-        // Each rule's areas replaced with it: an area the body keeps keeps its row, one it leaves out is deleted, the new ones go in one insert.
         const byEvent = new Map(rows.map((row) => [row.event, row.id]))
         const held = await areasIn(tx, principal.companyId, id)
         const wanted = rules.flatMap((rule) => (rule.planningAreaIds ?? []).map((planningAreaId) => ({ ruleId: byEvent.get(rule.event) as string, planningAreaId })))

@@ -99,7 +99,6 @@ export async function refuseAllocatedElsewhere(tx: Tx, scope: Scope, crew: Route
       ),
     )
     .orderBy(asc(vehicleAllocation.plannedFrom), asc(vehicleAllocation.id))
-  // Which of the route's crew an allocation reserves with others, and those others, by kind.
   const differs = (theirs: string | null, ours: string | null) => theirs !== null && ours !== null && theirs !== ours
   const clashes: { who: () => Promise<string>; others: () => Promise<string[]>; row: (typeof rows)[number] }[] = []
   for (const row of rows) {

@@ -67,7 +67,6 @@ const lowercased = <T extends { email?: string | null }>(values: T): T => (value
 
 const { get: getContact, locked: lockedContact } = scoped(customerContact, { noun: "contact person", reach: "company", columns })
 
-/** A customer's contacts, every one, oldest first. */
 export async function contactsOf(tx: Tx, companyId: string, customerId: string): Promise<CustomerContact[]> {
   const rows = await tx
     .select(columns)

@@ -72,7 +72,6 @@ import { requireContainer, requireDriver, requireRoute, requireTicket, requireVe
 import { alertScope, getAlert, listAlerts, lockedAlert, noSuchAlert } from "./resolution-shapes"
 import { requireNotAhead } from "./shared"
 
-/** The grant every route here runs under: the exceptions board's. */
 const MODULE = "operate.exceptions"
 
 const AlertPage = Page(Alert)
@@ -84,7 +83,6 @@ function judged(current: AlertRow, command: AlertCommand): AlertStatus | undefin
   return transition.kind === "stay" ? undefined : transition.to
 }
 
-/** Moves the row — the status and the stamps a command sets — and answers it as written. */
 async function moved(tx: Tx, principal: Principal, id: string, values: Partial<typeof alert.$inferInsert>): Promise<AlertRow> {
   const [row] = await tx
     .update(alert)

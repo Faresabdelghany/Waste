@@ -60,16 +60,13 @@ export type Owner = { companyId: string; id: string }
 /** A child table of a company-wide record: the tenant and the two ids a row is made of, no role and no project. */
 export type IdSetTable = PgTable & { companyId: PgColumn }
 
-/** What reading and deleting a set need: the table and the two ids it is made of. */
 export type IdSetColumns = {
   table: IdSetTable
-  /** The column naming the record the set belongs to. */
   parentId: PgColumn
   /** The column naming what an entry points at: a container type, a waste fraction. */
   entryId: PgColumn
 }
 
-/** One family's set: the columns above, how a row of it is written, and what holds its ids to what their key allows. */
 export type IdSet<Table extends IdSetTable> = IdSetColumns & {
   table: Table
   /** One entry as a row of the table; the module spells it, since only it knows what its two id columns are called. */

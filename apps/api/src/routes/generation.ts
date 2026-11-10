@@ -107,7 +107,6 @@ const runColumns = {
 }
 type RunRow = Pick<typeof generationRun.$inferSelect, keyof typeof runColumns>
 
-/** One run on the wire. */
 const runOf = (row: RunRow): GenerationRun => ({
   ...row,
   ...stampsOf(row),
@@ -117,7 +116,6 @@ const runOf = (row: RunRow): GenerationRun => ({
   finishedAt: instantOf(row.finishedAt),
 })
 
-/** The runs of this company, in the projects the caller works in; a scheme's newest first. */
 const { scope: runScope, find: findRun, get: getRun, list: listRuns } = scoped(generationRun, { noun: "generation run", reach: "projects", columns: runColumns, order: "desc" })
 
 /** What asking for a run answered: the run the request started; the scheme's run already queued or in flight, which it did not start; or a send refused with no held run to show for it. */
@@ -222,7 +220,6 @@ export function generationRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, status } = c.req.valid("query")
-        // The cursor is the last run of the page before; newest first, so the next page is the runs below it.
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")

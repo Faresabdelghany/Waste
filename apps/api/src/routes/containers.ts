@@ -150,7 +150,6 @@ const placementColumns = {
   updatedAt: containerServicePlacement.updatedAt,
 }
 
-/** The stored columns of the selection above, plus the one it computes. */
 type PlacementRow = Pick<
   typeof containerServicePlacement.$inferSelect,
   Exclude<keyof typeof placementColumns, "effectiveServiceFrequencyId">
@@ -216,13 +215,6 @@ function placementsFrom(tx: Tx, companyId: string) {
 const servedPeriod = (row: { subscriptionValidFrom: string | null; subscriptionValidTo: string | null }): Period | null =>
   row.subscriptionValidFrom === null ? null : { validFrom: row.subscriptionValidFrom, validTo: row.subscriptionValidTo }
 
-/**
- * The same for a placement, which carries the project its container is in:
- * one placement, with the two things a write of it is held against — the
- * container's label, which the overlap sentence names, and the period of the
- * subscription it serves. Both come off the statement above, so a patch costs
- * one round trip and not three.
- */
 const {
   scope: placementScope,
   noSuch: noSuchPlacement,
@@ -256,7 +248,6 @@ export function containerRoutes(deps: RouteDeps) {
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         // The warehouse asked about is one the caller may see: the project named, or any the caller works in.
         if (warehouseId !== undefined) await requireWarehouse(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, warehouseId, "warehouseId", "query")
-        // The ledger's reading, by the name the family's read gives it.
         const { state } = containersFrom(tx, principal.companyId)
         const page = await listContainers(
           tx,
@@ -264,7 +255,6 @@ export function containerRoutes(deps: RouteDeps) {
           at,
           projectId === undefined ? undefined : eq(container.projectId, projectId),
           containerTypeId === undefined ? undefined : eq(container.containerTypeId, containerTypeId),
-          // The ledger's reading, filtered in SQL: the status the latest movement folds onto, and the warehouse it arrived at.
           status === undefined ? undefined : eq(assetStatus(state.toKind), status),
           warehouseId === undefined ? undefined : eq(state.toWarehouseId, warehouseId),
           identifier === undefined ? undefined : namedByCode(container, identifier),
