@@ -24,12 +24,12 @@ import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { alertColumns, alertOf } from "@waste/db/shapes/alerts"
 import { ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { sendMessage } from "../messaging/send-message"
-import { ALERTS_MODULE, notifyStaffFor } from "../notifications/staff-notifications"
-import type { MessagingProvider, OutgoingMessage } from "../messaging/provider"
-import { at, dropConsumerTenant, outboxJob, seedConsumerTenant, testId, type ConsumerTenant } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { databaseUnderTest, ownerUnderTest } from "./database"
+import { sendMessage } from "../../messaging/send-message"
+import { ALERTS_MODULE, notifyStaffFor } from "../staff-notifications"
+import type { MessagingProvider, OutgoingMessage } from "../../messaging/provider"
+import { at, dropConsumerTenant, outboxJob, seedConsumerTenant, testId, type ConsumerTenant } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()

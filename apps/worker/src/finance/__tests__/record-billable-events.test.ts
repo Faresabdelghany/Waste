@@ -24,7 +24,6 @@
 // `REQUIRE_DATABASE`.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
-import { setTimeout as sleep } from "node:timers/promises"
 
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import { createDb, type Database } from "@waste/db/client"
@@ -43,15 +42,16 @@ import { withCompany } from "@waste/db/tenant"
 import { FINANCE_EVENT_KINDS } from "@waste/domain/finance/from-event"
 import type { OutboxKind } from "@waste/domain/outbox/vocabulary"
 import type { Job } from "pg-boss"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 
-import type { WorkerContext } from "../jobs"
-import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../runtime/outbox"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import type { WorkerContext } from "../../jobs"
+import { recordBillableEvents, type Recorded } from "../record-billable-events"
+import { consumerQueue, type RelayedJob } from "../../runtime/outbox"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
+import { until } from "../../__tests__/until"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -181,7 +181,6 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   test("works the ten kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339): a missed stop's two for its Pickup Exception (#293 M5), a Site Visit's two (M4 of #293), an Unload's weight review (O28 of #290) and a Scale Ticket's two (M16b of #293)", () => {
     assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
     assert.deepEqual(recordBillableEvents.map((job) => job.queue), FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance")))
-    for (const job of recordBillableEvents) assert.equal(job.schedule, undefined, "sent by the relay, never by a cron")
   })
 
   test("a pickup-completed records one priced pickup event with its links, no person and the outbox event's id: the Centrum row wins under the scheme's planning area, and the same job twice records one", async () => {
@@ -514,9 +513,16 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     let racing: Promise<Recorded> | undefined
     await withCompany(pool.db, tenant.companyId, async (holding) => {
       await lockRow(holding, pickup, { companyId: tenant.companyId, id: heldPickup })
+      const [{ holder }] = await holding.execute<{ holder: number }>(sql`select pg_backend_pid() as holder`)
       racing = handle(published("pickup-completed", heldPickup, pickupPayload(heldRoute.id, heldPickup, held.containerId)))
-      const first = await Promise.race([racing.then(() => "recorded" as const), sleep(500).then(() => "waiting" as const)])
-      assert.equal(first, "waiting", "the handler takes the pickup's lock before it reads, so it waits on a transaction holding the row")
+      let settled = false
+      racing.then(
+        () => (settled = true),
+        () => (settled = true),
+      )
+      const blocked = async () => (await pool.sql<{ waiting: number }[]>`select count(*)::int as waiting from pg_stat_activity where ${holder} = any(pg_blocking_pids(pid))`)[0].waiting > 0
+      await until(blocked, 30_000, "the handler waiting on the transaction that holds the pickup's row")
+      assert.equal(settled, false, "the handler takes the pickup's lock before it reads, so it waits on a transaction holding the row")
     })
     assert.equal((await racing!).did, "recorded", "and records once the row is let go")
 

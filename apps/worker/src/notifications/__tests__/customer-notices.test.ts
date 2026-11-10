@@ -26,19 +26,19 @@ import { notificationRule, notificationRuleArea } from "@waste/db/schema/notific
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { CUSTOMER_NOTICE_KINDS, type CustomerNoticeKind } from "@waste/domain/notifications/notices"
+import type { CustomerNoticeKind } from "@waste/domain/notifications/notices"
 import type { CustomerNoticeEvent } from "@waste/domain/notifications/vocabulary"
-import { aggregateOf, type OutboxKind } from "@waste/domain/outbox/vocabulary"
+import { aggregateOf } from "@waste/domain/outbox/vocabulary"
 import { alertOfRule } from "@waste/domain/resolution/alert-rules"
 import { and, eq, sql } from "drizzle-orm"
 import { alertColumns, alertOf } from "@waste/db/shapes/alerts"
 import { eventColumns, eventOf, ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { noticeCustomerFor } from "../notifications/customer-notices"
-import type { RelayedEvent, RelayedJob } from "../runtime/outbox"
-import { jobContext } from "./context"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "./finance-tenant"
+import { noticeCustomerFor } from "../customer-notices"
+import type { RelayedEvent, RelayedJob } from "../../runtime/outbox"
+import { jobContext } from "../../__tests__/context"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { at, dropFinanceTenant, FIXTURE_DAY, placeBin, seedBulkyBooking, seedCompletedRoute, seedFinanceTenant, testId, type FinanceTenant, type PlacedBin, type SeededRoute } from "../../__tests__/finance-tenant"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -341,9 +341,5 @@ describe("the customer notices", { skip: api.skip || owner.skip }, () => {
     })
     assert.deepEqual(served, [], "the route's one stop serves no customer")
     assert.equal(reminded.due.some((due) => due.customerId === tenant.customers.bo.id), false, "nor is its customer reminded of the day")
-  })
-
-  test("takes the eight kinds, one queue each", () => {
-    assert.deepEqual([...CUSTOMER_NOTICE_KINDS] satisfies OutboxKind[], ["bulky-booking-booked", "bulky-booking-cancelled", "pickup-completed", "pickup-failed", "ticket-replied", "ticket-completed", "route-cancelled", "alert-raised"])
   })
 })

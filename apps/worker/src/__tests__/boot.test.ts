@@ -366,16 +366,15 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     const [drained] = await boss.findJobs(legacy, { id: sent! })
     assert.equal(drained.state, "completed", "completed on the kind's queue")
     assert.ok(lines.includes(`pg-boss: 1 job of ${legacy} moved to ${consumerQueue("pickup-skipped", "resolution")}, ${consumerQueue("pickup-skipped", "test")}`))
-    await until(() => heard.length > 0 && lines.some((line) => line === `resolution.open-tickets: pickup-skipped ${event.id} → nothing`), 10_000, "both consumers working the moved event")
-    // Once each, however long the workers keep polling.
-    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    const heirs = [consumerQueue("pickup-skipped", "resolution"), consumerQueue("pickup-skipped", "test")]
+    const jobsOf = (queue: string) => boss.findJobs<RelayedEvent>(queue, { data: { id: event.id } })
+    // Once each, however long the workers keep polling: one job of the event on each heir's queue, worked to completed, which pg-boss never hands a worker again.
+    await until(async () => (await Promise.all(heirs.map(jobsOf))).every((jobs) => jobs.length > 0 && jobs.every((job) => job.state === "completed")), 10_000, "both consumers working the moved event to completion")
+    for (const queue of heirs) assert.equal((await jobsOf(queue)).length, 1, `one job on ${queue}`)
     assert.deepEqual(heard, [event.id])
     assert.deepEqual(heardFresh, [], "the consumer that starts fresh took none of the backlog")
-    assert.equal((await boss.findJobs<RelayedEvent>(consumerQueue("pickup-skipped", "fresh"), { data: { id: event.id } })).length, 0)
+    assert.equal((await jobsOf(consumerQueue("pickup-skipped", "fresh"))).length, 0)
     assert.equal(lines.filter((line) => line === `resolution.open-tickets: pickup-skipped ${event.id} → nothing`).length, 1)
-    for (const queue of [consumerQueue("pickup-skipped", "resolution"), consumerQueue("pickup-skipped", "test")]) {
-      assert.equal((await boss.findJobs<RelayedEvent>(queue, { data: { id: event.id } })).length, 1, `one job on ${queue}`)
-    }
 
     // Started again: nothing waits on the kind's queue, so nothing moves twice.
     await running.stop(2_000)

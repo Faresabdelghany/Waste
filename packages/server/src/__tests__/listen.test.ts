@@ -51,10 +51,12 @@ describe("listen", () => {
   test("close cuts a connection that never finishes its request when the grace period ends", async () => {
     const listening = await listen(createApp(), { ...loopback, graceMs: 200 })
     const { port } = listening.server.address() as net.AddressInfo
+    // The client can see its connect before the server has taken the connection, and a close before then has none to wait for.
+    const accepted = once(listening.server, "connection")
     const stalled = net.connect({ host: "127.0.0.1", port })
     await once(stalled, "connect")
     stalled.write("GET /healthz HTTP/1.1\r\nHost: x\r\n")
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await accepted
     const started = Date.now()
     await Promise.all([listening.close(), once(stalled, "close")])
     const elapsed = Date.now() - started

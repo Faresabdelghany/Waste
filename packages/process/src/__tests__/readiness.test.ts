@@ -19,10 +19,8 @@ describe("bounded", () => {
       settled = true
       throw new Error("long after the bound")
     })
-    const started = Date.now()
     assert.equal(await bounded(late, "unreachable", 10), "unreachable")
-    assert.ok(Date.now() - started < 40, "the bound answered, not the probe")
-    assert.equal(settled, false)
+    assert.equal(settled, false, "the bound answered, not the probe")
     // The late rejection lands here. Unhandled, Node would fail this file.
     await sleep(80)
     assert.equal(settled, true)

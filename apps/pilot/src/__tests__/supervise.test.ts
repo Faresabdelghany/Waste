@@ -1,14 +1,18 @@
 // The supervisor's rules (#128 Q6–Q7, measured in #134) over real children:
 // `node -e` scripts standing in for the API and the worker, with small
-// timings in place of the decision's 5 s / 5 min / 10 min / 20 s. Every run
-// goes through `supervised`, which stops the children however the body
-// ends, so a failed assertion cannot leave a child keeping the runner alive.
+// timings in place of the decision's 5 s / 5 min / 10 min / 20 s. The
+// backoff runs over scripted children on a clock the test moves, so how long
+// a run lasted is what the test says and never what a loaded machine took.
+// Every run goes through `supervised`, which stops the children however the
+// body ends, so a failed assertion cannot leave a child keeping the runner
+// alive.
 import assert from "node:assert/strict"
-import { spawn as nodeSpawn } from "node:child_process"
+import { spawn as nodeSpawn, type ChildProcess } from "node:child_process"
 import { EventEmitter } from "node:events"
+import { PassThrough } from "node:stream"
 import { describe, test } from "node:test"
 
-import { supervise, TIMINGS, type ChildPids, type ChildSpec, type SuperviseOptions, type Timings } from "../supervise"
+import { supervise, TIMINGS, type ChildPids, type ChildSpec, type Schedule, type SuperviseOptions, type Timings } from "../supervise"
 
 const SMALL: Timings = { backoffInitialMs: 50, backoffMaxMs: 200, healthyAfterMs: 300, killAfterMs: 400 }
 
@@ -16,12 +20,11 @@ const SCRIPTS = {
   alive: `process.on("SIGTERM", () => { console.log("got SIGTERM"); process.exit(0) }); console.log("up"); setInterval(() => {}, 1000)`,
   exitsAtOnce: `process.exit(2)`,
   exitsLater: `setTimeout(() => { console.log("bye"); console.error("last words"); process.exit(3) }, 100); setInterval(() => {}, 1000)`,
-  healthyThenExits: `process.on("SIGTERM", () => process.exit(0)); setTimeout(() => process.exit(0), 400); setInterval(() => {}, 1000)`,
   stubborn: `process.on("SIGTERM", () => console.log("ignoring SIGTERM")); console.log("up"); setInterval(() => {}, 1000)`,
   toStderr: `console.error("a warning"); process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000)`,
 }
 
-const child = (name: string, script: string): ChildSpec => ({ name, command: process.execPath, args: ["-e", script], env: { PILOT_ROLE: name } })
+const child = (name: string, script: string): ChildSpec => ({ name, command: process.execPath, args: ["-e", script] })
 
 /** Lines written, split on newlines; the supervisor writes whole lines. */
 const collector = () => {
@@ -39,9 +42,78 @@ const until = async (predicate: () => boolean, timeoutMs = 5_000) => {
 
 const restartDelays = (lines: string[]) => lines.filter((line) => line.includes("restarting in")).map((line) => Number(/restarting in ([\d.]+) s/.exec(line)![1]))
 
+/** A child with no process behind it, which the test ends: what the supervisor reads of one. A forwarded signal ends it at once, exiting 0, as the scripts' handlers do. */
+class ScriptedChild extends EventEmitter {
+  readonly stdout = new PassThrough()
+  readonly stderr = new PassThrough()
+  exitCode: number | null = null
+  signalCode: NodeJS.Signals | null = null
+  constructor(readonly pid: number) {
+    super()
+  }
+  exit(code: number) {
+    this.exitCode = code
+    this.stdout.end()
+    this.stderr.end()
+    this.emit("close", code, null)
+  }
+  kill(): boolean {
+    if (this.exitCode === null) this.exit(0)
+    return true
+  }
+}
+
+/** Scripted children by name, spawned as `api` and `worker`. */
+const scripted = () => {
+  const spawned: Record<string, ScriptedChild[]> = { api: [], worker: [] }
+  const spawn = ((command: string) => {
+    const started = new ScriptedChild(1000 + spawned.api.length + spawned.worker.length)
+    spawned[command].push(started)
+    return started as unknown as ChildProcess
+  }) as typeof nodeSpawn
+  return {
+    spawned,
+    spawn,
+    api: { name: "api", command: "api", args: [] } satisfies ChildSpec,
+    worker: { name: "worker", command: "worker", args: [] } satisfies ChildSpec,
+    lastWorker: () => spawned.worker.at(-1) ?? assert.fail("no worker spawned"),
+  }
+}
+
+/** A clock and a scheduler the test moves: `asked` is every delay the supervisor scheduled, `fire` runs the one due first with the clock moved to it. */
+const testClock = () => {
+  let at = 0
+  const pending: { due: number; run: () => void }[] = []
+  const asked: number[] = []
+  const schedule: Schedule = (run, ms) => {
+    asked.push(ms)
+    const timer = { due: at + ms, run }
+    pending.push(timer)
+    return () => {
+      const index = pending.indexOf(timer)
+      if (index !== -1) pending.splice(index, 1)
+    }
+  }
+  return {
+    now: () => at,
+    schedule,
+    asked,
+    pass: (ms: number) => void (at += ms),
+    fire: () => {
+      pending.sort((a, b) => a.due - b.due)
+      const next = pending.shift() ?? assert.fail("nothing scheduled")
+      at = Math.max(at, next.due)
+      next.run()
+    },
+  }
+}
+
+/** Lets the supervisor answer what the test just did: a child's close settles a promise, and the restart follows it. */
+const settled = () => new Promise((resolve) => setImmediate(resolve))
+
 type Run = { out: ReturnType<typeof collector>; err: ReturnType<typeof collector>; signals: EventEmitter; done: Promise<number>; pids: ChildPids[] }
 
-async function supervised(options: Pick<SuperviseOptions, "api" | "worker" | "spawn">, body: (run: Run) => Promise<void>): Promise<number> {
+async function supervised(options: Pick<SuperviseOptions, "api" | "worker" | "spawn" | "now" | "schedule">, body: (run: Run) => Promise<void>): Promise<number> {
   const out = collector()
   const err = collector()
   const signals = new EventEmitter()
@@ -75,26 +147,33 @@ describe("supervise", () => {
   })
 
   test("restarts the worker with doubling backoff up to the cap while the API keeps running", async () => {
-    await supervised({ api: child("api", SCRIPTS.alive), worker: child("worker", SCRIPTS.exitsAtOnce) }, async ({ out }) => {
-      await until(() => restartDelays(out.lines).length >= 4)
-      assert.deepEqual(restartDelays(out.lines).slice(0, 4), [0.05, 0.1, 0.2, 0.2])
-      assert.ok(out.lines.some((line) => /^\[pilot\] worker exited code=2 signal=null after [\d.]+ s; restarting in 0\.05 s$/.test(line)))
-      assert.ok(out.lines.filter((line) => line.startsWith("[pilot] worker started pid=")).length >= 4)
-      assert.equal(out.lines.filter((line) => line.startsWith("[pilot] api started pid=")).length, 1, "the API was started once and never restarted")
+    const children = scripted()
+    const clock = testClock()
+    await supervised({ api: children.api, worker: children.worker, spawn: children.spawn, now: clock.now, schedule: clock.schedule }, async ({ out }) => {
+      for (let run = 0; run < 4; run += 1) {
+        children.lastWorker().exit(2)
+        await settled()
+        clock.fire()
+      }
+      assert.deepEqual(clock.asked, [50, 100, 200, 200])
+      assert.ok(out.lines.includes("[pilot] worker exited code=2 signal=null after 0.0 s; restarting in 0.05 s"))
+      assert.equal(children.spawned.worker.length, 5)
+      assert.equal(children.spawned.api.length, 1, "the API was started once and never restarted")
     })
   })
 
   test("resets the backoff to its initial delay once a worker run lasted past healthyAfterMs", async () => {
-    let workerSpawns = 0
-    const spawn: typeof nodeSpawn = ((command: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
-      if (options.env?.PILOT_ROLE !== "worker") return nodeSpawn(command, args, options)
-      workerSpawns += 1
-      const script = workerSpawns === 3 ? SCRIPTS.healthyThenExits : SCRIPTS.exitsAtOnce
-      return nodeSpawn(command, ["-e", script], options)
-    }) as typeof nodeSpawn
-    await supervised({ api: child("api", SCRIPTS.alive), worker: child("worker", SCRIPTS.exitsAtOnce), spawn }, async ({ out }) => {
-      await until(() => restartDelays(out.lines).length >= 4)
-      assert.deepEqual(restartDelays(out.lines).slice(0, 4), [0.05, 0.1, 0.05, 0.1])
+    const children = scripted()
+    const clock = testClock()
+    await supervised({ api: children.api, worker: children.worker, spawn: children.spawn, now: clock.now, schedule: clock.schedule }, async () => {
+      // The third run lasts exactly healthyAfterMs, at least as long as a healthy run must.
+      for (const lastedMs of [0, 0, SMALL.healthyAfterMs, 0]) {
+        clock.pass(lastedMs)
+        children.lastWorker().exit(0)
+        await settled()
+        clock.fire()
+      }
+      assert.deepEqual(clock.asked, [50, 100, 50, 100])
     })
   })
 
@@ -121,12 +200,18 @@ describe("supervise", () => {
   })
 
   test("kills a child that ignores the forwarded signal after killAfterMs, and says so", async () => {
-    await supervised({ api: child("api", SCRIPTS.alive), worker: child("worker", SCRIPTS.stubborn) }, async ({ out, signals, done }) => {
+    // Node's own timers, each delay noted: the kill is real, and the grace is the one it was given.
+    const asked: number[] = []
+    const schedule: Schedule = (run, ms) => {
+      asked.push(ms)
+      const timer = setTimeout(run, ms)
+      return () => clearTimeout(timer)
+    }
+    await supervised({ api: child("api", SCRIPTS.alive), worker: child("worker", SCRIPTS.stubborn), schedule }, async ({ out, signals, done }) => {
       await until(() => out.lines.includes("[worker] up") && out.lines.includes("[api] up"))
-      const startedAt = Date.now()
       signals.emit("SIGTERM")
       assert.equal(await done, 0)
-      assert.ok(Date.now() - startedAt < 2_000, "the kill came with the grace, not later")
+      assert.ok(asked.length > 0 && asked.every((ms) => ms === SMALL.killAfterMs), `the kill came with the grace, not later: ${asked.join(", ")}`)
       assert.ok(out.lines.includes("[worker] ignoring SIGTERM"))
       assert.ok(out.lines.some((line) => line.startsWith("[pilot] worker did not exit within 400 ms after SIGTERM; killing it")))
       assert.ok(out.lines.some((line) => line.startsWith("[pilot] worker exited code=null signal=SIGKILL")))

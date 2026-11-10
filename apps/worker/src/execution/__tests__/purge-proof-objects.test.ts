@@ -16,11 +16,11 @@ import type { ProofStorage } from "@waste/db/storage"
 import { withCompany } from "@waste/db/tenant"
 import { objectKeyOf } from "@waste/domain/storage-objects"
 
-import type { WorkerContext } from "../jobs"
-import { expiredProofObjects, purgeProofObjects } from "../execution/purge-proof-objects"
-import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import type { WorkerContext } from "../../jobs"
+import { expiredProofObjects, purgeProofObjects } from "../purge-proof-objects"
+import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 
@@ -74,7 +74,6 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
   let routeQuiet: string
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))

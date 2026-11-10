@@ -18,10 +18,10 @@ import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
-import { runAlertRules } from "../resolution/alert-rules"
-import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import { runAlertRules } from "../alert-rules"
+import { at, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 
@@ -50,7 +50,6 @@ describe("the fill-driven emptying", { skip: roles.skip }, () => {
     withCompany(api.db, tenant.companyId, (tx) => tx.select().from(alert).where(and(eq(alert.companyId, tenant.companyId), eq(alert.containerId, containerId), eq(alert.rule, "fill-threshold"))).orderBy(asc(alert.id)))
 
   before(async () => {
-    if (roles.skip) return
     admin = createDb(roles.adminUrl, { max: 1 })
     await admin.sql.unsafe(`create database "${name}"`)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))

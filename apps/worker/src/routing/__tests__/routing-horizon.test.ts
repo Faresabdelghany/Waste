@@ -44,14 +44,14 @@ import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
 import { and, asc, eq } from "drizzle-orm"
 import type { PgBoss } from "pg-boss"
 
-import { createBoss } from "../runtime/boss"
-import type { WorkerContext } from "../jobs"
-import { runGeneration } from "../planning/generate-routes"
-import { sweepHorizon, type SweepOutcome } from "../routing/sweep-horizon"
-import { routingMeasure } from "../routing/measure"
-import { routingOptimise } from "../routing/optimise"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
+import { createBoss } from "../../runtime/boss"
+import type { WorkerContext } from "../../jobs"
+import { runGeneration } from "../../planning/generate-routes"
+import { sweepHorizon, type SweepOutcome } from "../sweep-horizon"
+import { routingMeasure } from "../measure"
+import { routingOptimise } from "../optimise"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 const testId = createIdMinter()

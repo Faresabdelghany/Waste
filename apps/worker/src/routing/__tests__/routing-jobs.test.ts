@@ -33,14 +33,14 @@ import { KEY_REFUSED, QuotaEngine, RoutingRetryable, STANDARD_PLAN } from "@wast
 import { asc, eq } from "drizzle-orm"
 import type { Job, PgBoss } from "pg-boss"
 
-import { createBoss } from "../runtime/boss"
-import type { WorkerContext } from "../jobs"
-import { routingMeasure } from "../routing/measure"
-import { routingOptimise } from "../routing/optimise"
-import { FIXTURE_DAY, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { rolesUnderTest, withDatabaseName } from "./database"
-import { until } from "./until"
+import { createBoss } from "../../runtime/boss"
+import type { WorkerContext } from "../../jobs"
+import { routingMeasure } from "../measure"
+import { routingOptimise } from "../optimise"
+import { FIXTURE_DAY, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { until } from "../../__tests__/until"
 
 const roles = rolesUnderTest()
 

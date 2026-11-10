@@ -32,11 +32,11 @@ import type { Job } from "pg-boss"
 import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 import { visitById } from "@waste/db/shapes/site-visits"
 
-import { recordBillableEvents, type Recorded } from "../finance/record-billable-events"
-import { consumerQueue, type RelayedJob } from "../runtime/outbox"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { dropFinanceTenant, seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import { recordBillableEvents, type Recorded } from "../record-billable-events"
+import { consumerQueue, type RelayedJob } from "../../runtime/outbox"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { dropFinanceTenant, seedFinanceTenant, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
