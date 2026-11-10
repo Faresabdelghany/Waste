@@ -51,10 +51,8 @@ const ADDRESS_KEPT = 64
 
 type Taken = { allowed: true } | { allowed: false; retryAfterSeconds: number }
 
-/** The seconds left of a window that began at `start`. */
 const secondsLeft = (start: number, at: number): number => Math.max(1, Math.ceil((start + WINDOW_MS - at) / 1000))
 
-/** Drops the windows that have ended, and the oldest half if none has. */
 function forget(windows: Map<string, { start: number }>, at: number): void {
   for (const [key, window] of windows) if (at - window.start >= WINDOW_MS) windows.delete(key)
   if (windows.size < REMEMBERED_CLIENTS) return

@@ -124,7 +124,6 @@ function refusalOf(error: unknown): TokenRefusal | undefined {
   return undefined
 }
 
-/** What an Authorization header carried: nothing, one bearer token, or something else. */
 export type BearerHeader = { kind: "absent" } | { kind: "malformed"; detail: string } | { kind: "token"; token: string }
 
 /** RFC 6750 §2.1: the scheme, whitespace, one token68. */
