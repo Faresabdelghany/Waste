@@ -130,7 +130,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
         409,
       )
       assert.equal(problem.detail, CALENDAR_RUNNING)
-      assert.doesNotMatch(problem.detail ?? "", /no_overlap/)
       const next = await calendar(2030)
       assert.equal(next.validFrom, "2030-01-01", "the day one calendar ends is the day the next may begin")
       const harbor = await calendar(2029, { projectId: a.projects.harbor.id, name: "Harbor 2029" })
@@ -141,7 +140,6 @@ describe("the collection calendar endpoints", { skip: database.skip }, () => {
       await calendar(2031)
       const problem = await refused(await olivia("/collection-calendars", { method: "POST", body: body(2032, { name: "Copenhagen Central 2031" }) }), 409)
       assert.equal(problem.detail, 'This project already has a collection calendar called "Copenhagen Central 2031"')
-      assert.doesNotMatch(problem.detail ?? "", /_key/)
       const harbor = await calendar(2031, { projectId: a.projects.harbor.id })
       assert.equal(harbor.name, "Copenhagen Central 2031")
     })

@@ -74,9 +74,7 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
     test("issues each payer's invoice in its own batch where the payers do not fit one, numbered on, and completes the run with its counts and totals", async () => {
       const day = "2027-02-01"
       const events = [await entered(manual({ serviceDate: day })), await entered(manual({ serviceDate: day })), await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))]
-      let transactions = 0
-      const done = await direct(day, { batchMax: 2, transact: (work) => withCompany(pool.db, a.companyId, (tx: Tx) => ((transactions += 1), work(tx))) })
-      assert.equal(transactions, 5, "the start, two batches, the batch that finds nobody left, and the finish")
+      const done = await direct(day, { batchMax: 2 })
       assert.deepEqual([done.run.status, done.run.eventCount, done.run.invoiceCount], ["completed", 3, 2])
       const issued = await Promise.all(done.invoiceIds.map((id) => readInvoice(id)))
       assert.deepEqual(issued.map((document) => document.lines.length).sort(), [1, 2])

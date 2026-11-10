@@ -123,7 +123,7 @@ describe("a transfer station's haul-out", { skip: database.skip || owner.skip },
 
     test("holds what our Unloads tipped by their weight review, less what it sent on, plus the counts' adjustments", async () => {
       const transfer = await station({ transfer: true })
-      const captured = await tip(transfer.id, 12_000)
+      await tip(transfer.id, 12_000)
       const approved = await tip(transfer.id, 9_000)
       assert.equal((await olivia(`/unloads/${approved.id}/approve`, { method: "POST", body: {} })).status, 201)
       const rejected = await tip(transfer.id, 4_000)
@@ -131,7 +131,6 @@ describe("a transfer station's haul-out", { skip: database.skip || owner.skip },
       const wrong = await tip(transfer.id, 7_000)
       assert.equal((await olivia(`/unloads/${wrong.id}/correct`, { method: "POST", body: { netKg: 6_500, note: "Read off the ticket again" } })).status, 201)
       await tip(transfer.id, 3_000, { refusal: { reason: "contamination" } })
-      assert.ok(captured.id)
       assert.deepEqual(await stockOf(transfer.id), [
         { projectId: a.projects.copenhagen.id, wasteFractionId: ex.fractions.residual.id, inKg: 12_000 + 9_000 + 6_500, rejectedKg: 4_000, outKg: 0, adjustedKg: 0, onHandKg: 27_500 },
       ])

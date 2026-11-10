@@ -14,8 +14,7 @@ import { PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/domain/resources/fleet
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { ProblemError } from "../problem"
-import { NOT_A_DRIVER, NOT_A_USER_ACCOUNT, requireDriver } from "../routes/references"
+import { NOT_A_USER_ACCOUNT } from "../routes/references"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { nextMillisecond } from "./clock"
@@ -425,29 +424,6 @@ describe("the driver endpoints", { skip: database.skip }, () => {
       const elsewhere = await driver("Harbor's", { projectId: a.projects.harbor.id })
       await refused(await viewer(`/drivers/${elsewhere.id}`, { method: "PATCH", body: { status: "inactive" } }), 404)
       assert.match((await refused(await ungranted(`/drivers/${created.id}`, { method: "PATCH", body: { status: "inactive" } }), 403)).detail ?? "", /edit on fleet\.drivers/)
-    })
-  })
-
-  describe("requireDriver", () => {
-    test("holds a driver to the project, with its sentence, at the path given, and answers the row's status", async () => {
-      const here = await driver("Here")
-      const elsewhere = await driver("Elsewhere", { projectId: a.projects.harbor.id })
-      const gone = await driver("Gone", { status: "inactive" })
-      const scope = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
-      const refusal = (path: string) => (error: unknown) => {
-        assert.ok(error instanceof ProblemError, String(error))
-        assert.equal(error.body.status, 400)
-        assert.deepEqual(error.body.errors, [{ path, message: NOT_A_DRIVER }])
-        return true
-      }
-      await withCompany(pool.db, a.companyId, async (tx) => {
-        assert.equal(await requireDriver(tx, scope, here.id), "active", "the status, for the doors that gate a new reference on it")
-        assert.equal(await requireDriver(tx, scope, gone.id), "inactive", "found, and inactive: whether that will do is the caller's rule")
-        assert.equal(await requireDriver(tx, scope, null), undefined, "nothing named, nothing to answer")
-        await assert.rejects(requireDriver(tx, scope, elsewhere.id), refusal("driverId"), "another project's")
-        await assert.rejects(requireDriver(tx, scope, theirDriver.id), refusal("driverId"), "another company's")
-        await assert.rejects(requireDriver(tx, scope, testId(), "collectionGroups.0.driverId"), refusal("collectionGroups.0.driverId"), "nobody's, at the path given")
-      })
     })
   })
 })

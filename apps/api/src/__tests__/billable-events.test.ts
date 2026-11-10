@@ -142,7 +142,7 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
 
     test("blocks the event with the reason that stood in the way — a draft agreement, no list in force, no row for the product, no VAT rate — and keeps it as a fact", async () => {
       const draft = await entered(manual({ agreementId: fx.agreements.draft.id }))
-      assert.deepEqual([draft.status, draft.blockReason, ...Object.values(NO_PRICE).map(() => null)], ["blocked", "agreement-draft", null, null, null, null, null, null])
+      assert.deepEqual([draft.status, draft.blockReason], ["blocked", "agreement-draft"])
       assert.deepEqual({ unitPriceMinor: draft.unitPriceMinor, netMinor: draft.netMinor, vatPercent: draft.vatPercent, vatMinor: draft.vatMinor, currency: draft.currency, priceListRowId: draft.priceListRowId }, NO_PRICE)
       assert.deepEqual([draft.agreementId, draft.productId], [fx.agreements.draft.id, fx.products.residual.id], "what it was under is kept beside the block")
 
