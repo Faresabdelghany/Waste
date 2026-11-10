@@ -50,7 +50,6 @@ export type RoutePreviewInput = {
   gazetteer: Gazetteer
 }
 
-/** The drawable stops of one drafted route, depot to station. */
 export function routePreview(input: RoutePreviewInput): RoutePreview {
   const byId = new Map(input.containers.map((record) => [record.id, record]))
   const depotAt = input.depot ? placeLocation(input.depot, input.gazetteer) : null

@@ -26,7 +26,6 @@ export type MapPoint = {
   record: BusinessRecord
 }
 
-/** "Residual · Mixed" → ["Residual", "Mixed"]; the empty fact → []. */
 export function containerFractions(record: BusinessRecord): string[] {
   const fact = record.facts["Waste fractions"] ?? record.facts["Waste fraction"] ?? ""
   return Array.from(
@@ -50,7 +49,6 @@ export function rankFractions(lists: ReadonlyArray<readonly string[]>): string[]
     .map(([fraction]) => fraction)
 }
 
-/** One point per located, in-service, visible container. */
 export function containerPoints(containers: readonly BusinessRecord[], gazetteer: Gazetteer): MapPoint[] {
   const points: MapPoint[] = []
   for (const record of containers) {

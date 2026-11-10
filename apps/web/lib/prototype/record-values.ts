@@ -13,13 +13,11 @@ import type { SubmittedValue } from "./prototype-record"
 /** The placeholder a fixture fact shows when it has nothing to say. */
 export const EMPTY_FACT = "—"
 
-/** A trimmed display fact, or undefined when blank, the placeholder, or not a string. */
 export function cleanFact(value: string | boolean | undefined): string | undefined {
   const trimmed = typeof value === "string" ? value.trim() : ""
   return trimmed && trimmed !== EMPTY_FACT ? trimmed : undefined
 }
 
-/** A trimmed typed value, or undefined when blank, missing, the placeholder, or not a string. */
 export function typedString(values: Readonly<Record<string, SubmittedValue | undefined>> | undefined, key: string): string | undefined {
   return cleanFact(values?.[key])
 }

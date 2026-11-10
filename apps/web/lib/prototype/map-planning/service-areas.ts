@@ -60,7 +60,6 @@ const isLngLat = (value: unknown): value is LngLat =>
   typeof (value as LngLat).lng === "number" &&
   typeof (value as LngLat).lat === "number"
 
-/** The stored spelling of a drawn polygon — what serviceAreaPolygon reads back. */
 export function serviceAreaPolygonValue(polygon: readonly LngLat[]): string {
   return JSON.stringify(polygon.map((point) => ({ lng: point.lng, lat: point.lat })))
 }
@@ -78,7 +77,6 @@ export function serviceAreaPolygon(area: BusinessRecord): LngLat[] | null {
   }
 }
 
-/** The planning-area ids the selected containers lie in today — by id first, by name second (`containerAreaRefs`). */
 function planningAreaIds(selected: readonly BusinessRecord[], planningAreas: readonly BusinessRecord[]): string[] {
   const byName = new Map(planningAreas.map((area) => [area.name.trim().toLowerCase(), area.id]))
   const known = new Set(planningAreas.map((area) => area.id))
@@ -132,7 +130,6 @@ export function serviceAreaZoneIds(area: BusinessRecord): string[] {
   return [...ids]
 }
 
-/** The parts an area is drawn as: its drawn polygon, else the stored boundary of each planning area it covers that has one. */
 function serviceAreaParts(area: BusinessRecord, planningAreas: readonly BusinessRecord[]): LngLat[][] {
   const drawn = serviceAreaPolygon(area)
   if (drawn) return [drawn]
@@ -143,7 +140,6 @@ function serviceAreaParts(area: BusinessRecord, planningAreas: readonly Business
   })
 }
 
-/** One layer per visible service area the map can draw — a drawn polygon, or planning areas with a stored boundary — in record order. */
 export function serviceAreaLayers(serviceAreas: readonly BusinessRecord[], planningAreas: readonly BusinessRecord[] = []): ServiceAreaLayer[] {
   const layers: ServiceAreaLayer[] = []
   for (const area of serviceAreas) {

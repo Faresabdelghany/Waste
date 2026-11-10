@@ -82,7 +82,6 @@ function* liveStops(
   }
 }
 
-/** Container id → each value `of` its live stops' routes give, sorted and once. */
 function indexStops(stops: Iterable<{ containerIds: string[]; route: BusinessRecord }>, of: (route: BusinessRecord) => string | undefined): Map<string, string[]> {
   const index = new Map<string, Set<string>>()
   for (const { containerIds, route } of stops) {
@@ -147,7 +146,6 @@ const MONTHS: Readonly<Record<string, string>> = {
   dec: "12",
 }
 
-/** "28 Aug 2026" (optionally followed by " · …") → "2026-08-28"; anything else → null. */
 export function parseDisplayDate(value: string | undefined): string | null {
   if (!value) return null
   const match = /^\s*(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/.exec(value)

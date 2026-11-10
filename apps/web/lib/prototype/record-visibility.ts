@@ -17,7 +17,6 @@ export function isSoftDeleted(record: BusinessRecord): boolean {
 export type SoftDeletion = {
   /** The structured deletion reason the confirm dialog collected. */
   reason: string
-  /** Who deleted the record. */
   actorName: string
   /** The deletion-log audit event id the soft-deleted record links to. */
   deletionLogId: string
