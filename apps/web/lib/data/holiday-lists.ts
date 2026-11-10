@@ -191,7 +191,7 @@ export function holidayListRowMatches(row: HolidayListRow, query: string): boole
 }
 
 /** The rows by the View's order: by list name, or the lists in use first and then by name. */
-export function orderHolidayListRows(rows: readonly HolidayListRow[], ordering: "name" | "status" | "updated"): HolidayListRow[] {
+export function orderHolidayListRows(rows: readonly HolidayListRow[], ordering: string): HolidayListRow[] {
   const byName = (a: HolidayListRow, b: HolidayListRow) => a.name.localeCompare(b.name)
   const rank = (row: HolidayListRow) => HOLIDAY_LIST_STATUSES.indexOf(row.status)
   return [...rows].sort(ordering === "status" ? (a, b) => rank(a) - rank(b) || byName(a, b) : byName)

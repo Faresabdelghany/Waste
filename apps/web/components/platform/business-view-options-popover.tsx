@@ -47,7 +47,8 @@ export type BusinessViewType = "table" | "list" | "board" | "timeline"
 export type BusinessViewOptions = {
   viewType: BusinessViewType
   density: "compact" | "comfortable"
-  ordering: "updated" | "name" | "status"
+  /** `default`: the list's own order (a role's or a team's as the API lists them); `role`: a user's role, then name. */
+  ordering: "updated" | "name" | "status" | "role" | "default"
   groupBy: string
   factColumns: string[]
   staticColumns: string[]

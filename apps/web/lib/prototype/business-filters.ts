@@ -54,6 +54,10 @@ export type BusinessFilters = {
   paymentStatuses: string[]
   /** What an unload's load on board reads as against its project's tolerance: within, above or not measured (O9 of #290). */
   tolerance: string[]
+  /** Users & roles: a user's organisation, a role's type (system or custom) and its scope. */
+  organizations: string[]
+  roleTypes: string[]
+  scopes: string[]
 }
 
 export type BusinessFilterKey = keyof BusinessFilters
@@ -100,6 +104,9 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   billingRuns: "Billing run",
   paymentStatuses: "Payment",
   tolerance: "Tolerance",
+  organizations: "Organization",
+  roleTypes: "Type",
+  scopes: "Scope",
 }
 
 export const BUSINESS_FILTER_KEYS = Object.keys(
