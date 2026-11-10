@@ -2611,8 +2611,8 @@ export function BusinessWorkspace({
     }
 
     // Route facts use the generation keys ("Operating date", "Route scheme" —
-    // lib/api/records/routes.ts); the quick form writes its own field labels ("Date",
-    // "Route Scheme") beside them, so an edited generated route would carry
+    // lib/api/records/routes.ts); the quick form writes its own field labels
+    // ("Date", "Route Scheme") beside them, so an edited generated route would carry
     // both spellings with diverging values (issue #23). Fold the label-keyed
     // facts onto the canonical keys and keep the generated "Project · Area"
     // context line instead of the form's full field dump.

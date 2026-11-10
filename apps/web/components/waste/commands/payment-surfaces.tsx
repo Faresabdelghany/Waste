@@ -54,6 +54,7 @@ export function PaymentsPrimarySurface({ label }: PrimarySurfaceProps) {
         pickers={pickers}
         make={createPaymentRecord}
         created={() => ({ title: "Payment registered", description: "The invoice it names is paid what it owes at most; the rest is a credit on the payer's balance." })}
+        // What it paid moves the invoice's standing.
         onCreated={() => void refreshModule(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)}
       />
       <ImportBankStatement />
