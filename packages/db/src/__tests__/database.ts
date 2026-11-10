@@ -74,12 +74,17 @@ export type FreshDatabase = {
  * Creates a database with a unique name, for a test file that wants one of its
  * own: `drop` it in `after`. The admin pool closes with the drop whatever
  * happened, so a failing drop cannot keep the test process alive.
+ *
+ * `template` names a database to copy instead of an empty one: a file whose
+ * tests each want a migrated (and seeded) database of their own migrates one
+ * once and copies it per test, a file copy where a migration runs every file
+ * again. Postgres refuses the copy while anyone is connected to the template.
  */
-export async function freshDatabase(adminUrl: string, prefix: string): Promise<FreshDatabase> {
+export async function freshDatabase(adminUrl: string, prefix: string, { template }: { template?: string } = {}): Promise<FreshDatabase> {
   const name = `${prefix}_${randomUUID().replaceAll("-", "")}`
   const admin = createDb(adminUrl, { max: 1 })
   try {
-    await admin.sql.unsafe(`create database "${name}"`)
+    await admin.sql.unsafe(template === undefined ? `create database "${name}"` : `create database "${name}" template "${template}"`)
   } catch (error) {
     await admin.close()
     throw error

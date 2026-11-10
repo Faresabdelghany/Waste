@@ -2,12 +2,12 @@ import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import path from "node:path"
-import { describe, test } from "node:test"
+import { after, before, describe, test } from "node:test"
 
-import { createDb } from "../client"
+import { createDb, type Database } from "../client"
 import { MIGRATIONS_FOLDER, migrateDatabase } from "../migrate"
 import { API_ROLE } from "../roles"
-import { databaseUnderTest, withFreshDatabase } from "./database"
+import { databaseUnderTest, freshDatabase, withFreshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
 
@@ -24,101 +24,103 @@ describe("migrateDatabase refuses what cannot work", () => {
   })
 })
 
-// A fresh database per run, so "migrating a fresh database" means exactly that
-// and nothing depends on what the shared local database already holds.
+// A fresh database of this file's own, so "migrating a fresh database" means
+// exactly that and nothing depends on what the shared local database already
+// holds. It is migrated once, by two runs at once — the race is its first
+// migration — and the tests read what that made; every other suite migrates
+// its fresh database with a single run. One migration of every file, not
+// four: four, one after another, outran the runner's budget for the file
+// under a shared stack's load.
 describe("migrateDatabase on a fresh database", { skip: database.skip }, () => {
-  test("creates the wms schema, the journal, the extensions, the functions and the API role", () =>
-    withFreshDatabase(database.adminUrl, "waste_migrate_test", async (freshUrl) => {
-      await migrateDatabase(freshUrl)
-      const fresh = createDb(freshUrl, { max: 1 })
-      try {
-        const schemas = await fresh.sql<{ nspname: string }[]>`
-          select nspname from pg_namespace where nspname in ('wms', 'drizzle', 'extensions') order by nspname`
-        assert.deepEqual(
-          schemas.map((row) => row.nspname),
-          ["drizzle", "extensions", "wms"],
-        )
-        const extensions = await fresh.sql<{ extname: string; schema: string }[]>`
-          select extname, extnamespace::regnamespace::text as schema
-          from pg_extension where extname in ('postgis', 'btree_gist') order by extname`
-        // postgres.js rows come back in a Result (an Array subclass): compare plain values.
-        assert.deepEqual(
-          extensions.map(({ extname, schema }) => ({ extname, schema })),
-          [
-            { extname: "btree_gist", schema: "extensions" },
-            { extname: "postgis", schema: "extensions" },
-          ],
-        )
-        const functions = await fresh.sql<{ proname: string }[]>`
-          select proname from pg_proc where pronamespace = 'wms'::regnamespace order by proname`
-        assert.deepEqual(
-          functions.map((row) => row.proname),
-          ["audit_row", "current_company_id", "outbox_event_route_problem", "touch_updated_at", "uuidv7"],
-        )
-        const [role] = await fresh.sql<{ rolbypassrls: boolean; rolsuper: boolean }[]>`
-          select rolbypassrls, rolsuper from pg_roles where rolname = ${API_ROLE}`
-        assert.ok(role, `the ${API_ROLE} role exists`)
-        assert.equal(role.rolbypassrls, false)
-        assert.equal(role.rolsuper, false)
-      } finally {
-        await fresh.close()
-      }
-    }))
+  let fresh: FreshDatabase
+  let owner: Database
+  /** How the two runs at once ended, and how many rows the journal held after them. */
+  let race: { outcomes: PromiseSettledResult<unknown>[]; rows: number }
 
-  test("journals each file's sha256 and its `when`, so an edited applied migration is detectable", () =>
-    withFreshDatabase(database.adminUrl, "waste_migrate_hash", async (freshUrl) => {
-      await migrateDatabase(freshUrl)
-      const fresh = createDb(freshUrl, { max: 1 })
-      try {
-        const rows = await fresh.sql<{ hash: string; created_at: string }[]>`
-          select hash, created_at::text as created_at from drizzle.__drizzle_migrations order by created_at`
-        assert.deepEqual(
-          rows.map(({ hash, created_at }) => ({ hash, when: Number(created_at) })),
-          journalEntries().map(({ tag, when }) => ({
-            hash: sha256(readFileSync(path.join(MIGRATIONS_FOLDER, `${tag}.sql`), "utf8")),
-            when,
-          })),
-        )
-      } finally {
-        await fresh.close()
-      }
-    }))
+  const journalRows = async (): Promise<number> => {
+    const [{ count }] = await owner.sql<{ count: string }[]>`select count(*)::text as count from drizzle.__drizzle_migrations`
+    return Number(count)
+  }
 
-  test("migrating again applies nothing", () =>
-    withFreshDatabase(database.adminUrl, "waste_migrate_again", async (freshUrl) => {
-      await migrateDatabase(freshUrl)
-      const fresh = createDb(freshUrl, { max: 1 })
-      try {
-        const before = await fresh.sql<{ count: string }[]>`select count(*)::text as count from drizzle.__drizzle_migrations`
-        await migrateDatabase(freshUrl)
-        const after = await fresh.sql<{ count: string }[]>`select count(*)::text as count from drizzle.__drizzle_migrations`
-        assert.equal(after[0].count, before[0].count)
-        assert.equal(Number(after[0].count), journalEntries().length)
-      } finally {
-        await fresh.close()
-      }
-    }))
+  before(async () => {
+    fresh = await freshDatabase(database.adminUrl, "waste_migrate_test")
+    const outcomes = await Promise.allSettled([migrateDatabase(fresh.url), migrateDatabase(fresh.url)])
+    owner = createDb(fresh.url, { max: 1 })
+    race = { outcomes, rows: await journalRows() }
+  })
+  after(async () => {
+    await owner?.close()
+    await fresh?.drop()
+  })
 
-  test("run twice at once, both runs succeed and the journal holds each migration once", () =>
-    withFreshDatabase(database.adminUrl, "waste_migrate_race", async (freshUrl) => {
-      await Promise.all([migrateDatabase(freshUrl), migrateDatabase(freshUrl)])
-      const fresh = createDb(freshUrl, { max: 1 })
-      try {
-        const rows = await fresh.sql<{ count: string }[]>`select count(*)::text as count from drizzle.__drizzle_migrations`
-        assert.equal(Number(rows[0].count), journalEntries().length)
-      } finally {
-        await fresh.close()
-      }
-    }))
+  test("creates the wms schema, the journal, the extensions, the functions and the API role", async () => {
+    const schemas = await owner.sql<{ nspname: string }[]>`
+      select nspname from pg_namespace where nspname in ('wms', 'drizzle', 'extensions') order by nspname`
+    assert.deepEqual(
+      schemas.map((row) => row.nspname),
+      ["drizzle", "extensions", "wms"],
+    )
+    const extensions = await owner.sql<{ extname: string; schema: string }[]>`
+      select extname, extnamespace::regnamespace::text as schema
+      from pg_extension where extname in ('postgis', 'btree_gist') order by extname`
+    // postgres.js rows come back in a Result (an Array subclass): compare plain values.
+    assert.deepEqual(
+      extensions.map(({ extname, schema }) => ({ extname, schema })),
+      [
+        { extname: "btree_gist", schema: "extensions" },
+        { extname: "postgis", schema: "extensions" },
+      ],
+    )
+    const functions = await owner.sql<{ proname: string }[]>`
+      select proname from pg_proc where pronamespace = 'wms'::regnamespace order by proname`
+    assert.deepEqual(
+      functions.map((row) => row.proname),
+      ["audit_row", "current_company_id", "outbox_event_route_problem", "touch_updated_at", "uuidv7"],
+    )
+    const [role] = await owner.sql<{ rolbypassrls: boolean; rolsuper: boolean }[]>`
+      select rolbypassrls, rolsuper from pg_roles where rolname = ${API_ROLE}`
+    assert.ok(role, `the ${API_ROLE} role exists`)
+    assert.equal(role.rolbypassrls, false)
+    assert.equal(role.rolsuper, false)
+  })
+
+  test("journals each file's sha256 and its `when`, so an edited applied migration is detectable", async () => {
+    const rows = await owner.sql<{ hash: string; created_at: string }[]>`
+      select hash, created_at::text as created_at from drizzle.__drizzle_migrations order by created_at`
+    assert.deepEqual(
+      rows.map(({ hash, created_at }) => ({ hash, when: Number(created_at) })),
+      journalEntries().map(({ tag, when }) => ({
+        hash: sha256(readFileSync(path.join(MIGRATIONS_FOLDER, `${tag}.sql`), "utf8")),
+        when,
+      })),
+    )
+  })
+
+  test("migrating again applies nothing", async () => {
+    const before = await journalRows()
+    await migrateDatabase(fresh.url)
+    const after = await journalRows()
+    assert.equal(after, before)
+    assert.equal(after, journalEntries().length)
+  })
+
+  test("run twice at once, both runs succeed and the journal holds each migration once", () => {
+    assert.deepEqual(
+      race.outcomes.map((outcome) => outcome.status),
+      ["fulfilled", "fulfilled"],
+      race.outcomes.map((outcome) => (outcome.status === "rejected" ? String(outcome.reason) : "fulfilled")).join("\n"),
+    )
+    assert.equal(race.rows, journalEntries().length)
+  })
 
   test("refuses a database whose PostGIS lives outside the extensions schema, instead of silently leaving it there", () =>
     withFreshDatabase(database.adminUrl, "waste_migrate_postgis_elsewhere", async (freshUrl) => {
-      const fresh = createDb(freshUrl, { max: 1 })
+      const elsewhere = createDb(freshUrl, { max: 1 })
       try {
         // A bare `create extension postgis` in a SQL editor lands in public.
-        await fresh.sql`create extension postgis`
+        await elsewhere.sql`create extension postgis`
       } finally {
-        await fresh.close()
+        await elsewhere.close()
       }
       await assert.rejects(migrateDatabase(freshUrl), /postgis.*extensions/s)
     }))
