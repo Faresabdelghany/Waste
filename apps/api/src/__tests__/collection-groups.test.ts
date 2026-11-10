@@ -183,7 +183,6 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       const created = await scheme("Named")
       const taken = await refused(await post(created.id, manualGroup("Residual", ["thursday"], [bin1.id])), 409)
       assert.equal(taken.detail, 'This scheme already has a collection group called "Residual"')
-      assert.doesNotMatch(taken.detail ?? "", /_key/)
       const outside = await refused(await post(created.id, manualGroup("Fridays", ["friday"], [bin1.id])), 400)
       assert.deepEqual(outside.errors, [{ path: "days", message: "Outside the scheme's service days" }])
       const paused = await add(created.id, manualGroup("Paused", [], [bin1.id]))

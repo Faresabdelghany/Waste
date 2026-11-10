@@ -277,7 +277,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       await container("BIN-3415")
       const problem = await refused(await olivia("/containers", { method: "POST", body: body("BIN-3415") }), 409)
       assert.equal(problem.detail, "This company already has a container labelled BIN-3415")
-      assert.doesNotMatch(problem.detail ?? "", /_key/)
       await refused(await olivia("/containers", { method: "POST", body: body("BIN-3415", { projectId: a.projects.harbor.id }) }), 409)
       assert.equal(
         (await create(other, "/containers", { projectId: b.projects.copenhagen.id, label: "BIN-3415", containerTypeId: theirBin.id }, Container)).label,
@@ -552,7 +551,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
         409,
       )
       assert.equal(problem.detail, "Container BIN-3444 is already placed over part of that period; end that placement first")
-      assert.doesNotMatch(problem.detail ?? "", /no_overlap/)
     })
 
     test("refuses a role that may view but not create", async () => {
