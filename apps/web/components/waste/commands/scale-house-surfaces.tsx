@@ -46,6 +46,7 @@ import { formatMinor } from "@/lib/commercial/money"
 import type { ScaleTicketAmountDue } from "@waste/contracts/scale-house"
 import { recordsForProject } from "@/lib/data/project-scope"
 import { REWEIGH_FORM, SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND, TARE_FORM, VEHICLE_TARE_RECORD_KIND, VOID_TICKET_FORM, WEIGH_IN_FORM, WEIGH_OUT_FORM } from "@/lib/data/scale-house"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const MASTER_MODULE = moduleAt("configure.master")
 
@@ -153,7 +154,7 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="scale-house-commands">
       <h3 className="text-sm font-semibold">{tare ? "Registered tare" : "Scale ticket"}</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The window is being read from the API; its commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("window", "its commands follow", { is: true })}</p>}
       {offered.length === 0 && moduleReady && <p className="text-sm text-muted-foreground">{record.description}</p>}
       <div className="flex flex-wrap gap-2">
         {offered.map((name) => (

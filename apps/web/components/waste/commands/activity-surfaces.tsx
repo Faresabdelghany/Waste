@@ -41,6 +41,7 @@ import {
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { SERVICE_PROVIDERS_MODULE, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { PATCH_RECORD } from "@/lib/api/provider-commands"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { ServiceProviderActivityKind } from "@waste/domain/service-providers/vocabulary"
 import type { ActivitySide } from "@waste/domain/service-providers/activities"
 
@@ -161,7 +162,7 @@ export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="activity-commands">
       <h3 className="text-sm font-semibold">Activity</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The activities are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("activities", "their commands follow")}</p>}
       {offers.length === 0 && !correctable && moduleReady && <p className="text-sm text-muted-foreground">Nothing for you to do here.</p>}
       <div className="flex flex-wrap gap-2">
         {offers.map((offer) => (

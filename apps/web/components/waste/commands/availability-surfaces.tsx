@@ -35,6 +35,7 @@ import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import { ABSENCE_FORM, UNAVAILABILITY_FORM } from "@/lib/data/availability"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /** What differs between a driver's surface and a vehicle's. */
 type AwayKind = {
@@ -114,7 +115,7 @@ function AwaySurface({ record, kind }: RowSurfaceProps & { kind: AwayKind }) {
   return (
     <section className="space-y-4" data-testid={kind.testId}>
       <h3 className="text-sm font-semibold">{kind.heading}</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The rows are being read from the API; what they are away for follows.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("rows", "what they are away for follows")}</p>}
       <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(true)}>
         {kind.form.submitLabel}
       </Button>

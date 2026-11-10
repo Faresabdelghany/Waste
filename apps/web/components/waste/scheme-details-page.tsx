@@ -374,11 +374,7 @@ export function SchemeDetailsPage({
                   ["holidays", "Holidays", null],
                 ] as const
               ).map(([value, label, count]) => (
-                <PillTab
-                  key={value}
-                  value={value}
-                 
-                >
+                <PillTab key={value} value={value}>
                   {label}
                   {count !== null && (
                     <span className="ml-1.5 text-[10px] text-muted-foreground">

@@ -23,6 +23,7 @@ import { useCommandOffered, useProviderWebId, useProviderWorkspace } from "@/com
 import { DEACTIVATE_USER, REACTIVATE_USER } from "@/lib/api/records/organisation"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/data/provider-workspace"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /** Add user: a provider's account invites into its own team. */
 export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {
@@ -83,7 +84,7 @@ export function TeamMemberCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="team-member-commands">
       <h3 className="text-sm font-semibold">Account</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The team is being read from the API; its commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("team", "its commands follow", { is: true })}</p>}
       <div className="flex flex-wrap gap-2">
         {deactivated ? (
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => send(REACTIVATE_USER, "User reactivated")}>

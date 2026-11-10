@@ -44,6 +44,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { blankNone, createPriceRowRecord, editedRecord, EXPLAIN_PRICE_FORM, formValuesOf, PRICE_ROW_FORM, priceRowEditForm } from "@/lib/data/commercial-forms"
 import { settingsHref } from "@/lib/modules/settings-panes"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /** The products' default prices are their default rows': a row added or moved reads the products again. */
 function useProductsReread(): () => void {
@@ -246,7 +247,7 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="price-row-commands">
       <h3 className="text-sm font-semibold">Price row</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The price rows are being read from the API; the edit follows.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("price rows", "the edit follows")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(schema)} onClick={() => setOpened(formValuesOf(schema, record))}>
           Edit price

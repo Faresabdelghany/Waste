@@ -37,6 +37,7 @@ import type { ActionOutcome } from "@/lib/api/records/server-records"
 import { VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { COMPLETE_FORM, orderFormOf, PLAN_FORM } from "@/lib/data/maintenance"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { MaintenanceOrder } from "@waste/contracts/maintenance"
 
 const text = (values: BusinessFormValues, key: string): string => (typeof values[key] === "string" ? (values[key] as string) : "")
@@ -118,7 +119,7 @@ export function VehicleMaintenanceSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="vehicle-maintenance">
       <h3 className="text-sm font-semibold">Maintenance plans</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The rows are being read from the API; the vehicle&apos;s maintenance follows.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("rows", "the vehicle's maintenance follows")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!offered} onClick={() => setForm("plan")}>
           Add plan

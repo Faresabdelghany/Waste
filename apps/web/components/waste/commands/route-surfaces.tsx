@@ -79,6 +79,7 @@ import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import { pickupReasonLabel } from "@/lib/data/route-labels"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
@@ -677,7 +678,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
             </PillTabsList>
           </div>
         </div>
-        {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+        {!moduleReady && <p className="border-b border-border/40 px-4 py-2 text-xs text-muted-foreground">{waitingSentence("routes", "their commands follow")}</p>}
 
         <TabsContent value="overview" forceMount className={tabContent}>
           <div className="grid min-h-[640px] min-[1180px]:grid-cols-[minmax(0,1.45fr)_minmax(380px,0.95fr)]">
@@ -865,7 +866,7 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   return (
     <section className="space-y-4" data-testid="route-commands">
       <h3 className="text-sm font-semibold">Route commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The routes are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("routes", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {commands.map((command) => (
           <Button key={command.name} variant="outline" size="sm" disabled={command.disabled} onClick={command.select}>
@@ -1070,7 +1071,7 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="pickup-commands">
       <h3 className="text-sm font-semibold">Stop commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The stops are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("stops", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {offered(REMOVE_PICKUP) && (
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen("remove")}>

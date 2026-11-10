@@ -19,6 +19,7 @@ import { APPROVE_PROPOSAL, approveChangesTheProduct, DISMISS_PROPOSAL, proposalC
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { APPROVE_SIZE_FORM, DISMISS_FORM, RIGHT_SIZING_MODULE } from "@/lib/data/right-sizing"
+import { waitingSentence } from "@/lib/api/read-state"
 
 /** Propose now: the run over the person's projects. */
 export function ProposeRightSizingSurface({ label }: PrimarySurfaceProps) {
@@ -77,7 +78,7 @@ export function RightSizingSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="right-sizing-commands">
       <h3 className="text-sm font-semibold">Right-sizing</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The proposals are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("proposals", "their commands follow")}</p>}
       {offered.length === 0 && moduleReady && <p className="text-sm text-muted-foreground">{record.description}</p>}
       {offered.length > 0 && (
         <div className="flex flex-wrap gap-2">

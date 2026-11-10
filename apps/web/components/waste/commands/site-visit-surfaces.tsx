@@ -47,6 +47,7 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { mintedRecord } from "@/lib/data/containers"
 import { PROPERTIES_MODULE } from "@/lib/data/properties"
 import { CHECK_IN_PATH, CREDENTIAL_BLOCKED_KEY, CREDENTIAL_KIND_KEY, CREDENTIAL_KIND_LABELS, CREDENTIAL_VALUE_KEY, SITE_ACCESS_MODULE, SITE_VISITS_MODULE, tradeSentence, VISIT_VOIDED_KEY } from "@/lib/data/site-visits"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const field = (id: string, label: string, relation?: ModuleLocation) => ({ id, label, type: "select" as const, required: true, ...(relation === undefined ? {} : { relation }) })
 
@@ -320,7 +321,7 @@ export function CredentialCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="credential-commands">
       <h3 className="text-sm font-semibold">Access credential</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The register is being read from the API; its commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("register", "its commands follow", { is: true })}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={openEdit}>
           Edit label or end
@@ -544,7 +545,7 @@ export function SiteVisitCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="site-visit-commands">
       <h3 className="text-sm font-semibold">Site visit</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The ledger is being read from the API; its commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("ledger", "its commands follow", { is: true })}</p>}
       {voided ? (
         <p className="text-sm text-muted-foreground">Voided: the visit stays on the ledger with why, and its charge is cancelled, or reversed once invoiced.</p>
       ) : (
