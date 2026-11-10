@@ -130,7 +130,6 @@ const workforceReferenceTaken = (reference: string) => `This company already has
 const LOGIN_TAKEN = "driver_user_account_id_idx"
 export const LOGIN_TAKEN_SENTENCE = "That login already has a driver profile"
 
-/** The sentences a write here can earn, and only for the fields the body gave. */
 const collisions = (values: { workforceReference?: string | null; userAccountId?: string | null }): Record<string, string> => ({
   ...(values.workforceReference == null ? {} : { [WORKFORCE_REFERENCE_TAKEN]: workforceReferenceTaken(values.workforceReference) }),
   ...(values.userAccountId == null ? {} : { [LOGIN_TAKEN]: LOGIN_TAKEN_SENTENCE }),
@@ -159,7 +158,6 @@ async function requireLogin(tx: Tx, principal: Principal, id: string | null | un
 // O30 of #290) share, so an imported row is held to every rule a form's is and
 // refused in the same sentence.
 
-/** Registers a driver: the project reached, the fleet the caller's own, every reference held, then the row. */
 export async function createDriver(tx: Tx, principal: Principal, body: DriverCreate, now: () => Date): Promise<Driver> {
   const { shift, ...values } = body
   await requireReachedProject(tx, principal, values.projectId, now)
@@ -193,7 +191,6 @@ export async function createDriver(tx: Tx, principal: Principal, body: DriverCre
   return driverOf(row)
 }
 
-/** Changes one driver the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and taking it out of service refused under what that would strand. */
 export async function patchDriver(tx: Tx, principal: Principal, id: string, body: DriverPatch, now: () => Date): Promise<Driver> {
   const { shift, ...patch } = body
   // The row the provider rule is held against, locked before it is read
@@ -203,7 +200,7 @@ export async function patchDriver(tx: Tx, principal: Principal, id: string, body
   const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
   const merged = { ...current, ...patch }
 
-  // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/place-rules.ts), in the driver's words: a patch carries one half and the stored row the other.
+  // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/provider-shape.ts), in the driver's words: a patch carries one half and the stored row the other.
   requireOwnFleet(principal, { kind: patch.employment, serviceProviderId: patch.serviceProviderId }, "driver", "patch")
   requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
   await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)

@@ -55,7 +55,6 @@ import { periodAfter, periodOf, requireOrdered } from "./periods"
 const DRIVERS = "fleet.drivers"
 const VEHICLES = "fleet.vehicles"
 
-/** A driver or a vehicle a body names: one of a project the caller works in. */
 export const NOT_A_DRIVER_HERE = "Not a driver of a project this account works in"
 export const NOT_A_VEHICLE_HERE = "Not a vehicle of a project this account works in"
 
@@ -73,10 +72,6 @@ function touching(validFrom: PgColumn, validTo: PgColumn, from: string | undefin
 
 /** What a list refuses beside the page rule. */
 const LIST_INVALID = ["a filter is malformed", "the window runs backwards", "`projectId` is not a project this account works in"]
-
-// ---------------------------------------------------------------------------
-// A driver's absences
-// ---------------------------------------------------------------------------
 
 const absenceColumns = {
   id: driverAbsence.id,
@@ -114,10 +109,6 @@ async function driverHere(tx: Tx, principal: Principal, id: string): Promise<{ i
   if (row === undefined) throw invalidRequest("body", [{ path: "driverId", message: NOT_A_DRIVER_HERE }])
   return row
 }
-
-// ---------------------------------------------------------------------------
-// A vehicle's unavailability
-// ---------------------------------------------------------------------------
 
 const unavailabilityColumns = {
   id: vehicleUnavailability.id,

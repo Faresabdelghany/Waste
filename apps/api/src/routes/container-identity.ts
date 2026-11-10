@@ -12,7 +12,6 @@ import { or, sql, type AnyColumn, type SQL } from "drizzle-orm"
 /** A container's four identifier columns: the table's, or an alias's. */
 export type IdentifierColumns = { label: AnyColumn; barcode: AnyColumn; rfid: AnyColumn; serialNumber: AnyColumn }
 
-/** Whether the container's row — the table or an alias of it — is one the code names. */
 export function namedByCode(table: IdentifierColumns, code: string): SQL {
   const wanted = normaliseCode(code)
   const spells = (column: AnyColumn): SQL => sql`upper(btrim(${column})) = ${wanted}`

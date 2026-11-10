@@ -76,7 +76,6 @@ const eventOf = (row: Row): AuditEvent => ({
   transactionId: String(row.transactionId),
 })
 
-/** The audit log the caller reads, newest first: the company's own rows and its projects' the caller works in, each with the name of the account that made the change. */
 const { list: listEvents } = scoped(auditEvent, {
   noun: "audit event",
   reach: (principal) => or(isNull(auditEvent.projectId), inProjects(auditEvent.projectId, principal)),

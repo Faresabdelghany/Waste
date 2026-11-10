@@ -227,10 +227,8 @@ const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
 const ReceiptPage = Page(DriverCommandReceipt)
 
-/** `GET /driver/routes`: the page, narrowed to one status of the day's routes. */
 const DriverRouteListQuery = PageRequest.extend({ status: RouteStatus.optional() })
 
-/** `GET /driver/commands`: the page, narrowed to one route's receipts. */
 const DriverReceiptListQuery = PageRequest.extend({ routeId: Id.optional() })
 
 /** The primary keys a race between two uploads of one batch can meet: the receipt's, and that of the row a command makes with the same id. */
@@ -261,7 +259,6 @@ const ROUTE_OPEN_INDEX = tableObjectName(session, "route_open_idx", "driverDoorR
  */
 export const HELD_AT_WRITE = "driver-command-held-at-write"
 
-/** Notes a start the write held, once per command, before its rejection is recorded. */
 const heldAtWrite = (applier: Applier, envelope: DriverCommandEnvelope, constraint: string): void =>
   applier.log({ event: HELD_AT_WRITE, constraint, commandId: envelope.id, kind: envelope.kind, routeId: envelope.routeId, driverId: applier.profile.id })
 
@@ -293,7 +290,6 @@ async function dayRoutes(tx: Tx, principal: Principal, profile: DriverProfile, n
   return narrow.limit === undefined ? await statement : await statement.limit(narrow.limit)
 }
 
-/** The three lists of `DriverMe` a start and an unload pick from. */
 type PickLists = Pick<DriverMe, "vehicles" | "unloadingStations" | "wasteFractions">
 
 /**
@@ -337,7 +333,6 @@ async function pickLists(tx: Tx, companyId: string, profile: DriverProfile): Pro
   }
 }
 
-/** The open session of this driver, whichever route it is on; undefined when none. */
 async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile): Promise<SessionRow | undefined> {
   const [row] = await tx
     .select(sessionColumns)
@@ -469,8 +464,6 @@ async function identifiedStopsOfRoute(tx: Tx, companyId: string, routeId: string
   const stops = [...(await read(false)), ...(await read(true))]
   return stops.sort((a, b) => a.position - b.position || a.pickupId.localeCompare(b.pickupId) || Number(a.replacement) - Number(b.replacement))
 }
-
-// The applier.
 
 /** What every command in a batch is judged and recorded with. */
 type Applier = {
@@ -630,7 +623,6 @@ async function readLookups(tx: Tx, applier: Applier, envelope: DriverCommandEnve
   return { lookups, route: routeRow, session: open, pickup: named }
 }
 
-/** The problem a rejection is recorded with and answered in: the contracts' shape, built the way every problem of this API is. */
 const rejectionProblem = (status: 400 | 404 | 409, detail: string, errors?: { path: string; message: string }[]): Problem => problemBody(status, errors === undefined ? { detail } : { detail, errors })
 
 /**
@@ -832,7 +824,6 @@ type Made = {
   events: Extract<Effect, { kind: "event" }>[]
 }
 
-/** Runs the decided effects as statements, in order. */
 async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvelope, read: Read, routeRow: RouteRow, effects: readonly Effect[]): Promise<Made> {
   const { companyId } = applier.principal
   const { projectId } = routeRow
@@ -995,11 +986,6 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
   return made
 }
 
-/**
- * Records an application: the effects, `last_seen_at`, the receipt, the
- * events, all inside the command's savepoint, and the row the command made
- * read back as its result.
- */
 async function recordApplication(tx: Tx, applier: Applier, envelope: DriverCommandEnvelope, read: Read, routeRow: RouteRow, effects: readonly Effect[]): Promise<CommandOutcomeRow> {
   const { companyId } = applier.principal
   const scope = receiptScope(applier, routeRow)
@@ -1093,7 +1079,6 @@ async function applyOne(tx: Tx, applier: Applier, envelope: DriverCommandEnvelop
   }
 }
 
-
 export function driverDoorRoutes(deps: RouteDeps) {
   const { now, log, jobs } = deps
   return routes(deps)
@@ -1147,7 +1132,6 @@ export function driverDoorRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const profile = await resolveDriver(tx, principal)
         const rows = await dayRoutes(tx, principal, profile, now(), { status, after, limit: fetchLimit(limit) })
-        // Paged first, so the row that only proves there is a next page is not one whose progress is counted.
         const { items, nextCursor } = pageOf(rows, limit)
         return c.json({ items: await routesOf(tx, principal.companyId, items), nextCursor })
       },

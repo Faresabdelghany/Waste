@@ -88,18 +88,14 @@ const RUNNING_SENTENCE = "A credential of this kind and number is already in for
 
 /** What a business credential naming another customer's agreement is told. */
 export const NOT_THE_CUSTOMERS_AGREEMENT = "A business's credential is charged to one of its own agreements"
-/** What a block of a blocked credential is told. */
 export const ALREADY_BLOCKED = "The credential is already blocked; unblock it first to block it for another reason"
-/** What an unblock of a credential not blocked is told. */
 export const NOT_BLOCKED = "The credential is not blocked"
 
 const { scope: credentialScope, get: getCredential, locked: lockedCredential, list: listCredentials } = scoped(accessCredential, { noun: "access credential", reach: "projects", columns })
 
 /** What a credential running outside its business's Agreement is told, at the bound. */
 export const WITHIN_THE_AGREEMENT = "A business's credential is in force only while the agreement its visits are charged to is"
-/** What a credential naming an inactive customer is told. */
 export const INACTIVE_HOLDER = "The customer is inactive; a credential needs an active customer"
-/** What a credential naming an Agreement that pays for nothing is told. */
 export const agreementPaysNothing = (status: string): string => `The agreement is ${status}; a credential's visits are charged to a signed agreement`
 
 /** A business credential's Agreement, read once under the project's fence: the project's (400), its customer's (400), its period, and its status. */

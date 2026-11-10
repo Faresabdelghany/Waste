@@ -117,7 +117,6 @@ const { noSuch: noSuchType, list: listTypes } = scoped(containerType, { noun: "c
 // O30 of #290) share, so an imported row is held to every rule a form's is and
 // refused in the same sentence: the duplicate's 409, the missing row's 404.
 
-/** Adds a waste fraction to the caller's company. */
 export async function createWasteFraction(tx: Tx, principal: Principal, values: WasteFractionCreate): Promise<WasteFraction> {
   const sentences = { [FRACTION_KEY_TAKEN]: fractionKeyTaken(values.key), [FRACTION_NAME_TAKEN]: fractionNameTaken(values.name) }
   const [row] = await refuseDuplicate(sentences, () =>
@@ -147,7 +146,6 @@ export async function patchWasteFraction(tx: Tx, principal: Principal, id: strin
   return fractionOf(row)
 }
 
-/** The company's waste fraction with this key, or undefined. */
 export async function wasteFractionByKey(tx: Tx, companyId: string, key: string): Promise<WasteFraction | undefined> {
   const [row] = await tx
     .select(fractionColumns)
@@ -157,7 +155,6 @@ export async function wasteFractionByKey(tx: Tx, companyId: string, key: string)
   return row === undefined ? undefined : fractionOf(row)
 }
 
-/** Adds a container type to the caller's company. */
 export async function createContainerType(tx: Tx, principal: Principal, values: ContainerTypeCreate): Promise<ContainerType> {
   const [row] = await refuseDuplicate({ [TYPE_NAME_TAKEN]: typeNameTaken(values.name) }, () =>
     tx
@@ -182,7 +179,6 @@ export async function patchContainerType(tx: Tx, principal: Principal, id: strin
   return typeOf(row)
 }
 
-/** The company's container type with this name, or undefined. */
 export async function containerTypeByName(tx: Tx, companyId: string, name: string): Promise<ContainerType | undefined> {
   const [row] = await tx
     .select(typeColumns)

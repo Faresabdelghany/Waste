@@ -43,7 +43,7 @@ const columns = {
 
 type Row = Pick<typeof company.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. */
+/** The row on the wire. `status` is text with a CHECK in the database and this enum here; @waste/domain/access/vocabulary holds the two lists in lockstep. */
 function companyOf(row: Row): Company {
   return {
     id: row.id,

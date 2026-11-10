@@ -198,13 +198,11 @@ const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 
 const { scope, noSuch: noSuchAgreement, find: findAgreement, get: getAgreement, locked: lockedAgreement, list: listAgreements } = scoped(agreement, { noun: "agreement", reach: "projects", columns })
 
-/** One agreement of the caller's projects as the wire carries it; undefined for one they do not reach. */
 export async function readAgreement(tx: Tx, principal: Principal, id: string): Promise<Agreement | undefined> {
   const row = await findAgreement(tx, principal, id)
   return row === undefined ? undefined : agreementOf(row)
 }
 
-/** The same for a subscription, which carries the project its agreement is in; its pauses hang on it. */
 export const { scope: subscriptionScope, noSuch: noSuchSubscription, list: listSubscriptions } = scoped(subscription, { noun: "subscription", reach: "projects", columns: subscriptionColumns })
 
 /**
@@ -231,7 +229,6 @@ async function findSubscription(
   return { ...held, agreement: { validFrom: agreementValidFrom, validTo: agreementValidTo } }
 }
 
-/** One subscription of the caller's projects as the wire carries it; undefined for one they do not reach. */
 export async function readSubscription(tx: Tx, principal: Principal, id: string): Promise<Subscription | undefined> {
   const row = await findSubscription(tx, principal, id)
   if (row === undefined) return undefined
@@ -239,7 +236,6 @@ export async function readSubscription(tx: Tx, principal: Principal, id: string)
   return subscriptionOf(held)
 }
 
-/** The status of the customer each field names, as `partyStatuses` answers it. */
 type Parties = Readonly<Record<Party, CustomerStatus | undefined>>
 
 /**
@@ -291,7 +287,6 @@ async function requireAgreementList(tx: Tx, within: Scope, priceListId: string |
 // the request's transaction, or a savepoint of it, and the caller; the grant
 // is the caller's to have checked.
 
-/** Writes an agreement in one of the caller's projects. */
 export async function createAgreement(tx: Tx, principal: Principal, body: AgreementCreate): Promise<Agreement> {
   const { serviceWindow, ...values } = body
   requireProject(principal, values.projectId)
@@ -443,7 +438,6 @@ export async function subscriptionStarting(
 export const INSIDE_SUBSCRIPTION = "After the subscription's first day and before its end"
 export const INSIDE_AGREEMENT = "After the agreement's first day and before its end"
 
-/** What a change that leaves the product and the quantity as they are is told. */
 export const CHANGES_NOTHING = "The subscription already has that product and that quantity"
 
 /** The day of a change or a termination: after the period's first day and before its end, so both halves it leaves are periods (400 at `on`). */

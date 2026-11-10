@@ -56,7 +56,6 @@ const columns = {
 
 type Row = Pick<typeof collectionCalendar.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. */
 function calendarOf(row: Row): CollectionCalendar {
   return {
     id: row.id,
@@ -82,7 +81,6 @@ const { scope, noSuch: noSuchCalendar, get: getCalendar, locked: lockedCalendar,
 // O30 of #290) share, so an imported row is held to every rule a form's is and
 // refused in the same sentence.
 
-/** Writes a calendar in a project the caller works in. */
 export async function createCalendar(tx: Tx, principal: Principal, body: CollectionCalendarCreate): Promise<CollectionCalendar> {
   requireProject(principal, body.projectId)
   const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
@@ -115,7 +113,6 @@ export async function patchCalendar(tx: Tx, principal: Principal, id: string, pa
   return calendarOf(row)
 }
 
-/** A project's calendar with this name; undefined where there is none. */
 export async function calendarByName(tx: Tx, principal: Principal, projectId: string, name: string): Promise<CollectionCalendar | undefined> {
   const [row] = await tx
     .select(columns)
