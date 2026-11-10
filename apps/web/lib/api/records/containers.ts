@@ -11,11 +11,11 @@
 // container, and the record shows one: the placement the ledger has the
 // container in service at, else the one serving on the project's day, else
 // its latest by start (a placement the seed wrote before any movement, or one
-// that has ended). The status is the
-// Container Asset State, the ledger's reading (ADR-0003) — In warehouse, In
-// service, In maintenance, Retired, or No stock record for a container with
-// no movement yet — which moves only by the lifecycle's commands, so the
-// adapter lists no `statuses` and the store refuses every move an edit makes.
+// that has ended). The status is the Container Asset State, the ledger's
+// reading (ADR-0003) — In warehouse, In service, In maintenance, Retired, or
+// No stock record for a container with no movement yet — which moves only by
+// the lifecycle's commands, so the adapter lists no `statuses` and the store
+// refuses every move an edit makes.
 //
 // An edit corrects the identity through `PATCH /containers/:id` and, where
 // the container has a placement, that placement's fraction, its cadence
