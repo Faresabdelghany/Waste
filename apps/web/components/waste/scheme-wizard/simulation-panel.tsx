@@ -73,7 +73,6 @@ const CHANGE_BADGE_CLASS: Record<OccurrenceChange, string> = {
   moved: "border-transparent bg-warning/10 text-warning-foreground",
 }
 
-/** The recurrence fields a candidate may change, lifted off the draft. */
 export function candidateFieldsOf(data: GuidedSchemeData): DraftRecurrenceFields {
   return {
     frequency: data.frequency,
@@ -86,7 +85,6 @@ export function candidateFieldsOf(data: GuidedSchemeData): DraftRecurrenceFields
   }
 }
 
-/** "05 Oct 2026" for a collection; "Skipped" when the side skips the date; "—" when it has no row. */
 function sideCell(row: Occurrence | null): string {
   if (!row) return "—"
   if (row.status === "skipped") return "Skipped"
@@ -114,7 +112,6 @@ export function SimulationPanel({
   model: WizardModel
   /** Today as ISO — where "next" starts counting, and the earliest start a candidate may take. */
   today: string
-  /** Writes the candidate's recurrence fields into the draft. */
   onApply: (candidate: DraftRecurrenceFields) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -277,7 +274,6 @@ export function SimulationPanel({
         </ToggleGroup>
       </div>
 
-      {/* The delta: the two counts and the tally, then the rows. */}
       <div className="overflow-hidden rounded-2xl border border-border bg-muted/40">
         <div className="flex min-h-12 flex-wrap items-center justify-between gap-3 px-5 py-2">
           <span

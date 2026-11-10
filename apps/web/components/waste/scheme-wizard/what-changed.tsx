@@ -30,7 +30,6 @@ const BASELINE_LABELS: Record<ChangeBaseline, string> = {
   start: "Since you started",
 }
 
-/** How the diff reads an id: the record's name, the vehicle's callsign, the driver's name. */
 export function draftNamesOf(model: WizardModel, records: WizardRecords): SchemeDraftNames {
   return {
     project: (id) => model.nameOf(records.projects, id),
@@ -50,7 +49,6 @@ export function WhatChanged({
   records,
 }: {
   data: GuidedSchemeData
-  /** The draft the wizard opened with. */
   initial: GuidedSchemeData
   /** The draft as it stood when the person last left the review step; null until they have. */
   reviewed: GuidedSchemeData | null
@@ -58,7 +56,6 @@ export function WhatChanged({
   records: WizardRecords
 }) {
   const [baselineState, setBaseline] = useState<ChangeBaseline | null>(null)
-  // Default to the last review once there is one; before that only the start exists.
   const baseline: ChangeBaseline = baselineState ?? (reviewed ? "review" : "start")
   const against = baseline === "review" && reviewed ? reviewed : initial
   const changes = schemeDraftChanges(against, data, draftNamesOf(model, records))

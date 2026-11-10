@@ -58,7 +58,6 @@ const parseBoundsKey = (key: string): LngLatBounds | null => {
   return { west, south, east, north }
 }
 
-/** How a stop is drawn: bases as squares, containers as dots. */
 function StopMark({ stop, at, color, emphasised }: { stop: PreviewStop; at: ScreenPoint; color: string; emphasised: boolean }) {
   if (stop.kind === "container") {
     return <circle cx={at.x} cy={at.y} r={emphasised ? 4.5 : 3.5} fill="white" stroke={color} strokeWidth={2} />

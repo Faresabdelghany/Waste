@@ -88,8 +88,6 @@ export function SchemeWizard({
     4: true,
     5: true,
   }
-  // A step is reachable from the rail once visited and only while every
-  // earlier gate still passes.
   const reachable = (target: WizardStepId) =>
     target <= maxStep && WIZARD_STEPS.every((s) => s.id >= target || gates[s.id])
   const canNext = step === 3 ? true : gates[step]

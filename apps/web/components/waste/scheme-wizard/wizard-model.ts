@@ -150,7 +150,6 @@ export function groupColor(index: number): string {
   return SCHEME_GROUP_COLORS[index % SCHEME_GROUP_COLORS.length]
 }
 
-/** The id a drafted route's road is asked for under. */
 export const wizardRouteId = (groupId: string, day: ServiceDay) => `${groupId}\u0001${day}`
 
 export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords): WizardModel {

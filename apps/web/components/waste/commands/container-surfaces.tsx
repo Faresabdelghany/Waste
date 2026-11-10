@@ -7,7 +7,7 @@
 // says why one does not apply (the rules on #81). The forms are
 // lib/data/containers.ts's, their values the adapter's input. Nothing is
 // offered until the module reads the API's rows: before that, and after its
-// load failed, a write would reach the browser's bucket and never the API.
+// load failed, the store refuses a write (`writeRouteOf`).
 import { useState } from "react"
 import { toast } from "sonner"
 
