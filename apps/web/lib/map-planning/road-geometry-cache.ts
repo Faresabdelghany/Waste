@@ -104,7 +104,6 @@ const deferOneMacrotask: Defer = (task) => {
   return () => clearTimeout(timer)
 }
 
-/** Records `geometry` under `key` as the newest entry, forgetting the oldest past `max`. */
 export function rememberRoadGeometry(memory: Map<string, RoadGeometry>, key: string, geometry: RoadGeometry, max = ROAD_MEMORY_MAX): Map<string, RoadGeometry> {
   memory.delete(key)
   memory.set(key, geometry)
@@ -124,7 +123,6 @@ export function createRoadGeometryCache(options: RoadGeometryCacheOptions): Road
   const standing = new Map<string, Standing>()
   const requests = new Map<string, RoadRequest>()
 
-  /** The answer standing for the key, forgotten once it no longer does. */
   const standingOf = (key: string): Standing | undefined => {
     const answer = standing.get(key)
     if (answer !== undefined && now() >= answer.standsUntil) {
@@ -167,7 +165,6 @@ export function createRoadGeometryCache(options: RoadGeometryCacheOptions): Road
     )
   }
 
-  /** Starts queued requests somebody still holds, up to the limit, oldest first. */
   const pump = () => {
     let room = maxInFlight - inFlightCount()
     for (const [key, request] of requests) {

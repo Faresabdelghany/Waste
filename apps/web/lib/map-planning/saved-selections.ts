@@ -90,7 +90,6 @@ export function serializeSavedSelections(selections: readonly SavedSelection[]):
   return JSON.stringify({ selections })
 }
 
-/** Appends a new entry with the trimmed name; a blank name leaves the list as it is. */
 export function addSavedSelection(
   selections: readonly SavedSelection[],
   input: SavedSelectionInput,
@@ -111,7 +110,6 @@ export function addSavedSelection(
   ]
 }
 
-/** Renames by id with the trimmed name; a blank name leaves the list as it is. */
 export function renameSavedSelection(
   selections: readonly SavedSelection[],
   id: string,

@@ -78,7 +78,6 @@ export function playbackFrame(
   return { position, travelled }
 }
 
-/** "06:32" → 392 minutes since midnight; anything else → null. */
 export function clockMinutes(value: string | null | undefined): number | null {
   const match = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(value ?? "")
   if (!match) return null
@@ -87,7 +86,6 @@ export function clockMinutes(value: string | null | undefined): number | null {
   return hours < 24 && minutes < 60 ? hours * 60 + minutes : null
 }
 
-/** Actual minus planned, in minutes, when both clocks are known. */
 export function stopDelay(planned: string | null, actual: string | null): number | null {
   const plannedMinutes = clockMinutes(planned)
   const actualMinutes = clockMinutes(actual)
@@ -99,7 +97,6 @@ export function formatDelay(minutes: number): string {
   return minutes > 0 ? `+${minutes} min` : `−${Math.abs(minutes)} min`
 }
 
-/** The next progress after `deltaMs` at `speed`, clamped to the last stop, which ends the journey. */
 export function advancePlayback(
   progress: number,
   deltaMs: number,

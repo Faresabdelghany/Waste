@@ -3,7 +3,7 @@
 // abandon deferred a tick so a release-and-hold in one tick (React's
 // development double-mount) aborts nothing, and what each outcome leaves
 // behind — a road landed is remembered, an estimate until the quota resumes,
-// a refusal for the session, an abort as nothing (#173). The fetcher, the
+// a failure for a minute, an abort as nothing (#173). The fetcher, the
 // tick and the clock are the test's own.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
@@ -16,7 +16,6 @@ import type { RoadGeometry } from "../road-geometry"
 type Call = {
   stops: readonly LngLat[]
   signal: AbortSignal
-  /** Answers the road. */
   resolve: (geometry: RoadGeometry) => void
   /** Answers the API's estimate: no road for now. */
   estimate: (resumesAt: string | null, reason: string) => void

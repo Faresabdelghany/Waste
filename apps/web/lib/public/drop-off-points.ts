@@ -14,7 +14,6 @@ export function fractionKeyOf(fraction: string | string[] | undefined): string |
   return first.length <= KEY_MAX && new RegExp(SLUG_PATTERN).test(first) ? first : null
 }
 
-/** Where the map lives, asking for one fraction's points where a key is given. */
 export const dropOffHrefOf = (slug: string, fractionKey?: string | null): string =>
   `/p/${encodeURIComponent(slug)}/drop-off${fractionKey == null ? "" : `?fraction=${encodeURIComponent(fractionKey)}`}`
 
@@ -25,7 +24,6 @@ export function openingTextOf(day: PublicOpeningDay): string {
   return day.windows.map((window) => `${window.opensAt}–${window.closesAt}`).join(COPY.windowsJoin)
 }
 
-/** A point as the map pins it. */
 export type MapPoint = { id: string; name: string; kind: PublicDropOffPoint["kind"]; lng: number; lat: number }
 
 export const mapPointsOf = (points: readonly PublicDropOffPoint[]): MapPoint[] =>
