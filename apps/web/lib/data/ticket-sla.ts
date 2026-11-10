@@ -27,7 +27,6 @@ export const SLA_PRIORITY_OPTIONS: readonly SlaOption[] = TICKET_PRIORITIES.map(
 /** What a target may be for: every kind, each kind, and the types listed (#548 of #544), a type's own winning over its kind's. */
 export const slaScopeOptions = (types: readonly TypeChoice[]): SlaOption[] => [...SLA_KIND_OPTIONS, ...types.map((type) => ({ value: typeScope(type.id), label: typeLabel(type) }))]
 
-/** The hours a new row starts at: a day. */
 const NEW_ROW_HOURS = "24"
 
 export const HOURS_SENTENCE = `Give the hours as a whole number from 1 to ${TICKET_SLA_HOURS_MAX}`
@@ -35,10 +34,8 @@ export const HOURS_SENTENCE = `Give the hours as a whole number from 1 to ${TICK
 /** The project's targets as rows, in the API's order. */
 export const slaRowsOf = (sla: TicketSla): SlaRow[] => sla.targets.map((target) => ({ key: target.id, kind: valueOfScope(target, EVERY_KIND), priority: target.priority, hours: String(target.hours) }))
 
-/** The types a project's targets name, for the rows' picker to list beside the active ones. */
 export const typesNamedBy = (sla: TicketSla): string[] => sla.targets.flatMap((target) => (target.ticketTypeId === null ? [] : [target.ticketTypeId]))
 
-/** A row's kind or type and priority as the domain names a target by, every kind as null. */
 const pairOf = (row: Pick<SlaRow, "kind" | "priority">) => slaTargetKey({ ...scopeOfValue(row.kind, EVERY_KIND), priority: row.priority })
 
 /** A row to add: every kind at the first priority without one, else the first kind free at the first priority with room, else the first type listed free (#548 of #544). */
@@ -51,12 +48,10 @@ export function newSlaRow(rows: readonly SlaRow[], key: string, types: readonly 
   return { key, kind: EVERY_KIND, priority: TICKET_PRIORITIES[0], hours: NEW_ROW_HOURS }
 }
 
-/** What the form refuses before the API sees it: the row, the field and why. */
 export type SlaRefusal = { index: number; field: "kind" | "hours"; message: string }
 
 export const isSlaRefusal = (value: TicketSlaSet | SlaRefusal): value is SlaRefusal => "index" in value
 
-/** The body the rows become, or the first row the API would refuse. */
 export function slaBodyOf(rows: readonly SlaRow[]): TicketSlaSet | SlaRefusal {
   const targets: TicketSlaSet["targets"] = []
   for (const [index, row] of rows.entries()) {
@@ -69,7 +64,6 @@ export function slaBodyOf(rows: readonly SlaRow[]): TicketSlaSet | SlaRefusal {
   return twice === undefined ? { targets } : { index: twice, field: "kind", message: SLA_TARGET_ONCE }
 }
 
-/** What a save of a project's targets tells: how many it holds, and what tickets opened from now on take from them, or that they take nothing. */
 export function slaSavedSentence(projectName: string, targets: number): string {
   if (targets === 0) return `${projectName} has no SLA now: tickets opened from now on have no due date unless someone gives one.`
   return targets === 1 ? `${projectName} has one target. Tickets opened from now on are due by it.` : `${projectName} has ${targets} targets. Tickets opened from now on are due by them.`

@@ -22,23 +22,19 @@ import { tokenOptions } from "@/lib/data/tickets"
 /** The units a billing run charges by their period — a recurring charge's month, a hire's day (M14 of #293): never a ticket's work. */
 const CHARGED_BY_PERIOD: readonly string[] = ["month", "day"]
 
-/** The products of the project a ticket's work may be charged at, by the products module's records: never one sold by the month or the day, a retired one by its status. */
 export function ticketWorkProductOptions(products: readonly BusinessRecord[], projectId: string | undefined): BusinessFormOption[] {
   return products
     .filter((record) => (projectId === undefined || (record.projectIds ?? []).includes(projectId)) && !CHARGED_BY_PERIOD.includes(String(record.submittedValues?.priceUnit)))
     .map((record) => ({ value: record.id, label: record.status === "Active" ? record.name : `${record.name} · ${record.status}` }))
 }
 
-/** The ticket kinds as the charges pane lists them: every kind once, in the vocabulary's order, by its label. */
 export const TICKET_KIND_ROWS: readonly { kind: TicketKind; label: string }[] = tokenOptions(TICKET_KINDS).map((option) => ({ kind: option.value as TicketKind, label: option.label }))
 
 /** One row of the pane: a kind or a type (#548 of #544), by its key and its label. */
 export type TicketChargeRow = TicketScope & { key: string; label: string }
 
-/** The types a set of picks names, by the picks' keys. */
 export const typesPicked = (picks: TicketChargePicks): string[] => Object.keys(picks).flatMap((key) => (key.startsWith("type:") ? [key.slice("type:".length)] : []))
 
-/** The pane's rows: every kind, then each type listed (`typesListed`), the types the set names already among them. */
 export function chargeRowsOf(types: TypeChoices, named: Iterable<string> = []): TicketChargeRow[] {
   const kinds = TICKET_KIND_ROWS.map(({ kind, label }) => ({ kind, ticketTypeId: null, key: scopeKey({ kind, ticketTypeId: null }), label }))
   return [...kinds, ...typesListed(types, named).map((type) => ({ kind: null, ticketTypeId: type.id, key: scopeKey({ kind: null, ticketTypeId: type.id }), label: typeLabel(type) }))]
