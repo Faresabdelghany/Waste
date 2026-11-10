@@ -167,7 +167,6 @@ export const KEY_NAMES_ANOTHER = "The attachment key names another company or an
 
 const LINK_KEYS = Object.keys(NO_TICKET_LINKS) as (keyof TicketLinks)[]
 
-/** The links a write leaves behind: the body's where given (null clearing), the stored ones where not. */
 function linksAfter(current: TicketLinks, set: TicketLinksSet | undefined): TicketLinks {
   const after = { ...current }
   for (const key of LINK_KEYS) {
@@ -898,7 +897,6 @@ export function ticketRoutes(deps: RouteDeps) {
     )
 }
 
-/** The first instant of a `YYYY-MM-DD` day on the UTC calendar. */
 const startOfUtcDay = (day: string): Date => new Date(`${day}T00:00:00Z`)
 
 /** The first instant after a `YYYY-MM-DD` day on the UTC calendar: the exclusive end of a window that takes the whole of that day. */

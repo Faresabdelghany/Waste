@@ -103,16 +103,13 @@ const describe403 = (improve: ModuleKey, rows: ModuleKey) => describeProblem(`No
 
 type WindowQuery = { projectId?: string; from: string; to: string; interval: Interval }
 
-/** The window as the report read it, for its answer. */
 const windowOf = (query: WindowQuery): ReportWindow => ({ projectId: query.projectId ?? null, from: query.from, to: query.to, interval: query.interval })
 
-/** A project-scoped table's two fences, and the project the query names. */
 type ProjectTable = { companyId: PgColumn; projectId: PgColumn }
 function fenced(table: ProjectTable, principal: Principal, projectId: string | undefined): SQL {
   return and(eq(table.companyId, principal.companyId), inProjects(table.projectId, principal), projectId === undefined ? undefined : eq(table.projectId, projectId)) as SQL
 }
 
-/** The project a row is of, joined within the tenant, for its timezone. */
 const projectOf = (table: ProjectTable) => and(eq(project.companyId, table.companyId), eq(project.id, table.projectId))
 
 /** An instant as the day it falls on, on its project's clock; no parameter, so a statement can group by it. */
@@ -130,7 +127,6 @@ function instantInWindow(instant: PgColumn, window: DayInterval): SQL {
   return and(gte(instant, earliest), lt(instant, latest), inWindow(dayOn(instant), window)) as SQL
 }
 
-/** `count(*)` of the rows the condition holds for. */
 const countWhere = (condition: SQL | undefined) => sql<number>`count(*) filter (where ${condition})`.mapWith(Number)
 
 /** A sum of whole numbers, as a number: Postgres answers `sum` as numeric text. */
@@ -138,8 +134,6 @@ const total = (value: PgColumn | SQL) => sql<number>`coalesce(sum(${value}), 0):
 
 /** Names in one order wherever the API runs. */
 export const byName = new Intl.Collator("en").compare
-
-// The service report's tallies.
 
 const noRoutes = (): RouteCounts => ({ total: 0, planned: 0, ready: 0, active: 0, completed: 0, cancelled: 0, started: 0, onTime: 0, late: 0, unjudged: 0 })
 const noPickups = (): PickupStandings => ({ due: 0, completed: 0, missed: 0, skipped: 0, failed: 0, open: 0, withdrawn: 0 })
@@ -182,7 +176,6 @@ function seriesOf<Tally>(window: DayInterval, interval: Interval, empty: () => T
   return new Map(intervalsOver(window, interval).map((span) => [span.from, { ...span, ...empty() }] as const))
 }
 
-/** The interval of the series a day is counted in. */
 function inSeries<Tally>(series: Map<string, DayInterval & Tally>, day: string, window: DayInterval, interval: Interval): DayInterval & Tally {
   const found = series.get(intervalOf(day, window, interval).from)
   if (found === undefined) throw new Error(`no interval for ${day} in ${window.from}..${window.to}`)
@@ -196,7 +189,6 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
   const { projectId, wasteFractionId, routeSchemeId } = query
   const window = { from: query.from, to: query.to }
   const routeWindow = and(routesOfWindow(window), routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId))
-  // On time: started no later than the planned start on the project's clock on the operating date, plus the grace.
   const deadline = sql`${instantOnClock(route.operatingDate, project.timezone, route.plannedStartTime)} + ${sql.raw(`interval '${ON_TIME_GRACE_MINUTES} minutes'`)}`
   const judged = and(isNotNull(route.startedAt), isNotNull(route.plannedStartTime))
   const routeGroups = await tx
@@ -217,7 +209,6 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
       and(
         fenced(route, principal, projectId),
         routeWindow,
-        // A fraction's routes are the ones holding a pickup of it.
         wasteFractionId === undefined
           ? undefined
           : exists(
@@ -280,7 +271,6 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
       pickups: scheme.pickups,
       rates: serviceRates(scheme.routes, scheme.pickups),
     }))
-    // The schemes by name, then each project's ad-hoc routes.
     .sort((a, b) => Number(a.name === null) - Number(b.name === null) || byName(a.name ?? "", b.name ?? "") || (a.routeSchemeId ?? "").localeCompare(b.routeSchemeId ?? "") || a.projectId.localeCompare(b.projectId))
   return {
     window: windowOf(query),
@@ -552,7 +542,6 @@ async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQ
   }
 }
 
-/** The warning as the wire carries it: the domain's, with its sentence. */
 const withSentence = (warning: DomainWarning): WasteDataWarning => ({ ...warning, sentence: wasteDataWarningSentence(warning) })
 
 async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataReportQuery): Promise<WasteDataReport> {
@@ -597,7 +586,6 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
       continue
     }
     rows.push({ ...place, wasteCode: group.wasteCode, netKg: group.netKg, unloads: group.n })
-    // What the rows filed are warned of, once each.
     if (group.wasteCode === null && !uncoded.some((warning) => warning.wasteFractionId === group.wasteFractionId)) {
       uncoded.push({ kind: "no-waste-code", wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName })
     }
@@ -625,7 +613,6 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
   }
 }
 
-/** A report as a request reads it: the project the query names held to the caller's, then the report read inside the request's transaction. */
 function reading<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
   return (c: Context<AuthEnv>, query: Query): Promise<Report> => {
     const principal = c.get("principal")
@@ -634,7 +621,6 @@ function reading<Query extends { projectId?: string }, Report>(read: (tx: Tx, pr
   }
 }
 
-/** A report's handler: the report `reading` reads, answered as JSON. */
 function answer<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
   const readFor = reading(read)
   return async (c: Context<AuthEnv>, query: Query) => c.json(await readFor(c, query))

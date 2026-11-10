@@ -97,7 +97,6 @@ async function messageById(tx: Tx, companyId: string, id: string): Promise<Route
   return row === undefined ? undefined : messageOf(row)
 }
 
-/** Appends one message to the route's thread and answers it as the thread reads it. */
 async function append(tx: Tx, principal: Principal, route: RouteRow, message: { id: string; author: RouteMessageAuthor; driverId: string | null; body: string }): Promise<RouteMessage> {
   await tx.insert(routeMessage).values({ id: message.id, companyId: principal.companyId, projectId: route.projectId, routeId: route.id, author: message.author, sentBy: principal.user.id, driverId: message.driverId, body: message.body })
   const written = await messageById(tx, principal.companyId, message.id)

@@ -83,10 +83,8 @@ const columns = {
 
 type Row = Pick<typeof tankInstallation.$inferSelect, keyof typeof columns>
 
-/** The later of two days, either of which may be absent. */
 const later = (a: string | null, b: string | null): string | null => (a === null ? b : b === null ? a : a > b ? a : b)
 
-/** The row on the wire, with its last emptying and the day the next is due. */
 const tankOf = (row: Row, emptying: TankEmptying | undefined): TankInstallation => ({
   id: row.id,
   projectId: row.projectId,
@@ -105,7 +103,6 @@ const tankOf = (row: Row, emptying: TankEmptying | undefined): TankInstallation 
   ...stampsOf(row),
 })
 
-/** Rows on the wire, their last emptyings read in one statement. */
 async function answered(tx: Tx, companyId: string, rows: readonly Row[]): Promise<TankInstallation[]> {
   const emptyings = await lastEmptyings(tx, companyId, [...new Set(rows.map((row) => row.containerId))])
   return rows.map((row) => tankOf(row, emptyings.get(row.containerId)))

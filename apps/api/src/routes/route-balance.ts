@@ -56,10 +56,8 @@ export const DAY_CHANGED = "The day's routes changed since the balance was previ
 /** What the apply answers a move the balance did not propose, at `moves`. */
 export const NOT_PROPOSED = "Not a move the balance proposes for this day; preview it again"
 
-/** A position off a stored point. */
 const positionOf = (point: { coordinates: readonly [number, number, number?] } | null): [number, number] | null => (point === null ? null : [point.coordinates[0], point.coordinates[1]])
 
-/** The routes of a project's day the balance weighs: planned or ready, in id order. */
 async function routesOfDay(tx: Tx, principal: Principal, day: RouteBalanceDay): Promise<RouteRow[]> {
   return await tx
     .select(routeColumns)
@@ -77,7 +75,6 @@ function tokenOf(routes: readonly RouteRow[], stops: readonly { id: string; rout
   return createHash("sha256").update(lines.join("\n")).digest("hex")
 }
 
-/** The day as the balance weighs it, with the token over what it read. */
 async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[]): Promise<{ balanced: BalanceRoute[]; token: string }> {
   const { companyId } = principal
   const routeIds = routes.map((row) => row.id)
@@ -177,7 +174,6 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
   return { balanced, token: tokenOf(routes, stops) }
 }
 
-/** The preview a day answers: the moves, every route before and after, the token. */
 async function previewOf(tx: Tx, principal: Principal, routes: readonly RouteRow[]): Promise<RouteBalancePreview> {
   const { balanced, token } = await weighDay(tx, principal, routes)
   const { moves, routes: weighed } = balanceDay(balanced)
@@ -245,7 +241,6 @@ export function routeBalanceRoutes(deps: RouteDeps) {
         const proposed = new Map(preview.moves.map((move) => [move.pickupId, move] as const))
         const errors = body.moves.flatMap((move, index) => (proposed.get(move.pickupId)?.toRouteId === move.toRouteId ? [] : [{ path: `moves.${index}`, message: NOT_PROPOSED }]))
         if (errors.length > 0) throw invalidRequest("body", errors)
-        // The accepted moves, in the order the balance proposed them, grouped by the routes they leave and join.
         const accepted = new Set(body.moves.map((move) => move.pickupId))
         const groups = new Map<string, { from: string; to: string; pickupIds: string[] }>()
         for (const move of preview.moves) {
@@ -262,7 +257,6 @@ export function routeBalanceRoutes(deps: RouteDeps) {
           const moving = group.pickupIds.map((id) => stops.find((row) => row.id === id) as PickupRow)
           await moveStops(tx, principal, byId.get(group.from) as RouteRow, byId.get(group.to) as RouteRow, moving, at)
         }
-        // Each route touched is asked a new Plan over its open stops as they now stand.
         const touched = [...new Set([...groups.values()].flatMap((group) => [group.from, group.to]))].sort()
         const asked: RouteBalanceResult["routes"] = []
         for (const routeId of touched) {

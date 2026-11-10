@@ -53,7 +53,6 @@ export async function requireTicketWorkProduct(tx: Tx, scope: Scope, id: string,
   return found.status
 }
 
-/** A project's charge rows, with their ids. */
 async function chargeRowsOf(tx: Tx, scope: Scope): Promise<(TicketCharge & { id: string })[]> {
   const rows = await tx
     .select({ id: ticketKindProduct.id, kind: ticketKindProduct.ticketKind, ticketTypeId: ticketKindProduct.ticketTypeId, productId: ticketKindProduct.productId })
@@ -62,7 +61,6 @@ async function chargeRowsOf(tx: Tx, scope: Scope): Promise<(TicketCharge & { id:
   return rows.map((row) => ({ ...row, kind: row.kind }))
 }
 
-/** A project's charges, in the kinds' order, then the types' by id. */
 async function chargesOf(tx: Tx, scope: Scope): Promise<TicketCharges> {
   const order = (charge: TicketCharge) => (charge.ticketTypeId !== null ? TICKET_KINDS.length : TICKET_KINDS.indexOf(charge.kind as TicketKind))
   const charges: TicketCharge[] = (await chargeRowsOf(tx, scope))

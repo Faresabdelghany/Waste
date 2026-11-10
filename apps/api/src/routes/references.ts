@@ -25,12 +25,12 @@
 // statement, not two hundred of these. They read their sentences from here,
 // so the singular and the plural refusal say the same thing.
 //
-// Four of the seven answer the row's status with the proof that it is there —
+// Some answer the row's status with the proof that it is there —
 // a Customer, a Product, a Property, a Shared Collection Point — because a new
 // reference is gated on it (@waste/domain/status-gates, Issue #79) and one statement
 // that says both is better than two that say one each. The refusal for a row
 // that is not there is unchanged, and comes first: the state of a row is only
-// a question once the row is. The other three have no status to answer.
+// a question once the row is.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { ProblemFieldError } from "@waste/contracts/problem"
@@ -67,7 +67,6 @@ export const NOT_A_CUSTOMER = "Not a customer of this company"
 /** What a body is told when it reaches for a property of another project; the fence the composite key already holds it to. */
 export const NOT_A_PROPERTY = "Not a property of this project"
 
-/** A table whose rows belong to a Project as well as to the company. */
 type ProjectTable = TenantTable & { projectId: PgColumn }
 
 /** What a project-scoped lookup is bounded by: the caller's company, and the project the parent record is in. */
@@ -273,7 +272,6 @@ export async function requireWarehouse(
 
 /** What a body is told when it reaches for a depot of another project; the fence the composite key already holds it to. */
 export const NOT_A_DEPOT = "Not a depot of this project"
-
 
 /** A Depot a body names: the project's, since a route leaves from its project's yard. */
 export async function requireDepot(tx: Tx, scope: Scope, id: string | null | undefined, path = "depotId"): Promise<void> {

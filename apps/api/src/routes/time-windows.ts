@@ -6,17 +6,14 @@
 // Postgres's `HH:MM:SS` as the wire's `HH:MM`.
 import type { DriverShift, TimeWindow } from "@waste/contracts/shifts"
 
-/** The two columns of a stored window as the wire's, or null where they hold none. */
 export const serviceWindowOf = (row: { serviceWindowStart: string | null; serviceWindowEnd: string | null }): TimeWindow | null =>
   row.serviceWindowStart === null || row.serviceWindowEnd === null ? null : { from: row.serviceWindowStart.slice(0, 5), to: row.serviceWindowEnd.slice(0, 5) }
 
-/** A body's service window as the columns it writes: none where the body left it out. */
 export function serviceWindowValues(window: TimeWindow | null | undefined): { serviceWindowStart?: string | null; serviceWindowEnd?: string | null } {
   if (window === undefined) return {}
   return { serviceWindowStart: window?.from ?? null, serviceWindowEnd: window?.to ?? null }
 }
 
-/** A body's shift as the five columns it writes: none where the body left it out. */
 export function shiftValues(shift: DriverShift | null | undefined): {
   shiftStart?: string | null
   shiftEnd?: string | null

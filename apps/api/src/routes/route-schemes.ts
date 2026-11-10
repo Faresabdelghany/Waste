@@ -337,7 +337,6 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         await requireDepot(tx, scope, patch.depotId)
         await requireUnloadingStation(tx, principal.companyId, patch.unloadingStationId)
         if (patch.validFrom !== undefined || patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
-        // The seasons the edit leaves the scheme with, held with its cadence (scheme-seasons.ts).
         const storedSeasons = await storedSeasonsOf(tx, principal.companyId, id)
         const seasonsLeft = seasons ?? storedSeasons
         requireRecurrence({ ...merged, seasons: seasonsLeft })
@@ -373,7 +372,6 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         const schemeRelease = schemeReleases(current, patch)
         await releaseHolds(tx, held, { routeSchemeId: id }, schemeRelease)
         if (schemeRelease.kind !== "all" && edit !== undefined) {
-          // The groups released whole in one statement; each group a day was taken from, by its own days.
           const groups = groupsReleasing(edit)
           await releaseHolds(tx, held, { collectionGroupIds: groups.filter((group) => group.release.kind === "all").map((group) => group.groupId) }, { kind: "all" })
           for (const { groupId, release } of groups) if (release.kind === "days") await releaseHolds(tx, held, { collectionGroupIds: [groupId] }, release)

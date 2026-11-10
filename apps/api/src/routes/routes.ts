@@ -70,7 +70,7 @@
 // answers it. The grant is `route-studio.routes` throughout, `view` to read
 // and `edit` to command. Every command carries the tenant and `inProjects`;
 // the reads — the list, a route's read and its device log — carry the tenant
-// and the reach (`routeReach`, auth/provider.ts): the office's projects, or,
+// and the reach (`routeReach`, execution-shapes.ts): the office's projects, or,
 // for a Service Provider's account, the routes its provider serves on their
 // operating date (#291 slice 23). A provider crews the routes it runs and
 // commands nothing else of them (#291 slice 23b): `assign` and `dispatch`
@@ -689,7 +689,6 @@ export function routeRoutes(deps: RouteDeps) {
         requireNotStarted(current, ASSIGNMENT_IS_THE_SESSIONS)
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const crew = crewOf(principal)
-        // The assignment the command leaves behind: the body's fields where given, the stored ones where not; a null given clears.
         const after: Assignment = {
           plannedVehicleId: body.vehicleId === undefined ? current.plannedVehicleId : body.vehicleId,
           plannedDriverId: body.driverId === undefined ? current.plannedDriverId : body.driverId,
@@ -711,7 +710,6 @@ export function routeRoutes(deps: RouteDeps) {
           depot: after.depotId !== current.depotId,
           station: after.unloadingStationId !== current.unloadingStationId,
         }
-        // The route's planned provider, too, it changes to itself alone.
         const elsewhere = crew !== undefined && changes.provider && after.plannedServiceProviderId !== crew.serviceProviderId
         if (crew !== undefined && (elsewhere || changes.depot || changes.station)) {
           throw invalidRequest("body", [
