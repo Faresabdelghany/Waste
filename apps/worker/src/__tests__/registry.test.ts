@@ -160,7 +160,7 @@ describe("the job registry", () => {
     ].sort())
   })
 
-  test("schedules on UTC's clock, catches a missed night or month up once, and runs the nightly jobs in their order: Plan Ahead, then the horizon sweep over what it generated, then the positions' purge, then the proofs'", () => {
+  test("schedules on UTC's clock, catches a missed night or month up once and lets a missed tick go, and runs the nightly jobs in their order: Plan Ahead, then the horizon sweep over what it generated, then the positions' purge, then the proofs'", () => {
     const scheduled = JOBS.filter((job) => job.schedule !== undefined)
     assert.ok(scheduled.length >= 5, "the ticks, the nightly jobs and the monthly run")
     for (const job of scheduled) {
@@ -168,6 +168,7 @@ describe("the job registry", () => {
       assert.equal(job.scheduleOptions?.tz, "UTC", `${job.queue}: the registry's times are UTC's, so they compare on one clock`)
       // A job due once a day or less often loses a night's or a month's work to a worker that was down unless it runs once on its return; a tick's next occurrence is the catch-up.
       if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) assert.equal(job.scheduleOptions?.missed, "once", `${job.queue}: a missed occurrence runs once when the worker is back`)
+      else assert.equal(job.scheduleOptions?.missed, "skip", `${job.queue}: a missed tick is the next tick's to read, never two at once`)
     }
     /** A nightly job's minute of the UTC day. */
     const minuteOfDay = (job: (typeof JOBS)[number]) => {
