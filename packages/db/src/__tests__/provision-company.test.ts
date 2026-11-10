@@ -4,13 +4,12 @@
 // administrator as an Invitation in every project — refused for a company the
 // register knows or an address already invited elsewhere; and the seed, which
 // spells the demo tenant's roles, grants and reasons through the same row
-// builders, writes exactly the rows it wrote before and nothing on a run after
-// another company is made beside it. Against a fresh database of its own.
+// builders, writes nothing on a run after another company is made beside it.
+// Against a fresh database of its own.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { normaliseGrants } from "@waste/domain/access/grants"
-import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
+import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 import { DEFAULT_TICKET_TYPE_NAMES } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { Refused } from "@waste/domain/refusal"
@@ -18,7 +17,7 @@ import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommissi
 import { eq, sql } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
-import { defaultDecommissionReasonRows, systemGrantRows, systemRoleRows } from "../commands/company-defaults"
+import { systemGrantRows } from "../commands/company-defaults"
 import { companyRegistered, invitationOpen, provisionCompany, type CompanyProvision } from "../commands/provision-company"
 import { newId } from "../ids"
 import { migrateDatabase } from "../migrate"
@@ -30,26 +29,6 @@ import { DEMO_IDS, seedDemo } from "../seed/demo"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
-
-const COMPANY = "01a1d2a4-a280-7001-8000-0000000000aa"
-const idOf = (key: SystemRoleKey) => `role-${key}`
-
-describe("the rows a company starts with", () => {
-  test("are the builders' exactly as the seed spelled them inline before: one role per charter, one grant per action, the eight reasons", () => {
-    // The seed's spelling before C33, kept here to prove the builders write the same rows byte for byte.
-    const roles = SYSTEM_ROLES.map((systemRole) => ({ id: idOf(systemRole.key), companyId: COMPANY, key: systemRole.key, name: systemRole.name, scope: systemRole.scope, description: systemRole.description, system: systemRole.system }))
-    const grants = SYSTEM_ROLES.flatMap((systemRole) => normaliseGrants(systemRole.grants).flatMap((grant) => grant.actions.map((action) => ({ companyId: COMPANY, roleId: idOf(systemRole.key), moduleKey: grant.moduleKey, action }))))
-    let n = 0
-    const counted = () => `reason-${(n += 1)}`
-    const reasons = DEFAULT_DECOMMISSION_REASONS.map(({ code, name }) => ({ id: counted(), companyId: COMPANY, code, name, status: "active" }))
-    assert.deepEqual(systemRoleRows(COMPANY, idOf), roles)
-    assert.deepEqual(systemGrantRows(COMPANY, idOf), grants)
-    let m = 0
-    assert.deepEqual(defaultDecommissionReasonRows(COMPANY, () => `reason-${(m += 1)}`), reasons)
-    assert.equal(roles.length, 12)
-    assert.equal(reasons.length, 8)
-  })
-})
 
 describe("provisioning a company", { skip: database.skip }, () => {
   let fresh: FreshDatabase

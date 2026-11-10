@@ -3,8 +3,9 @@
 // database of this file's own. Every reading the three seed files state in
 // their headers — each mapping, derivation, invention and omission — is
 // pinned here by the row it produces, so a header sentence and the data it
-// describes cannot part. What is proved beyond the rows: a second run writes
-// nothing; the references hold inside the tenant and the project; the four
+// describes cannot part. What is proved beyond the rows (that a second run
+// writes nothing is seed.test.ts's, over every table): the references hold
+// inside the tenant and the project; the four
 // boundaries are the map's own outline of their containers, stored as a
 // closed ring that covers them; both validated schemes pass the rules the API
 // holds a validated scheme to; and no operational table holds a row.
@@ -706,14 +707,6 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     const [counters] = await owner.sql<{ route: number; ticket: number; invoice: number }[]>`
       select next_route_number as route, next_ticket_number as ticket, next_invoice_number as invoice from wms.company where id = ${DEMO_IDS.company}`
     assert.deepEqual(counters, { route: 1000, ticket: 1000, invoice: 1000 })
-  })
-
-  test("a second run writes nothing: not a row of the configuration, not an updated_at", async () => {
-    const tables = CONFIGURATION_TABLES.map((name) => owner.sql`select * from ${owner.sql("wms")}.${owner.sql(name)} order by id`)
-    const before = JSON.stringify(await Promise.all(tables))
-    const report = await seedDemo(fresh.url)
-    assert.equal(report.changed, 0)
-    assert.equal(JSON.stringify(await Promise.all(CONFIGURATION_TABLES.map((name) => owner.sql`select * from ${owner.sql("wms")}.${owner.sql(name)} order by id`))), before)
   })
 
   /** Every configuration row without its stamps, keyed by table: what the seed says, whenever it was written. */

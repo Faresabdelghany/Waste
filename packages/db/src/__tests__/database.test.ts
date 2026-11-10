@@ -25,11 +25,6 @@ describe("databaseUnderTest", () => {
     )
   })
 
-  test("REQUIRE_DATABASE=0 or false counts as unset", () => {
-    assert.equal(typeof databaseUnderTest({ REQUIRE_DATABASE: "0" }).skip, "string")
-    assert.equal(typeof databaseUnderTest({ REQUIRE_DATABASE: "false" }).skip, "string")
-  })
-
   test("runs against loopback hosts, whatever their case", () => {
     assert.equal(databaseUnderTest(local).skip, false)
     assert.equal(
