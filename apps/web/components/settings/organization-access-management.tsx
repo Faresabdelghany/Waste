@@ -87,7 +87,7 @@ import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type B
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
-import { listView, RecordToolbar } from "@/components/platform/record-toolbar"
+import { densityClass, detailsColumn, listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
 const roleScopeOptions = [
   "Company",
@@ -169,8 +169,6 @@ const shownIn = (records: readonly BusinessRecord[], filters: BusinessFilters, r
   return record === undefined || matchesBusinessFilters(record, filters, readers)
 }
 
-/** A row's padding by the view's density, as every list's. */
-const rowPadding = (view: BusinessViewOptions) => (view.density === "compact" ? "py-1.5" : "py-3")
 
 const USER_ORDERS: readonly BusinessOrderingOption[] = [
   { value: "name", label: "Name" },
@@ -292,11 +290,13 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
             readers={TEAM_READERS}
             filters={filters}
             onFiltersChange={setFilters}
-            view={view}
-            onViewChange={setView}
-            orderingOptions={LIST_ORDERS}
-            defaults={defaultTeamView}
-            detailsLabel="Members"
+            view={{
+              value: view,
+              onChange: setView,
+              orderingOptions: LIST_ORDERS,
+              defaults: defaultTeamView,
+              builtinColumnChips: detailsColumn("Members"),
+            }}
           />
         }
         title="Teams"
@@ -311,7 +311,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
             </Button>
           }
         >
-          <Table>
+          <Table className={densityClass(view)}>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="h-10">Team</TableHead>
@@ -325,7 +325,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
             <TableBody>
               {pageRows.map((team) => (
                 <TableRow key={team.id}>
-                  <TableCell className={cn("min-w-52 font-medium text-foreground", rowPadding(view))}>{team.name}</TableCell>
+                  <TableCell className="min-w-52 py-3 font-medium text-foreground">{team.name}</TableCell>
                   {view.showDescription && <TableCell className="min-w-64 text-muted-foreground">{team.facts.Members ?? "None"}</TableCell>}
                   <TableCell>
                     <Badge variant="outline" className={cn("whitespace-nowrap", statusClassName(team.status))}>
@@ -602,11 +602,13 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               readers={userReaders}
               filters={userFilters}
               onFiltersChange={setUserFilters}
-              view={userView}
-              onViewChange={setUserView}
-              orderingOptions={USER_ORDERS}
-              defaults={defaultUserView}
-              detailsLabel="Emails"
+              view={{
+                value: userView,
+                onChange: setUserView,
+                orderingOptions: USER_ORDERS,
+                defaults: defaultUserView,
+                builtinColumnChips: detailsColumn("Emails"),
+              }}
             />
           }
           title="Users"
@@ -626,7 +628,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               </Button>
             }
           >
-            <Table>
+            <Table className={densityClass(userView)}>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-10">User</TableHead>
@@ -642,7 +644,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               <TableBody>
                 {usersPageRows.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className={cn("min-w-52", rowPadding(userView))}>
+                    <TableCell className="min-w-52 py-3">
                       <div className="flex items-center gap-2 font-medium text-foreground">
                         {user.name}
                         {user.primaryAdministrator && (
@@ -717,11 +719,13 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               readers={roleReaders}
               filters={roleFilters}
               onFiltersChange={setRoleFilters}
-              view={roleView}
-              onViewChange={setRoleView}
-              orderingOptions={LIST_ORDERS}
-              defaults={defaultRoleView}
-              detailsLabel="Access summary"
+              view={{
+                value: roleView,
+                onChange: setRoleView,
+                orderingOptions: LIST_ORDERS,
+                defaults: defaultRoleView,
+                builtinColumnChips: detailsColumn("Access summary"),
+              }}
             />
           }
           title="Roles"
@@ -741,7 +745,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               </Button>
             }
           >
-            <Table>
+            <Table className={densityClass(roleView)}>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-10">Role</TableHead>
@@ -769,7 +773,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
                       }
                     }}
                   >
-                    <TableCell className={cn("min-w-48 font-medium text-foreground", rowPadding(roleView))}>
+                    <TableCell className="min-w-48 py-3 font-medium text-foreground">
                       {roleDefinition.name}
                     </TableCell>
                     <TableCell>

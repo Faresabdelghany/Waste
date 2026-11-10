@@ -25,9 +25,7 @@ import {
 
 import {
   applyBusinessFilters,
-  businessFilterChips,
   emptyBusinessFilters,
-  removeBusinessFilterValue,
   type BusinessFilters,
   type FilterValueReaders,
 } from "@/lib/prototype/business-filters"
@@ -107,11 +105,9 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { ChipOverflow } from "@/components/chip-overflow"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { StatRow } from "@/components/ui/stat-row"
 import { PageActions, PageTopBar, PillTab, PillTabsList, TableCard } from "@/components/page-layout"
-import { BusinessFilterPopover } from "@/components/platform/business-filter-popover"
 import { SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
 import { dayIn } from "@/lib/format/clock"
 import { ROUTES_MODULE } from "@/lib/data/routes"
@@ -130,9 +126,9 @@ import {
   NoRecordsShown,
   recordStatusTone,
 } from "@/components/platform/business-record-views"
-import { RecordSearchInput } from "@/components/platform/record-search-input"
 import { readableKey } from "@/lib/data/record-key"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
+import { RecordToolbar } from "@/components/platform/record-toolbar"
 
 /** The date a generated route operates on (D17). */
 function routeOperatingDate(route: BusinessRecord): string | undefined {
@@ -810,28 +806,16 @@ function SchemeTabToolbar({
   readers: FilterValueReaders
 }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-1 flex-wrap items-center gap-2 min-w-[260px]">
-        <RecordSearchInput
-          value={query}
-          onChange={onQueryChange}
-          placeholder={placeholder}
-        />
-        <BusinessFilterPopover
-          records={records}
-          value={filters}
-          onChange={onFiltersChange}
-          readers={readers}
-        />
-      </div>
-      <ChipOverflow
-        chips={businessFilterChips(filters)}
-        onRemove={(key, value) =>
-          onFiltersChange(removeBusinessFilterValue(filters, key, value))
-        }
-        maxVisible={4}
-      />
-    </div>
+    <RecordToolbar
+      className="gap-3"
+      placeholder={placeholder}
+      query={query}
+      onQueryChange={onQueryChange}
+      records={records}
+      readers={readers}
+      filters={filters}
+      onFiltersChange={onFiltersChange}
+    />
   )
 }
 

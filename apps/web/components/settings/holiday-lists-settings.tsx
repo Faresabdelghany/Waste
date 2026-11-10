@@ -340,14 +340,16 @@ function HolidayListsIndex({
           readers={readers}
           filters={filters}
           onFiltersChange={setFilters}
-          view={view}
-          onViewChange={setView}
-          orderingOptions={ORDERING_OPTIONS}
-          defaults={HOLIDAY_LIST_VIEW_DEFAULTS}
-          columnOptions={HOLIDAY_LIST_OPTIONAL_COLUMNS}
-          groupOptions={GROUP_OPTIONS}
-          builtinColumnChips={BUILTIN_COLUMNS}
-          fixedColumnChips={FIXED_COLUMNS}
+          view={{
+            value: view,
+            onChange: setView,
+            orderingOptions: ORDERING_OPTIONS,
+            defaults: HOLIDAY_LIST_VIEW_DEFAULTS,
+            columnOptions: HOLIDAY_LIST_OPTIONAL_COLUMNS,
+            groupOptions: GROUP_OPTIONS,
+            builtinColumnChips: BUILTIN_COLUMNS,
+            fixedColumnChips: FIXED_COLUMNS,
+          }}
         />
       }
     >

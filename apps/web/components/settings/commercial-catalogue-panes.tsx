@@ -33,7 +33,7 @@ import { recordStatusTone } from "@/components/platform/business-record-views"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/platform/use-command-support"
-import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { densityClass, detailsColumn, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
 import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
 import { cn } from "@/lib/utils"
 import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
@@ -112,11 +112,13 @@ export function ProductsPane() {
           readers={PRODUCT_READERS}
           filters={filters}
           onFiltersChange={setFilters}
-          view={view}
-          onViewChange={setView}
-          orderingOptions={RECENT_ORDERS}
-          defaults={listView("updated")}
-          detailsLabel="Project"
+          view={{
+            value: view,
+            onChange: setView,
+            orderingOptions: RECENT_ORDERS,
+            defaults: listView("updated"),
+            builtinColumnChips: detailsColumn("Project"),
+          }}
         />
       }
     >
@@ -299,11 +301,13 @@ export function PriceListsPane() {
           readers={LIST_READERS}
           filters={filters}
           onFiltersChange={setFilters}
-          view={view}
-          onViewChange={setView}
-          orderingOptions={RECENT_ORDERS}
-          defaults={listView("updated")}
-          detailsLabel="Notes"
+          view={{
+            value: view,
+            onChange: setView,
+            orderingOptions: RECENT_ORDERS,
+            defaults: listView("updated"),
+            builtinColumnChips: detailsColumn("Notes"),
+          }}
         />
       }
     >
