@@ -30,14 +30,12 @@ import { labelOf } from "@waste/db/shapes/routes"
 
 import { problem } from "../problem"
 
-/** Why an unload has no transfer note, as the 409 says it; null where it has one. */
 export function noteRefusal(row: UnloadRow): ReturnType<typeof problem> | null {
   if (row.refusalReason !== null) return problem(409, { detail: `Unload ${row.id} was refused by the station: a load turned away was not transferred and has no transfer note` })
   if (row.reviewStatus === "corrected" && row.reviewCorrectionUnloadId !== null) return problem(409, { detail: `This unload was corrected by unload ${row.reviewCorrectionUnloadId}; its transfer note is that one's` })
   return null
 }
 
-/** The rows one unload's note is rendered from, under its company. */
 export async function transferNoteInputOf(tx: Tx, companyId: string, row: UnloadRow): Promise<TransferNoteInput> {
   const [[holder], [scope], [ran], [station], [fraction], [crew]] = await Promise.all([
     tx.select({ legalName: company.legalName, registrationNumber: company.registrationNumber, postalAddress: company.postalAddress }).from(company).where(eq(company.id, companyId)),

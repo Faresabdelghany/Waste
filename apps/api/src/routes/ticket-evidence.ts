@@ -40,7 +40,6 @@ export function whenOn(instant: string, timezone: string): string {
   return `${time} on ${day}`
 }
 
-/** The stop a ticket is about, with what it recorded and the reply that quotes it; null for a ticket about no stop. */
 export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow): Promise<StopEvidence | null> {
   if (row.pickupId === null) return null
   const [stop] = await tx
@@ -70,7 +69,6 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
   }
 }
 
-/** The reply's words: the record's sentence, then the office's note where it gave one. */
 export const replyBody = (evidence: StopEvidence, note: string | undefined): string => (note === undefined ? evidence.reply : `${evidence.reply}\n\n${note}`)
 
 /** Records a reply on the customer's thread: the one way a reply is written, and where its sending will be. */

@@ -35,7 +35,6 @@ const Assignments = z.array(ServiceAreaAssignment)
 
 const MODULE = "service-providers.service-areas"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const MARCH = "2026-03-01"
 const JULY = "2026-07-01"
@@ -55,7 +54,6 @@ const inReadOrder = (ids: readonly string[]): string[] => [...ids].sort()
 describe("the service area and assignment endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -117,7 +115,6 @@ describe("the service area and assignment endpoints", { skip: database.skip }, (
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  /** An area body a caller may send: Copenhagen Central, the year 2026, no planning areas, no fractions, no assignment. */
   const body = (code: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     code,
@@ -548,7 +545,6 @@ describe("the service area and assignment endpoints", { skip: database.skip }, (
       assert.deepEqual([paths(outside), messages(outside)], [["validTo"], [OUTSIDE_AREA]])
       const overlapping = await refused(await olivia(`/service-area-assignments/${made.assignment.id}`, { method: "PATCH", body: { validTo: AUGUST } }), 409)
       assert.equal(overlapping.detail, ASSIGNMENT_RUNNING)
-      // Two prices under the assignment, and an end that leaves them outside.
       const price = (productId: string) => create(olivia, "/service-provider-prices", { serviceAreaAssignmentId: made.assignment?.id, productId, bidMinor: 3_000, validFrom: MARCH, validTo: JULY }, ServiceProviderPrice)
       const residualPrice = await price(products.residual.id)
       const glassPrice = await price(products.glass.id)

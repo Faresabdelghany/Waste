@@ -51,9 +51,10 @@
 // today names, whatever the scheme's status; the patch is refused (409)
 // counting them, since the rows in the way are not in the body and have to
 // be released, or reassigned, first (the `refuseStranded` shape of
-// routes/periods.ts, the pieces spelled once in @waste/domain/status-gates and
-// routes/scheme-groups.ts, since a driver is taken out of service the same
-// way). An allocation names a vehicle as its vehicle or as its trailer, and a
+// @waste/db/commands/periods, the pieces spelled once in
+// @waste/domain/resources/allocations and /fleet, routes/vehicle-allocations.ts
+// and routes/scheme-groups.ts, since a driver is taken out of service the
+// same way). An allocation names a vehicle as its vehicle or as its trailer, and a
 // trailer is a vehicle of this table, so both columns are counted. The counts
 // run under the vehicle's row lock, taken before the current row is read, so
 // a retirement and an allocation being made serialise on the vehicle. The
@@ -303,7 +304,6 @@ const registrationTaken = (registration: string) => `This company already has a 
 const CALLSIGN_TAKEN = "vehicle_callsign_idx"
 const callsignTaken = (callsign: string) => `This company already has a vehicle with the callsign ${callsign}`
 
-/** The sentences a write here can earn, and only for the fields the body gave. */
 const collisions = (values: { registration?: string; callsign?: string | null }): Record<string, string> => ({
   ...(values.registration === undefined ? {} : { [REGISTRATION_TAKEN]: registrationTaken(values.registration) }),
   ...(values.callsign == null ? {} : { [CALLSIGN_TAKEN]: callsignTaken(values.callsign) }),
@@ -313,7 +313,7 @@ const collisions = (values: { registration?: string; callsign?: string | null })
 const liveAllocationsNameThis = liveAllocationsName("vehicle")
 const groupsNameThis = groupsName("vehicle")
 
-/** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (@waste/domain/status-gates spells the rest). */
+/** The allocations a retirement would strand: the live ones naming the vehicle as the vehicle or as the trailer (routes/vehicle-allocations.ts spells the rest). */
 const liveAllocations = (companyId: string, vehicleId: string, now: Date) =>
   liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)), now)
 
@@ -323,7 +323,6 @@ const { scope, noSuch: noSuchVehicle, get: getVehicle, locked: lockedVehicle, li
 // O30 of #290) share, so an imported row is held to every rule a form's is and
 // refused in the same sentence.
 
-/** Registers a vehicle with its compartments: the project reached, the fleet the caller's own, every reference held, then the row and its compartments. */
 export async function createVehicle(tx: Tx, principal: Principal, body: VehicleCreate, now: () => Date): Promise<Vehicle> {
   const { compartments, ...values } = body
   await requireReachedProject(tx, principal, values.projectId, now)
@@ -357,7 +356,6 @@ export async function createVehicle(tx: Tx, principal: Principal, body: VehicleC
   return await vehicleWithCompartments(tx, principal.companyId, row)
 }
 
-/** Changes one vehicle the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and a retirement refused under what it would strand. */
 export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch, now: () => Date): Promise<Vehicle> {
   // The row every rule below is held against, locked before it is read
   // (`@waste/db/commands/shared`): a retirement and an allocation being made are two
@@ -430,7 +428,6 @@ export function vehicleRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) await requireReachedProject(tx, principal, projectId, now, "projectId", "query")
         const { items, nextCursor } = await listVehicles(tx, principal, at, projectId === undefined ? undefined : eq(vehicle.projectId, projectId), kind === undefined ? undefined : eq(vehicle.kind, kind), vehicleTypeId === undefined ? undefined : eq(vehicle.vehicleTypeId, vehicleTypeId), status === undefined ? undefined : eq(vehicle.status, status), homeDepotId === undefined ? undefined : eq(vehicle.homeDepotId, homeDepotId))
-        // Paged first, so the row that only proves there is a next page is not one whose compartments are loaded.
         const compartments = await compartmentsOf(tx, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => vehicleOf(row, compartments.get(row.id) ?? [])), nextCursor })
       },

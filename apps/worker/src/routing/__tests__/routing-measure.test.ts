@@ -19,11 +19,12 @@ import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
 import { asc, eq } from "drizzle-orm"
+import type { Job } from "pg-boss"
 
-import { routingMeasure } from "../routing/measure"
-import { databaseUnderTest, ownerUnderTest } from "./database"
-import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "./consumer-fixtures"
-import { jobContext } from "./context"
+import { routingMeasure } from "../measure"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
+import { dropConsumerTenant, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
 
 const database = databaseUnderTest()
 const owner = ownerUnderTest()
@@ -85,7 +86,11 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
     return planId
   }
 
-  const run = (planId: string) => routingMeasure.handler([{ id: testId(), name: ROUTING_MEASURE_QUEUE, data: { planId, companyId: tenant.companyId } } as never], context())
+  /** The Plan's job as a sender before #171 sent it, with no class: the handler reads it as interactive. */
+  const run = (planId: string) => {
+    const job: Job<RoutingJobData> = { id: testId(), name: ROUTING_MEASURE_QUEUE, data: { planId, companyId: tenant.companyId }, expireInSeconds: 600, heartbeatSeconds: null, signal: new AbortController().signal }
+    return routingMeasure.handler([job], context())
+  }
 
   const planRow = async (planId: string) => {
     const rows = await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select().from(plan).where(eq(plan.id, planId)))
@@ -196,7 +201,5 @@ describe("routing.measure through the fake provider", { skip: database.skip || o
       retryBackoff: true,
       retryDelayMax: 300,
     })
-    const data: RoutingJobData = { planId: "x", companyId: "y" }
-    assert.ok(data)
   })
 })

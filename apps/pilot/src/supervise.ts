@@ -59,6 +59,14 @@ export type ChildSpec = {
 
 export type Sink = { write(text: string): unknown }
 
+/** Runs `callback` once `ms` have passed; what it answers cancels that. */
+export type Schedule = (callback: () => void, ms: number) => () => void
+
+const nodeSchedule: Schedule = (callback, ms) => {
+  const timer = setTimeout(callback, ms)
+  return () => clearTimeout(timer)
+}
+
 export type SuperviseOptions = {
   api: ChildSpec
   worker: ChildSpec
@@ -69,6 +77,8 @@ export type SuperviseOptions = {
   out?: Sink
   err?: Sink
   now?: () => number
+  /** Starts the restart delays and the kill grace; Node's timers by default. A test hands in its own to move them on its clock. */
+  schedule?: Schedule
   /** Told the children's pids whenever one starts or ends; main.ts hands them to the memory line. */
   children?: (pids: ChildPids) => void
 }
@@ -127,6 +137,7 @@ export function supervise({
   out = process.stdout,
   err = process.stderr,
   now = Date.now,
+  schedule = nodeSchedule,
   children,
 }: SuperviseOptions): Promise<number> {
   return new Promise((resolve) => {
@@ -134,7 +145,7 @@ export function supervise({
     let shuttingDown = false
     let apiExit: Exit | undefined
     let running: Running | undefined
-    let restartTimer: ReturnType<typeof setTimeout> | undefined
+    let cancelRestart: (() => void) | undefined
     let backoffMs = timings.backoffInitialMs
     const pids: ChildPids = {}
     const report = (name: "api" | "worker", pid: number | undefined) => {
@@ -168,14 +179,14 @@ export function supervise({
       const { child, ended } = target
       if (hasExited(child)) return ended
       child.kill(signal)
-      const timer = setTimeout(() => {
+      const cancelKill = schedule(() => {
         if (!hasExited(child)) {
           log(`${name} did not exit within ${timings.killAfterMs} ms after ${signal}; killing it`)
           child.kill("SIGKILL")
         }
       }, timings.killAfterMs)
       const exit = await ended
-      clearTimeout(timer)
+      cancelKill()
       log(`${name} exited code=${exit.code} signal=${exit.signal}`)
       return exit
     }
@@ -190,7 +201,7 @@ export function supervise({
         const delay = backoffMs
         backoffMs = Math.min(backoffMs * 2, timings.backoffMaxMs)
         log(`worker exited code=${code} signal=${signal} after ${(upMs / 1000).toFixed(1)} s; restarting in ${delay / 1000} s`)
-        restartTimer = setTimeout(() => {
+        cancelRestart = schedule(() => {
           if (!shuttingDown) runWorker()
         }, delay)
       })
@@ -202,7 +213,7 @@ export function supervise({
     const shutdown = async (reason: string, signal: NodeJS.Signals) => {
       if (shuttingDown) return
       shuttingDown = true
-      clearTimeout(restartTimer)
+      cancelRestart?.()
       log(reason)
       const [apiTerminated] = await Promise.all([terminate(apiRunning, "api", signal), terminate(running, "worker", signal)])
       const code = exitCodeOf(apiExit ?? apiTerminated ?? { code: 0, signal: null })

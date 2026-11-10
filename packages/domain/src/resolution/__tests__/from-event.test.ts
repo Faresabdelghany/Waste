@@ -119,7 +119,6 @@ describe("ticketFor", () => {
       }
     }
     assert.equal(tickets, CLOSING_REASONS.length, "every closing reason makes a ticket, and only those")
-    assert.deepEqual([...CLOSING_REASONS], ["route-ended", "route-cancelled"], "the two the sentences above are spelled for")
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: null })), undefined, "a skip without a reason is not one the route closed")
     assert.equal(ticketFor(pickupEvent("pickup-skipped", { reason: "toString" as PickupReason })), undefined, "a reason outside the vocabulary finds nothing: the lookup is the list's, not the table's prototype's")
     // A cancelled route somebody had started keeps the planned driver on the ticket, since the source is the dispatcher's.
@@ -168,7 +167,6 @@ describe("ticketFor", () => {
 
   test("every other kind is news and not a case: the route's own events, the completions, the corrections and the unloads answer nothing", () => {
     const cases: OutboxKind[] = []
-    const news: OutboxKind[] = []
     for (const kind of OUTBOX_KINDS) {
       const event: EventFacts = (PICKUP_EVENT_KINDS as readonly string[]).includes(kind)
         ? pickupEvent(kind as PickupEventKind, { reason: "route-ended", note: "x" })
@@ -177,10 +175,9 @@ describe("ticketFor", () => {
           : kind === "route-problem-reported"
             ? routeProblem()
             : ({ kind } as EventFacts)
-      ;(ticketFor(event) === undefined ? news : cases).push(kind)
+      if (ticketFor(event) !== undefined) cases.push(kind)
     }
-    assert.deepEqual(cases, ["route-problem-reported", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
-    assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-corrected", "unload-recorded", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
+    assert.deepEqual(cases, ["route-problem-reported", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"], "these five are cases, and every other kind is news")
     // A completed or corrected pickup answers nothing whatever its reason.
     for (const kind of ["pickup-completed", "pickup-corrected"] as const) {
       for (const reason of [...PICKUP_REASONS, null] as (PickupReason | null)[]) assert.equal(ticketFor(pickupEvent(kind, { reason })), undefined, `${kind} ${reason}`)

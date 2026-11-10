@@ -90,7 +90,6 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
     await ownerPool?.close()
   })
 
-  /** The routes of the company the principal's provider serves, oldest first. */
   const served = (principal: Principal): Promise<string[]> =>
     withCompany(pool.db, tenant.companyId, async (tx) =>
       (
@@ -102,7 +101,6 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
       ).map((row) => row.id),
     )
 
-  /** The assignments the principal reaches. */
   const reached = (principal: Principal): Promise<string[]> =>
     withCompany(pool.db, tenant.companyId, async (tx) =>
       (
@@ -145,7 +143,6 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
     assert.equal((await served(principalOf(tenant.serviceProviders.nordren, []))).includes(routes.unheld), false)
   })
 
-  /** The routes the principal reads through `reachesRoute`, and the routes whose pickups it reads through `reachesThroughRoute`. */
   const reachedRoutes = (principal: Principal): Promise<{ routes: string[]; pickupRoutes: string[] }> =>
     withCompany(pool.db, tenant.companyId, async (tx) => ({
       routes: (

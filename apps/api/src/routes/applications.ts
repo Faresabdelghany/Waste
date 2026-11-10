@@ -54,12 +54,10 @@ const ApplicationPage = Page(Application)
 
 const { get: getApplication, locked: lockedApplication, list: listApplications } = scoped(application, { noun: "application", reach: "projects", columns: applicationColumns })
 
-/** One Application on the wire, with its latest Decision. */
 async function answer(tx: Tx, companyId: string, row: ApplicationRow): Promise<Application> {
   return applicationOf(row, (await latestDecisions(tx, companyId, [row.id])).get(row.id))
 }
 
-/** The places and the subscription a body names: each the Application's project's. */
 async function requireSubject(tx: Tx, principal: Principal, projectId: string, body: { propertyId?: string | null; sharedCollectionPointId?: string | null; subscriptionId?: string | null }): Promise<void> {
   const subject = { companyId: principal.companyId, projectId }
   await requireProperty(tx, subject, body.propertyId)
@@ -106,7 +104,6 @@ async function subjectRefusal(tx: Tx, companyId: string, subject: Subject, check
 
 const SUBJECT_SENTENCES = { party: NOT_A_PARTY, customer: NOT_THE_CUSTOMERS, place: ANOTHER_PLACE } as const
 
-/** A command's route: the row locked, its move judged by the domain, and the status written; `decide` appends its Decision first. */
 async function moved(tx: Tx, principal: Principal, id: string, command: ApplicationCommand): Promise<ApplicationRow> {
   const current = await lockedApplication(tx, principal, id)
   // A withdrawal from review after an appeal withdraws the appeal: back to the Decision the Application has.

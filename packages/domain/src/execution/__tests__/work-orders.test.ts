@@ -6,13 +6,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BOOKED_WITH, isLedgerService, LEDGER_SERVICES, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, reservedContainerOf, takenContainerOf } from "../work-orders"
+import { BOOKED_WITH, isLedgerService, LEDGER_STEPS, ledgerMovedThenCorrected, ledgerNotRecorded, reservedContainerOf, takenContainerOf } from "../work-orders"
 import { CONTAINERLESS_SERVICES } from "../office-stops"
 import { OFFICE_STOP_SERVICES, PICKUP_SERVICES } from "../vocabulary"
 
 describe("the ledger's work orders", () => {
   test("are the delivery, the removal and the swap; the office books every service", () => {
-    assert.deepEqual([...LEDGER_SERVICES], ["deliver", "remove", "swap"])
     assert.deepEqual([...OFFICE_STOP_SERVICES], [...PICKUP_SERVICES])
     assert.deepEqual(CONTAINERLESS_SERVICES, ["empty", "bulky"], "an emptying at an address and a bulky collection stand without a container; every work order names one")
     assert.deepEqual(PICKUP_SERVICES.filter(isLedgerService), ["deliver", "remove", "swap"])

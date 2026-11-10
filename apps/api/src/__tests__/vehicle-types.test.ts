@@ -28,7 +28,6 @@ const inReadOrder = (ids: readonly string[]): string[] => [...ids].sort()
 describe("the vehicle type endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -46,7 +45,6 @@ describe("the vehicle type endpoints", { skip: database.skip }, () => {
   let bin240: ContainerType
   let bin660: ContainerType
   let underground: ContainerType
-  /** The other company's. */
   let theirContainerType: ContainerType
   let theirType: VehicleType
 

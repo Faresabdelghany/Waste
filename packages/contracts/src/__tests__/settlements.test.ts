@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { A_PERIOD_ENDS, PRICED_TOGETHER, pricedWhole } from "@waste/domain/finance/settlements"
-import { SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
 import { ENDS_AFTER_IT_STARTS } from "@waste/domain/periods"
 
 import { Settlement, SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementLine, SettlementListQuery, SettlementReopen } from "../settlements"
@@ -42,7 +41,6 @@ describe("Settlement", () => {
     assert.deepEqual(Settlement.parse(open), open)
     const closed = { ...settlement, status: "closed", closedAt: WHEN, closedBy: OTHER }
     assert.deepEqual(Settlement.parse(closed), closed)
-    for (const status of SETTLEMENT_STATUSES) assert.equal(Settlement.safeParse({ ...settlement, status }).success, true, status)
   })
 
   test("is the one effective-dated resource whose end is required: without validTo it does not parse, and it is told why", () => {

@@ -7,11 +7,11 @@
 //   Location        — the row's own single-row GET, relative to the origin:
 //                     the collection the body was posted to under the id the
 //                     server minted. That collection is the last segment of
-//                     the request path even for the two nested creates, since
+//                     the request path even for a nested create, since
 //                     a subscription posted under `/agreements/:id/subscriptions`
 //                     is read at `/subscriptions/:id` and a placement under
-//                     `/containers/:id/placements` at `/placements/:id`. The
-//                     one create read under a name of its own says so with
+//                     `/containers/:id/placements` at `/placements/:id`. A
+//                     create read under a name of its own says so with
 //                     `readAt`: a boundary version posted under
 //                     `/planning-areas/:id/boundaries` is read at
 //                     `/planning-area-boundaries/:id` (Issue #97);

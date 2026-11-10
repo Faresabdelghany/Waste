@@ -9,7 +9,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { MINOR_MAX } from "../money"
 import { CONDITION_NAMES, PRICE_CONDITIONS, priceListIdFor, priceOccurrence, RESOLUTION_RULE, resolvePrice, scoreOf, type PriceInput, type PriceRow } from "../pricing"
 
 const HARBOR = "018f7c34-a000-7000-8000-000000000001"
@@ -232,6 +231,5 @@ describe("priceOccurrence", () => {
     assert.equal(huge.price, null)
     assert.equal(huge.resolution?.winner?.row.id, "harbor", "the resolution travels with the block")
     assert.equal(priceOccurrence({ ...occurrence, quantity: 143_165 }, labels).blockReason, null, "2 147 475 000 fits")
-    assert.equal(MINOR_MAX, 2 ** 31 - 1)
   })
 })

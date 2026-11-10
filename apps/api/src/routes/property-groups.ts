@@ -144,8 +144,6 @@ export function propertyGroupRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const { items, nextCursor } = await listGroups(tx, principal, at, projectId === undefined ? undefined : eq(propertyGroup.projectId, projectId))
-        // Paged first, so the row that only proves there is a next page is
-        // not one of the groups whose members are loaded.
         const gathered = await entriesOf(tx, members, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => groupOf(row, gathered.get(row.id) ?? [])), nextCursor })
       },

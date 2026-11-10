@@ -132,7 +132,6 @@ const columns = {
 
 type Row = Pick<typeof priceList.$inferSelect, keyof typeof columns>
 
-/** The list on the wire. */
 function listOf(row: Row): PriceList {
   return {
     id: row.id,
@@ -227,7 +226,7 @@ async function requireDefaultInProjectCurrency(tx: Tx, within: Scope, currency: 
   if (currency !== expected) throw invalidRequest("body", [{ path: "isDefault", message: defaultListCurrency(expected) }])
 }
 
-/** The `where` of the rows a list's move would strand, for `refuseStranded` (routes/periods.ts): this company's rows of the list whose period leaves the new one. */
+/** The `where` of the rows a list's move would strand, for `refuseStranded` (@waste/db/commands/periods): this company's rows of the list whose period leaves the new one. */
 const strandedRowsOf = (list: { companyId: string; id: string }, period: Period) =>
   and(eq(priceListRow.companyId, list.companyId), eq(priceListRow.priceListId, list.id), notWithin(priceListRow, period))
 
@@ -239,10 +238,8 @@ async function requireConditions(tx: Tx, within: Scope, values: PriceListRowCrea
   await requireCustomer(tx, within.companyId, values.customerId)
 }
 
-/** The ids of one kind the rows and the query name, each once. */
 const named = (values: readonly (string | null | undefined)[]): string[] => [...new Set(values.filter((value): value is string => value != null))]
 
-/** One kind's names by id, in one statement, or nothing when nothing names one. */
 async function namesOf(tx: Tx, companyId: string, table: typeof planningArea | typeof containerType | typeof wasteFraction | typeof customer, ids: readonly string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map()
   const rows = await tx

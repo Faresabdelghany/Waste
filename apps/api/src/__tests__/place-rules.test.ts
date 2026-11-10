@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-
 import { BOTH_HOURS_OR_NEITHER, PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 
 import { ProblemError } from "../problem"
@@ -12,12 +11,10 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const providerIssue = { path: "serviceProviderId", message: PROVIDER_WITH_PROVIDER_OWNERSHIP }
 const hoursIssue = { path: "closesAt", message: BOTH_HOURS_OR_NEITHER }
 
-/** A stored depot the company runs, with no hours. */
 const company: PlaceShape = { ownership: "company", serviceProviderId: null, opensAt: null, closesAt: null }
 /** A stored provider's depot, open six to four, as Postgres spells the hours. */
 const providers: PlaceShape = { ownership: "service-provider", serviceProviderId: PROVIDER, opensAt: "06:00:00", closesAt: "16:00:00" }
 
-/** The 400 a refused patch raises, as its field errors. */
 const refusal = (run: () => void) => {
   try {
     run()

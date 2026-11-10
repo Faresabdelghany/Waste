@@ -80,7 +80,6 @@ describe("the ledger's work orders", { skip: database.skip || owner.skip }, () =
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
     return into
   }
-  /** A ready route for Mads on WH-24 on the day, Mads's session open on it. */
   const running = async (): Promise<RouteDetail> => {
     const route = await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: DAY, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id, acceptSameDay: true } }), RouteDetail)
     return route

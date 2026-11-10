@@ -5,11 +5,11 @@
 // `@waste/tooling/database-under-test`, the same one `packages/db` applies to
 // its two URLs.
 //
-// One proof needs the owner (`ownerUnderTest`, DATABASE_ADMIN_URL): that the
-// principal lookup binds the claim to the tenant by itself and not through the
-// tenant fence, which only a role that bypasses RLS can show. It reads and
-// nothing else, but the owner URL is the local stack's by rule (packages/db),
-// so a hosted host is refused here too.
+// A proof that must see past the tenant fence needs the owner
+// (`ownerUnderTest`, DATABASE_ADMIN_URL), a role that bypasses RLS: that the
+// principal lookup binds the claim to the tenant by itself, say. The owner URL
+// is the local stack's by rule (packages/db), so a hosted host is refused here
+// too.
 import { databaseUnderTest as variablesUnderTest, LOCAL_STACK_HINT } from "@waste/tooling/database-under-test"
 import { isLocalHost } from "@waste/db/local-host"
 
@@ -29,7 +29,7 @@ export type OwnerUnderTest = {
   url: string
 }
 
-/** The owner's URL, for the one test that must see through the fence; same skip/fail rule, loopback only. */
+/** The owner's URL, for a test that must see through the fence; same skip/fail rule, loopback only. */
 export function ownerUnderTest(env: Readonly<Record<string, string | undefined>> = process.env): OwnerUnderTest {
   const found = variablesUnderTest(["DATABASE_ADMIN_URL"], { hint: LOCAL_STACK_HINT, env })
   const url = found.urls.DATABASE_ADMIN_URL

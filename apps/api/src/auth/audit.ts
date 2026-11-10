@@ -29,7 +29,6 @@ export function changeReasonOf(header: string | undefined): string | null {
   return reason
 }
 
-/** Names the writer of the request's transaction: the Principal, and the reason its header gives. */
 export function writtenBy(tx: Tx, principal: Principal, header: string | undefined): Promise<void> {
   return actAs(tx, { userAccountId: principal.user.id, reason: changeReasonOf(header) })
 }

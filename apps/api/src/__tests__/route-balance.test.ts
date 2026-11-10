@@ -140,7 +140,6 @@ describe("balancing a day across vehicles", { skip: database.skip || owner.skip 
     const weighed = new Map(proposal.routes.map((day) => [day.routeId, day] as const))
     assert.deepEqual([weighed.get(over.id)?.before.kg, weighed.get(over.id)?.before.overCapacityKg, weighed.get(over.id)?.after.overCapacityKg], [72, 22, 0])
     assert.deepEqual([weighed.get(beside.id)?.before.kg, weighed.get(beside.id)?.after.kg, weighed.get(beside.id)?.after.overCapacityKg], [24, 48, null])
-    // The route read says the same of the route over: its load against its payload.
     assert.deepEqual([(await read(over.id)).workload.expectedKg, (await read(over.id)).workload.overCapacityKg], [72, 22])
   })
 

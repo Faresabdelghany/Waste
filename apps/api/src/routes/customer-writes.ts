@@ -61,7 +61,6 @@ const registrationTaken = (registrationNumber: string) =>
 
 export const { noSuch: noSuchCustomer, get: getCustomer, list: listCustomers } = scoped(customer, { noun: "customer", reach: "company", columns: customerColumns })
 
-/** The one sentence a collision here can earn, and only when the body gave a number to collide on. */
 const collisions = (registrationNumber: string | null | undefined): Record<string, string> =>
   registrationNumber == null ? {} : { [REGISTRATION_TAKEN]: registrationTaken(registrationNumber) }
 
@@ -69,7 +68,6 @@ const collisions = (registrationNumber: string | null | undefined): Record<strin
 const lowercased = <T extends { email?: string | null }>(values: T): T =>
   values.email == null ? values : { ...values, email: values.email.toLowerCase() }
 
-/** Registers a customer in the caller's company. */
 export async function createCustomer(tx: Tx, principal: Principal, body: CustomerCreate): Promise<Customer> {
   const values = lowercased(body)
   const [row] = await refuseDuplicate(collisions(values.registrationNumber), () =>

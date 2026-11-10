@@ -97,7 +97,6 @@ type StopWarnings = ActivePlan["stopWarnings"]
 /** A Plan's stop as its readings take it: a pickup, or an unload visit on the way (O15 of #290). */
 export type PlanStopRow = { planId: string; kind: string; pickupId: string | null; unloadingStationId: string | null; position: number; warning: string | null }
 
-/** Each Plan's stops in its order, by its id. */
 export async function planStopsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, PlanStopRow[]>> {
   if (planIds.length === 0) return new Map()
   const rows = await tx

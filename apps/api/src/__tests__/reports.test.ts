@@ -58,7 +58,6 @@ const owner = ownerUnderTest()
 /** The request's clock: a Saturday morning, after everything the week did. */
 const NOW = new Date("2026-10-24T08:00:00Z")
 
-/** The week the reports are read over. */
 const WEEK = "from=2026-10-05&to=2026-10-11"
 
 const routeCounts = (counts: Partial<RouteCounts> = {}): RouteCounts => ({ total: 0, planned: 0, ready: 0, active: 0, completed: 0, cancelled: 0, started: 0, onTime: 0, late: 0, unjudged: 0, ...counts })
@@ -123,7 +122,6 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       { moduleKey: "improve.performance", actions: ["view"] },
       { moduleKey: "improve.analytics", actions: ["view"] },
     ])
-    // Another company's viewer holds Performance and nothing it counts, and not Analytics.
     await grantRole(pool, b.companyId, b.roles.viewer.id, [{ moduleKey: "improve.performance", actions: ["view"] }])
     app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)

@@ -42,7 +42,6 @@ const refusal = (result: { success: boolean; error?: { issues: readonly { path: 
 
 describe("UserStatus", () => {
   test("is the three a user can be in, and it is derived: no column holds it", () => {
-    assert.deepEqual(UserStatus.options, ["invited", "active", "deactivated"])
     for (const status of ["pending", "Active", "", "disabled"]) {
       assert.equal(UserStatus.safeParse(status).success, false, JSON.stringify(status))
     }
@@ -156,7 +155,9 @@ describe("UserPatch", () => {
 
   test("refuses a member it does not own: the status is derived and the e-mail is the invitation's", () => {
     for (const owned of ["status", "email", "primaryAdministrator", "deactivatedAt", "id"]) {
-      assert.match(refusal(UserPatch.safeParse({ fullName: "x", [owned]: ID }))[0].message, new RegExp(owned))
+      const issues = refusal(UserPatch.safeParse({ fullName: "x", [owned]: ID }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], owned)
+      assert.match(issues[0].message, new RegExp(owned), owned)
     }
     assert.equal(UserPatch.safeParse({ fullName: "" }).success, false)
     assert.equal(UserPatch.safeParse({ allProjects: false }).success, false)
@@ -201,7 +202,9 @@ describe("RoleCreate", () => {
       [{ moduleKey: "operate.tickets", actions: ["view"] }],
     )
     for (const owned of ["key", "system", "id", "createdAt"]) {
-      assert.match(refusal(RoleCreate.safeParse({ name: "n", scope: "s", description: "d", [owned]: "x" }))[0].message, new RegExp(owned))
+      const issues = refusal(RoleCreate.safeParse({ name: "n", scope: "s", description: "d", [owned]: "x" }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], owned)
+      assert.match(issues[0].message, new RegExp(owned), owned)
     }
   })
 
@@ -220,7 +223,9 @@ describe("RolePatch", () => {
     assert.deepEqual(RolePatch.parse({ scope: "Company", description: "d" }), { scope: "Company", description: "d" })
     assert.deepEqual(refusal(RolePatch.safeParse({})), [{ path: "", message: "Give at least one field to change" }])
     for (const owned of ["key", "system", "grants", "id"]) {
-      assert.match(refusal(RolePatch.safeParse({ name: "x", [owned]: "y" }))[0].message, new RegExp(owned))
+      const issues = refusal(RolePatch.safeParse({ name: "x", [owned]: "y" }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], owned)
+      assert.match(issues[0].message, new RegExp(owned), owned)
     }
   })
 })

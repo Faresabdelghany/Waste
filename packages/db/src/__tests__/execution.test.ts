@@ -26,6 +26,7 @@ import { and, eq, getTableName, sql } from "drizzle-orm"
 import type { PgTable } from "drizzle-orm/pg-core"
 
 import { createDb, type Database, type Tx } from "../client"
+import { nextNumbers } from "../commands/shared"
 import { migrateDatabase } from "../migrate"
 import { API_ROLE } from "../roles"
 import { role, userAccount } from "../schema/access"
@@ -300,7 +301,6 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
   test("0008 created the seven tables in wms, each fenced, four with the updated_at trigger and the three ledgers with none, and gave company its counter at 1000; 0114 gave the outbox the route problem's trigger", async () => {
     // The API role's policies alone: the public door's own (0017) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
-    assert.equal(names.length, 7)
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] | null }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
         (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname and 'wms_api' = any (p.roles)) as policies,
@@ -323,7 +323,6 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
            (values (${API_ROLE}::text), (current_user::text)) as r(rolename),
            (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) as p(privilege)
       order by t.relation, r.rolename, p.privilege`
-    assert.equal(rows.length, 40)
     const denied = rows.filter((row) => !row.granted).map((row) => `${row.rolename} ${row.privilege} ${row.relation}`)
     assert.deepEqual(denied.sort(), LEDGERS.flatMap((ledger) => [`${API_ROLE} DELETE ${ledger}`, `${API_ROLE} UPDATE ${ledger}`]).sort())
   })
@@ -650,30 +649,51 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
     }))
 
   test("the counter allocates disjoint blocks under two concurrent transactions: the row lock is the serialisation", async () => {
+    // Generation's `nextNumbers`, twice: the first run holds its transaction open, and with it the row lock, until Postgres reports the second blocked behind it (`pg_blocking_pids`), so the two always overlap.
     const companyId = a.spare
     await owner.db.insert(company).values({ id: companyId, companyId, name: "Counter", legalName: "Counter A/S", registrationNumber: "99999999", country: "DK", status: "active" })
     try {
       const [{ nextRouteNumber }] = await owner.db.select({ nextRouteNumber: company.nextRouteNumber }).from(company).where(eq(company.id, companyId))
       assert.equal(nextRouteNumber, 1000, "the default")
-      /** One generation run taking a block of `size`: the first number of the block is what the counter said before the update. */
-      const allocate = (size: number): Promise<number> =>
-        owner.db.transaction(async (tx) => {
-          const [row] = await tx
-            .update(company)
-            .set({ nextRouteNumber: sql`${company.nextRouteNumber} + ${size}` })
-            .where(and(eq(company.id, companyId), eq(company.companyId, companyId)))
-            .returning({ next: company.nextRouteNumber })
-          // Hold the lock a moment, so the second run waits on this one rather than slipping in between.
-          await tx.execute(sql`select pg_sleep(0.05)`)
-          return row.next - size
+      const backendOf = async (tx: Tx): Promise<number> => (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))[0].pid
+      const released = Promise.withResolvers<void>()
+      const firstTook = Promise.withResolvers<number>()
+      const first = owner.db
+        .transaction(async (tx) => {
+          const pid = await backendOf(tx)
+          const block = await nextNumbers(tx, companyId, "nextRouteNumber", 5)
+          firstTook.resolve(pid)
+          await released.promise
+          return block
         })
-      const [first, second] = await Promise.all([allocate(5), allocate(3)])
-      const blocks = [
-        [first, first + 5],
-        [second, second + 3],
-      ].sort((x, y) => x[0] - y[0])
-      assert.equal(blocks[0][0], 1000)
-      assert.equal(blocks[0][1], blocks[1][0], "the second block begins where the first ends: nothing shared, nothing skipped")
+        .catch((error: unknown) => {
+          firstTook.reject(error)
+          throw error
+        })
+      let second: Promise<number> | undefined
+      try {
+        const firstPid = await firstTook.promise
+        const secondStarted = Promise.withResolvers<number>()
+        second = owner.db
+          .transaction(async (tx) => {
+            secondStarted.resolve(await backendOf(tx))
+            return await nextNumbers(tx, companyId, "nextRouteNumber", 3)
+          })
+          .catch((error: unknown) => {
+            secondStarted.reject(error)
+            throw error
+          })
+        const secondPid = await secondStarted.promise
+        const deadline = Date.now() + 10_000
+        while ((await owner.sql`select pid from pg_stat_activity where pid = ${secondPid} and ${firstPid} = any(pg_blocking_pids(pid))`).length === 0) {
+          assert.ok(Date.now() < deadline, "the second run never waited on the first: the row lock did not hold it")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        released.resolve()
+        await Promise.allSettled([first, second])
+      }
+      assert.deepEqual(await Promise.all([first, second]), [1000, 1005], "the second block begins where the first ends: nothing shared, nothing skipped")
       const [{ after }] = await owner.db.select({ after: company.nextRouteNumber }).from(company).where(eq(company.id, companyId))
       assert.equal(after, 1008)
     } finally {

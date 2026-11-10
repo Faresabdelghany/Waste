@@ -98,7 +98,6 @@ describe("Route", () => {
     assert.equal(Route.safeParse(unsaid).success, false, "the hold is always said, null while the route is the scheme's")
     const adHoc = { ...planned, routeSchemeId: null, collectionGroupId: null, note: "Re-collections for Tuesday" }
     assert.deepEqual(Route.parse(adHoc), adHoc, "the office's ad-hoc route names no scheme and no group (#111)")
-    assert.equal(Object.keys(RouteProgress.shape).length, 6)
     assert.equal(RouteProgress.safeParse({ ...progress, fraction: 1.2 }).success, false)
     assert.equal(RouteProgress.safeParse({ ...progress, planned: -1 }).success, false)
   })
@@ -108,7 +107,8 @@ describe("Route", () => {
     assert.equal(labelMatches({ number: 1042, label: "RC-1043" }), false)
     assert.deepEqual(refusal(Route.safeParse({ ...route, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
     assert.deepEqual(refusal(RouteDetail.safeParse({ ...route, label: "1042", pickups: [], activePlan: null, workload, shift, session: null, sessions: [], unloads: [] })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
-    assert.equal(Route.safeParse({ ...route, number: 0 }).success, false)
+    // The label moves with the number, so the number's own rule is the one issue.
+    assert.deepEqual(refusal(Route.safeParse({ ...route, number: 0, label: "RC-0" })).map((issue) => issue.path), ["number"])
     assert.equal(Route.safeParse({ ...route, plannedStartTime: "06:30:00" }).success, false, "HH:MM, no seconds")
     assert.equal(Route.safeParse({ ...route, serviceDate: "2026-10-05T00:00:00Z" }).success, false, "a day, not an instant")
   })
@@ -133,12 +133,12 @@ describe("Route", () => {
     const activePlan = { id: OTHER, solver: "manual", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: "2026-10-05T09:00:30.000Z", stopWarnings: [], unloads: [] }
     assert.deepEqual(RouteListItem.parse({ ...route, activePlan, workload, shift }), { ...route, activePlan, workload, shift })
     assert.deepEqual(RouteListItem.parse({ ...route, activePlan: null, workload, shift }), { ...route, activePlan: null, workload, shift })
-    assert.equal(RouteListItem.safeParse({ ...route, workload }).success, false, "the reading is there, null or not")
+    assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, workload, shift })).map((issue) => issue.path), ["activePlan"], "the reading is there, null or not")
     assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, label: "RC-1043", activePlan: null, workload, shift })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
   })
 
   test("a listed or detailed route carries its workload (O10 of #290): the stop time and the expected load against a payload, unknowns null", () => {
-    assert.equal(RouteListItem.safeParse({ ...route, activePlan: null }).success, false, "the workload is always there")
+    assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, activePlan: null, shift })).map((issue) => issue.path), ["workload"], "the workload is always there")
     const over = { stopSeconds: 5_400, expectedKg: 14_200, unexpectedStops: 2, capacityKg: 12_000, overCapacityKg: 2_200 }
     assert.deepEqual(RouteWorkload.parse(over), over)
     assert.deepEqual(refusal(RouteWorkload.safeParse({ ...over, capacityKg: 0 })).map((issue) => issue.path), ["capacityKg"], "no payload is null, never zero")

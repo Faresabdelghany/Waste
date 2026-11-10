@@ -82,7 +82,6 @@ describe("a Service Provider's own doors", { skip: database.skip || owner.skip }
   let otherLars: Call
   const accounts = {} as Record<"mikkel" | "frida" | "tove", Account>
   const roles = {} as Record<"foreman" | "wide" | "ticketEditor", string>
-  /** NordRen's own truck and driver, registered by Lars through the API in `before`. */
   let truck: Vehicle
   let crew: Driver
   /** Routes by what they prove: one NordRen runs to crew; one crewed by the office; one with NordRen's driver and the office's truck; one at the office's depot with its truck; one with NordRen's driver and no truck; one in Harbor, nobody's. */
@@ -160,13 +159,11 @@ describe("a Service Provider's own doors", { skip: database.skip || owner.skip }
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
   }
-  /** The field errors of a 400, as path and message. */
   const fieldErrors = async (response: Response) => (await refused(response, 400)).errors?.map((error) => [error.path, error.message])
   const post = (call: Call, path: string, body?: unknown) => call(path, { method: "POST", body })
   const patch = (call: Call, path: string, body: unknown) => call(path, { method: "PATCH", body })
 
   let plate = 0
-  /** A NordRen truck in Copenhagen, as a provider's manager registers one. */
   function truckBody(overrides: Record<string, unknown> = {}) {
     plate += 1
     return {
@@ -181,7 +178,6 @@ describe("a Service Provider's own doors", { skip: database.skip || owner.skip }
       ...overrides,
     }
   }
-  /** A NordRen driver in Copenhagen holding C until 2030. */
   function driverBody(overrides: Record<string, unknown> = {}) {
     return { projectId: a.projects.copenhagen.id, name: `NordRen driver ${testId().slice(-4)}`, employment: "service-provider", serviceProviderId: a.serviceProviders.nordren.id, licenceClass: "c", licenceExpiry: "2030-12-31", ...overrides }
   }

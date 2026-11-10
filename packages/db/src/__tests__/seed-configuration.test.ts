@@ -3,8 +3,9 @@
 // database of this file's own. Every reading the three seed files state in
 // their headers — each mapping, derivation, invention and omission — is
 // pinned here by the row it produces, so a header sentence and the data it
-// describes cannot part. What is proved beyond the rows: a second run writes
-// nothing; the references hold inside the tenant and the project; the four
+// describes cannot part. What is proved beyond the rows (that a second run
+// writes nothing is seed.test.ts's, over every table): the references hold
+// inside the tenant and the project; the four
 // boundaries are the map's own outline of their containers, stored as a
 // closed ring that covers them; both validated schemes pass the rules the API
 // holds a validated scheme to; and no operational table holds a row.
@@ -18,7 +19,7 @@ import type { CustomerKind } from "@waste/domain/registry/vocabulary"
 import type { LicenceClass } from "@waste/domain/resources/vocabulary"
 import { holidayNamesFor } from "@waste/domain/planning/holiday-names"
 import { CONTAINER_VEHICLE_COMPATIBILITY } from "@waste/fixtures/taxonomy"
-import { and, eq } from "drizzle-orm"
+import { and, eq, getTableName } from "drizzle-orm"
 
 import { createDb, type Database } from "../client"
 import { migrateDatabase } from "../migrate"
@@ -33,6 +34,7 @@ import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { DEMO_IDS, seedDemo, type DemoSeedReport } from "../seed/demo"
 import { PLANNING_BOUNDARY_SOURCES } from "../seed/planning"
+import { KEPT_TABLES, TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
@@ -666,39 +668,12 @@ describe("the pilot's configuration against a fresh database", { skip: database.
   })
 
   test("the seed writes no operational row: no route, run, session, proof, command, event, ticket, money or movement, and the company's counters stand", async () => {
-    const empty = [
-      "route",
-      "pickup",
-      "generation_run",
-      "generation_match",
-      "session",
-      "driver_command",
-      "proof_of_service",
-      "unload",
-      "outbox_event",
-      "ticket",
-      "ticket_event",
-      "alert",
-      "billable_event",
-      "billing_run",
-      "billing_run_exclusion",
-      "invoice",
-      "invoice_line",
-      "settlement",
-      "settlement_line",
-      "settlement_event",
-      "weight_review",
-      "stock_movement",
-      "vehicle_allocation",
-      "vehicle_allocation_event",
-      "driver_absence",
-      "vehicle_unavailability",
-      "service_area",
-      "service_area_planning_area",
-      "service_area_waste_fraction",
-      "service_area_assignment",
-      "service_provider_price",
-    ]
+    // Operational is every table of the schema but the ones the seed is declared to write, so a new table is operational unless it is added there.
+    const schema = TABLES.map(getTableName)
+    const seeded = SEEDED_TABLES
+    assert.deepEqual(seeded.filter((name) => !schema.includes(name)), [], "every table the seed is declared to write is a table of the schema")
+    const empty = schema.filter((name) => !seeded.includes(name))
+    assert.ok(empty.includes("route") && empty.includes("invoice"), "the operational tables are the rest")
     for (const table of empty) {
       const [{ rows }] = await owner.sql<{ rows: number }[]>`select count(*)::int as rows from ${owner.sql("wms")}.${owner.sql(table)}`
       assert.equal(rows, 0, `wms.${table} holds ${rows} rows`)
@@ -706,14 +681,6 @@ describe("the pilot's configuration against a fresh database", { skip: database.
     const [counters] = await owner.sql<{ route: number; ticket: number; invoice: number }[]>`
       select next_route_number as route, next_ticket_number as ticket, next_invoice_number as invoice from wms.company where id = ${DEMO_IDS.company}`
     assert.deepEqual(counters, { route: 1000, ticket: 1000, invoice: 1000 })
-  })
-
-  test("a second run writes nothing: not a row of the configuration, not an updated_at", async () => {
-    const tables = CONFIGURATION_TABLES.map((name) => owner.sql`select * from ${owner.sql("wms")}.${owner.sql(name)} order by id`)
-    const before = JSON.stringify(await Promise.all(tables))
-    const report = await seedDemo(fresh.url)
-    assert.equal(report.changed, 0)
-    assert.equal(JSON.stringify(await Promise.all(CONFIGURATION_TABLES.map((name) => owner.sql`select * from ${owner.sql("wms")}.${owner.sql(name)} order by id`))), before)
   })
 
   /** Every configuration row without its stamps, keyed by table: what the seed says, whenever it was written. */
@@ -819,4 +786,21 @@ const CONFIGURATION_TABLES = [
   "collection_group_container",
   "price_list",
   "price_list_row",
+]
+
+/**
+ * Every table the seed is declared to write (#143: configuration and identity,
+ * never a run): Organisation & Access (`KEPT_TABLES`), the configuration
+ * above, the Registry, the company's own lists — contaminant codes,
+ * decommission reasons, default ticket types — and the audit trail its writes
+ * leave. A table the seed comes to write goes here; every other table is
+ * operational and holds no row after it.
+ */
+const SEEDED_TABLES: readonly string[] = [
+  ...KEPT_TABLES.map(getTableName),
+  ...CONFIGURATION_TABLES,
+  ...["waste_fraction", "container_type", "service_frequency", "customer", "property", "property_party", "property_group", "property_group_member"],
+  ...["shared_collection_point", "shared_collection_point_member", "agreement", "subscription", "container", "container_service_placement"],
+  ...["contaminant_code", "contaminant_code_fraction", "decommission_reason", "ticket_type"],
+  "audit_event",
 ]

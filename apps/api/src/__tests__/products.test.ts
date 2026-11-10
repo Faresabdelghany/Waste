@@ -22,7 +22,6 @@ const MODULE = "commercial.products"
 describe("the product endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -36,13 +35,11 @@ describe("the product endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** This company's master data: what a product may point at. */
   let bin: ContainerType
   let residual: WasteFraction
   let weekly: ServiceFrequency
   /** A cadence of Harbor Commercial: this company's, but not a Copenhagen product's to name. */
   let harborWeekly: ServiceFrequency
-  /** The other company's. */
   let theirBin: ContainerType
   let theirFraction: WasteFraction
   let theirProduct: Product

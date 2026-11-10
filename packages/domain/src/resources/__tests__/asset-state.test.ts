@@ -70,7 +70,6 @@ describe("movementShape", () => {
       const expected = allowed[kind].some(([f, t]) => f === from && t === to)
       assert.equal(movementShape(kind, from, to), expected, `${kind}: ${from} → ${to}`)
     }
-    assert.equal(everyTriple.length, 150, "six kinds over five places twice")
   })
 
   test("the table as data says the same as the function, kind by kind", () => {

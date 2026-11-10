@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { channelShapeIssue, maskedAddress, MESSAGE_VARIABLES, needsConsent, placeholdersOf, renderTemplate, SMS_BODY_MAX, unfilledPlaceholders, unfilledSentence, unknownPlaceholders } from "../template"
+import { channelShapeIssue, maskedAddress, MESSAGE_VARIABLES, needsConsent, placeholdersOf, renderTemplate, SMS_BODY_MAX, unfilledPlaceholders, unfilledSentence, unknownPlaceholders, unknownPlaceholderSentence } from "../template"
 
 describe("a template's placeholders", () => {
   test("are the names between double braces, spaces allowed, each once in the order first named", () => {
@@ -17,6 +17,12 @@ describe("a template's placeholders", () => {
     assert.deepEqual(unknownPlaceholders("Hello {{recipientName}} from {{companyName}}"), [])
     assert.deepEqual(unknownPlaceholders("Hello {{firstName}}, invoice {{invoiceNumber}} {{customerName}}"), ["firstName", "invoiceNumber"])
     assert.deepEqual([...MESSAGE_VARIABLES], ["recipientName", "customerName", "companyName", "collectionDate", "ticketNumber", "replyText"])
+  })
+
+  test("are named back in a sentence that says which names a message does fill, one name is and several are", () => {
+    const use = "use {{recipientName}}, {{customerName}}, {{companyName}}, {{collectionDate}}, {{ticketNumber}}, {{replyText}}"
+    assert.equal(unknownPlaceholderSentence(["nobody"]), `{{nobody}} is filled by no message; ${use}`)
+    assert.equal(unknownPlaceholderSentence(["invoiceNumber", "firstName"]), `{{invoiceNumber}}, {{firstName}} are filled by no message; ${use}`)
   })
 })
 

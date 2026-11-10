@@ -3,7 +3,6 @@ import { describe, test } from "node:test"
 
 import { OCCURRED_WINDOW_ORDERED } from "@waste/domain/clock"
 import { WAREHOUSE_WITH_A_STOCK_PLACE } from "@waste/domain/resources/asset-state"
-import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 
 import { EACH_TYPE_ONCE, STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
 
@@ -40,8 +39,6 @@ const owned = ["containerId", "projectId", "kind", "fromKind", "fromWarehouseId"
 
 describe("the two place lists", () => {
   test("are the vocabulary's values, so a command may ask for exactly the places the ledger's shape allows", () => {
-    assert.deepEqual(StockPlace.options, [...STOCK_PLACES])
-    assert.deepEqual(AdjustmentTarget.options, [...ADJUSTMENT_TARGETS])
     assert.equal(StockPlace.safeParse("service").success, false, "only an issue arrives in service")
     assert.equal(AdjustmentTarget.safeParse("service").success, false, "an adjustment never touches a placement")
   })
@@ -158,6 +155,8 @@ describe("a warehouse's stock balance and minimums (O30 of #290, row 9.8)", () =
     assert.deepEqual(refusal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 4 }, { containerTypeId: THIRD, minimum: 2 }] })), [{ path: "minimums", message: EACH_TYPE_ONCE }])
     assert.deepEqual(refusal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 0 }] })).map((issue) => issue.path), ["minimums.0.minimum"], "no minimum is no row, never a zero")
     assert.equal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 1, warehouseId: ID }] }).success, false, "the warehouse is the path's")
-    assert.equal(StockMinimumsSet.safeParse({ minimums: Array.from({ length: STOCK_MINIMUMS_MAX + 1 }, () => ({ containerTypeId: THIRD, minimum: 1 })) }).success, false)
+    // Each type once, so the bound is the one rule the body breaks.
+    const types = Array.from({ length: STOCK_MINIMUMS_MAX + 1 }, (_, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
+    assert.deepEqual(refusal(StockMinimumsSet.safeParse({ minimums: types.map((containerTypeId) => ({ containerTypeId, minimum: 1 })) })).map((issue) => issue.path), ["minimums"])
   })
 })

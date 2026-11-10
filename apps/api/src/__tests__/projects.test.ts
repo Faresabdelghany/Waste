@@ -19,7 +19,6 @@ import { signingKeys, type SigningKeys } from "./tokens"
 const database = databaseUnderTest()
 const ProjectPage = Page(Project)
 
-/** A project body a caller may send. */
 const body = (name: string) => ({ name, kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen" })
 
 describe("the project endpoints", { skip: database.skip }, () => {
@@ -105,7 +104,6 @@ describe("the project endpoints", { skip: database.skip }, () => {
       assert.deepEqual(second.items, all.slice(2))
       assert.equal(second.nextCursor, null)
 
-      // One at a time: three pages, then nothing left.
       const walked: string[] = []
       let cursor: string | null = null
       for (let step = 0; step < 4; step += 1) {

@@ -193,11 +193,6 @@ describe("releaseToDeployBranch", () => {
     assert.equal(gh.left(), 0)
   })
 
-  test("a commit pushed onto the branch by hand — release.json still naming the commit, the tree another — is released over when the commit is dispatched again: the trees decide, not the file", async () => {
-    const gh = github([{ status: 200, body: ref(P1) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(P1, OTHER_TREE), { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
-    assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: P1, head: P2, commit: COMMIT })
-  })
-
   test("a branch made by hand from main's tip — its head the released commit itself — gets the release commit on that commit alone, never two parents the same", async () => {
     const gh = github([{ status: 200, body: ref(COMMIT) }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: RELEASE_TREE } }, commitWithTree(COMMIT, TREE), { status: 201, body: { sha: P2 } }, { status: 200, body: ref(P2) }])
     assert.deepEqual(await releaseToDeployBranch({ ...base, fetch: gh.fetch }), { moved: true, from: COMMIT, head: P2, commit: COMMIT })

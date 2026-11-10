@@ -23,7 +23,6 @@ export type CallOptions = {
   headers?: Readonly<Record<string, string>>
 }
 
-/** One account's way of calling the API. */
 export type Call = (path: string, options?: CallOptions) => Promise<Response>
 
 /**

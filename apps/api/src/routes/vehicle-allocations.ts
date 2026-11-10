@@ -178,7 +178,6 @@ function allocationOf(row: Row): VehicleAllocation {
   }
 }
 
-/** One event on the wire. */
 function eventOf(row: EventRow): VehicleAllocationEvent {
   return {
     id: row.id,
@@ -242,21 +241,6 @@ const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
 })
 
 /**
- * Every rule of §4 over one reservation, over the parts of it that `moved`,
- * in the order a body reads: the window ordered; the vehicle a powered
- * vehicle of the project; the trailer a trailer of it and not the vehicle of
- * another live allocation over the window (`except` the row being changed);
- * the driver one of the project's who holds the vehicle's class on the
- * window's last day on the project's clock — judged again whenever the
- * driver, the vehicle or the window moved; the depot the project's; the
- * fraction the company's. Each of those refusals is a 400 at the field that
- * carried it. Then the statuses, after every 400 and each a 409 naming the
- * row and its status (@waste/domain/status-gates): a vehicle or a trailer named
- * afresh is not retired, a driver named afresh is active. A stored row is
- * read only where a rule or an overlap sentence needs it, and its status is
- * never asked; the rows read are handed back for the sentences.
- */
-/**
  * The vehicle carries what the allocation plans (O7 of #290): its fraction in
  * one of its compartments (400 at `wasteFractionId`; a vehicle whose
  * compartments name none carries any), and its required capacity within what
@@ -278,7 +262,6 @@ async function requireCarries(tx: Tx, scope: Scope, reservation: Reservation): P
   }
 }
 
-/** A fraction's name for a sentence. */
 async function fractionName(tx: Tx, companyId: string, id: string): Promise<string | null> {
   const [row] = await tx
     .select({ name: wasteFraction.name })
@@ -288,6 +271,21 @@ async function fractionName(tx: Tx, companyId: string, id: string): Promise<stri
   return row?.name ?? null
 }
 
+/**
+ * Every rule of §4 over one reservation, over the parts of it that `moved`,
+ * in the order a body reads: the window ordered; the vehicle a powered
+ * vehicle of the project; the trailer a trailer of it and not the vehicle of
+ * another live allocation over the window (`except` the row being changed);
+ * the driver one of the project's who holds the vehicle's class on the
+ * window's last day on the project's clock — judged again whenever the
+ * driver, the vehicle or the window moved; the depot the project's; the
+ * fraction the company's. Each of those refusals is a 400 at the field that
+ * carried it. Then the statuses, after every 400 and each a 409 naming the
+ * row and its status (@waste/domain/status-gates): a vehicle or a trailer named
+ * afresh is not retired, a driver named afresh is active. A stored row is
+ * read only where a rule or an overlap sentence needs it, and its status is
+ * never asked; the rows read are handed back for the sentences.
+ */
 async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, moved: Moved, except?: string): Promise<Reserved> {
   if (moved.window && !windowOrdered(reservation)) throw invalidRequest("body", [{ path: "plannedTo", message: WINDOW_ENDS_AFTER_IT_STARTS }])
 
@@ -315,7 +313,6 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
   }
 
   const driver = reservation.driverId === null || !judgeDriver ? null : await findDriver(tx, scope, reservation.driverId)
-  // The project's clock, read once and only where a rule below renders the window as its days.
   let timezone: string | undefined
   const timezoneOf = async (): Promise<string> => (timezone ??= await projectTimezone(tx, scope.companyId, scope.projectId))
   if (driver !== null && vehicle !== null) {
@@ -357,7 +354,6 @@ const overlapSentences = (reserved: Reserved): Record<string, string> => ({
   ...(reserved.trailer === null ? {} : { [TRAILER_RESERVED]: alreadyAllocated(vehicleLabel(reserved.trailer)) }),
 })
 
-/** The reservation's window as the column takes it. */
 const windowOf = (reservation: Reservation) => ({ plannedFrom: new Date(reservation.plannedFrom), plannedTo: new Date(reservation.plannedTo) })
 
 /**
@@ -385,8 +381,6 @@ async function appendEvent(tx: Tx, principal: Principal, row: Row, action: Alloc
   })
 }
 
-
-/** Moves the row to a status, and answers it as written. */
 async function setStatus(tx: Tx, principal: Principal, id: string, status: AllocationStatus): Promise<Row> {
   const [row] = await tx
     .update(vehicleAllocation)
@@ -525,7 +519,6 @@ export function vehicleAllocationRoutes(deps: RouteDeps) {
         const current = await lockedAllocation(tx, principal, id)
         if (current.status === "released") throw problem(409, { detail: RELEASED_DOES_NOT_CHANGE })
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        // The row the change leaves behind: the body's fields where given, the stored ones where not; a null given clears.
         const reservation: Reservation = {
           vehicleId: body.vehicleId ?? current.vehicleId,
           driverId: body.driverId === undefined ? current.driverId : body.driverId,

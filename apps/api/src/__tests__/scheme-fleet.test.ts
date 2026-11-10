@@ -38,7 +38,6 @@ const FAR_AHEAD = "2030-01-06"
 describe("the fleet and place fields of the scheme and group endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, whose station a scheme of `a` may not name. */
   let b: Tenant
@@ -75,7 +74,6 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
     return schema.parse(await response.json())
   }
-  /** A rule group on the residual fraction over the days given, with whatever else the test says. */
   const ruleGroup = (name: string, days: string[], values: Record<string, unknown> = {}) => ({
     name,
     days,
@@ -83,7 +81,6 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
     rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null },
     ...values,
   })
-  /** A scheme body on Copenhagen Central inside Centrum, Mondays and Thursdays, one rule group over both, starting in January. */
   const body = (name: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     name,

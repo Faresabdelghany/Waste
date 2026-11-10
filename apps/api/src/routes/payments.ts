@@ -146,7 +146,6 @@ const allocationColumns = {
 
 type AllocationRow = Pick<typeof paymentAllocation.$inferSelect, keyof typeof allocationColumns>
 
-/** The payments of this company, in the projects the caller works in, each read with what its allocations apply. */
 const {
   scope: paymentScope,
   find: findPayment,
@@ -215,7 +214,6 @@ async function paymentDetail(tx: Tx, principal: Principal, id: string): Promise<
   return { ...paymentOf(row), allocations: allocations.map(allocationOf) }
 }
 
-/** One document of the caller's projects that a payment may pay, by id: the invoice, or undefined. */
 async function findDocument(tx: Tx, principal: Principal, id: string): Promise<InvoiceRow | undefined> {
   const [row] = await tx
     .select(invoiceColumns)
@@ -540,7 +538,6 @@ export function paymentRoutes(deps: RouteDeps) {
         const { companyId } = principal
         requireProject(principal, body.projectId)
         const keyed = body.lines.map((line) => ({ line, key: bankLineKey(line, line.occurrence) }))
-        // The invoices any line could pay, read once: by the references the lines carry, and by the invoice labels their texts name.
         const references = [...new Set(body.lines.flatMap((line) => bankLineReference(line.reference) ?? []))]
         const numbers = [
           ...new Set(

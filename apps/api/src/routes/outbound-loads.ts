@@ -1,4 +1,3 @@
-
 import { OUTBOUND_LOAD_COMMANDS, notATransferStation, outboundLoadTransition, receiptReading, SAY_WHY, type OutboundLoadCommand } from "@waste/domain/execution/haul-out"
 import { unloadStanding } from "@waste/domain/insight/readings"
 import {
@@ -91,7 +90,6 @@ type AdjustmentRow = Pick<typeof materialAdjustment.$inferSelect, keyof typeof a
 
 const adjustmentOf = (row: AdjustmentRow): MaterialAdjustment => ({ ...row, recordedAt: row.recordedAt.toISOString() })
 
-/** Each project's weight tolerance, for the projects named: what a receipt is read against. */
 async function tolerancesOf(tx: Tx, companyId: string, projectIds: readonly string[]): Promise<Map<string, number>> {
   if (projectIds.length === 0) return new Map()
   const rows = await tx
@@ -101,7 +99,6 @@ async function tolerancesOf(tx: Tx, companyId: string, projectIds: readonly stri
   return new Map(rows.map((row) => [row.id, row.tolerance]))
 }
 
-/** The loads as the wire spells them, each receipt read against its project's tolerance: one statement for the page. */
 async function loadsOf(tx: Tx, companyId: string, rows: readonly LoadRow[]): Promise<OutboundLoad[]> {
   const tolerances = await tolerancesOf(tx, companyId, rows.filter((row) => row.receivedNetKg !== null).map((row) => row.projectId))
   return rows.map((row) => {
@@ -118,10 +115,8 @@ const { find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, {
 
 const { list: listAdjustments } = scoped(materialAdjustment, { noun: "material adjustment", reach: "projects", columns: adjustmentColumns })
 
-/** A sum of whole kilograms, as a number. */
 const kilograms = (column: PgColumn) => sql<number>`coalesce(sum(${column}), 0)`.mapWith(Number)
 
-/** The station's stock by project and fraction, in the projects `projectIds` names. */
 async function stockOf(tx: Tx, principal: Principal, stationId: string, projectId: string | undefined): Promise<MaterialStockRow[]> {
   const { companyId } = principal
   const inScope = (column: typeof unload.projectId | typeof outboundLoad.projectId | typeof materialAdjustment.projectId) =>
@@ -191,7 +186,6 @@ const COMMAND_BODIES = { receive: OutboundLoadReceive, reconcile: OutboundLoadRe
 
 export function outboundLoadRoutes(deps: RouteDeps) {
   const { now } = deps
-  /** A command on a load: locked, read again, asked of the machine, and written with what it sets beside the status. */
   async function command(c: Context<AuthEnv>, id: string, name: OutboundLoadCommand, sets: (found: LoadRow) => Partial<typeof outboundLoad.$inferInsert>): Promise<Response> {
     const principal = c.get("principal")
     const tx = c.get("tx")

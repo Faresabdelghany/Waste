@@ -182,30 +182,23 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChipOverflow } from "@/components/chip-overflow"
 import { StatRow } from "@/components/ui/stat-row"
 import { WeekTimeline, type TimelineItem } from "@/components/ui/week-timeline"
 import { ProgressCircle } from "@/components/progress-circle"
 import { CheckRow } from "@/components/ui/check-row"
 import {
-  BusinessFilterPopover,
   canonicalCalendarName,
 } from "@/components/platform/business-filter-popover"
 import {
-  businessFilterChips,
   matchesBusinessFilters,
   matchesBusinessQuery,
-  removeBusinessFilterValue,
-  type BusinessFilterKey,
   type BusinessFilters,
 } from "@/lib/prototype/business-filters"
 import { RecordHistory } from "@/components/waste/record-history"
-import { RecordSearchInput } from "@/components/platform/record-search-input"
 import {
   canonicalServiceFrequencyName,
 } from "@/lib/prototype/service-frequencies"
 import {
-  BusinessViewOptionsPopover,
   defaultBusinessViewOptions,
   type BusinessGroupOption,
   type BusinessViewOptions,
@@ -264,6 +257,7 @@ import { useGrants } from "@/components/platform/use-grants"
 import { useActorName } from "@/components/platform/shell-identity"
 import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
+import { RecordToolbar } from "@/components/platform/record-toolbar"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -1267,10 +1261,6 @@ export function BusinessWorkspace({
   const rowsAwaited = awaitedRowsSentence(activeModuleOnApi)
   // Where no API is configured a switched module has nothing to show or make: its table says so, and no action stands over it.
   const keptOnApi = activeModuleOnApi?.status === "kept-on-api"
-  const activeFilterChips = useMemo(
-    () => businessFilterChips(businessFilters),
-    [businessFilters],
-  )
   // Queue vs rich vs standard table is a property of the module, never of the
   // viewing persona (lib/data/business-view-kinds.ts) — the operator's Tickets
   // page and the service provider workspace render the same rich record table.
@@ -1592,10 +1582,6 @@ export function BusinessWorkspace({
     }))
     setTablePage(1)
   }, [activeModuleId, workspace.id])
-
-  const removeFilterChip = (key: BusinessFilterKey, value: string) => {
-    setBusinessFilters((current) => removeBusinessFilterValue(current, key, value))
-  }
 
   // The address bar's module is applied once per change, not on every
   // record-store change that makes WorkspaceQuerySync ask again
@@ -3327,75 +3313,49 @@ export function BusinessWorkspace({
           )}
 
           {showFilters && !isMapPlanningView && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-1 flex-wrap items-center gap-2 min-w-[260px]">
-                <RecordSearchInput
-                  value={query}
-                  onChange={setQuery}
-                  placeholder={`Search ${activeModule.entityLabel.toLowerCase()}s`}
-                />
-                <BusinessFilterPopover
-                  records={visibleScopedRecords}
-                  value={businessFilters}
-                  onChange={setBusinessFilters}
-                  variant={activeModule.filters ?? "default"}
-                  readers={listReaders}
-                />
-                <BusinessViewOptionsPopover
-                  value={viewOptions}
-                  onChange={setViewOptions}
-                  variant={
-                    isContainersAssetsView
-                      ? "containers"
-                      : isRichRecordView
-                        ? "records"
-                        : "default"
-                  }
-                  allowedViewTypes={moduleViewTypes}
-                  columnOptions={factColumnOptions}
-                  groupOptions={recordGroupOptions}
-                  columnsStyle={
-                    typeof activeModule.view === "object" && activeModule.view.columnsShown === "display" ? "display" : "chips"
-                  }
-                  fixedColumnChips={
-                    isServiceProviderUsersView
-                      ? ["Full name", "Email", "Phone number", "Role", "Status"]
-                      : undefined
-                  }
-                  builtinColumnChips={
-                    isRichRecordView && !isRoutesView
-                      ? isServiceProviderUsersView
-                        ? // Full name, Email, Phone number, Role, and Status
-                          // are fixed columns and the description is never
-                          // shown, so only Updated toggles.
-                          [{ key: "showUpdated", label: "Updated" }]
-                        : [
-                            { key: "showDescription", label: "Description" },
-                            { key: "showContext", label: activeModule.contextLabel },
-                            { key: "showUpdated", label: "Updated" },
-                          ]
-                      : undefined
-                  }
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                {showDeepLinks && activeModule.deepLink && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={activeModule.deepLink}>
-                      Open full view
-                      <ArrowSquareOut className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-          {showFilters && !isMapPlanningView && (
-            <ChipOverflow
-              chips={activeFilterChips}
-              onRemove={removeFilterChip}
-              maxVisible={4}
+            <RecordToolbar
+              className="gap-3"
+              placeholder={`Search ${activeModule.entityLabel.toLowerCase()}s`}
+              query={query}
+              onQueryChange={setQuery}
+              records={visibleScopedRecords}
+              readers={listReaders}
+              filterVariant={activeModule.filters ?? "default"}
+              filters={businessFilters}
+              onFiltersChange={setBusinessFilters}
+              view={{
+                value: viewOptions,
+                onChange: setViewOptions,
+                variant: isContainersAssetsView ? "containers" : isRichRecordView ? "records" : "default",
+                allowedViewTypes: moduleViewTypes,
+                columnOptions: factColumnOptions,
+                groupOptions: recordGroupOptions,
+                columnsStyle: typeof activeModule.view === "object" && activeModule.view.columnsShown === "display" ? "display" : "chips",
+                fixedColumnChips: isServiceProviderUsersView ? ["Full name", "Email", "Phone number", "Role", "Status"] : undefined,
+                builtinColumnChips:
+                  isRichRecordView && !isRoutesView
+                    ? isServiceProviderUsersView
+                      ? // Full name, Email, Phone number, Role, and Status are fixed columns and the description is never shown, so only Updated toggles.
+                        [{ key: "showUpdated", label: "Updated" }]
+                      : [
+                          { key: "showDescription", label: "Description" },
+                          { key: "showContext", label: activeModule.contextLabel },
+                          { key: "showUpdated", label: "Updated" },
+                        ]
+                    : undefined,
+              }}
+              actions={
+                <div className="flex items-center gap-2">
+                  {showDeepLinks && activeModule.deepLink && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={activeModule.deepLink}>
+                        Open full view
+                        <ArrowSquareOut className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </div>
+              }
             />
           )}
         </div>

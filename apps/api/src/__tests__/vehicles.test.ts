@@ -36,7 +36,6 @@ const HOUR = 3_600_000
 describe("the vehicle endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -55,7 +54,6 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
   /** What a compartment carries. */
   let residual: WasteFraction
   let glass: WasteFraction
-  /** The other company's. */
   let theirFraction: WasteFraction
   let theirVehicle: Vehicle
 
@@ -606,7 +604,6 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
   })
 
   describe("requireVehicle", () => {
-    /** What the helper refuses with: a 400 on the body, one error at the path given. */
     const refusal = (path: string, message: string) => (error: unknown) => {
       assert.ok(error instanceof ProblemError, String(error))
       assert.equal(error.body.status, 400)

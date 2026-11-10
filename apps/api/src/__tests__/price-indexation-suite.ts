@@ -56,7 +56,6 @@ export const refused = async (response: Response, status: number) => {
 
 export const send = (call: Call, path: string, body: unknown) => call(path, { method: "POST", body })
 
-/** Two tenants, the first with its products, a retired one, and two awarded service areas, and the calls the suites make. */
 export async function setUpIndexation(databaseUrl: string): Promise<IndexationSuite> {
   const pool = createDb(databaseUrl, { max: 4 })
   const keys = await signingKeys()

@@ -5,7 +5,7 @@
 // hold roles, and a role nobody holds is a product question (which account
 // takes its holders?) rather than a row disappearing.
 //
-// A company is seeded with the eleven system roles of
+// A company is seeded with the twelve system roles of
 // @waste/domain/access/system-roles, which keep their `key` and `system =
 // true`; a role created here is custom, so the server writes `key: null` and
 // `system: false` and no write body names either — a seeded role's key is
@@ -66,7 +66,6 @@ const columns = {
 
 type Row = Pick<typeof role.$inferSelect, keyof typeof columns>
 
-/** The row on the wire, with the matrix the page loaded for it. */
 function roleOf(row: Row, grants: Grant[]): Role {
   return {
     id: row.id,
@@ -80,7 +79,6 @@ function roleOf(row: Row, grants: Grant[]): Role {
   }
 }
 
-/** The grants of a whole page in one query, grouped by role: a list of fifty roles is two statements, never fifty-one. */
 async function grantsOf(tx: Tx, companyId: string, roleIds: readonly string[]): Promise<Map<string, Grant[]>> {
   if (roleIds.length === 0) return new Map()
   const rows = await tx
@@ -102,7 +100,6 @@ async function roleWithGrants(tx: Tx, companyId: string, row: Row): Promise<Role
   return roleOf(row, byRole.get(row.id) ?? [])
 }
 
-/** The rows a grant set is, one per allowed action. */
 const grantRowsOf = (companyId: string, roleId: string, grants: readonly Grant[]) =>
   grants.flatMap((grant) => grant.actions.map((action) => ({ id: newId(), companyId, roleId, moduleKey: grant.moduleKey, action })))
 

@@ -24,7 +24,6 @@ const Occurrences = z.array(Occurrence)
 
 const MODULE = "route-studio.schemes"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const APRIL = "2026-04-01"
 const JULY = "2026-07-01"
@@ -34,7 +33,6 @@ const NEXT_YEAR = "2027-01-01"
 describe("the route scheme endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -49,7 +47,6 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** What a rule matches and what a manual group picks. */
   let residual: WasteFraction
   let glass: WasteFraction
   let bin: ContainerType
@@ -58,7 +55,6 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
   let bin3: Container
   /** A container of Harbor Commercial, which a Copenhagen scheme may not pick. */
   let harborBin: Container
-  /** The other company's. */
   let theirFraction: WasteFraction
   let theirScheme: RouteScheme
 
@@ -110,7 +106,6 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  /** A rule group on the residual fraction, running on the days given. */
   const ruleGroup = (name: string, days: string[], values: Record<string, unknown> = {}) => ({
     name,
     days,
@@ -118,7 +113,6 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
     rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null },
     ...values,
   })
-  /** A manual group picking the containers given, in that order. */
   const manualGroup = (name: string, days: string[], containerIds: string[], values: Record<string, unknown> = {}) => ({
     name,
     days,

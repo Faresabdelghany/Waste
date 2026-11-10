@@ -64,7 +64,6 @@ const TeamPage = Page(Team)
 const columns = { id: team.id, name: team.name, status: team.status, createdAt: team.createdAt, updatedAt: team.updatedAt }
 type Row = Pick<typeof team.$inferSelect, keyof typeof columns>
 
-/** The members: the accounts of this company in the team, one row per pair. */
 const members: IdSet<typeof teamMember> = {
   table: teamMember,
   parentId: teamMember.teamId,
@@ -96,7 +95,6 @@ async function defaultsOf(tx: Tx, companyId: string, projectId: string): Promise
 /** Where a default sorts: the kinds in the vocabulary's order, then the types (#548 of #544) by id. */
 const defaultOrder = (row: Pick<DefaultRow, "kind" | "ticketTypeId">): number => (row.ticketTypeId !== null ? TICKET_KINDS.length : TICKET_KINDS.indexOf(row.kind as TicketKind))
 
-/** The company's teams among the ids a set names, with their names and statuses: one read for the whole set. */
 async function teamsNamed(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, { name: string; status: string }>> {
   if (ids.length === 0) return new Map()
   const found = await tx
@@ -106,7 +104,6 @@ async function teamsNamed(tx: Tx, companyId: string, ids: readonly string[]): Pr
   return new Map(found.map((row) => [row.id, row]))
 }
 
-/** A project's defaults on the wire, in the vocabulary's order of kinds, then the types'. */
 const defaultsAnswer = (projectId: string, rows: readonly Pick<DefaultRow, "kind" | "ticketTypeId" | "teamId">[]): TicketTeamDefaults => ({
   projectId,
   defaults: [...rows]

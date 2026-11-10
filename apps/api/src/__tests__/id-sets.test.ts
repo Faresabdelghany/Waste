@@ -16,7 +16,6 @@ const A = "01a0d3a5-e5e0-7000-8000-00000000000a"
 const B = "01a0d3a5-e5e0-7000-8000-00000000000b"
 const owner: Owner = { companyId: "01a0d3a5-e5e0-7000-8000-000000000000", id: "01a0d3a5-e5e0-7000-8000-000000000001" }
 
-/** A `tx` whose one `insert(...).values(rows)` keeps the rows it was given. */
 const scripted = () => {
   const written: unknown[] = []
   const tx = { insert: () => ({ values: async (rows: unknown[]) => void written.push(...rows) }) } as unknown as Tx

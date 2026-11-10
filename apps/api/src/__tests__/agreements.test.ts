@@ -25,14 +25,13 @@ import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
-/** The owner sweeps the one ledger row this suite writes — the receipt behind its placement — which `wms_api` may not delete (#101 §6.24). */
+/** The owner sweeps the ledger rows this suite writes — the movements behind its placements — which `wms_api` may not delete (#101 §6.24). */
 const owner = ownerUnderTest()
 const AgreementPage = Page(Agreement)
 const SubscriptionPage = Page(Subscription)
 
 const MODULE = "customers.agreements"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const APRIL = "2026-04-01"
 const JULY = "2026-07-01"
@@ -43,7 +42,6 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -67,10 +65,9 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
   /** What a subscription subscribes to, in each project: an active product, since a draft one cannot be subscribed to (Issue #79). */
   let residual: Product
   let harborResidual: Product
-  /** What the one placement of this file needs: a container's type and the fraction it takes. */
+  /** What the placements of this file need: a container's type and the fraction it takes. */
   let bin: ContainerType
   let residualWaste: WasteFraction
-  /** The other company's. */
   let theirCustomer: Customer
   let theirAgreement: Agreement
 
@@ -189,7 +186,6 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
   /** One product at one place under an agreement; the place is Parkvej 18 unless a test names another. */
   const subscribe = (agreementId: string, values: Record<string, unknown> = {}) =>
     create(olivia, `/agreements/${agreementId}/subscriptions`, { productId: residual.id, propertyId: parkvej.id, validFrom: JANUARY, ...values }, Subscription)
-  /** A customer of this company that is no longer served. */
   const inactiveCustomer = async (name: string): Promise<Customer> => {
     const created = await create(olivia, "/customers", { kind: "organisation", name }, Customer)
     await setStatus(olivia, `/customers/${created.id}`, "inactive")
@@ -787,7 +783,6 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
   })
 
   describe("POST /subscriptions/:id/change (#291, slice 10)", () => {
-    /** A bin received into a warehouse of the project and issued under the subscription from the day given: a container serving it. */
     const placedUnder = async (subscription: Subscription, label: string, validFrom = JANUARY) => {
       const container = await stocked(olivia, { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id }, await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, `WH-${label}`))
       const placement = await create(olivia, `/containers/${container.id}/placements`, { subscriptionId: subscription.id, wasteFractionId: residualWaste.id, validFrom }, ContainerServicePlacement)

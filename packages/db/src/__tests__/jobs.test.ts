@@ -15,7 +15,7 @@ import { fromDrizzle, PgBoss } from "pg-boss"
 
 import { createDb, type Database } from "../client"
 import { GENERATE_ROUTES_QUEUE, sendGenerateRoutes } from "../commands/generation"
-import { createJobSender, jobHeld, LIVE_JOB_STATES, QueueMissing, sendInTransaction, succeedInTransaction, type Complete, type JobSender } from "../jobs"
+import { createJobSender, jobHeld, QueueMissing, sendInTransaction, succeedInTransaction, type Complete, type JobSender } from "../jobs"
 import { API_ROLE } from "../roles"
 import { PGBOSS_SCHEMA } from "../sql/pgboss"
 import { databaseUnderTest } from "./database"
@@ -198,9 +198,14 @@ describe("the shared send, as the API role", { skip: database.skip }, () => {
       assert.ok(id)
       assert.equal(await held(id), true, "queued: created is a live state")
       assert.equal(await held(randomUUID()), false, "a job nobody sent")
-      await owner.sql`update ${owner.sql(PGBOSS_SCHEMA)}.job set state = 'completed' where name = ${GENERATE_ROUTES_QUEUE} and id = ${id}::uuid`
-      assert.equal(await held(id), false, "done: no job is coming for its run")
-      assert.deepEqual([...LIVE_JOB_STATES], ["created", "retry", "active"])
+      for (const state of ["retry", "active"]) {
+        await owner.sql`update ${owner.sql(PGBOSS_SCHEMA)}.job set state = ${state}::${owner.sql(PGBOSS_SCHEMA)}.job_state where name = ${GENERATE_ROUTES_QUEUE} and id = ${id}::uuid`
+        assert.equal(await held(id), true, `${state} is a live state too: pg-boss will still run it`)
+      }
+      for (const state of ["completed", "cancelled", "failed"]) {
+        await owner.sql`update ${owner.sql(PGBOSS_SCHEMA)}.job set state = ${state}::${owner.sql(PGBOSS_SCHEMA)}.job_state where name = ${GENERATE_ROUTES_QUEUE} and id = ${id}::uuid`
+        assert.equal(await held(id), false, `${state}: no job is coming for its run`)
+      }
     } finally {
       await owner.sql`delete from ${owner.sql(PGBOSS_SCHEMA)}.job where name = ${GENERATE_ROUTES_QUEUE} and singleton_key = ${schemeKey}`
       if (existing === undefined) await owner.sql`select ${owner.sql(PGBOSS_SCHEMA)}.delete_queue(${GENERATE_ROUTES_QUEUE})`

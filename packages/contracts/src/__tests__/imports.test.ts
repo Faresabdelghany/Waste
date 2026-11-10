@@ -6,7 +6,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { BOUNDARY_COLUMN } from "@waste/domain/imports/columns"
-import { cellTooLong, PROJECT_IMPORT_KINDS, PROJECT_REFUSED, PROJECT_REQUIRED } from "@waste/domain/imports/rules"
+import { cellTooLong, PROJECT_REFUSED, PROJECT_REQUIRED } from "@waste/domain/imports/rules"
 import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_CELL_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import { ImportBatch, ImportBatchResult, ImportPreview, ImportPreviewRequest, ImportRunCreate } from "../imports"
@@ -34,7 +34,6 @@ describe("ImportPreviewRequest and ImportRunCreate", () => {
       assert.equal(ImportRunCreate.safeParse({ kind, fileName: "catalogue.csv", rowCount: 3 }).success, true, kind)
       assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, projectId: PROJECT, fileName: "catalogue.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REFUSED }], kind)
     }
-    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements", "vehicles", "drivers", "collection-calendars", "planning-areas"])
   })
 
   test("hold a cell to a paragraph's length, and a planning area's boundary to some thousands of vertices (O30 of #290)", () => {

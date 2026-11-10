@@ -32,7 +32,6 @@ const PlacementPage = Page(ContainerServicePlacement)
 const MODULE = "resources.containers"
 const AGREEMENTS = "customers.agreements"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const FEBRUARY = "2026-02-01"
 const APRIL = "2026-04-01"
@@ -45,9 +44,7 @@ describe("the container and placement endpoints", { skip: database.skip || owner
   /** Every placement here is of a container received through the ledger, so the owner sweeps the whole suite's rows (#101 §6.24). */
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
-  /** The other company, written to once below and never again. */
   let b: Tenant
   let app: ReturnType<typeof createApp>
   let olivia: Call
@@ -59,14 +56,12 @@ describe("the container and placement endpoints", { skip: database.skip || owner
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** This company's master data: what a container and a placement point at. */
   let bin: ContainerType
   let residual: WasteFraction
   let weekly: ServiceFrequency
   let fortnightly: ServiceFrequency
   /** A cadence of Harbor Commercial: this company's, but not a Copenhagen placement's to name. */
   let harborWeekly: ServiceFrequency
-  /** What is subscribed to in Copenhagen Central, and where. */
   let subscribed: Subscription
   /** The same in Harbor Commercial, which a Copenhagen container may not serve. */
   let harborSubscription: Subscription
@@ -78,7 +73,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
   /** A warehouse of Copenhagen Central and one of Harbor Commercial: where a container is received before it can be issued (Issue #101). */
   let west: string
   let havnen: string
-  /** The other company's. */
   let theirBin: ContainerType
   let theirContainer: Container
 
@@ -180,7 +174,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     )
   const subscribeTo = (held: Agreement, productId: string, propertyId: string) =>
     create(olivia, `/agreements/${held.id}/subscriptions`, { productId, propertyId, validFrom: JANUARY }, Subscription)
-  /** The same, delivered at a point: the other kind of place. */
   const subscribeAtPoint = (held: Agreement, productId: string, sharedCollectionPointId: string) =>
     create(olivia, `/agreements/${held.id}/subscriptions`, { productId, sharedCollectionPointId, validFrom: JANUARY }, Subscription)
   /** Gives a subscription an end, so a placement of it has a bound to fall outside of. */
@@ -190,7 +183,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     return Subscription.parse(await response.json())
   }
 
-  /** A container body a caller may send: a label of this test's own, in Copenhagen Central unless it says otherwise. */
   const body = (label: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     label,
@@ -824,7 +816,6 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     })
   })
 
-  /** The other company's placement, made the way it makes everything else: through its own routes. */
   const theirPlacement = async (): Promise<ContainerServicePlacement> => {
     const customer = await create(other, "/customers", { kind: "organisation", name: "Their Housing" }, Customer)
     const held = await create(

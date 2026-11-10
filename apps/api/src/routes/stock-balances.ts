@@ -38,7 +38,6 @@ import { eachPresent } from "./sets"
 const INVENTORY = "resources.inventory"
 const WAREHOUSES = "resources.warehouses"
 
-/** A warehouse of this company inside the caller's projects, as its minimums read it: its project. */
 const { get: getWarehouse, locked: lockedWarehouse } = scoped(warehouse, { noun: "warehouse", reach: "projects", columns: { id: warehouse.id, projectId: warehouse.projectId } })
 
 /** A warehouse's minimums as they stand, in the order they were written. */

@@ -70,9 +70,7 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
   let placed: { id: string; label: string }
   /** BIN-8, whose placement and subscription stand while the agreement over them ended on 1 October: placed nowhere in force on Tuesday. */
   let lapsed: { id: string; label: string }
-  /** A shared collection point of Copenhagen Central, open. */
   let point: { id: string }
-  /** A property of Copenhagen Central that is inactive. */
   let inactive: { id: string }
 
   before(async () => {
@@ -281,7 +279,6 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       assert.equal((await refused(await add(planned, { containerId: lapsed.id }), 409)).detail, notPlacedOn("BIN-8"), "its placement stands, its agreement does not: not in force, as generation judges a stop")
       assert.deepEqual((await refused(await add(planned, { service: "wash", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id }), 400)).errors?.map((error) => error.path), ["containerId"], "a work order is of a container")
       assert.equal((await refused(await add(planned, { propertyId: inactive.id, wasteFractionId: ex.fractions.residual.id }), 409)).detail, "The property is inactive; a stop needs an active property")
-      // Nothing written by any of them.
       assert.equal((await read(planned)).pickups.filter((pickup) => pickup.origin === "office").length, 1, "the one stop the first test added")
     })
 

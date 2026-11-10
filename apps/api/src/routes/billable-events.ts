@@ -161,7 +161,6 @@ async function hireOf(tx: Tx, scope: Scope, row: EventReading, agreementId: stri
   return { agreementId, productId, serviceDate: row.serviceDate, chargedDays: row.quantity, ...conditions }
 }
 
-/** A manual event links to nothing. */
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null, scaleTicketLineId: null }
 
 /** The conditions a pickup event carries into the resolver; none on a manual or a ticket event. */
@@ -240,7 +239,6 @@ export function billableEventRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (customerId !== undefined) await requireCustomer(tx, principal.companyId, customerId, "customerId", "query")
-        // The LATERAL columns a status is read over, by the names the family's read gives them.
         const { line, reversing } = eventsFrom(tx, principal.companyId)
         const page = await listEvents(
           tx,

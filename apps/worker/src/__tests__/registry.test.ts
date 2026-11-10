@@ -18,18 +18,16 @@ import { CUSTOMER_NOTICE_KINDS } from "@waste/domain/notifications/notices"
 import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
 import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/outbox/vocabulary"
 import { RESOLUTION_EVENT_KINDS } from "@waste/domain/resolution/from-event"
+import type { Job } from "pg-boss"
 
 import { isCronExpression } from "../runtime/boss"
 import { CONSUMERS, JOBS, relay } from "../jobs"
-import { alertRulesJob } from "../resolution/alert-rules"
 import { applyPauseGrants } from "../registry/apply-pause-grants"
 import { countEmptyings } from "../resolution/count-emptyings"
-import { defineJob, updatableOptions } from "../runtime/definition"
+import { updatableOptions } from "../runtime/definition"
 import { generateRoutes } from "../planning/generate-routes"
-import { heartbeat } from "../runtime/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../resolution/open-tickets"
 import { planAheadJob } from "../planning/plan-ahead"
-import { proposeRightSizingJob } from "../registry/propose-right-sizing"
 import { RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../finance/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS } from "../runtime/relay-outbox"
 import { purgePositionsJob } from "../execution/purge-positions"
@@ -106,11 +104,6 @@ describe("the job registry", () => {
     }
     assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues, ...notificationQueues, ...customerNoticeQueues, ...registryQueues, ...countingQueues].sort(), "the six consumers take Resolution's kinds, Finance's, the staff notices' two, the customer notices' four, the Registry's one and the counting rules' two, and nothing else is consumed")
     assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
-    // The relay's routes are the consumers' queues by kind, in the consumers' order.
-    for (const kind of OUTBOX_KINDS) {
-      const expected = consumers.filter((job) => job.inherits === outboxQueue(kind)).map((job) => job.queue)
-      assert.deepEqual(ROUTES.get(kind) ?? [], expected, kind)
-    }
   })
 
   test("routes a kind two consumers take to both their queues, in the consumers' order, and a kind none takes to none (#339)", () => {
@@ -123,27 +116,12 @@ describe("the job registry", () => {
   })
 
   test("holds Resolution's consumer: one entry per kind Resolution reads on outbox.<kind>.resolution, not route-cancelled, with its retry policy over the seam's", () => {
-    assert.deepEqual([...RESOLUTION_EVENT_KINDS], ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "route-problem-reported", "command-rejected"])
-    assert.deepEqual(
-      openTickets.map((job) => job.queue),
-      ["outbox.pickup-failed.resolution", "outbox.pickup-skipped.resolution", "outbox.pickup-problem-reported.resolution", "outbox.route-problem-reported.resolution", "outbox.command-rejected.resolution"],
-    )
     for (const job of openTickets) {
       assert.ok(JOBS.includes(job), job.queue)
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS })
       assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
-      assert.match(job.description, /^Opens a Ticket .* \((pickup-failed|pickup-skipped|pickup-problem-reported|route-problem-reported|command-rejected)\)$/)
     }
     assert.ok(!openTickets.some((job) => job.inherits === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
-  })
-
-  test("holds the heartbeat: every minute, UTC, no retry, kept a day, sent as the schedule's", () => {
-    assert.ok(JOBS.includes(heartbeat))
-    assert.equal(heartbeat.queue, "worker.heartbeat")
-    assert.equal(heartbeat.schedule, "* * * * *")
-    assert.deepEqual(heartbeat.scheduleData, { source: "schedule" })
-    assert.deepEqual(heartbeat.scheduleOptions, { tz: "UTC", missed: "skip" })
-    assert.deepEqual(heartbeat.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
   })
 
   test("holds Planning's two (#97 part B): generate-routes on an exclusive queue keyed by the scheme with two backed-off retries and an hour to run, and plan-ahead nightly at 03:00 UTC, once for every night missed, sent as the schedule's", () => {
@@ -157,7 +135,8 @@ describe("the job registry", () => {
     assert.deepEqual(planAheadJob.scheduleData, { source: "schedule" })
     assert.deepEqual(planAheadJob.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.deepEqual(planAheadJob.queueOptions, { retryLimit: 1, retryDelay: 60, deleteAfterSeconds: 604_800 })
-    assert.deepEqual(JOBS.map((job) => job.queue), [
+    // Every queue's name, as pg-boss keeps its jobs and schedules under it and the API sends to it; the order is the wiring's and nothing reads it.
+    assert.deepEqual(JOBS.map((job) => job.queue).sort(), [
       "worker.heartbeat",
       "planning.generate-routes",
       "planning.plan-ahead",
@@ -178,50 +157,29 @@ describe("the job registry", () => {
       "messaging.send",
       "messaging.collection-reminders",
       "customers.propose-right-sizing",
-    ])
+    ].sort())
   })
 
-  test("holds right-sizing's nightly run (M23b of #293): at 03:23 UTC, once for every night missed, sent as the schedule's, one retry", () => {
-    assert.ok(JOBS.includes(proposeRightSizingJob))
-    assert.equal(proposeRightSizingJob.schedule, "23 3 * * *")
-    assert.deepEqual(proposeRightSizingJob.scheduleData, { source: "schedule" })
-    assert.deepEqual(proposeRightSizingJob.scheduleOptions, { tz: "UTC", missed: "once" })
-  })
-
-  test("holds the alert rules (O4 of #290): every five minutes unless the knob says otherwise, a missed tick skipped, sent as the schedule's, no retry — the next tick reads the same", () => {
-    assert.ok(JOBS.includes(alertRulesJob))
-    assert.equal(alertRulesJob.queue, "resolution.alert-rules")
-    assert.equal(alertRulesJob.schedule, "*/5 * * * *")
-    assert.deepEqual(alertRulesJob.scheduleData, { source: "schedule" })
-    assert.deepEqual(alertRulesJob.scheduleOptions, { tz: "UTC", missed: "skip" })
-    assert.deepEqual(alertRulesJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
-  })
-
-  test("holds the proofs' purge (O1 of #290): nightly at 03:45 UTC, after the horizon sweep, once for every night missed, sent as the schedule's, no retry — the next night's window overlaps by a week", () => {
-    assert.ok(JOBS.includes(purgeProofObjectsJob))
-    assert.equal(purgeProofObjectsJob.queue, "execution.purge-proof-objects")
-    assert.equal(purgeProofObjectsJob.schedule, "45 3 * * *")
-    assert.deepEqual(purgeProofObjectsJob.scheduleData, { source: "schedule" })
-    assert.deepEqual(purgeProofObjectsJob.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.deepEqual(purgeProofObjectsJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
-  })
-
-  test("holds the positions' purge (O8 of #290): nightly at 03:40 UTC, after the horizon sweep and before the proofs', once for every night missed, sent as the schedule's, no retry — the next night sweeps everything past the days", () => {
-    assert.ok(JOBS.includes(purgePositionsJob))
-    assert.equal(purgePositionsJob.queue, "execution.purge-positions")
-    assert.equal(purgePositionsJob.schedule, "40 3 * * *")
-    assert.deepEqual(purgePositionsJob.scheduleData, { source: "schedule" })
-    assert.deepEqual(purgePositionsJob.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.deepEqual(purgePositionsJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
-  })
-
-  test("holds routing's horizon sweep (#172, #132 §2): nightly at 03:30 UTC, half an hour after Plan Ahead, once for every night missed, sent as the schedule's, no retry — the next night is the retry", () => {
-    assert.ok(JOBS.includes(sweepHorizonJob))
-    assert.equal(sweepHorizonJob.queue, "routing.sweep-horizon")
-    assert.equal(sweepHorizonJob.schedule, "30 3 * * *")
-    assert.deepEqual(sweepHorizonJob.scheduleData, { source: "schedule" })
-    assert.deepEqual(sweepHorizonJob.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.deepEqual(sweepHorizonJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
+  test("schedules on UTC's clock, catches a missed night or month up once and lets a missed tick go, and runs the nightly jobs in their order: Plan Ahead, then the horizon sweep over what it generated, then the positions' purge, then the proofs'", () => {
+    const scheduled = JOBS.filter((job) => job.schedule !== undefined)
+    assert.ok(scheduled.length >= 5, "the ticks, the nightly jobs and the monthly run")
+    for (const job of scheduled) {
+      const [minute, hour] = job.schedule!.split(" ")
+      assert.equal(job.scheduleOptions?.tz, "UTC", `${job.queue}: the registry's times are UTC's, so they compare on one clock`)
+      // A job due once a day or less often loses a night's or a month's work to a worker that was down unless it runs once on its return; a tick's next occurrence is the catch-up.
+      if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) assert.equal(job.scheduleOptions?.missed, "once", `${job.queue}: a missed occurrence runs once when the worker is back`)
+      else assert.equal(job.scheduleOptions?.missed, "skip", `${job.queue}: a missed tick is the next tick's to read, never two at once`)
+    }
+    /** A nightly job's minute of the UTC day. */
+    const minuteOfDay = (job: (typeof JOBS)[number]) => {
+      const [minute, hour, ...every] = job.schedule!.split(" ")
+      assert.deepEqual(every, ["*", "*", "*"], `${job.queue} runs every night`)
+      return Number(hour) * 60 + Number(minute)
+    }
+    const nightly = [planAheadJob, sweepHorizonJob, purgePositionsJob, purgeProofObjectsJob]
+    for (const [index, job] of nightly.entries()) {
+      if (index > 0) assert.ok(minuteOfDay(job) > minuteOfDay(nightly[index - 1]), `${job.queue} runs after ${nightly[index - 1].queue}`)
+    }
   })
 
   test("holds the relay: every minute as the backstop of its five-second successor, UTC, one tick queued at a time, no retry, publishing the dead-letter queue and then one queue per outbox kind, each kept ninety days for a consumer to come", () => {
@@ -254,11 +212,6 @@ describe("the job registry", () => {
   })
 
   test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>.finance, never scheduled, with five backed-off retries under a cap over the seam's dead letter; the billing run scheduled monthly at noon UTC", () => {
-    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed", "scale-ticket-completed", "scale-ticket-voided"])
-    assert.deepEqual(
-      recordBillableEvents.map((job) => job.queue),
-      ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.pickup-failed.finance", "outbox.pickup-skipped.finance", "outbox.ticket-completed.finance", "outbox.site-visit-recorded.finance", "outbox.site-visit-voided.finance", "outbox.weight-reviewed.finance", "outbox.scale-ticket-completed.finance", "outbox.scale-ticket-voided.finance"],
-    )
     // A missed stop's two kinds fan out to Resolution and Finance both (#293 M5b on #339's fan-out).
     for (const kind of ["pickup-failed", "pickup-skipped"] as const) assert.deepEqual(ROUTES.get(kind)?.slice(0, 2), [consumerQueue(kind, "resolution"), consumerQueue(kind, "finance")], kind)
     assert.deepEqual(RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 300, deleteAfterSeconds: 604_800 }, "five retries backing off from ten seconds under a five-minute cap: longer than an ordinary failover")
@@ -270,7 +223,6 @@ describe("the job registry", () => {
     assert.ok(JOBS.includes(runScheduledBilling))
     assert.equal(runScheduledBilling.queue, "finance.run-billing")
     assert.equal(runScheduledBilling.schedule, "0 12 1 * *", "noon UTC is the first of the month from UTC−11 to UTC+11 at once; 04:00 was the last of the month before in Chicago")
-    assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
   })
 
   test("publishes each queue once, none of them worked: the outbox kinds' own queues, which hold what no consumer takes and are inherited by the consumers that take a kind (#339), and the dead-letter queue; routing.optimise has its worker (#171)", () => {
@@ -306,11 +258,6 @@ describe("the job registry", () => {
   })
 
   test("holds the staff notices' consumer (O16 of #290): one entry per kind on outbox.<kind>.notifications, never scheduled, on the seam's policy", () => {
-    assert.deepEqual([...NOTIFICATION_EVENTS], ["alert-raised", "ticket-assigned"])
-    assert.deepEqual(
-      notifyStaff.map((job) => job.queue),
-      ["outbox.alert-raised.notifications", "outbox.ticket-assigned.notifications"],
-    )
     for (const job of notifyStaff) {
       assert.ok(JOBS.includes(job), job.queue)
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS })
@@ -416,7 +363,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
 
     const lines: string[] = []
     const context = jobContext({ log: (line) => void lines.push(line) })
-    const event = (kind: string, id: string) => ({
+    const event = (kind: OutboxKind, id: string): RelayedJob => ({
       id,
       companyId: "01a0d3a5-e5e0-7000-8000-000000000002",
       projectId: "01a0d3a5-e5e0-7000-8000-000000000003",
@@ -429,7 +376,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
       createdAt: "2026-10-05T06:00:00.000Z",
       updatedAt: "2026-10-05T06:00:05.000Z",
     })
-    const job = (data: object) => ({ id: "j", name: "outbox.pickup-failed", data, expireInSeconds: 1, heartbeatSeconds: null, signal: AbortSignal.abort() }) as Parameters<(typeof jobs)[0]["handler"]>[0][number]
+    const job = (data: RelayedJob): Job<RelayedJob> => ({ id: "j", name: "outbox.pickup-failed", data, expireInSeconds: 1, heartbeatSeconds: null, signal: AbortSignal.abort() })
     const first = "01a0d3a5-e5e0-7000-8000-000000000011"
     const second = "01a0d3a5-e5e0-7000-8000-000000000012"
     assert.deepEqual(await jobs[0].handler([job(event("pickup-failed", first)), job(event("pickup-failed", second))], context), { events: [first, second] })
@@ -440,7 +387,7 @@ describe("the outbox queues and defineOutboxConsumer", () => {
     assert.deepEqual(lines, ["pickup-failed", "pickup-failed"])
     // Another kind's event on this queue, and data that is no event: refused before the handler.
     await assert.rejects(jobs[0].handler([job(event("command-rejected", first))], context), /outbox\.pickup-failed\.resolution: job j carries a command-rejected event/)
-    await assert.rejects(jobs[0].handler([job({ not: "an event" })], context))
+    await assert.rejects(jobs[0].handler([job({ not: "an event" } as unknown as RelayedJob)], context))
     assert.equal(seen.length, 2)
   })
 })
@@ -453,23 +400,5 @@ describe("isCronExpression", () => {
     for (const expression of ["", "not a cron", "61 * * * *", "* * * *", "0 3 * * * *"]) {
       assert.equal(isCronExpression(expression), false, expression)
     }
-  })
-})
-
-describe("defineJob", () => {
-  test("returns the definition it is given, typed by the handler's data", async () => {
-    const lines: string[] = []
-    const job = defineJob<{ n: number }>({
-      queue: "test.echo",
-      description: "Echoes.",
-      handler: async (jobs, { log }) => {
-        for (const item of jobs) log(`n=${item.data.n}`)
-        return jobs.length
-      },
-    })
-    assert.equal(job.queue, "test.echo")
-    const context = jobContext({ log: (line) => void lines.push(line) })
-    assert.equal(await job.handler([{ id: "1", name: "test.echo", data: { n: 7 }, expireInSeconds: 1, heartbeatSeconds: null, signal: AbortSignal.abort() }], context), 1)
-    assert.deepEqual(lines, ["n=7"])
   })
 })

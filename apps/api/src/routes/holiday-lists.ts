@@ -73,7 +73,6 @@ export async function requireHolidayList(tx: Tx, companyId: string, name: string
   if (found === undefined) throw invalidRequest("body", [{ path: "holidayList", message: NO_SUCH_HOLIDAY_LIST }])
 }
 
-/** The days of a page of lists in one query, by list and by day. */
 async function holidaysOf(tx: Tx, companyId: string, listIds: readonly string[]): Promise<Map<string, Holiday[]>> {
   const byList = new Map<string, Holiday[]>()
   if (listIds.length === 0) return byList
@@ -86,7 +85,6 @@ async function holidaysOf(tx: Tx, companyId: string, listIds: readonly string[])
   return byList
 }
 
-/** How many of the company's projects rest on each of the names. */
 async function projectCountsOf(tx: Tx, companyId: string, names: readonly string[]): Promise<Map<string, number>> {
   if (names.length === 0) return new Map()
   const rows = await tx
@@ -97,7 +95,6 @@ async function projectCountsOf(tx: Tx, companyId: string, names: readonly string
   return new Map(rows.flatMap((row) => (row.name === null ? [] : [[row.name, row.projects] as const])))
 }
 
-/** The ids of the company's projects resting on the list of this name. */
 async function projectsOn(tx: Tx, companyId: string, name: string): Promise<string[]> {
   const rows = await tx
     .select({ id: project.id })
@@ -107,14 +104,12 @@ async function projectsOn(tx: Tx, companyId: string, name: string): Promise<stri
   return rows.map((row) => row.id)
 }
 
-/** One list on the wire, with its days and its projects counted. */
 async function readList(tx: Tx, companyId: string, row: Row): Promise<HolidayList> {
   const holidays = (await holidaysOf(tx, companyId, [row.id])).get(row.id) ?? []
   const projects = (await projectCountsOf(tx, companyId, [row.name])).get(row.name) ?? 0
   return listOf(row, holidays, projects)
 }
 
-/** Writes the days a list starts with, or the set that replaces them. Nothing to write is no statement. */
 async function writeHolidays(tx: Tx, companyId: string, listId: string, holidays: readonly Holiday[]): Promise<void> {
   if (holidays.length === 0) return
   await tx.insert(holidayListHoliday).values(holidays.map((holiday) => ({ id: newId(), companyId, holidayListId: listId, day: holiday.day, name: holiday.name })))

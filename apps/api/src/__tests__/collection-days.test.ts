@@ -103,7 +103,6 @@ describe("the collection days by address on the public door", { skip: database.s
         { companyId, projectId: copenhagen, validFrom: "2026-01-01", containerId: ids.glassBin, subscriptionId: ids.subscription, wasteFractionId: ids.glass },
         { companyId, projectId: copenhagen, validFrom: "2026-01-01", containerId: ids.residualBin, subscriptionId: ids.subscription, wasteFractionId: ids.residual },
       ])
-      // Mondays and Thursdays from October; a manual group on Thursdays lists the glass bin, a rule group on Mondays matched the residual one.
       await tx.insert(routeScheme).values({ id: ids.scheme, companyId, projectId: copenhagen, validFrom: "2026-10-01", name: `Centrum ${testId().slice(-6)}`, serviceType: "container-collection", frequency: "weekly", serviceDays: ["monday", "thursday"], holidayPolicy: "skip", status: "validated" })
       await tx.insert(collectionGroup).values([
         { id: ids.glassGroup, companyId, projectId: copenhagen, routeSchemeId: ids.scheme, name: "Glass Thursdays", position: 1, days: ["thursday"], stopSource: "manual" },

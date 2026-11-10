@@ -118,7 +118,6 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
     return EventPage.parse(await response.json())
   }
   const kindsOf = async (id: string) => (await events(id)).items.map((event) => event.kind)
-  /** A line by the event it settles, as the assertions read one. */
   const lineFor = (settled: SettlementDetail, eventId: string) => {
     const line = settled.lines.find((candidate) => candidate.billableEventId === eventId)
     assert.ok(line, `a line for event ${eventId}`)
@@ -379,7 +378,6 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
       assert.deepEqual((await page(olivia, `?limit=1&cursor=${first.nextCursor}`)).items.map((row) => row.id), [next.id])
       assert.deepEqual(await filtered("", viewer), [s.id, next.id, theirs.id], "Copenhagen's settlements, which the viewer works in")
 
-      // Lars, NordRen's manager: his provider's settlements, with their lines and totals, and nothing of CityHaul's.
       assert.deepEqual(await filtered("", lars), [s.id, next.id])
       const his = await detail(s.id, lars)
       assert.deepEqual(his, await detail(s.id))

@@ -107,7 +107,6 @@ export function successorDayIssue(predecessor: { validFrom: string; validTo: str
   return undefined
 }
 
-/** The scheme the path names, locked and read again under the lock, refused when it is not here or is archived. */
 async function lockedScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow> {
   await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
   const current = await getScheme(tx, principal, id)
@@ -115,7 +114,6 @@ async function lockedScheme(tx: Tx, principal: Principal, id: string): Promise<S
   return current
 }
 
-/** The predecessor as the create body its next version is written from: the whole scheme as it reads, from `validFrom` to the end it had. */
 function successorBody(predecessor: RouteScheme, validFrom: string): RouteSchemeCreate {
   return {
     projectId: predecessor.projectId,
@@ -197,7 +195,6 @@ export async function writeSuccessor(
     .orderBy(asc(route.number))
   if (going.length > 0) throw problem(409, { detail: dispatchedFrom(going.map((row) => routeLabel(row.number)), validFrom) })
 
-  // The predecessor as it reads, before the cut: what the next version is written from.
   const before = await schemeWithGroups(tx, principal.companyId, current, now)
   const [row] = await tx
     .update(routeScheme)

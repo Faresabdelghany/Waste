@@ -57,7 +57,6 @@ export type PlaceShape = {
   closesAt: string | null
 }
 
-/** The same four as a patch may carry them: each absent where the body did not name it. */
 export type PlaceShapePatch = {
   ownership?: string
   serviceProviderId?: string | null

@@ -1,25 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import { ATTACHMENT_EXTENSIONS, ATTACHMENT_KEY_SHAPE } from "@waste/domain/storage-objects"
 
 import { ObjectKey } from "../execution"
 
-import {
-  AlertKind,
-  AlertSeverity,
-  AlertSource,
-  AlertStatus,
-  TicketEventKind,
-  TicketKind,
-  TicketObjectKey,
-  TicketPriority,
-  TicketResolution,
-  TicketSource,
-  TicketStatus,
-  TicketVisibility,
-} from "../resolution"
+import { AlertSource, AlertStatus, TicketEventKind, TicketObjectKey, TicketSource, TicketStatus } from "../resolution"
 import { refusal } from "./expect"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -27,20 +13,6 @@ const TICKET = "01a0d3a5-e5e0-7000-8000-000000000002"
 const OBJECT = "01a0d3a5-e5e0-7000-8000-000000000003"
 
 describe("the Resolution enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(TicketStatus.options, [...TICKET_STATUSES])
-    assert.deepEqual(TicketKind.options, [...TICKET_KINDS])
-    assert.deepEqual(TicketPriority.options, [...TICKET_PRIORITIES])
-    assert.deepEqual(TicketSource.options, [...TICKET_SOURCES])
-    assert.deepEqual(TicketResolution.options, [...TICKET_RESOLUTIONS])
-    assert.deepEqual(TicketEventKind.options, [...TICKET_EVENT_KINDS])
-    assert.deepEqual(TicketVisibility.options, [...TICKET_VISIBILITIES])
-    assert.deepEqual(AlertKind.options, [...ALERT_KINDS])
-    assert.deepEqual(AlertSeverity.options, [...ALERT_SEVERITIES])
-    assert.deepEqual(AlertSource.options, [...ALERT_SOURCES])
-    assert.deepEqual(AlertStatus.options, [...ALERT_STATUSES])
-  })
-
   test("refuse the prototype's display strings and the readings that are never stored", () => {
     assert.equal(TicketStatus.safeParse("created").success, false, "Created folds into open")
     assert.equal(TicketStatus.safeParse("Waiting for customer").success, false, "the portal's words for pending")

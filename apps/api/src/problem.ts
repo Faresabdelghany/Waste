@@ -57,7 +57,6 @@ import { HTTPException } from "hono/http-exception"
 import type { ClientErrorStatusCode, ServerErrorStatusCode } from "hono/utils/http-status"
 import { resolver, validator } from "hono-openapi"
 
-/** A status a problem can carry: 4xx or 5xx. */
 export type ProblemStatus = ClientErrorStatusCode | ServerErrorStatusCode
 
 export type ProblemOptions = {

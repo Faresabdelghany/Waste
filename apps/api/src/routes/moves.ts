@@ -79,7 +79,6 @@ class Rehearsal extends Error {
   }
 }
 
-/** The move itself, in `tx`: every statement, every refusal, and what it leaves. */
 async function performMove(tx: Tx, principal: Principal, id: string, body: MoveCreate, now: () => Date): Promise<MoveOutcome> {
   const { companyId } = principal
   const { on } = body
@@ -87,7 +86,6 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
   await lockRow(tx, property, { companyId, id })
   const row = await getProperty(tx, principal, id)
 
-  // The body's own 400s: three customers of this company, and the number the subscriptions owe.
   await requireCustomer(tx, companyId, body.outgoingCustomerId, "outgoingCustomerId")
   const incomingStatus = await requireCustomer(tx, companyId, body.incomingCustomerId, "incomingCustomerId")
   await requireCustomer(tx, companyId, body.payerCustomerId, "payerCustomerId")
@@ -144,7 +142,6 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
     const ended = outgoing.agreement
     if (ended === null) throw noSuchProperty(id)
 
-    // The incoming half begins: its agreement as any agreement is written, then each replacement and the containers it carries.
     const started = await createAgreement(tx, principal, {
       projectId: ended.projectId,
       number: body.agreementNumber as string,
@@ -166,7 +163,6 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
       containersCarried.push(...carried.map((placement) => placement.containerId))
     }
 
-    // The charges a move does not reprice: each ended subscription's recurring charge, live, whose period crosses or follows the day.
     const { query, reversing } = eventsFrom(tx, companyId)
     const charged = await query
       .where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.kind, "subscription"), inArray(billableEvent.subscriptionId, ending), gt(billableEvent.chargePeriodTo, on), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
@@ -174,7 +170,6 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
     chargesToCredit = charged.map(eventOf)
   }
 
-  // The parties last: the outgoing customer's roles end on the day, and the incoming customer's begin there, each until the end the outgoing role had.
   await tx.update(propertyParty).set({ validTo: on }).where(and(eq(propertyParty.companyId, companyId), inArray(propertyParty.id, leaving.map((party) => party.id))))
   await refuseOverlap({ [PARTY_OVERLAP]: ROLE_HELD }, () =>
     tx.insert(propertyParty).values(

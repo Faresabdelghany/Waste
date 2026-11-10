@@ -11,7 +11,6 @@ const after = (status: OutboundLoadStatus) => Object.fromEntries(OUTBOUND_LOAD_C
 
 describe("an outbound load", () => {
   test("departs, is received, then reconciled or disputed; a disputed load is reconciled once settled", () => {
-    assert.deepEqual([...OUTBOUND_LOAD_STATUSES], ["departed", "received", "reconciled", "disputed", "cancelled"])
     assert.deepEqual(after("departed"), {
       receive: { kind: "move", to: "received" },
       reconcile: { kind: "refuse", sentence: LOAD_NOT_RECEIVED },

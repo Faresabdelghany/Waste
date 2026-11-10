@@ -42,7 +42,6 @@ export const FAKE_ADDRESSES: readonly Entry[] = [
   { id: darId(10), parts: street("Østerbrogade", "50", "2100", "København Ø"), registryId: "100045679", at: [12.5772, 55.6981] },
 ]
 
-/** A text as the search compares it: lowercase words, commas and periods aside. */
 const wordsOf = (text: string): string[] =>
   text
     .toLocaleLowerCase("da")

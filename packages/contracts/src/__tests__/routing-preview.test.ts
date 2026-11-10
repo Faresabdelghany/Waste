@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { PICKUP_ORDER_MAX } from "@waste/domain/execution/routes"
 
-import { ROUTING_PREVIEW_POINTS_MAX, RoutingPreview, RoutingPreviewRequest } from "../routing-preview"
+import { RoutingPreview, RoutingPreviewRequest } from "../routing-preview"
 
 const depot = [12.5683, 55.6761]
 const bin = [12.575, 55.68]
@@ -15,13 +15,12 @@ describe("RoutingPreviewRequest: the drafted route's points POST /routing/previe
   test("two points or more in driving order, a repeated one included, up to a route's most stops with its depot and station", () => {
     const body = { points: [depot, bin, bin, station] }
     assert.deepEqual(RoutingPreviewRequest.parse(body), body)
-    assert.equal(ROUTING_PREVIEW_POINTS_MAX, PICKUP_ORDER_MAX + 2)
-    assert.equal(RoutingPreviewRequest.safeParse({ points: along(ROUTING_PREVIEW_POINTS_MAX) }).success, true)
+    assert.equal(RoutingPreviewRequest.safeParse({ points: along(PICKUP_ORDER_MAX + 2) }).success, true, "every stop, the depot and the station")
   })
 
   test("refuses one point, one too many, a third ordinate, a position off the globe and a member it does not know", () => {
     assert.equal(RoutingPreviewRequest.safeParse({ points: [depot] }).success, false)
-    assert.equal(RoutingPreviewRequest.safeParse({ points: along(ROUTING_PREVIEW_POINTS_MAX + 1) }).success, false)
+    assert.equal(RoutingPreviewRequest.safeParse({ points: along(PICKUP_ORDER_MAX + 3) }).success, false)
     assert.equal(RoutingPreviewRequest.safeParse({ points: [depot, [12.6, 55.7, 12]] }).success, false)
     assert.equal(RoutingPreviewRequest.safeParse({ points: [depot, [181, 55.7]] }).success, false)
     assert.equal(RoutingPreviewRequest.safeParse({ points: [depot, bin], profile: "driving-car" }).success, false)

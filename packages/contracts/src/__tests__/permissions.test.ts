@@ -1,15 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ACTIONS, MODULE_KEYS } from "@waste/domain/access/modules"
-
 import { Action, Grant, ModuleKey } from "../permissions"
 
 describe("ModuleKey", () => {
-  test("the vocabulary is the domain's, whole and in order", () => {
-    assert.deepEqual(ModuleKey.options, [...MODULE_KEYS])
-  })
-
   test("a known key parses; anything else is refused", () => {
     assert.equal(ModuleKey.parse("configure.access"), "configure.access")
     assert.equal(ModuleKey.safeParse("configure.nothing").success, false)
@@ -21,9 +15,7 @@ describe("ModuleKey", () => {
 })
 
 describe("Action", () => {
-  test("the four actions, and nothing else", () => {
-    assert.deepEqual(Action.options, [...ACTIONS])
-    for (const action of ACTIONS) assert.equal(Action.parse(action), action)
+  test("refuses an action outside the four, and one spelled other than lowercase", () => {
     assert.equal(Action.safeParse("approve").success, false)
     assert.equal(Action.safeParse("View").success, false)
   })

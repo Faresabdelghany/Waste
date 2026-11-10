@@ -6,6 +6,7 @@ import { PICKUP_EXCEPTION_HISTORY_MAX, REASON_AND_CODE } from "@waste/domain/exe
 
 import { PickupCorrection } from "../pickups"
 import { ContaminantCode, ContaminantCodeCreate, ContaminantCodeFractionsSet, ContaminantCodePatch, PickupException, PickupExceptionHistory, PickupExceptionRule, PickupExceptionRuleCreate, PickupExceptionRulePatch } from "../pickup-exceptions"
+import { refusal } from "./expect"
 
 const ID = "01a0d2a4-a280-7001-8000-000000000001"
 const OTHER = "01a0d2a4-a280-7001-8000-000000000002"
@@ -54,7 +55,14 @@ describe("PickupExceptionRule", () => {
   test("a patch moves the free count, the window, the ladder and the end, never the key or the start", () => {
     assert.deepEqual(PickupExceptionRulePatch.parse({ freeCount: 0, validTo: null }), { freeCount: 0, validTo: null })
     for (const key of ["outcome", "reason", "contaminantCodeId", "validFrom", "projectId"]) {
-      assert.equal(PickupExceptionRulePatch.safeParse({ [key]: null }).success, false, key)
+      // A field the patch takes stands beside the refused one, so the strict object's refusal is the one issue.
+      const issues = refusal(PickupExceptionRulePatch.safeParse({ freeCount: 1, [key]: null }))
+      assert.deepEqual(
+        issues.map((issue) => issue.path),
+        [""],
+        key,
+      )
+      assert.match(issues[0].message, new RegExp(key), key)
     }
   })
 })

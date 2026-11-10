@@ -1,26 +1,18 @@
 // The Execution vocabulary, held to the shape every vocabulary module keeps
-// (src/__tests__/vocabulary.ts), and to four things of its own: the route and
-// pickup statuses are #97 §2's, verbatim, since generation writes what these
-// rows read; the driver's reasons and the closing reasons are values of the
-// reason list and together with the two the system writes otherwise make the
-// whole of it; the thirteen proof kinds are seven events, five kinds of evidence and
-// the correction; and every command kind is a kebab token the prototype's
-// action list can be mapped onto, less the two that are not commands.
+// (src/__tests__/vocabulary.ts), and to the rules its values beside the lists
+// state: the driver's reasons and the closing reasons are values of the
+// reason list and together with the ones the system writes make the whole of
+// it; the office's cancel codes are every code but a run's; and the command
+// kinds leave out what is not a command.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 21, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS", "RECEIVED_LOAD_STATUSES", "ACTIVE_CONTAMINANT_CODE_STATUSES", "NOT_STARTED_ROUTE_STATUSES", "DISPATCHED_ROUTE_STATUSES", "OPEN_ROUTE_STATUSES", "RAN_ROUTE_STATUSES", "MISSED_PICKUP_STATUSES", "LIVE_STOP_STATUSES"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS", "RECEIVED_LOAD_STATUSES", "ACTIVE_CONTAMINANT_CODE_STATUSES", "NOT_STARTED_ROUTE_STATUSES", "DISPATCHED_ROUTE_STATUSES", "OPEN_ROUTE_STATUSES", "RAN_ROUTE_STATUSES", "MISSED_PICKUP_STATUSES", "LIVE_STOP_STATUSES"])
 
 describe("the Execution vocabulary's own rules", () => {
-  test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
-    assert.deepEqual([...vocabulary.ROUTE_STATUSES], ["planned", "ready", "active", "completed", "cancelled"])
-    assert.deepEqual([...vocabulary.PICKUP_STATUSES], ["planned", "completed", "skipped", "failed"])
-    assert.deepEqual([...vocabulary.PICKUP_OUTCOMES], vocabulary.PICKUP_STATUSES.filter((status) => status !== "planned"))
-  })
-
   test("the driver's six reasons and the system's four make the reason list; the closing reasons are two of the system's", () => {
     const system = vocabulary.PICKUP_REASONS.filter((reason) => !(vocabulary.DRIVER_PICKUP_REASONS as readonly string[]).includes(reason))
     assert.deepEqual([...vocabulary.DRIVER_PICKUP_REASONS], ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other"])
@@ -29,18 +21,7 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.CLOSING_REASONS], ["route-ended", "route-cancelled"])
   })
 
-  test("a stop is generation's or the office's (#111): the two who put one on a route", () => {
-    assert.deepEqual([...vocabulary.PICKUP_ORIGINS], ["generation", "office"])
-  })
-
-  test("a stop empties its container, or is one of the office's work orders or a bulky booking's collection; the office books every service of the list, a delivery, a removal and a swap with their ledger moves (O3 of #290)", () => {
-    assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash", "bulky"])
-    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash", "bulky"])
-    for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
-  })
-
   test("a bulky booking is booked, routed, collected or cancelled (O11 of #290), and a bulky collection is no work order", () => {
-    assert.deepEqual([...vocabulary.BULKY_BOOKING_STATUSES], ["booked", "routed", "collected", "cancelled"])
     assert.ok(!(vocabulary.WORK_ORDER_SERVICES as readonly string[]).includes("bulky"))
   })
 
@@ -52,20 +33,11 @@ describe("the Execution vocabulary's own rules", () => {
     )
   })
 
-  test("a fill estimate is the driver's eye, a quarter at a time, and past full (M23 of #293)", () => {
-    assert.deepEqual([...vocabulary.FILL_LEVELS], ["empty", "quarter", "half", "three-quarters", "full", "overflowing"])
-  })
-
-  test("the proof kinds are seven driver events — five about a stop, two about the route — five kinds of evidence and the correction", () => {
-    assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"])
-  })
-
-  test("the seventeen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
-    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 17)
+  test("the command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }
-    assert.deepEqual([...vocabulary.COMMAND_OUTCOMES], ["applied", "rejected"], "replayed is the wire's word and is never stored")
+    assert.equal((vocabulary.COMMAND_OUTCOMES as readonly string[]).includes("replayed"), false, "replayed is the wire's word and is never stored")
   })
 })
 

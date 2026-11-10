@@ -32,7 +32,7 @@ import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { useActorName } from "@/components/platform/shell-identity"
-import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { densityClass, detailsColumn, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
 import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
 import { cn } from "@/lib/utils"
 import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
@@ -232,11 +232,13 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
           readers={STATUS_READERS}
           filters={filters}
           onFiltersChange={setFilters}
-          view={view}
-          onViewChange={setView}
-          orderingOptions={RECENT_ORDERS}
-          defaults={listView("updated")}
-          detailsLabel="Details"
+          view={{
+            value: view,
+            onChange: setView,
+            orderingOptions: RECENT_ORDERS,
+            defaults: listView("updated"),
+            builtinColumnChips: detailsColumn("Details"),
+          }}
         />
       }
     >

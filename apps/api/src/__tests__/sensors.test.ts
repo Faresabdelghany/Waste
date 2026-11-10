@@ -124,7 +124,6 @@ describe("fill-level sensors", { skip: database.skip || ownerDatabase.skip }, ()
       assert.match(await refused(await olivia(`/sensors/${sensor.id}/pairings`, { method: "POST", body: { containerId: other, validFrom: "2026-10-20" } }), 409), /paired with another container/)
       // After the end, the container is free.
       await pair(olivia, second.id, { containerId: spare, validFrom: "2026-11-01" })
-      // Another project's container is a 400 at the field.
       const problem = await readProblem(await olivia(`/sensors/${sensor.id}/pairings`, { method: "POST", body: { containerId: ids.harborBin, validFrom: "2026-12-01" } }))
       assert.deepEqual(problem.errors, [{ path: "containerId", message: "Not a container of this project" }])
       assert.equal((await read(olivia, `/sensors/${sensor.id}/pairings`, PairingPage)).items.length, 1)

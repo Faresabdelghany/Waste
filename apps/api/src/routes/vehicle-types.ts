@@ -75,7 +75,6 @@ const containerTypes: IdSet<typeof containerTypeVehicleType> = {
   require: requireEachOf(containerType, "containerTypeIds", requireContainerType),
 }
 
-/** The row on the wire, with the container types the page loaded for it, by id. */
 function typeOf(row: Row, containerTypeIds: readonly string[]): VehicleType {
   return {
     id: row.id,
@@ -103,7 +102,6 @@ const { scope, noSuch: noSuchType, get: getType, list: listTypes } = scoped(vehi
 // The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
 // O30 of #290) share, so an imported row is held to every rule a form's is.
 
-/** Adds a vehicle type with the container types it starts out servicing, each held to the company. */
 export async function createVehicleType(tx: Tx, principal: Principal, body: VehicleTypeCreate): Promise<VehicleType> {
   const { containerTypeIds, ...values } = body
   await containerTypes.require(tx, principal.companyId, containerTypeIds)
@@ -114,7 +112,6 @@ export async function createVehicleType(tx: Tx, principal: Principal, body: Vehi
       .returning(columns),
   )
   await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
-  // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
   return typeOf(row, asRead(containerTypeIds))
 }
 
@@ -145,7 +142,6 @@ export async function replaceVehicleTypeContainerTypes(tx: Tx, principal: Princi
   return typeOf(row, asRead(containerTypeIds))
 }
 
-/** The company's vehicle type with this key, with its container types, or undefined. */
 export async function vehicleTypeByKey(tx: Tx, companyId: string, key: string): Promise<VehicleType | undefined> {
   const [row] = await tx
     .select(columns)
@@ -177,8 +173,6 @@ export function vehicleTypeRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { items, nextCursor } = await listTypes(tx, principal, at)
-        // Paged first, so the row that only proves there is a next page is
-        // not one of the types whose container types are loaded.
         const held = await idsOf(tx, containerTypes, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => typeOf(row, held.get(row.id) ?? [])), nextCursor })
       },

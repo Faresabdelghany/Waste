@@ -43,7 +43,6 @@ export type TicketBase = {
   pool: Database
   ownerPool: Database
   keys: SigningKeys
-  /** The company under test. */
   a: Tenant
   /** The other company: one ticket of its own, to prove it is invisible. */
   b: Tenant
@@ -69,7 +68,6 @@ export type TicketBase = {
 export type TicketSuite = TicketBase & {
   /** A ticket of Harbor Commercial, which the viewer does not work in. */
   harbors: Ticket
-  /** The other company's ticket. */
   theirs: Ticket
 }
 
@@ -110,7 +108,6 @@ export function ticketSuite(): { readonly current: TicketSuite } {
         { id: portal.annas, companyId: a.companyId, projectId: copenhagen, name: "Rosenvej 4", address: "Rosenvej 4, 2100 København Ø", kind: "residential", location: TOWN_HALL, status: "active" },
         { id: portal.bos, companyId: a.companyId, projectId: copenhagen, name: "Lindevej 9", address: "Lindevej 9, 2100 København Ø", kind: "residential", location: TOWN_HALL, status: "active" },
       ])
-      // Anna is two things to her address; Bo one thing to his.
       await tx.insert(propertyParty).values([
         { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "tenant", validFrom: "2026-01-01" },
         { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "payer", validFrom: "2026-01-01" },
@@ -158,7 +155,6 @@ export function ticketCalls(of: () => TicketBase) {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
   }
-  /** A create body: Copenhagen Central, a missed collection, the two texts, and whatever the test adds. */
   const body = (values: Record<string, unknown> = {}) => ({
     projectId: of().a.projects.copenhagen.id,
     subject: "Bin not emptied",
@@ -211,7 +207,6 @@ export function ticketCalls(of: () => TicketBase) {
     reject: { reason: "Not this company's address" },
     reopen: { note: "The customer called again" },
   }
-  /** A fresh ticket moved into the status named through the commands, as the office would. */
   async function inStatus(status: TicketStatus, values: Record<string, unknown> = {}): Promise<Ticket> {
     const fresh = await opened(values)
     switch (status) {

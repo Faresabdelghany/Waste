@@ -52,7 +52,6 @@ export const ALREADY_VOIDED = "The visit is already voided"
 
 const { scope: visitScope, noSuch: noSuchVisit, list: listVisits } = scoped(siteVisit, { noun: "site visit", reach: "projects", columns: visitColumns, order: "desc" })
 
-/** The project of a recycling centre in the projects the caller works in; the 400 at `siteId` otherwise. */
 async function siteProject(tx: Tx, principal: Principal, siteId: string): Promise<string> {
   const [found] = await tx
     .select({ projectId: dropOffPoint.projectId })

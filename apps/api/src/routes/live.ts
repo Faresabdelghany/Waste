@@ -47,7 +47,6 @@ const MODULE = "route-studio.live"
 const LivePage = Page(LiveRoute)
 const SessionPage = Page(Session)
 
-/** The latest point a proof of each route carried, by route, in one statement over the page's ids. */
 async function lastLocationsByRoute(tx: Tx, companyId: string, routeIds: readonly string[]): Promise<Map<string, FlatPoint>> {
   if (routeIds.length === 0) return new Map()
   const rows = await tx
@@ -89,7 +88,6 @@ export function liveRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        // Today on each route's project's clock at the request's instant.
         const today = todayOnClock(now(), project.timezone)
         const { items, nextCursor } = await listLiveRoutes(
           tx,

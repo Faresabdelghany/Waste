@@ -30,7 +30,6 @@ const UnloadPage = Page(Unload)
 const MODULE = "route-studio.weights"
 /** The request's clock, pinned: one in the afternoon on the fixtures' Monday, so the skew rule has a known edge. */
 const AFTERNOON = new Date("2026-10-05T13:00:00Z")
-/** An instant so many minutes off the pinned clock. */
 const minutes = (n: number) => new Date(AFTERNOON.getTime() + n * 60_000).toISOString()
 
 describe("the unload endpoints", { skip: database.skip || owner.skip }, () => {
@@ -84,7 +83,6 @@ describe("the unload endpoints", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
   }
-  /** A ticket for the completed route at ARC Amager: 8,540 kg net, with whatever else the test says. */
   const ticket = (values: Record<string, unknown> = {}) => ({
     unloadingStationId: fleet.stations.amager.id,
     wasteFractionId: ex.fractions.residual.id,

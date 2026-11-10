@@ -24,7 +24,6 @@ import { testId, type Tenant } from "./tenant"
 
 describe("the driver door", { skip: database.skip || owner.skip }, () => {
   let now = MORNING
-  /** Where the door's log goes, for the two things it notes. */
   const logged: unknown[] = []
   const door = driverDoor({ now: () => now, logged })
   let pool: Database
@@ -334,7 +333,6 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   })
 
   describe("a container confirmed at a stop by its code (O19 of #290)", () => {
-    /** Gives the fixture containers a barcode and an RFID tag each, the way a registry holds them. */
     const tagged = () =>
       withCompany(pool.db, a.companyId, async (tx) => {
         for (const [index, bin] of fixtures.containers.entries()) {

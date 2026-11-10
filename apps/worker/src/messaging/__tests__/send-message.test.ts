@@ -18,14 +18,14 @@ import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
 
-import { JOBS } from "../jobs"
-import { MAX_ATTEMPTS, NO_CONSENT, sendMessage } from "../messaging/send-message"
-import { LogOnlyProvider } from "../messaging/log-only"
-import type { MessagingProvider, OutgoingMessage } from "../messaging/provider"
-import { messagingProviderFromEnv } from "../messaging/select"
-import { at, dropConsumerTenant, seedConsumerTenant, testId, type ConsumerTenant } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { databaseUnderTest, ownerUnderTest } from "./database"
+import { JOBS } from "../../jobs"
+import { MAX_ATTEMPTS, NO_CONSENT, sendMessage } from "../send-message"
+import { LogOnlyProvider } from "../log-only"
+import type { MessagingProvider, OutgoingMessage } from "../provider"
+import { messagingProviderFromEnv } from "../select"
+import { at, dropConsumerTenant, seedConsumerTenant, testId, type ConsumerTenant } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()

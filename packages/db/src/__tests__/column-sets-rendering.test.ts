@@ -40,11 +40,6 @@ describe("the column sets as drizzle-kit writes them", () => {
     )
   })
 
-  test("projectScoped includes the tenant column, so a project-scoped table spreads it alone", () => {
-    assert.deepEqual(Object.keys(projectScoped), ["companyId", "projectId"])
-    assert.deepEqual(Object.keys(tenant), ["companyId"])
-  })
-
   test("the sets are shared: two tables spreading the same objects render independently", async () => {
     const one = wms.table("specimen_shared_one", { ...id, ...tenant, ...timestamps })
     const two = wms.table("specimen_shared_two", { ...id, ...tenant, ...timestamps })

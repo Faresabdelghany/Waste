@@ -143,7 +143,6 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
       ).map((row) => ({ ...row, case: caseOf(row.subscriptionId) })),
     )
 
-  /** The month the suite first runs: built once the tenant is, since the project is its. */
   const october = () => period("2026-10-01", "2026-10-31")
 
   test("a preview plans October's run and writes nothing; the run then mints and invoices exactly what it planned: October never charged and November in advance", async () => {

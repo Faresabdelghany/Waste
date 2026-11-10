@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { checkBoss, type BossProbe } from "../readiness"
+import { checkBoss, type BossCheck, type BossProbe } from "../readiness"
 
 const bossOf = (getQueues: BossProbe["boss"]["getQueues"], started = true): BossProbe => ({ boss: { getQueues }, queues: ["a.one", "b.two"], isStarted: () => started })
 
@@ -45,11 +45,18 @@ describe("checkBoss", () => {
     assert.deepEqual(await checkBoss(missing), { boss: "ok", failedJobs: 1 })
   })
 
-  test("answers unreachable when the read rejects, and when the bound passes with the read still hanging", async () => {
+  test("answers unreachable when the read rejects, and when the bound passes with the read still hanging", async (t) => {
     assert.deepEqual(await checkBoss(bossOf(async () => Promise.reject(new Error("connection terminated")))), { boss: "unreachable" })
-    const started = Date.now()
-    assert.deepEqual(await checkBoss(bossOf(() => new Promise(() => {})), { timeoutMs: 50 }), { boss: "unreachable" })
-    const elapsed = Date.now() - started
-    assert.ok(elapsed >= 40 && elapsed < 1_000, `answered after ${elapsed} ms`)
+    // The bound's timer on a mocked clock: what has answered is read once the promises have settled, after each tick.
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    const settled = () => new Promise((resolve) => setImmediate(resolve))
+    let answered: BossCheck | undefined
+    void checkBoss(bossOf(() => new Promise(() => {})), { timeoutMs: 50 }).then((check) => (answered = check))
+    t.mock.timers.tick(49)
+    await settled()
+    assert.equal(answered, undefined, "not before the bound")
+    t.mock.timers.tick(1)
+    await settled()
+    assert.deepEqual(answered, { boss: "unreachable" }, "at the bound")
   })
 })

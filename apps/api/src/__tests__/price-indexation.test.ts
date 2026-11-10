@@ -122,7 +122,6 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
       assert.deepEqual([glass?.unitPriceMinor, glass?.customerKind, glass?.validFrom, glass?.validTo], [344, "organisation", NEW_YEAR, LATER], "the successor keeps the conditions and the old end")
       for (const untouched of [typedIn, scheduled, ofRetired, ended]) assert.deepEqual(all.get(untouched.id), untouched, "a row left is left as it was")
 
-      // The resolver reads the row in force on each side of the day.
       const resolve = async (on: string) => {
         const response = await olivia(`/price-lists/${list.id}/resolve?productId=${products.residual.id}&on=${on}`)
         assert.equal(response.status, 200)

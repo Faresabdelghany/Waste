@@ -226,7 +226,6 @@ export function collectionGroupRoutes(deps: RouteDeps) {
         requireFleetInService(refs, rows)
         await requireFleetThere(tx, within, scheme, [values], today)
         await requireStructure(tx, within, scheme, [...others, values])
-        // A group given no position goes after the last; past the last a position can be, it is told to name one.
         const position = values.position ?? Math.max(0, ...others.map((group) => group.position)) + 1
         if (position > INT4_MAX) throw problem(409, { detail: NO_POSITION_LEFT })
 

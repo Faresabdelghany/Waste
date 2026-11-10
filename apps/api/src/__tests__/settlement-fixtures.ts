@@ -49,7 +49,6 @@ import { seedPriceList, seedServiceArea } from "./finance-fixtures"
 import type { FleetFixtures, PlanningFixtures } from "./scheme-fixtures"
 import { testId, type Tenant } from "./tenant"
 
-/** A billable event as the suite names it: its id, its service date, and the route and pickup it charges for. */
 export type EventFixture = { id: string; serviceDate: string; route: SeededRoute | null }
 
 export type SettlementFixtures = {
@@ -112,7 +111,6 @@ async function completedRoute(pool: Database, tenant: Tenant, fleet: FleetFixtur
   )
 }
 
-/** What a seeder answered as optional and this ground always asks for. */
 function made<T>(value: T | null, what: string): T {
   if (value === null) throw new Error(`settlement fixtures: ${what} was not made`)
   return value
@@ -169,7 +167,6 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
     })
   })
 
-  // The tariff the events were billed under: the project's default list, open-ended, a row per product.
   const list = await seedPriceList(pool, tenant, {
     code: "PL-CPH-2026",
     name: "Copenhagen tariff 2026",
@@ -183,7 +180,6 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
   const [collectionRowId, unpricedRowId] = list.rowIds
   if (collectionRowId === undefined || unpricedRowId === undefined) throw new Error("settlement fixtures: the tariff has two rows")
 
-  // The two awards, open-ended from January: NordRen's over Centrum, assigned from July with its first fee for the first product until October; CityHaul's over OP-CEN-02, assigned from January, paid for nothing here.
   const nordren = await seedServiceArea(pool, tenant, {
     code: "CA-Ø-2",
     name: "Østerbro 2",
@@ -307,7 +303,6 @@ export async function seedSettlementFixtures(pool: Database, tenant: Tenant, pla
         sourceEventId: testId(),
         createdBy: null,
       },
-      // The office's own entry: a person's, priced by the row, on no route.
       {
         id: events.manual.id,
         companyId,

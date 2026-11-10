@@ -26,7 +26,6 @@ const RowPage = Page(PriceListRow)
 
 const MODULE = "commercial.price-rows"
 
-/** The days the periods of this file are cut from; every test says which of them it means. */
 const JANUARY = "2026-01-01"
 const MARCH = "2026-03-01"
 const JULY = "2026-07-01"
@@ -43,7 +42,6 @@ const defaultInCurrency = (currency: string) => `A default price list is in the 
 describe("the price list endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -59,13 +57,11 @@ describe("the price list endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** What a row's conditions name. */
   let bin: ContainerType
   let residual: WasteFraction
   let glass: WasteFraction
   let osterbro: Customer
   let cowork: Customer
-  /** A product not yet offered, and one of another project. */
   let draftProduct: Product
   let harborProduct: Product
   /** The other company's rows, for the 400s. */
@@ -106,7 +102,6 @@ describe("the price list endpoints", { skip: database.skip }, () => {
 
   type Schema<T> = { parse: (value: unknown) => T }
 
-  /** A list body a caller may send: Copenhagen Central, the year 2026, nothing else decided. */
   const body = (code: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     code,
@@ -119,10 +114,8 @@ describe("the price list endpoints", { skip: database.skip }, () => {
   const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
     created(call, path, await call(path, { method: "POST", body: values }), schema)
   const list = (code: string, values: Record<string, unknown> = {}) => create(olivia, "/price-lists", body(code, values), PriceList)
-  /** A row posted under its list, read at `/price-list-rows/{id}`. */
   const row = async (call: Call, listId: string, values: Record<string, unknown>): Promise<PriceListRow> =>
     created(call, `/price-lists/${listId}/rows`, await call(`/price-lists/${listId}/rows`, { method: "POST", body: values }), PriceListRow, "/price-list-rows")
-  /** The residual collection over the whole of 2026 unless said otherwise. */
   const rowBody = (values: Record<string, unknown> = {}) => ({ productId: products.residual.id, unitPriceMinor: 4_500, validFrom: JANUARY, validTo: NEXT_YEAR, ...values })
   const one = async (call: Call, id: string): Promise<PriceList> => {
     const response = await call(`/price-lists/${id}`)
@@ -467,11 +460,9 @@ describe("the price list endpoints", { skip: database.skip }, () => {
           [everyone.id, 0, false],
         ],
       )
-      // A person without the kind: the zone row wins, and the business row says what it needed.
       const household = await resolve(olivia, made.id, { productId: products.residual.id, on: AUGUST, planningAreaId: planning.areas.centrum.id, customerKind: "person" })
       assert.equal(household.winner?.row.id, zoned.id)
       assert.equal(household.verdicts.find((verdict) => verdict.row.id === business.id)?.reason, "Customer kind is organisation, not person")
-      // Outside the zone: the default row, and the zone row spelled by the area's name.
       const elsewhere = await resolve(olivia, made.id, { productId: products.residual.id, on: AUGUST })
       assert.equal(elsewhere.winner?.row.id, everyone.id)
       assert.equal(elsewhere.verdicts.find((verdict) => verdict.row.id === zoned.id)?.reason, "Requires planning area Centrum")
@@ -523,7 +514,6 @@ describe("the price list endpoints", { skip: database.skip }, () => {
       assert.equal(reasons.get(binned.id), "Requires container type 660 L container")
       assert.equal(reasons.get(glassy.id), "Waste fraction is Glass, not Residual waste")
       assert.deepEqual(resolution.verdicts[0].row.id, everyone.id, "the winner first, the ineligible after")
-      // No row at all is no winner: the product with no rows here.
       const none = await resolve(olivia, made.id, { productId: products.unrated.id, on: AUGUST })
       assert.deepEqual([none.verdicts, none.winner, none.unitPriceMinor, none.vatPercent], [[], null, null, null], "a product with no rate answers null, which would block an event with no-vat-rate")
     })

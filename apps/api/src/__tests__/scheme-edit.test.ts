@@ -76,7 +76,6 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
     return schema.parse(await response.json())
   }
-  /** A rule group on the residual fraction over the days given, with whatever else the test says. */
   const ruleGroup = (name: string, days: string[], values: Record<string, unknown> = {}) => ({
     name,
     days,
@@ -86,7 +85,6 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
   })
   /** A manual group picking the containers given, in stop order. */
   const manualGroup = (name: string, days: string[], containerIds: string[]) => ({ name, days, stopSource: "manual", containerIds })
-  /** A validated scheme on Copenhagen Central inside Centrum, over the days and with the groups given. */
   const scheme = (name: string, serviceDays: string[], collectionGroups: unknown[]) =>
     create(
       "/route-schemes",

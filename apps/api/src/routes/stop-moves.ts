@@ -100,13 +100,11 @@ function requireOther(current: RouteRow, otherId: string, other: RouteRow | unde
   return other
 }
 
-/** The open stops of the route the body names, refused (400 at `pickupIds`) where any id is not one, counted. */
 function requireOpenStops(named: readonly string[], stops: readonly PickupRow[], current: RouteRow): void {
   const strangers = strangersAmong(named, stops.map(asMoving))
   if (strangers.length > 0) throw invalidRequest("body", [{ path: "pickupIds", message: notOpenStopsOf(strangers.length, labelOf(current)) }])
 }
 
-/** The Add stop a moved stop is on the route it joins: the same work, at the same container or address, with what its service books and the note the driver reads, and the open ticket it answers. */
 function addedAs(row: PickupRow, ticketId: string | undefined): PickupAdd {
   const service = row.service
   const answers = ticketId === undefined ? {} : { ticketId }
@@ -124,7 +122,6 @@ function addedAs(row: PickupRow, ticketId: string | undefined): PickupAdd {
   }
 }
 
-/** The open tickets booked to answer these stops, by stop: each goes with its stop. */
 async function ticketsBookedTo(tx: Tx, principal: Principal, stopIds: readonly string[]): Promise<Map<string, string>> {
   if (stopIds.length === 0) return new Map()
   const rows = await tx
@@ -134,7 +131,6 @@ async function ticketsBookedTo(tx: Tx, principal: Principal, stopIds: readonly s
   return new Map(rows.flatMap((row) => (row.pickupId === null ? [] : [[row.pickupId, row.id] as const])))
 }
 
-/** A container's label, for the sentence an emptying refused names it by. */
 async function containerLabel(tx: Tx, companyId: string, id: string): Promise<string> {
   const [row] = await tx
     .select({ label: container.label })

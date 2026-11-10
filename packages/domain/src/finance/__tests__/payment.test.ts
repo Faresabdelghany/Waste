@@ -6,12 +6,11 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, dueOn, FIK_CREDITOR_PATTERN, fikLine, IBAN_PATTERN, modulus10, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, paymentReference, termsOf, VAT_NUMBER_PATTERN } from "../payment"
-import { PAYMENT_REFERENCE_SCHEMES } from "../vocabulary"
 
 describe("an invoice's terms", () => {
   test("are the customer's own where it has them, else the project's; a new project's are thirty days", () => {
     assert.equal(DEFAULT_PAYMENT_TERMS_DAYS, 30)
-    assert.equal(PAYMENT_TERMS_MAX, 365)
+    assert.equal(PAYMENT_TERMS_MAX, 365, "the project's terms are described as 0 to 365 days in @waste/contracts/organisation")
     assert.equal(termsOf(null, 30), 30)
     assert.equal(termsOf(14, 30), 14, "the customer's override")
     assert.equal(termsOf(0, 30), 0, "due on issue is a term too")
@@ -33,7 +32,6 @@ describe("a payment reference", () => {
   })
 
   test("is the document's number under the scheme: FIK 71 fifteen digits, FIK 75 sixteen, the check digit last; none under none", () => {
-    assert.deepEqual([...PAYMENT_REFERENCE_SCHEMES], ["none", "fik-71", "fik-75"])
     const reference71 = paymentReference("fik-71", 26_007_188)
     assert.equal(reference71, "00000026007188" + String(modulus10("00000026007188")))
     assert.equal(reference71?.length, 15)

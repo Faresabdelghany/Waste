@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "@waste/domain/execution/unloads"
-import { WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CORRECTION_NAMES_ITS_UNLOAD, correctionShape } from "@waste/domain/finance/weight-reviews"
 
 import { UnloadCreate } from "../unloads"
@@ -24,7 +23,6 @@ describe("WeightReview", () => {
     const corrected = { ...review, decision: "corrected", correctionUnloadId: ID, note: "Tare read off the wrong truck" }
     assert.deepEqual(WeightReview.parse(corrected), corrected)
     assert.equal("updatedAt" in WeightReview.shape, false)
-    for (const decision of WEIGHT_REVIEW_DECISIONS) assert.equal(WeightReview.safeParse({ ...review, decision, correctionUnloadId: decision === "corrected" ? ID : null }).success, true, decision)
   })
 
   test("holds a correction to naming the new unload and never the reviewed one, and the other two to naming none", () => {

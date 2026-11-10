@@ -89,7 +89,6 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     return { ...answer, routes: SchemeEndingCounts.parse(answer.routes) }
   }
 
-  /** A draft residual scheme of Copenhagen Central on Mondays from the start of the year, with one rule group. */
   const schemeNamed = async (name: string, values: Record<string, unknown> = {}): Promise<RouteScheme> =>
     RouteScheme.parse(
       await ok(
@@ -250,7 +249,6 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     assert.equal(problem.detail, dispatchedFrom([after.label], MONDAYS[1]), "the route on the day, not the one before it")
     assert.equal(((await ok(await olivia(`/route-schemes/${scheme.id}`))) as RouteScheme).validTo, null, "the predecessor is not cut")
     assert.equal((await readRoute(planned.id)).status, "planned", "and its planned routes stand")
-    // From the day after the dispatched routes, the next version is taken.
     assert.equal(succession(await ok(await successor(scheme.id, { validFrom: MONDAYS[2] }), 201)).routes.cancelled, 1)
   })
 

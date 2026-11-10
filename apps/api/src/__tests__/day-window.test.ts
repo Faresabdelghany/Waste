@@ -23,7 +23,6 @@ describe("endOfDayExclusive", () => {
 
 describe("dayWindow", () => {
   const dialect = new PgDialect({ casing: CASING })
-  /** The fragment as Postgres would see it: its text, and its parameters as instants. */
   const rendered = (window: SQL | undefined) => {
     if (window === undefined) return undefined
     const query = dialect.sqlToQuery(window)

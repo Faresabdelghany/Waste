@@ -39,12 +39,10 @@ export async function seasonsOf(tx: Tx, companyId: string, schemeIds: readonly s
   return byScheme
 }
 
-/** One scheme's seasons as the domain reads them for its occurrences. */
 export async function storedSeasonsOf(tx: Tx, companyId: string, schemeId: string): Promise<StoredSeason[]> {
   return (await seasonsOf(tx, companyId, [schemeId])).get(schemeId) ?? []
 }
 
-/** Whether two sets hold the same seasons, whatever order the body gave them in. */
 export function sameSeasons(a: readonly SchemeSeason[], b: readonly SchemeSeason[]): boolean {
   const spelled = (seasons: readonly SchemeSeason[]) => JSON.stringify([...seasons].sort((x, y) => x.startsOn.localeCompare(y.startsOn)).map(({ name, startsOn, endsOn, frequency, weekRotation }) => [name, startsOn, endsOn, frequency, weekRotation]))
   return spelled(a) === spelled(b)

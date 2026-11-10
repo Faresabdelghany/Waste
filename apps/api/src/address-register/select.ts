@@ -19,7 +19,6 @@ export type AddressProviderName = (typeof NAMES)[number]
 
 export type AddressRegisterSettings = { ADDRESS_PROVIDER?: string; DATAFORSYNINGEN_TOKEN?: string; ADDRESS_REGISTER_URL?: string }
 
-/** The register the settings name, built; none where they name none. */
 export function addressRegisterFrom(settings: AddressRegisterSettings): AddressRegister | null {
   const name = settings.ADDRESS_PROVIDER
   if (name === undefined) return null

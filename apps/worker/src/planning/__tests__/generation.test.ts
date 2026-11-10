@@ -66,11 +66,11 @@ import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
-import { createBoss, startBoss, type Boss } from "../runtime/boss"
-import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../planning/generate-routes"
-import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../planning/plan-ahead"
-import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "./database"
-import { jobContext } from "./context"
+import { createBoss, startBoss, type Boss } from "../../runtime/boss"
+import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../generate-routes"
+import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../plan-ahead"
+import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "../../__tests__/database"
+import { jobContext } from "../../__tests__/context"
 
 const owner = ownerUnderTest()
 const apiRole = databaseUnderTest()

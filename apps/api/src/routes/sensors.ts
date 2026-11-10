@@ -132,7 +132,6 @@ const pairingOf = (row: PairingRow): SensorPairing => ({
   ...stampsOf(row),
 })
 
-/** A reading as the wire spells it, its container read through its pairing. */
 const readingColumns = {
   id: fillReading.id,
   projectId: fillReading.projectId,
@@ -160,7 +159,6 @@ const readingOf = (row: ReadingRow): FillReading => ({
   recordedAt: row.recordedAt.toISOString(),
 })
 
-/** The readings, each with its pairing joined for the container, inside the company. */
 const readingsFrom = (tx: Tx, companyId: string) =>
   tx
     .select(readingColumns)
@@ -231,7 +229,6 @@ const { scope: sensorScope, find: findSensor, get: getSensor, list: listSensors 
 
 const { get: getPairing, list: listPairings } = scoped(sensorPairing, { noun: "sensor pairing", reach: "projects", columns: pairingColumns })
 
-/** The pairings of a sensor open on or after a day: what a retirement would leave measuring. */
 async function openPairings(tx: Tx, companyId: string, sensorId: string, day: string): Promise<number> {
   const [row] = await tx
     .select({ open: sql<number>`count(*)::int` })
@@ -240,17 +237,8 @@ async function openPairings(tx: Tx, companyId: string, sensorId: string, day: st
   return row?.open ?? 0
 }
 
-/** A reading of the batch with what the ingest resolved for it. */
 type Known = { id: string; projectId: string; status: SensorStatus }
 
-/**
- * The ingest: each reading judged alone, in the body's order. The sensors are
- * read once for the batch by identifier inside the caller's projects, their
- * projects' timezones once, and their pairings over the batch's days once; a
- * reading is then appended with `on conflict do nothing` over the sensor and
- * the instant, and a reading the ledger already holds is answered with that
- * row's id.
- */
 async function ingest(tx: Tx, principal: Principal, batch: FillReadingBatch, at: Date): Promise<FillReadingOutcome[]> {
   const { companyId } = principal
   const identifiers = [...new Set(batch.readings.map((reading) => reading.sensorIdentifier))]

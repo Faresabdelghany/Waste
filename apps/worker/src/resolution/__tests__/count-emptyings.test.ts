@@ -21,10 +21,10 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, isNotNull } from "drizzle-orm"
 import { ticketColumns, ticketOf } from "@waste/db/shapes/tickets"
 
-import { countEmptying } from "../resolution/count-emptyings"
-import { at, dropConsumerTenant, outboxJob, pickupPayload, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type StopSeed } from "./consumer-fixtures"
-import { jobContext } from "./context"
-import { databaseUnderTest, ownerUnderTest } from "./database"
+import { countEmptying } from "../count-emptyings"
+import { at, dropConsumerTenant, outboxJob, pickupPayload, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type StopSeed } from "../../__tests__/consumer-fixtures"
+import { jobContext } from "../../__tests__/context"
+import { databaseUnderTest, ownerUnderTest } from "../../__tests__/database"
 
 const api = databaseUnderTest()
 const owner = ownerUnderTest()

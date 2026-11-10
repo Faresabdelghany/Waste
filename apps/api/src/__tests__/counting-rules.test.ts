@@ -101,7 +101,6 @@ describe("counting rules", { skip: database.skip || owner.skip }, () => {
       ])
     })
 
-    // The emptyings the simulations count, each on a Monday route of its own.
     const done = (day: string) => ({ status: "completed" as const, outcomeAt: at(day, "09:00") })
     const stops = {
       parkvej: (day: string): PickupSeed => ({ containerId: ex.containers.bin1.id, propertyId: ex.properties.parkvej.id, ...done(day) }),

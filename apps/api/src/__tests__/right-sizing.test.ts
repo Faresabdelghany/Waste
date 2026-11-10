@@ -89,7 +89,6 @@ describe("right-sizing", { skip: database.skip || owner.skip }, () => {
     await ownerPool?.close()
   })
 
-  /** A subscription of `product` at a property of its own, its container placed under it, and one completed stop per estimate, newest first, a day apart before the clock. */
   async function subscribedWith(name: string, product: "p140" | "p240" | "p660", fills: readonly FillLevel[]): Promise<{ subscription: Subscription; container: Container; property: Property }> {
     const property = await create(olivia, "/properties", { projectId: a.projects.copenhagen.id, name, address: `${name} 1, 2100 København Ø`, kind: "residential" }, Property)
     const agreement = await create(

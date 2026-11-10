@@ -6,18 +6,19 @@
 // routes and takes the neighbouring context's rows as given — and
 // `dropTenant` drops them with the rest of the company.
 //
-// Three builders and one ground: `seedProducts` writes two Copenhagen
-// Central products with a VAT rate, `seedPriceList` one list with the rows
-// the caller spells, `seedServiceArea` one award over the planning areas the
-// caller names with its first assignment and, when asked, one provider price
-// under it; `seedFinance` lays the §6 ground once — a default list with
-// rows, a named list, NordRen's area over two Copenhagen planning areas with
-// its assignment, and one provider price — for the suite that reads it
-// (provider-reach.test.ts); the billing and settlement suites lay their own
-// ground through `seedPriceList` and `seedServiceArea` (billing-fixtures.ts,
-// settlement-fixtures.ts). A second Copenhagen planning area is written here too,
-// since scheme-fixtures.ts seeds one per project and an award over two is
-// what the one-award rule and the predicate are proved against.
+// Three builders and one ground: `seedProducts` writes four Copenhagen
+// Central products, three with a VAT rate, `seedPriceList` one list with
+// the rows the caller spells, `seedServiceArea` one award over the planning
+// areas the caller names with its first assignment and, when asked, one
+// provider price under it; `seedFinance` lays the §6 ground once — a
+// default list with rows, a named list, NordRen's area over two Copenhagen
+// planning areas with its assignment, and one provider price — for the
+// provider suites that read it (provider-reach.test.ts among them); the
+// billing and settlement suites lay their own ground through
+// `seedPriceList` and `seedServiceArea` (billing-fixtures.ts,
+// settlement-fixtures.ts). A second Copenhagen planning area is written here
+// too, since scheme-fixtures.ts seeds one per project and an award over two
+// is what the one-award rule and the predicate are proved against.
 import type { CustomerKind } from "@waste/contracts/customers"
 import type { Database, Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
@@ -213,7 +214,6 @@ export type FinanceFixtures = {
   nordren: SeededServiceArea
 }
 
-/** The days the ground is cut from. */
 export const FINANCE_YEAR = { from: "2026-01-01", to: "2027-01-01" } as const
 /** The day NordRen's assignment starts: the award ran two months before anyone held it. */
 export const NORDREN_ASSIGNED_FROM = "2026-03-01"

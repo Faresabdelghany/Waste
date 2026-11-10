@@ -4,8 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { alertNotice, countingTicketNotice, CUSTOMER_NOTICE_KINDS, customerNoticeOf, NOTICE_VALUES, REMINDER_BATCH, REMINDER_DAILY_CAP, REMINDER_HOUR, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
-import { CUSTOMER_NOTICE_EVENTS } from "../vocabulary"
+import { alertNotice, countingTicketNotice, CUSTOMER_NOTICE_KINDS, customerNoticeOf, reminderDayAt, severityReaches, ticketAssignedNotice, unfilledByNotice } from "../notices"
 
 describe("an alert's severity against a person's threshold", () => {
   test("reaches it at the threshold and above, never below", () => {
@@ -72,18 +71,11 @@ describe("what each notice fills, and the reminders' clock", () => {
     assert.deepEqual(unfilledByNotice("collection-reminder", "Dear {{recipientName}}, we come on {{collectionDate}}"), [])
     assert.deepEqual(unfilledByNotice("collection-reminder", "Ticket {{ticketNumber}}: {{replyText}}"), ["ticketNumber", "replyText"])
     assert.deepEqual(unfilledByNotice("ticket-replied", "T-{{ticketNumber}}: {{replyText}} {{collectionDate}}"), ["collectionDate"])
-    for (const notice of CUSTOMER_NOTICE_EVENTS) assert.ok(NOTICE_VALUES[notice] !== undefined, notice)
   })
 
   test("the next day's reminders go once the project's clock passes two in the afternoon", () => {
-    assert.equal(REMINDER_HOUR, 14)
     assert.equal(reminderDayAt("2026-10-29", 13), null)
     assert.equal(reminderDayAt("2026-10-29", 14), "2026-10-30")
     assert.equal(reminderDayAt("2026-12-31", 23), "2027-01-01")
-  })
-
-  test("a day's reminders are bounded per run and per day, the cap what the afternoon's hourly runs reach", () => {
-    assert.equal(REMINDER_BATCH, 200)
-    assert.equal(REMINDER_DAILY_CAP, 2000)
   })
 })

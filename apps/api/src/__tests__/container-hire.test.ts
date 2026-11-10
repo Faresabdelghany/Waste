@@ -58,7 +58,6 @@ const NOON = new Date("2026-11-02T12:00:00Z")
 /** The days the runs are asked on: each a day after the months they charge have ended. */
 const ON = { november20: new Date("2026-11-20T12:00:00Z"), december2: new Date("2026-12-02T12:00:00Z"), february20: new Date("2027-02-20T12:00:00Z") }
 
-/** The skips of the suite, each a case of the rule. */
 type Case = "whole" | "returned" | "late" | "unpriced" | "draft" | "manual" | "cancelled"
 const CASES: readonly Case[] = ["whole", "returned", "late", "unpriced", "draft", "manual", "cancelled"]
 
@@ -144,7 +143,6 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     return BillingRunPreview.parse(await response.json())
   }
 
-  /** Every hire of the company, by case and month, as the table holds it. */
   const hires = (from?: readonly string[]) =>
     withCompany(pool.db, a.companyId, async (tx: Tx) =>
       (

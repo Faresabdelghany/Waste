@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { A_WORKING_DAY, WEEKEND_MAX } from "@waste/domain/access/projects"
+import { A_WORKING_DAY } from "@waste/domain/access/projects"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 
-import { Company, CompanyPatch, CompanyStatus, ProjectBranding, ProjectBrandingReplace, Project, ProjectCreate, ProjectPatch, ProjectStatus, ServiceProvider, ServiceProviderCreate, ServiceProviderPatch } from "../organisation"
+import { Company, CompanyPatch, ProjectBranding, ProjectBrandingReplace, Project, ProjectCreate, ProjectPatch, ServiceProvider, ServiceProviderCreate, ServiceProviderPatch } from "../organisation"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
@@ -58,15 +58,6 @@ const refusal = (result: { success: boolean; error?: { issues: readonly { path: 
   assert.equal(result.success, false)
   return (result.error?.issues ?? []).map((issue) => ({ path: issue.path.join("."), message: issue.message }))
 }
-
-describe("the statuses", () => {
-  test("are the two the database's check allows, in the same order (packages/db holds them in lockstep)", () => {
-    assert.deepEqual(CompanyStatus.options, ["active", "onboarding"])
-    assert.deepEqual(ProjectStatus.options, ["active", "onboarding"])
-    assert.equal(CompanyStatus.safeParse("archived").success, false)
-    assert.equal(CompanyStatus.safeParse("Active").success, false)
-  })
-})
 
 describe("Company", () => {
   test("is the row on the wire: a version 7 id, the registry's identity, and instants as RFC 3339", () => {
@@ -192,8 +183,7 @@ describe("Project", () => {
   })
 
   test("rests on at most six days: a project has a working day for a shifted collection to land on", () => {
-    assert.equal(WEEKEND_MAX, SERVICE_DAYS.length - 1)
-    const sixDays = SERVICE_DAYS.slice(0, WEEKEND_MAX)
+    const sixDays = SERVICE_DAYS.slice(0, 6)
     assert.deepEqual(Project.parse({ ...project, weekend: sixDays }).weekend, sixDays)
     const everyDay = { path: "weekend", message: A_WORKING_DAY }
     assert.deepEqual(refusal(Project.safeParse({ ...project, weekend: [...SERVICE_DAYS] })), [everyDay])
@@ -266,8 +256,10 @@ describe("a project's public slug (ADR-0010)", () => {
     assert.deepEqual(ProjectPatch.parse({ weightTolerancePercent: 8 }), { weightTolerancePercent: 8 })
     for (const out of [0, 101, 2.5]) assert.equal(ProjectPatch.safeParse({ weightTolerancePercent: out }).success, false, String(out))
     assert.equal(ProjectPatch.safeParse({ publicSlug: "Not A Slug" }).success, false)
-    const { id: _id, createdAt: _created, updatedAt: _updated, publicSlug: _slug, ...create } = project
-    assert.equal(ProjectCreate.safeParse({ ...create, publicSlug: "kystbyen" }).success, false)
+    const { id: _id, createdAt: _created, updatedAt: _updated, publicSlug: _slug, branding: _branding, ...create } = project
+    const unowned = refusal(ProjectCreate.safeParse({ ...create, publicSlug: "kystbyen" }))
+    assert.deepEqual(unowned.map((issue) => issue.path), [""])
+    assert.match(unowned[0].message, /publicSlug/)
   })
 })
 

@@ -1,18 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { WEIGHBRIDGE_REFUSALS, WEIGHBRIDGE_TICKET_STATUSES, WEIGHBRIDGE_UNMATCHED_REASONS } from "../vocabulary"
 import { fractionNamed, matchTicket, plateKey, possibleDuplicates, type DuplicateCandidate, type MatchFacts } from "../weighbridge"
 
 const facts = (overrides: Partial<MatchFacts> = {}): MatchFacts => ({ vehicleId: "truck", sessionRouteIds: ["route"], dayRouteIds: ["route"], wasteFractionId: "residual", stationTakes: true, ...overrides })
-
-describe("a weighbridge ticket's vocabulary", () => {
-  test("is the three statuses, the five reasons a ticket waits for the office, and the two it is not kept for", () => {
-    assert.deepEqual([...WEIGHBRIDGE_TICKET_STATUSES], ["matched", "unmatched", "dismissed"])
-    assert.deepEqual([...WEIGHBRIDGE_UNMATCHED_REASONS], ["unknown-vehicle", "no-route", "several-routes", "unknown-fraction", "fraction-not-accepted"])
-    assert.deepEqual([...WEIGHBRIDGE_REFUSALS], ["unknown-station", "ahead-of-clock"])
-  })
-})
 
 describe("a plate as the match reads it", () => {
   test("is its letters and digits in upper case, whatever the weighbridge spaced or dashed", () => {

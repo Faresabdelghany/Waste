@@ -5,7 +5,7 @@
 // seeds Planning and the fleet — the suites prove the office's commands and
 // the driver door, not generation — and dropped with the rest of the company
 // by `dropTenant`, the three ledgers as the owner. Two grounds live here and
-// a suite lays one: `seedExecution` with `seedRoute` for the office's four
+// a suite lays one: `seedExecution` with `seedRoute` for the office's
 // suites, `seedDriverFixtures` with `routeFor` for the driver door's, each
 // writing its own fraction, container type and properties, so the two are
 // not run on one tenant.
@@ -88,7 +88,6 @@ import { testId, type Account, type Tenant } from "./tenant"
 /** The scheme every route of the project names; each route's group is its own, minted with the route. */
 export type SchemeFixture = { id: string }
 
-/** A route as a suite names it: its ids, its label, the day it runs, its pickups in position order, and the session it went out on where it did. */
 export type SeededRoute = {
   id: string
   number: number
@@ -135,7 +134,6 @@ export const at = (day: string, time: string): Date => new Date(`${day}T${time}:
 /** The Monday the fixtures' routes run on. */
 export const FIXTURE_DAY = "2026-10-05"
 
-/** One stop of a route to seed: where, what, and where it stands. */
 export type PickupSeed = {
   containerId: string
   propertyId: string
@@ -224,7 +222,6 @@ async function nextRouteNumber(tx: Tx, companyId: string): Promise<number> {
   return row.next - 1
 }
 
-/** The default stops of a Copenhagen route: the three bins at their addresses, planned. */
 const defaultPickups = (fixtures: Pick<ExecutionFixtures, "containers" | "properties">): PickupSeed[] => [
   { containerId: fixtures.containers.bin1.id, propertyId: fixtures.properties.parkvej.id },
   { containerId: fixtures.containers.bin2.id, propertyId: fixtures.properties.havnegade.id },
@@ -252,7 +249,6 @@ export async function seedRoute(pool: Database, tenant: Tenant, fleet: FleetFixt
   const minted = Date.now()
   const routeId = testId(minted)
   const collectionGroupId = testId(minted)
-  /** A driver of the route's own, minted below, where a route went out without a planned one. */
   const mintedDriverId = wentOut && seed.plannedDriverId == null ? testId(minted + 1) : null
   const actualDriverId = wentOut ? (seed.plannedDriverId ?? mintedDriverId) : null
   const actualVehicleId = wentOut ? (seed.plannedVehicleId ?? fleet.vehicles.wh24.id) : null
@@ -465,8 +461,6 @@ export async function seedExecution(pool: Database, tenant: Tenant, fleet: Fleet
   return { day, ...ground, routes: { ready, planned, completed } }
 }
 
-// The driver door's ground.
-
 export type DriverFixtures = {
   /** The system `Driver` role, on its charter: `operate.driver-app` view and edit among them. */
   role: { id: string }
@@ -587,7 +581,6 @@ export async function seedDriverFixtures(pool: Database, tenant: Tenant, fleet: 
   return fixtures
 }
 
-/** A route as the driver suite names it: its id, its display number and label, and its pickups' ids by position. */
 export type FixtureRoute = { id: string; number: number; label: string; pickupIds: string[] }
 
 export type RouteOptions = {
@@ -601,7 +594,6 @@ export type RouteOptions = {
   pickups?: number
   /** `FIXTURE_DAY` unless said. */
   operatingDate?: string
-  /** The planned service provider, for a provider's route. */
   serviceProviderId?: string
   /** Copenhagen Central unless said; a Harbor route takes Harbor's truck and no pickups, since the containers and the address are Copenhagen's. */
   project?: "copenhagen" | "harbor"

@@ -43,7 +43,6 @@ import { invalidRequest, problem } from "../problem"
 /** What a body naming a type of another company, or none, is told. */
 export const NOT_A_TICKET_TYPE = "Not a ticket type of this company"
 
-/** One refusal of a body's field. */
 type Issue = { path: string; message: string }
 
 /** The type the body names, with its rules: the company's, or a 400 at `path`. Its status is the caller's 409 to ask, after every 400. */
@@ -60,7 +59,6 @@ async function rulesOf(tx: Tx, companyId: string, id: string): Promise<TicketTyp
   return found
 }
 
-/** The type named, its kind held to the body's where the body names one too (400 at `kind`). */
 async function namedOfKind(tx: Tx, companyId: string, id: string, kind: TicketKind | undefined): Promise<TicketTypeRules> {
   const named = await findNamedType(tx, companyId, id)
   if (kind !== undefined && kind !== named.kind) throw invalidRequest("body", [{ path: "kind", message: typeOfAnotherKind(named.name, named.kind) }])
@@ -122,7 +120,6 @@ export function requireFieldsToComplete(rules: TicketTypeRules, ticket: { label:
   if (missing.length > 0) throw problem(409, { detail: needsBeforeCompleting(ticket.label, missing) })
 }
 
-/** The rules of the type the ticket is of, for a status command. */
 export const rulesOfTicket = (tx: Tx, companyId: string, ticket: { ticketTypeId: string }): Promise<TicketTypeRules> => rulesOf(tx, companyId, ticket.ticketTypeId)
 
 /**

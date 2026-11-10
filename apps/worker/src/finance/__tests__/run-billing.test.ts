@@ -40,10 +40,10 @@ import { eventOf, eventsFrom } from "@waste/db/shapes/billable-events"
 import { invoiceColumns } from "@waste/db/shapes/invoices"
 import { runColumns } from "@waste/db/shapes/billing-runs"
 
-import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../finance/run-billing"
-import { rolesUnderTest, withDatabaseName } from "./database"
-import { seedFinanceTenant, testId, type FinanceTenant } from "./finance-tenant"
-import { jobContext } from "./context"
+import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../run-billing"
+import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { seedFinanceTenant, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
+import { jobContext } from "../../__tests__/context"
 
 const roles = rolesUnderTest()
 const skip = roles.skip
@@ -110,7 +110,6 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     assert.equal(runScheduledBilling.schedule, "0 12 1 * *")
     assert.deepEqual(runScheduledBilling.scheduleData, { projectId: null, on: null })
     assert.deepEqual(runScheduledBilling.scheduleOptions, { tz: "UTC", missed: "once" })
-    assert.ok(!runScheduledBilling.queue.startsWith("outbox."), "sent by the schedule, never by the relay")
     // The schedule's instant read on each clock: the first everywhere the system could serve, so `monthBefore` is the month that just ended. At 04:00 UTC (the earlier schedule) Chicago still read the 30th of September and would have billed August.
     const noon = new Date("2026-10-01T12:00:00Z")
     for (const timezone of ["Pacific/Pago_Pago", "America/Anchorage", "America/Chicago", "America/New_York", "Europe/Copenhagen", "Asia/Kolkata", "Asia/Tokyo", "Pacific/Noumea"]) {

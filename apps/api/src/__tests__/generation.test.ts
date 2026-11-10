@@ -63,7 +63,6 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
   let ownerPool: Database
   /** pg-boss on the owner's connection: the worker's side of the queue, to read what the API sent and to take a job off it. */
   let boss: PgBoss
-  /** What pg-boss reported on its own; the last test holds it to nothing. */
   const bossErrors: unknown[] = []
   let keys: SigningKeys
   let a: Tenant
@@ -84,7 +83,6 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
   let draft: RouteScheme
   /** Harbor Commercial's, which the viewer does not work in. */
   let harbor: RouteScheme
-  /** Company b's. */
   let theirs: RouteScheme
   const schemeIds = (): string[] => [scheme, draft, harbor, theirs].filter((row) => row !== undefined).map((row) => row.id)
 
@@ -279,7 +277,6 @@ describe("the generation endpoints", { skip: database.skip || owner.skip }, () =
     assert.equal((await refused(await viewer(`/generation-runs/${harborRun.id}`), 404)).detail, `No generation run ${harborRun.id} in the projects this account works in`)
     // An account that works in no project reads nothing of any scheme's.
     await refused(await lars(`/generation-runs/${harborRun.id}`), 404)
-    // Company b sees nothing of a's, and its click on a's scheme starts nothing.
     await refused(await generate(other, scheme.id), 404)
     await refused(await other(`/generation-runs/${harborRun.id}`), 404)
     await refused(await other(`/route-schemes/${scheme.id}/generation-runs`), 404)

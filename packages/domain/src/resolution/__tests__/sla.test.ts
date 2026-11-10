@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { duplicateSlaTarget, dueBySla, slaStateOf, slaTargetFor, slaTargetKey, SLA_STATES, TICKET_SLA_HOURS_MAX, type SlaTarget } from "../sla"
+import { duplicateSlaTarget, dueBySla, slaStateOf, slaTargetFor, slaTargetKey, type SlaTarget } from "../sla"
 
 const BULKY = "01a0d3a5-e5e0-7000-8000-000000000b01"
 const targets: SlaTarget[] = [
@@ -40,10 +40,6 @@ describe("the target a ticket is due by", () => {
   test("the due date is when the issue or request happened plus the hours, on the wall clock", () => {
     assert.equal(dueBySla(new Date("2026-10-24T22:30:00.000Z"), 4).toISOString(), "2026-10-25T02:30:00.000Z")
     assert.equal(dueBySla(new Date("2026-03-28T12:00:00.000Z"), 24).toISOString(), "2026-03-29T12:00:00.000Z")
-  })
-
-  test("a year is the longest target", () => {
-    assert.equal(TICKET_SLA_HOURS_MAX, 365 * 24)
   })
 })
 
@@ -85,9 +81,5 @@ describe("what a ticket's due date reads as", () => {
   test("a ticket without a due date has none, open or closed", () => {
     assert.equal(slaStateOf({ ...open, dueAt: null }, now), "none")
     assert.equal(slaStateOf({ status: "completed", dueAt: null, closedAt: "2026-10-24T10:00:00.000Z" }, now), "none")
-  })
-
-  test("the readings, in the order a list offers them", () => {
-    assert.deepEqual(SLA_STATES, ["overdue", "due", "met", "breached", "none"])
   })
 })

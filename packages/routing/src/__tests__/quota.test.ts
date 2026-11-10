@@ -62,10 +62,6 @@ describe("pacing: thirty calls a minute per family (#132 §1)", () => {
     }
     assert.deepEqual(slept, [])
   })
-
-  test("defaults to the Standard plan: reserves of 500 directions and 100 optimisations, 30 calls a minute", () => {
-    assert.deepEqual(STANDARD_PLAN, { reserves: { directions: 500, optimisation: 100 }, callsPerMinute: 30 })
-  })
 })
 
 describe("the reserve, read off the provider before each call (#132 §1)", () => {

@@ -46,7 +46,6 @@ describe("the live endpoints", { skip: database.skip || owner.skip }, () => {
   let lars: Call
   let ungranted: Call
 
-  /** The routes the live read is proved on: which are due today on their project's clock, which run, which are neither. */
   let copenhagenToday: SeededRoute
   let copenhagenTomorrow: SeededRoute
   let cairoToday: SeededRoute

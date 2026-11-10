@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ACTIONS, MODULE_KEYS, WORKSPACE_KEYS, modulesOf } from "../modules"
+import { MODULE_KEYS, WORKSPACE_KEYS, modulesOf } from "../modules"
 
 describe("the module vocabulary", () => {
   test("every key is one workspace and one module, lowercase, and named once", () => {
@@ -19,7 +19,6 @@ describe("the module vocabulary", () => {
       [...WORKSPACE_KEYS],
       ["operate", "plan", "route-studio", "fleet", "customers", "resources", "service-providers", "commercial", "improve", "configure"],
     )
-    assert.deepEqual([...new Set(MODULE_KEYS.map((key) => key.split(".")[0]))], [...WORKSPACE_KEYS])
     // Configure carries the Control Center module; the workspace of the same
     // name is a route alias and has no row of its own.
     assert.ok(MODULE_KEYS.includes("configure.control-center"))
@@ -33,11 +32,7 @@ describe("the module vocabulary", () => {
         modules.every((key) => key.startsWith(`${workspace}.`)),
         `modulesOf(${workspace}) reached another workspace`,
       )
-      assert.deepEqual(modules, MODULE_KEYS.filter((key) => key.startsWith(`${workspace}.`)))
     }
-  })
-
-  test("the four actions, in the order a grant lists them", () => {
-    assert.deepEqual([...ACTIONS], ["view", "edit", "create", "delete"])
+    assert.deepEqual(WORKSPACE_KEYS.flatMap(modulesOf).sort(), [...MODULE_KEYS].sort(), "every key is read by its own workspace, once")
   })
 })

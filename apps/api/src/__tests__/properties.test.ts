@@ -44,7 +44,6 @@ const inReadOrder = <Entry extends { customerId: string; role: string }>(parties
 describe("the property endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -58,10 +57,8 @@ describe("the property endpoints", { skip: database.skip }, () => {
   /** A role with `configure.access` and nothing else: the 403s. */
   let ungranted: Call
 
-  /** This company's customers: who a party names. */
   let housing: Customer
   let tenantCustomer: Customer
-  /** The other company's. */
   let theirCustomer: Customer
   let theirProperty: Property
 

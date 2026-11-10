@@ -106,7 +106,6 @@ const nameTaken = (name: string) => `This project already has a product called $
 const INVOICE_CODE_TAKEN = "product_invoice_code_idx"
 export const invoiceCodeTaken = (code: string) => `This project already has a product with invoice code ${code}`
 
-/** The unique constraints a write can meet, each with its sentence; the invoice code's only when the body carries one. */
 const collisions = (values: { name?: string; invoiceCode?: string | null }): Record<string, string> => ({
   ...(values.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(values.name) }),
   ...(values.invoiceCode == null ? {} : { [INVOICE_CODE_TAKEN]: invoiceCodeTaken(values.invoiceCode) }),
