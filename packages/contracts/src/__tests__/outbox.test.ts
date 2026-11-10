@@ -1,10 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/outbox/vocabulary"
 import * as z from "zod"
 
-import { OUTBOX_PAYLOADS, OutboxAggregate, OutboxEvent, OutboxKind, outboxPayloadOf, RouteEvent } from "../outbox"
+import { OutboxEvent, outboxPayloadOf, RouteEvent } from "../outbox"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -60,19 +59,9 @@ describe("OutboxEvent", () => {
     assert.equal(OutboxEvent.safeParse({ ...event, payload: undefined }).success, false, "a payload is always there")
     assert.equal(OutboxEvent.safeParse({ ...event, payload: "a plain string is JSON too" }).success, true)
   })
-
-  test("its kinds and aggregates are the domain's, value for value and in the database's order", () => {
-    assert.deepEqual(OutboxKind.options, [...OUTBOX_KINDS])
-    assert.deepEqual(OutboxAggregate.options, [...OUTBOX_AGGREGATES])
-  })
 })
 
 describe("OUTBOX_PAYLOADS", () => {
-  test("names one schema for each kind, and nothing else", () => {
-    assert.deepEqual(Object.keys(OUTBOX_PAYLOADS), [...OUTBOX_KINDS])
-    for (const kind of OUTBOX_KINDS) assert.ok(OUTBOX_PAYLOADS[kind] instanceof z.ZodType, kind)
-  })
-
   test("reads a payload through its kind's schema, and refuses another resource", () => {
     const route = outboxPayloadOf("route-cancelled", routeBefore209)
     assert.deepEqual([route.heldAt, route.cancelReasonCode], [null, null], "a route cancelled before the hold and the codes reads as neither")

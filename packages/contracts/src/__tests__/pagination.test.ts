@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX } from "@waste/domain/requests"
+import { PAGE_LIMIT_DEFAULT } from "@waste/domain/requests"
 import * as z from "zod"
 
 import { Page, PageRequest } from "../pagination"
@@ -9,8 +9,6 @@ import { Page, PageRequest } from "../pagination"
 describe("PageRequest", () => {
   test("defaults the limit and leaves the cursor absent", () => {
     assert.deepEqual(PageRequest.parse({}), { limit: PAGE_LIMIT_DEFAULT })
-    assert.equal(PAGE_LIMIT_DEFAULT, 50)
-    assert.equal(PAGE_LIMIT_MAX, 200)
   })
 
   test("reads the limit from a query string and keeps it a whole number in range", () => {

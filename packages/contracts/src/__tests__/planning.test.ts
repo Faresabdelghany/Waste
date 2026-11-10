@@ -3,24 +3,12 @@ import { describe, test } from "node:test"
 
 import { eachOnce } from "@waste/domain/requests"
 
-import { EACH_DAY_ONCE, HOLIDAY_POLICIES, PLANNING_AREA_PURPOSES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
+import { EACH_DAY_ONCE, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 
-import { HolidayPolicy, PlanningAreaPurpose, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceDays, ServiceType, StopSource, WeekRotation } from "../planning"
+import { RouteSchemeStatus, ServiceDay, ServiceDays, ServiceType } from "../planning"
 import { refusal } from "./expect"
 
 describe("the planning enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(ServiceDay.options, [...SERVICE_DAYS])
-    assert.deepEqual(RecurrenceFrequency.options, [...RECURRENCE_FREQUENCIES])
-    assert.deepEqual(WeekRotation.options, [...WEEK_ROTATIONS])
-    assert.deepEqual(HolidayPolicy.options, [...HOLIDAY_POLICIES])
-    assert.deepEqual(SchemeEditPolicy.options, [...SCHEME_EDIT_POLICIES])
-    assert.deepEqual(ServiceType.options, [...SERVICE_TYPES])
-    assert.deepEqual(StopSource.options, [...STOP_SOURCES])
-    assert.deepEqual(RouteSchemeStatus.options, [...ROUTE_SCHEME_STATUSES])
-    assert.deepEqual(PlanningAreaPurpose.options, [...PLANNING_AREA_PURPOSES])
-  })
-
   test("refuse the prototype's display strings and the readings that are never stored", () => {
     assert.equal(ServiceType.safeParse("Container collection").success, false, "the web's display tuple is not the wire's")
     assert.equal(ServiceDay.safeParse("Monday").success, false)

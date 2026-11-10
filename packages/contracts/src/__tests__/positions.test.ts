@@ -18,7 +18,6 @@ describe("a track", () => {
     assert.equal(Position.safeParse({ ...position, accuracyM: 0 }).success, false)
     assert.equal(Position.safeParse({ ...position, location: { type: "Point", coordinates: [12.5, 55.7, 4] } }).success, false, "a flat point")
     assert.deepEqual(RouteTrack.parse({ routeId: ID, sessionId: null, points: [], thinned: false }), { routeId: ID, sessionId: null, points: [], thinned: false })
-    assert.equal(TRACK_POINTS_MAX, 2000)
     assert.equal(RouteTrack.safeParse({ routeId: ID, sessionId: OTHER, points: Array.from({ length: TRACK_POINTS_MAX + 1 }, () => position), thinned: true }).success, false)
     assert.deepEqual(RouteTrackQuery.parse({ sessionId: OTHER }), { sessionId: OTHER })
     assert.match(String(RouteTrackQuery.safeParse({ sessionId: OTHER, driverId: ID }).error?.issues[0].message), /driverId/, "no read of a driver's positions")

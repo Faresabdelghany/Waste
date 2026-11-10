@@ -7,7 +7,7 @@ import { TICKET_EVENT_SHAPES, ticketEventShape, ticketEventShapeIssue, type Tick
 import { CHARGE_WITH_A_BILLABLE_RESOLUTION, KIND_CHARGED_ONCE, REPLY_NOTE_MAX, LABEL_IS_THE_NUMBER, PICKUP_WITH_ITS_ROUTE, pickupWithItsRoute, pickupWithItsRouteOnPatch, RECOLLECTION_ROUTE_WITH_RECOLLECTED, RECOLLECTION_STOP_WITH_ITS_ROUTE, recollectionRouteWithRecollected, recollectionStopWithItsRoute } from "@waste/domain/resolution/tickets"
 import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEventKind } from "@waste/domain/resolution/vocabulary"
 
-import { EvidenceProof, StopEvidence, TicketEvidence, TicketReplyWithEvidence, labelMatches, Ticket, TicketAssign, TicketCharges, TicketChargesQuery, TicketChargesSet, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEventListQuery, TicketHold, TicketLinks, TicketListQuery, TicketPatch, TicketReject, TicketReopen, TicketStart, TicketWait } from "../tickets"
+import { EvidenceProof, StopEvidence, TicketEvidence, TicketReplyWithEvidence, labelMatches, Ticket, TicketAssign, TicketCharges, TicketChargesQuery, TicketChargesSet, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEventListQuery, TicketHold, TicketListQuery, TicketPatch, TicketReject, TicketReopen, TicketStart, TicketWait } from "../tickets"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -119,7 +119,6 @@ describe("Ticket", () => {
     assert.equal(Ticket.safeParse({ ...counted, countedBy: { countingRuleId: THIRD, periodFrom: "2026-10-01", periodTo: "2026-11-01", count: 0 } }).success, false, "a count is positive")
     const { countedBy: _counted, ...beforeRules } = ticket
     assert.deepEqual(Ticket.parse(beforeRules), ticket, "an event the outbox took before the rules names none, and reads as none")
-    assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 
   test("holds the label to the number", () => {

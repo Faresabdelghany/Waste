@@ -5,7 +5,7 @@ import { SLA_KIND_OR_TYPE, TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution
 import { TICKET_TYPE_SETTINGS_MAX } from "@waste/domain/resolution/ticket-types"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
-import { TICKET_SLA_TARGETS_MAX, TicketSla, TicketSlaSet } from "../ticket-sla"
+import { TicketSla, TicketSlaSet } from "../ticket-sla"
 import { TicketListQuery } from "../tickets"
 import { refusal } from "./expect"
 
@@ -23,7 +23,7 @@ describe("TicketSla", () => {
   test("is a project's targets on the wire: every kind or one kind, a priority and the hours", () => {
     assert.deepEqual(TicketSla.parse(sla), sla)
     assert.deepEqual(TicketSla.parse({ projectId: ID, targets: [] }).targets, [])
-    assert.equal(TicketSla.safeParse({ ...sla, targets: [{ id: ID, kind: "deviation", priority: "high", hours: 4 }] }).success, false)
+    assert.deepEqual(refusal(TicketSla.safeParse({ ...sla, targets: [{ id: ID, kind: "deviation", ticketTypeId: null, priority: "high", hours: 4 }] })).map((issue) => issue.path), ["targets.0.kind"])
   })
 })
 
@@ -60,7 +60,13 @@ describe("TicketSlaSet", () => {
   })
 
   test("holds at most every kind, each kind and the types a set may name, at each priority", () => {
-    assert.equal(TICKET_SLA_TARGETS_MAX, (TICKET_KINDS.length + 1 + TICKET_TYPE_SETTINGS_MAX) * TICKET_PRIORITIES.length)
+    const types = Array.from({ length: TICKET_TYPE_SETTINGS_MAX + 1 }, (_, n) => `01a0d3a5-e5e0-7000-8000-${String(n + 2).padStart(12, "0")}`)
+    const fullest = TICKET_PRIORITIES.flatMap((priority) => [
+      ...[null, ...TICKET_KINDS].map((kind) => ({ kind, priority, hours: 24 })),
+      ...types.slice(0, TICKET_TYPE_SETTINGS_MAX).map((ticketTypeId) => ({ kind: null, ticketTypeId, priority, hours: 24 })),
+    ])
+    assert.equal(TicketSlaSet.safeParse({ targets: fullest }).success, true, "every kind, each kind and as many types as a setting may name, at each priority")
+    assert.deepEqual(refusal(TicketSlaSet.safeParse({ targets: [...fullest, { kind: null, ticketTypeId: types[TICKET_TYPE_SETTINGS_MAX], priority: "low", hours: 24 }] })).map((issue) => issue.path), ["targets"], "one target more")
     const all = TICKET_PRIORITIES.flatMap((priority) => [null, ...TICKET_KINDS].map((kind) => ({ kind, priority, hours: 24 })))
     assert.equal(TicketSlaSet.safeParse({ targets: all }).success, true)
   })
