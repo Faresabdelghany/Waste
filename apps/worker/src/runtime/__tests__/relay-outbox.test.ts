@@ -36,7 +36,7 @@ import { CONSUMERS, relay, type WorkerContext } from "../../jobs"
 import { defineJob } from "../definition"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, staleOutboxCount } from "../relay-outbox"
 import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedJob, routesOf, type RelayedEvent } from "../outbox"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 import { jobContext } from "../../__tests__/context"
 import { until } from "../../__tests__/until"
 
@@ -52,7 +52,7 @@ type Tenant = { companyId: string; projectId: string }
 type JobRow = { id: string; name: string; state: string; data: unknown; start_after: string; output: unknown }
 
 describe("execution.relay-outbox", { skip: roles.skip }, () => {
-  const name = `waste_worker_relay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("relay")
   let admin: Database
   let owner: Database
   let api: Database
@@ -130,7 +130,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     owner = createDb(withDatabaseName(roles.adminUrl, name), { max: 2 })
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 4 })

@@ -51,7 +51,7 @@ import { sweepHorizon, type SweepOutcome } from "../sweep-horizon"
 import { routingMeasure } from "../measure"
 import { routingOptimise } from "../optimise"
 import { jobContext } from "../../__tests__/context"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 const testId = createIdMinter()
@@ -275,7 +275,7 @@ async function seedB(tx: Tx): Promise<void> {
 type JobRow = { id: string; name: string; state: string; data: RoutingJobData; priority: number; singleton_key: string }
 
 describe("the horizon: generation's routing jobs and routing.sweep-horizon", { skip: roles.skip }, () => {
-  const name = `waste_worker_horizon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("horizon")
   let admin: Database
   let owner: Database
   let api: Database
@@ -312,7 +312,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     owner = createDb(withDatabaseName(roles.adminUrl, name), { max: 3 })
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 3 })

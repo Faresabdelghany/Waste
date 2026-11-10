@@ -16,6 +16,7 @@ describe("the Execution enums", () => {
     assert.equal(RouteStatus.safeParse("paused").success, false, "a reading of the session")
     assert.equal(PickupStatus.safeParse("rescheduled").success, false, "a Ticket's outcome")
     assert.equal(PickupOutcome.safeParse("planned").success, false, "nothing moves a pickup back to planned")
+    assert.deepEqual(PickupOutcome.options, ["completed", "skipped", "failed"], "the statuses less planned: a status added to them is an outcome only when it is one")
     assert.equal(PickupStatus.safeParse("next").success, false, "a reading")
     assert.equal(DriverPickupReason.safeParse("route-ended").success, false, "the system's, not a device's")
     assert.equal(PickupReason.safeParse("route-ended").success, true)

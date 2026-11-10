@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { SERVICE_DAYS } from "../../days"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, ["DEFAULT_WEEKEND"])
+defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, { DEFAULT_WEEKEND: "SERVICE_DAYS" })
 
 describe("the Planning vocabulary's own rules", () => {
   test("the days are the calendar's tuple, the same and not a copy", () => {

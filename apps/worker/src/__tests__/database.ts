@@ -32,8 +32,9 @@
 // (across companies, writing nothing) — `WORKER_DATABASE_URL`, the process's
 // own variable, loopback only like the owner's, since the test points both
 // logins at a database of its own by name.
-import { databaseUnderTest as variablesUnderTest, LOCAL_STACK_HINT } from "@waste/tooling/database-under-test"
+import type { Database } from "@waste/db/client"
 import { isLocalHost } from "@waste/db/local-host"
+import { databaseUnderTest as variablesUnderTest, LOCAL_STACK_HINT } from "@waste/tooling/database-under-test"
 
 export type DatabaseUnderTest = {
   /** A string reason when the database tests must be skipped, false when they can run. */
@@ -99,4 +100,33 @@ export function withDatabaseName(url: string, name: string): string {
   const parsed = new URL(url)
   parsed.pathname = `/${name}`
   return parsed.toString()
+}
+
+const PREFIX = "waste_worker_"
+
+/** How long a suite's database may stand before a later run takes it for one a killed run left: far past any file's budget. */
+const LEFT_BEHIND_MS = 6 * 60 * 60 * 1000
+
+/** A suite's own database: its label and the instant it is made, so a later run can tell one left behind. */
+export function testDatabaseName(label: string): string {
+  return `${PREFIX}${label}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Creates a suite's database, after dropping the suites' databases a run left
+ * behind: one cancelled at its file timeout runs no `after` hook, so its drop
+ * never comes. Only a database named hours ago that no session holds goes; a
+ * concurrent run's drop of the same one is no failure.
+ */
+export async function createTestDatabase(admin: Database, name: string, now = Date.now()): Promise<void> {
+  const unheld = await admin.sql<{ datname: string }[]>`
+    select d.datname from pg_database d
+     where starts_with(d.datname, ${PREFIX})
+       and not exists (select 1 from pg_stat_activity a where a.datname = d.datname)`
+  for (const { datname } of unheld) {
+    const made = new RegExp(`^${PREFIX}[a-z_]+?_([0-9a-z]+)_[0-9a-z]+$`).exec(datname)?.[1]
+    if (made === undefined || now - parseInt(made, 36) < LEFT_BEHIND_MS) continue
+    await admin.sql.unsafe(`drop database if exists "${datname}"`).catch(() => undefined)
+  }
+  await admin.sql.unsafe(`create database "${name}"`)
 }

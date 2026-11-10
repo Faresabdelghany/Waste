@@ -31,7 +31,7 @@ import { createContext, type Context, type Environment } from "../pilot/phase"
 import { releasePhases, resetToSeedPhases } from "../pilot/phases"
 import { LOCAL_RUN } from "../pilot/run"
 import { seedDemo } from "../seed/demo"
-import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
+import { databaseUnderTest, freshDatabase, sharedDatabase } from "./database"
 
 const database = databaseUnderTest()
 const missing = database.skip === false ? backupTools() : undefined
@@ -43,22 +43,19 @@ const skip = database.skip || (missing ?? false)
 type Run = { context: Context; outputs: Map<string, string>; said: string[]; roles: string[] }
 
 /** The migrated and seeded database every test copies, made once for the file. */
-let seeded: FreshDatabase | undefined
+const seeded = sharedDatabase(database.adminUrl, "waste_phases_seeded", async (url) => {
+  await migrateDatabase(url)
+  await seedDemo(url)
+})
 
 before(async () => {
-  if (skip) return
-  seeded = await freshDatabase(database.adminUrl, "waste_phases_seeded")
-  await migrateDatabase(seeded.url)
-  await seedDemo(seeded.url)
+  if (!skip) await seeded.ready()
 })
-after(async () => {
-  await seeded?.drop()
-})
+after(() => seeded.drop())
 
 /** A copy of the migrated and seeded database, a throwaway age key, two throwaway roles that can log in, and a context over them: what one operation's phases run on. */
 async function onFreshDatabase(prefix: string, env: Environment, body: (run: Run) => Promise<void>): Promise<void> {
-  assert.ok(seeded, "the file's seeded database")
-  const fresh = await freshDatabase(database.adminUrl, prefix, { template: seeded.name })
+  const fresh = await freshDatabase(database.adminUrl, prefix, { template: (await seeded.ready()).name })
   const work = mkdtempSync(path.join(tmpdir(), `${prefix}-`))
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12)
   const roles = [`${prefix}_${suffix}_a`, `${prefix}_${suffix}_b`]

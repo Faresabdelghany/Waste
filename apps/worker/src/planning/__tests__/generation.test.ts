@@ -69,7 +69,7 @@ import { PgBoss } from "pg-boss"
 import { createBoss, startBoss, type Boss } from "../../runtime/boss"
 import { DRAFT_GENERATES_NOTHING, generateRoutes, runGeneration } from "../generate-routes"
 import { eligibleSchemes, PLAN_AHEAD_QUEUE, planAhead } from "../plan-ahead"
-import { databaseUnderTest, ownerUnderTest, workerUnderTest } from "../../__tests__/database"
+import { createTestDatabase, databaseUnderTest, ownerUnderTest, testDatabaseName, workerUnderTest } from "../../__tests__/database"
 import { jobContext } from "../../__tests__/context"
 
 const owner = ownerUnderTest()
@@ -233,7 +233,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
 }
 
 describe("generation against a migrated database", { skip }, () => {
-  const name = `waste_worker_generation_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("generation")
   let admin: Database
   let ownerPool: Database
   let api: Database
@@ -270,7 +270,7 @@ describe("generation against a migrated database", { skip }, () => {
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     const url = withDatabaseName(owner.url, name)
     await migrateDatabase(url)
     ownerPool = createDb(url, { max: 3 })

@@ -45,6 +45,9 @@ describe("migrateDatabase on a fresh database", { skip: database.skip }, () => {
   before(async () => {
     fresh = await freshDatabase(database.adminUrl, "waste_migrate_test")
     const outcomes = await Promise.allSettled([migrateDatabase(fresh.url), migrateDatabase(fresh.url)])
+    // Where neither run migrated there is no journal to read: say why they failed, not that the journal is missing.
+    const reasons = outcomes.flatMap((outcome) => (outcome.status === "rejected" ? [outcome.reason as unknown] : []))
+    if (reasons.length === outcomes.length) throw new AggregateError(reasons, `both runs failed, so the database was never migrated:\n${reasons.map(String).join("\n")}`)
     owner = createDb(fresh.url, { max: 1 })
     race = { outcomes, rows: await journalRows() }
   })

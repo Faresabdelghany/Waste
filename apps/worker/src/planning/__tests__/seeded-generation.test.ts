@@ -24,7 +24,7 @@ import { asc, eq, inArray } from "drizzle-orm"
 
 import { runGeneration } from "../generate-routes"
 import { planAhead } from "../plan-ahead"
-import { databaseUnderTest, ownerUnderTest, withDatabaseName, workerUnderTest } from "../../__tests__/database"
+import { createTestDatabase, databaseUnderTest, ownerUnderTest, testDatabaseName, withDatabaseName, workerUnderTest } from "../../__tests__/database"
 import { jobContext } from "../../__tests__/context"
 
 const owner = ownerUnderTest()
@@ -36,7 +36,7 @@ const skip = owner.skip || apiRole.skip || workerRole.skip
 const NOW = new Date("2026-10-11T18:00:00Z")
 
 describe("the Pilot's first generation over the seeded tenant", { skip }, () => {
-  const name = `waste_worker_seeded_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("seeded")
   let admin: Database
   let ownerPool: Database
   let api: Database
@@ -50,7 +50,7 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
 
   before(async () => {
     admin = createDb(owner.url, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     const url = withDatabaseName(owner.url, name)
     await migrateDatabase(url)
     await seedDemo(url)

@@ -31,6 +31,7 @@ import { company, project } from "../schema/organisation"
 import { AUDIT_TRAIL, auditTrail, replaceAuditTrail } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { AUDITED, EXEMPT, TABLES } from "../table-policies"
+import { ACTOR_SETTING, REASON_SETTING } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack } from "./specimen"
 
@@ -132,6 +133,12 @@ describe("the audit trigger against a fresh database", { skip: database.skip }, 
   after(async () => {
     await owner?.close()
     await fresh?.drop()
+  })
+
+  test("the trigger function reads the actor and the reason under the setting names actAs writes them to", async () => {
+    // 0019's text, which no helper spells any more: a rename in tenant.ts would leave every row's actor and reason null.
+    const [{ body }] = await owner.sql<{ body: string }[]>`select prosrc as body from pg_proc where oid = 'wms.audit_row()'::regprocedure`
+    for (const setting of [ACTOR_SETTING, REASON_SETTING]) assert.ok(body.includes(`current_setting('${setting}', true)`), `wms.audit_row() reads ${setting}`)
   })
 
   test("every audited table carries one trigger, with the parent and the ignored columns its declaration gives, and no other table carries one", async () => {

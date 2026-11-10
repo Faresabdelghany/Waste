@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Imports", vocabulary, vocabulary.IMPORT_VOCABULARIES, ["COMPANY_IMPORT_KINDS"])
+defineVocabularyTests("Imports", vocabulary, vocabulary.IMPORT_VOCABULARIES, { COMPANY_IMPORT_KINDS: "IMPORT_KINDS" })
 
 describe("the import vocabulary's own rules", () => {
   test("the company's kinds are the customers and the catalogue, and every other kind is a project's", () => {
