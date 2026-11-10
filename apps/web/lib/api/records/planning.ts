@@ -76,12 +76,7 @@ import { todayIn } from "./clock"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** Whether a typed form value differs between two records. */
 const changedTyped = (before: BusinessRecord, after: BusinessRecord, key: string) => typed(before, key) !== typed(after, key)
-
-// ---------------------------------------------------------------------------
-// The polygon a form's geometry text spells
-// ---------------------------------------------------------------------------
 
 const round6 = (value: number): number => Math.round(value * 1e6) / 1e6
 
@@ -120,10 +115,8 @@ function ringsOf(value: unknown): Position2D[][] | undefined {
   return undefined
 }
 
-/** What the create and the edit refuse JSON that spells no polygon with, at the geometry field. */
 export const NOT_A_POLYGON = "This is not a polygon the map can draw: give a GeoJSON Polygon, a Feature around one, or a list of [lng, lat] positions that enclose an area"
 
-/** The three readings of a form's geometry text: blank, a note in words, JSON that spells a polygon, and JSON that spells none. */
 export type GeometryText = { kind: "none" } | { kind: "note" } | { kind: "malformed" } | { kind: "polygon"; polygon: FlatPolygon }
 
 /**
@@ -147,15 +140,10 @@ export function geometryOfText(text: string | undefined): GeometryText {
   return rings === undefined ? { kind: "malformed" } : { kind: "polygon", polygon: { type: "Polygon", coordinates: rings } }
 }
 
-/** The flat polygon a form's geometry text spells, or undefined for text that spells none — a note or a malformed drawing alike. */
 export function parsePolygonText(text: string | undefined): FlatPolygon | undefined {
   const geometry = geometryOfText(text)
   return geometry.kind === "polygon" ? geometry.polygon : undefined
 }
-
-// ---------------------------------------------------------------------------
-// Planning areas
-// ---------------------------------------------------------------------------
 
 /** Where an area record carries every boundary version (O21 of #290): JSON, by the day each starts. */
 export const BOUNDARY_VERSIONS_KEY = "boundaryVersions"
@@ -167,10 +155,8 @@ export const NEXT_VERSION_GEOMETRY_KEY = "nextVersionGeometry"
 /** One boundary version as the record lists it: its first day, its last day in force (null while open) and how it stands on the project's day. */
 export type BoundaryVersionRow = { id: string; validFrom: string; lastDay: string | null; standing: "in force" | "upcoming" | "ended" }
 
-/** How a version row names its standing. */
 const STANDING_WORDS: Record<PeriodStanding, BoundaryVersionRow["standing"]> = { upcoming: "upcoming", "in-force": "in force", ended: "ended" }
 
-/** An area's versions as the record lists them, by the day each starts, read against the project's day. */
 export function boundaryVersionRows(boundaries: readonly PlanningAreaBoundary[], day: string): BoundaryVersionRow[] {
   return [...boundaries]
     .sort((a, b) => a.validFrom.localeCompare(b.validFrom))
@@ -194,13 +180,11 @@ export function boundaryVersionsOf(record: BusinessRecord): BoundaryVersionRow[]
   }
 }
 
-/** What a next version from a day that does not follow the version before it is told. */
 export const nextVersionAfter = (validFrom: string): string => `The next version starts after the one before it does, on ${validFrom}`
 
 /** An area with every boundary version the API holds for it: what the read lists and a write answers. */
 export type PlanningAreaResource = PlanningArea & { boundaries: PlanningAreaBoundary[] }
 
-/** The record's status as a reading of the versions against the day, and the version it reads. */
 export function versionInForce(boundaries: readonly PlanningAreaBoundary[], day: string): { status: "Draft" | "Active" | "Upcoming" | "Expired"; version: PlanningAreaBoundary | null } {
   const inForce = boundaries.find((version) => inForceOn(version, day))
   if (inForce) return { status: "Active", version: inForce }
@@ -246,7 +230,6 @@ function successorWriteOf(before: BusinessRecord, after: BusinessRecord): NonNul
   const versions = boundaryVersionsOf(before)
   const latest = versions.at(-1)
   if (latest !== undefined && from <= latest.validFrom) return refusal(NEXT_VERSION_FROM_KEY, nextVersionAfter(latest.validFrom))
-  // The version still in force on the day — open, or ending after it — ends there; one that ended before it stays as it is.
   const ending = latest !== undefined && (latest.lastDay === null || latest.lastDay >= from) ? latest.id : null
   return { successor: { endId: ending, create: { boundary: drawn.polygon, validFrom: from } } }
 }
@@ -395,10 +378,6 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource, unknown,
   },
 }
 
-// ---------------------------------------------------------------------------
-// Collection calendars
-// ---------------------------------------------------------------------------
-
 export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar, CollectionCalendarCreate, CollectionCalendarPatch> = {
   prefix: "calendar",
   auditTable: "collection_calendar",
@@ -453,10 +432,6 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar, Coll
   create: (client, body) => create<CollectionCalendar>(client, "/collection-calendars", body).then((created) => created.body),
   update: (client, serverId, body) => patch<CollectionCalendar>(client, `/collection-calendars/${serverId}`, body),
 }
-
-// ---------------------------------------------------------------------------
-// The modules
-// ---------------------------------------------------------------------------
 
 /** Settings → Areas & Zones, and the map's outlines: each carries the boundary version in force on the project's day (#232). */
 export const planningAreasModule = {

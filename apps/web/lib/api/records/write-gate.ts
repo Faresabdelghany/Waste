@@ -50,7 +50,6 @@ function unreadModule(target: ModuleState, label: string, when: string): string 
   }
 }
 
-/** The problem a write is refused with once the session it began in is over. */
 export const sessionEnded = (): Problem => genericProblem(UNREACHABLE_STATUS, "The session ended before the record was saved")
 
 /** Where the store sends a write: the browser's bucket, the API, or nowhere, with why and whether the store says so. */

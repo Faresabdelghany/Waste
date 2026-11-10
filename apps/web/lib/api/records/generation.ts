@@ -22,7 +22,6 @@ import { BROWSER_TIMERS, type Timers } from "@/lib/timers"
 import { get, listPage, type ApiClient } from "../client"
 import { problemOfError, type Problem } from "../problem"
 
-/** How often an open run is read again. */
 export const RUN_READ_EVERY_MS = 3_000
 
 /** How long after its last update an open run is still read again; past it, the worker has not reported on it. */
@@ -66,11 +65,6 @@ export function runCounts(run: GenerationRun): string {
   return parts.length === 0 ? "No route changed" : parts.join(" · ")
 }
 
-/**
- * How the page reads a run it shows: `watched` while it is open and was
- * last updated under fifteen minutes ago, `unreported` once it is open and
- * older than that, `finished` once it has succeeded or failed.
- */
 export function runReading(run: Pick<GenerationRun, "status" | "updatedAt">, now: number): "watched" | "unreported" | "finished" {
   if (run.status !== "queued" && run.status !== "running") return "finished"
   return now - Date.parse(run.updatedAt) < RUN_REPORTS_WITHIN_MS ? "watched" : "unreported"
@@ -114,7 +108,6 @@ export function watchGenerationRun(run: GenerationRun, { read, onRun, onProblem,
   let handle: unknown
   let stopped = false
 
-  // Waits for the next read while the run is watched, and says so once it is left unreported.
   const next = () => {
     const reading = runReading(latest, now())
     if (reading === "unreported") onUnreported?.(latest)

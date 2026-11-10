@@ -105,7 +105,6 @@ export function compartmentDraftsOf(record: Pick<BusinessRecord, "submittedValue
   }
 }
 
-/** A blank or a whole number of at least one, as a compartment's figure; a refusal at `path` otherwise. */
 function figureOf(text: string, path: string, message: string): number | undefined | LocalRefusal {
   const trimmed = text.trim()
   if (trimmed === "") return undefined
@@ -190,7 +189,6 @@ function litresOf(record: BusinessRecord): number | undefined | LocalRefusal {
   return Number.isFinite(cubicMetres) && cubicMetres > 0 && litres >= 1 ? litres : refusal("volumeCapacity", "A volume capacity is cubic metres, above zero")
 }
 
-/** The vehicle type the form picked at the master module, as a server id, or a refusal. */
 function vehicleTypeServerIdOf(record: BusinessRecord, context: MappingContext): string | LocalRefusal {
   const webId = typed(record, "vehicleType")
   const serverId = webId === undefined ? undefined : context.resolve.serverIdOf(webId)
@@ -246,7 +244,6 @@ export const vehicleAdapter: ResourceAdapter<Vehicle, unknown, VehicleWrite> = {
     const provider = vehicle.serviceProviderId === null ? undefined : referenced(context, "service-provider", vehicle.serviceProviderId)
     const type = referenced(context, MASTER_DATA_KIND_DETAILS["vehicle-type"].prefix, vehicle.vehicleTypeId)
     const depot = vehicle.homeDepotId === null ? undefined : referenced(context, "depot", vehicle.homeDepotId)
-    // The union of the compartments' fractions, each once, in the order they were written.
     const fractionIds = [...new Set(vehicle.compartments.flatMap((compartment) => compartment.wasteFractionIds))]
     const fractions = fractionIds.map((id) => referenced(context, MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix, id))
     const fractionNames = new Map(fractionIds.map((id, index) => [id, fractions[index].name ?? fractions[index].webId]))
@@ -432,10 +429,6 @@ export const vehicleAdapter: ResourceAdapter<Vehicle, unknown, VehicleWrite> = {
   actions: { ...VEHICLE_AVAILABILITY_ACTIONS, ...VEHICLE_MAINTENANCE_ACTIONS },
 }
 
-// ---------------------------------------------------------------------------
-// Drivers
-// ---------------------------------------------------------------------------
-
 /** `C · valid to 2026-09-05`, literal: the class and the last day it holds; the reading is the licence rule's. */
 function licenceFact(driver: Driver): string {
   if (driver.licenceClass === null) return "Not on record"
@@ -603,10 +596,6 @@ export const driverAdapter: ResourceAdapter<Driver> = {
   // When the driver is away (O6 of #290): absences of their own, recorded and removed from the driver's details.
   actions: DRIVER_AVAILABILITY_ACTIONS,
 }
-
-// ---------------------------------------------------------------------------
-// The modules
-// ---------------------------------------------------------------------------
 
 /** Fleet → Vehicles, after the master data (its type), the providers and the depots (its base). */
 export const fleetVehiclesModule = {

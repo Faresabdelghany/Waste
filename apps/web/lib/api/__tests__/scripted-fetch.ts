@@ -19,7 +19,6 @@ export function scripted(answers: Array<(call: Call) => Response | Promise<Respo
   return { fetch: fetchImpl, calls }
 }
 
-/** A JSON answer. */
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } })
 
@@ -30,7 +29,6 @@ export const problem = (status: number, detail: string, errors?: { path: string;
     headers: { "content-type": PROBLEM_MEDIA_TYPE },
   })
 
-/** The body a scripted call was sent, parsed. */
 export const bodyOf = (call: Call): unknown => (typeof call.init.body === "string" ? JSON.parse(call.init.body) : call.init.body)
 
 export const clientOver = (fetchImpl: typeof fetch): ApiClient => ({ baseUrl: "http://api.test", token: "t0k3n", fetch: fetchImpl })

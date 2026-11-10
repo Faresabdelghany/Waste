@@ -9,7 +9,7 @@
 // `statuses` and refuses every edit, and its status moves by `acknowledge`
 // and `resolve` alone. "Linked to ticket" is no status but a reading of the
 // alert's ticket, which the row shows beside its status. An alert is
-// `alert-<uuid>` from the start; the fixtures' ALERT-2201 is a fixture's.
+// `alert-<uuid>` from the start.
 //
 // An alert names what it is about — a route, a vehicle, a driver, a
 // container, at least one (`namesASubject`) — by web id through the store's
@@ -37,12 +37,10 @@ import { callsignOf, routeAdapter } from "./routes"
 import { isTicketRecord, TICKET_PREFIX } from "./tickets"
 import { TICKET_NUMBER_FACT } from "@/lib/data/tickets"
 
-/** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
 export const ALERTS_MODULE = moduleAt("operate.exceptions")
 
 export const ALERT_PREFIX = "alert"
 
-/** The alert's commands, by the names its surface sends. */
 export const ACKNOWLEDGE_ALERT = "acknowledge"
 export const RESOLVE_ALERT = "resolve"
 export const LINK_ALERT_TICKET = "link-ticket"
@@ -112,7 +110,6 @@ export function toAlertRecord(alert: Alert, context: MappingContext): RecordFiel
   }
 }
 
-/** A closed-list token a form typed under `key`, or a refusal naming the list. */
 function required(record: BusinessRecord, key: string, tokens: readonly string[], noun: string): string | LocalRefusal {
   const text = typed(record, key)
   if (text === undefined) return refusal(key, `Pick the alert's ${noun}`)

@@ -24,12 +24,10 @@ import type { ActionOutcome, SendAction } from "./server-records"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** The list's days as the wire spells them, from the record's typed values. */
 function holidaysOf(record: BusinessRecord): HolidayListHoliday[] {
   return holidayListEntries(record).map((entry) => ({ day: entry.date, name: entry.name.trim() === "" ? null : entry.name.trim() }))
 }
 
-/** What a list's update carries: the list's own fields, the days, or both. */
 type HolidayListWrite = { list?: { name?: string; country?: string }; holidays?: HolidayListHoliday[] }
 
 /** The action that removes a list, answering nothing. */

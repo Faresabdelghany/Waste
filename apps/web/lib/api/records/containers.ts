@@ -9,12 +9,13 @@
 // the bin, and the effective-dated placements of where it serves — and one
 // record here: the read lists both and files every placement under its
 // container, and the record shows one: the placement the ledger has the
-// container in service at, else its latest by start (a placement the seed
-// wrote before any movement, or one that has ended). The status is the
-// Container Asset State, the ledger's reading (ADR-0003) — In warehouse, In
-// service, In maintenance, Retired, or No stock record for a container with
-// no movement yet — which moves only by the lifecycle's commands, so the
-// adapter lists no `statuses` and the store refuses every move an edit makes.
+// container in service at, else the one serving on the project's day, else
+// its latest by start (a placement the seed wrote before any movement, or one
+// that has ended). The status is the Container Asset State, the ledger's
+// reading (ADR-0003) — In warehouse, In service, In maintenance, Retired, or
+// No stock record for a container with no movement yet — which moves only by
+// the lifecycle's commands, so the adapter lists no `statuses` and the store
+// refuses every move an edit makes.
 //
 // An edit corrects the identity through `PATCH /containers/:id` and, where
 // the container has a placement, that placement's fraction, its cadence
@@ -63,7 +64,6 @@ import { containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
 
-/** The workspace module the ledger is the rows of: the movements the containers' commands append. */
 export const INVENTORY_MODULE = moduleAt("resources.inventory")
 
 /** A container as the adapter reads it: the resource, and every placement it has had. */
@@ -75,7 +75,6 @@ export const NO_STOCK_RECORD = "No stock record"
 const CONTAINER_PREFIX = "asset"
 const MOVEMENT_PREFIX = "movement"
 const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix
-// What each reference is held to when the store holds the row: its kind.
 const KIND = {
   warehouse: { owns: warehouseAdapter.owns },
   containerType: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "container-type" },
@@ -89,7 +88,6 @@ const KIND = {
 
 const isOwnership = (value: string): value is ContainerOwnership => (CONTAINER_OWNERSHIPS as readonly string[]).includes(value)
 
-/** The placement a record shows: the one the ledger has the container in service at, else the one serving on the project's day, else the latest by start. */
 function placementShown(resource: ContainerResource, day: string): ContainerServicePlacement | undefined {
   const serving = resource.assetState?.placementId
   if (serving) {
@@ -100,7 +98,6 @@ function placementShown(resource: ContainerResource, day: string): ContainerServ
   return latestFirst.find((placement) => servesOn(placement, day)) ?? latestFirst[0]
 }
 
-/** A placement's period as a person reads it: its first day, and its last or "open". */
 const periodOf = (placement: ContainerServicePlacement) => (placement.validTo === null ? `From ${placement.validFrom}, open` : `From ${placement.validFrom} to ${lastDayIn(placement.validTo)}`)
 
 const PICK_CONTAINER_TYPE = "Pick a container type the API holds"
@@ -111,7 +108,6 @@ const OWNERSHIP_WORDS = `Ownership is ${CONTAINER_OWNERSHIPS.slice(0, -1).join("
 export const PLACEMENT_ENDS_BY_THE_LEDGER = "A placement ends when its container is returned or decommissioned"
 const PLACEMENT_END_KEPT = "A placement's end is corrected, never taken back"
 
-/** The identity fields of a container as the form spells them, read for a patch. */
 function identityOf(record: BusinessRecord, context: MappingContext) {
   const ownership = typed(record, "ownership")
   return {
@@ -125,7 +121,6 @@ function identityOf(record: BusinessRecord, context: MappingContext) {
   }
 }
 
-/** What a container's update carries: a patch of the container, a patch of its placement, or both, each to its own route. */
 type ContainerWrite = {
   container?: Record<string, unknown>
   placement?: { id: string; patch: Record<string, unknown> }
@@ -176,18 +171,14 @@ function placementPatchOf(before: BusinessRecord, after: BusinessRecord, context
   return { id: placementId, patch: body }
 }
 
-// ---------------------------------------------------------------------------
-// The lifecycle's commands
-// ---------------------------------------------------------------------------
-//
 // The ledger's five commands (`receive`, `return`, `transfer`,
 // `decommission`, `adjust`: `POST /containers/:id/<command>`) and the one door
 // into service, `issue`, which is the Registry's `POST
 // /containers/:id/placements`. Each dialog's input becomes the contract's
 // body here — a warehouse, a fraction, a frequency by web id through the
-// resolver, or by the id chip a row of a module not yet switched shows; a
-// subscription by its id until 9a switches the subscriptions; the form's last
-// day in service as the wire's first day out — or a refusal naming the field.
+// resolver, or by the id chip a row of a module not yet read shows; the
+// form's last day in service as the wire's first day out — or a refusal
+// naming the field.
 // What the container's state allows is the API's to say: every command is
 // offered and its 409 speaks (the rules on #81). A command answers the
 // movement (or the placement) it wrote, so the row is read back after it,
@@ -219,7 +210,6 @@ const wordsOf = (input: CommandInput, keys: readonly ("reason" | "reference")[])
 const PICK_WAREHOUSE = "Pick a warehouse the API holds"
 const IN_STOCK = "It arrives in a warehouse or in maintenance at one"
 
-/** The warehouse a command arrives at, required. */
 function warehouseOf(input: CommandInput, context: MappingContext): string | LocalRefusal {
   return inputReference(input, "warehouseId", "warehouse", context, KIND.warehouse) ?? refusal("warehouseId", PICK_WAREHOUSE)
 }
@@ -238,7 +228,6 @@ function endOf(input: CommandInput): string | undefined | LocalRefusal {
   return ISO_DAY.test(lastDay) ? firstDayOut(lastDay) : refusal("lastDay", "Give the last day it serves")
 }
 
-/** Composes a body from its parts, the first refusal among them winning. */
 function bodyOf(...parts: Array<Record<string, unknown> | LocalRefusal>): Record<string, unknown> | LocalRefusal {
   const refused = parts.find(isLocalRefusal)
   if (refused !== undefined) return refused
@@ -251,7 +240,6 @@ async function readBack(client: Client, serverId: string): Promise<ContainerReso
   return { ...container, placements }
 }
 
-/** A command posted to its path on the container, then the row read back; the ledger it appended to is read again. */
 const lifecycle = (path: string, verb: string, toBody: NonNullable<RecordCommand<ContainerResource>["toBody"]>): RecordCommand<ContainerResource> => ({
   toBody,
   run: async (client, serverId, body) => {
@@ -262,7 +250,6 @@ const lifecycle = (path: string, verb: string, toBody: NonNullable<RecordCommand
   touches: [moduleKeyOf(INVENTORY_MODULE.workspaceId, INVENTORY_MODULE.moduleId)],
 })
 
-/** A reason a command must carry. */
 const reasonOf = (input: CommandInput): { reason: string } | LocalRefusal => {
   const reason = said(input, "reason")
   return reason === undefined ? refusal("reason", "Say why") : { reason }
@@ -318,7 +305,6 @@ export const CONTAINER_COMMANDS = {
   }),
 } satisfies Record<string, RecordCommand<ContainerResource>>
 
-/** The names of the container's commands, as the dialogs send them. */
 export type ContainerCommand = keyof typeof CONTAINER_COMMANDS
 
 /** One container's ledger, oldest first: its details' history. */
@@ -453,8 +439,6 @@ export const containerAdapter: ResourceAdapter<ContainerResource, unknown, Conta
     // A container just registered serves nowhere: it has no placement to read.
     return { ...created.body, placements: [] }
   },
-  // The container first, then its placement, then the row read back with its
-  // placements, so what the write answers is what the next load reads.
   update: async (client, serverId, write) => {
     let container: Container | undefined
     if (write.container !== undefined) container = await patch<Container>(client, `/containers/${serverId}`, write.container)
@@ -472,10 +456,6 @@ export const containersModule = {
   resources: [containerAdapter],
 } satisfies ServerModule
 
-// ---------------------------------------------------------------------------
-// The inventory: the ledger across containers
-// ---------------------------------------------------------------------------
-//
 // `resources.inventory` on the wire is what moved (`GET /stock-movements`,
 // oldest first), not the prototype's stock items with their balances: what
 // stands in a warehouse today is the containers' own reading, and a movement
@@ -488,7 +468,6 @@ export const containersModule = {
 
 const APPEND_ONLY = "The ledger is append-only: a wrong movement is corrected by adjusting its container"
 
-/** Where a movement leaves from or arrives at, as a person reads it: a supplier, a warehouse, maintenance at one, service, scrap. */
 function placeOf(kind: StockMovement["fromKind"], warehouseId: string | null, context: MappingContext): string {
   const warehouse = warehouseId === null ? undefined : nameVia(context, "warehouse", warehouseId)
   if (kind === "warehouse") return warehouse ?? "Warehouse"

@@ -42,11 +42,9 @@ const ACTION_REFERENCES = [
   { key: "vehicleId", prefix: "vehicle", owns: (record: BusinessRecord) => vehicleAdapter.owns(record), refused: "Pick a vehicle the API holds" },
 ] as const
 
-/** An action with every reference by its web id, as the record carries it. */
 const actionByWebIds = (action: TicketTypeAction, context: MappingContext): TicketTypeAction =>
   ACTION_REFERENCES.reduce((mapped, { key, prefix }) => (action[key] === null ? mapped : { ...mapped, [key]: webIdVia(context, prefix, action[key]) }), action)
 
-/** The actions as the API takes them, every reference by its server id; a refusal for one the API does not hold. */
 function actionServerIds(record: BusinessRecord, context: MappingContext): TicketTypeActionBody[] | LocalRefusal {
   const actions: TicketTypeActionBody[] = []
   for (const action of typeActionsOf(record)) {
@@ -92,7 +90,6 @@ export function toTicketTypeRecord(type: TicketType, context: MappingContext): R
   }
 }
 
-/** The type's own fields as the record says them: the name, the description, the status in the wire's word and whether it is its kind's default. */
 function typeFieldsOfRecord(record: BusinessRecord): { name: string; description: string | null; status: "active" | "inactive"; isDefault: boolean } | LocalRefusal {
   const name = typed(record, "name") ?? record.name.trim()
   if (name === "") return refusal("name", "Name the ticket type")
@@ -102,7 +99,6 @@ function typeFieldsOfRecord(record: BusinessRecord): { name: string; description
   return { name, description: description === undefined || description.trim() === "" ? null : description, status, isDefault: record.submittedValues?.isDefault === true }
 }
 
-/** The permissions as server ids, each a role the API holds; a refusal for one it does not. */
 function permissionServerIds(record: BusinessRecord, context: MappingContext): TicketTypePermission[] | LocalRefusal {
   const permissions: TicketTypePermission[] = []
   for (const entry of typePermissionsOf(record)) {

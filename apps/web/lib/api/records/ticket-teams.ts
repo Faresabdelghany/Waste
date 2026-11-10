@@ -36,7 +36,6 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 /** The members a form names, by web id, as its multiselect keeps them, the picker's None left out. */
 export const memberWebIdsOf = (record: Pick<BusinessRecord, "submittedValues">): string[] => splitList(typed(record, "memberUserAccountIds") ?? "").filter((id) => id !== NO_ONE)
 
-/** The members as server ids, each an account the API holds; a refusal at the field for one it does not. */
 function memberServerIds(record: BusinessRecord, context: MappingContext): string[] | LocalRefusal {
   const ids: string[] = []
   for (const webId of memberWebIdsOf(record)) {
@@ -47,7 +46,6 @@ function memberServerIds(record: BusinessRecord, context: MappingContext): strin
   return ids
 }
 
-/** The team's own fields as the form says them: the name, and the status in the wire's word. */
 function teamFieldsOf(record: BusinessRecord): { name: string; status: "active" | "inactive" } | LocalRefusal {
   const name = typed(record, "name") ?? record.name.trim()
   if (name === "") return refusal("name", "Name the team")
@@ -121,7 +119,7 @@ export const ticketTeamAdapter: ResourceAdapter<Team, unknown, TeamWrite> = {
   },
 }
 
-/** Settings › Tickets' Teams and Types tabs (#545 and #548 of #544), and the module the tickets' Team and Type pickers read: the company's teams and its types, the API keeping both under `configure.templates`. */
+/** Settings › Users & roles' Teams tab and Settings › Tickets' Types tab (#545 and #548 of #544), and the module the tickets' Team and Type pickers read: the company's teams and its types, the API keeping both under `configure.templates`. */
 export const ticketTeamsModule = {
   ...TICKET_TEAMS_MODULE,
   resources: [ticketTeamAdapter, ticketTypeAdapter],

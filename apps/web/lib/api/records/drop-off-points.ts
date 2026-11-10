@@ -46,7 +46,6 @@ import {
 } from "./places"
 
 const PREFIX = "drop-off"
-/** The form's keys for the three sets. */
 export const DROP_OFF_FRACTIONS_KEY = "acceptedFractionIds"
 export const DROP_OFF_HOURS_KEY = "weeklyHours"
 export const DROP_OFF_EXCEPTIONS_KEY = "openingExceptions"
@@ -58,16 +57,13 @@ const keepsLocation = "A drop-off point keeps a location: give the latitude and 
 const codeSetOnce = "The code is set once: a point that needs another code is another point"
 const projectSetOnce = "A drop-off point stays in its project: register another point in the other project"
 
-/** The project's today, on its own clock, for the exceptions a save keeps. */
 const todayFor = (record: BusinessRecord, context: MappingContext): string => todayIn(context, projectTimezoneOf(record, context))
 
-/** The weekly hours the form's text names, or the refusal at the field. */
 function hoursFrom(record: BusinessRecord): WeeklyWindow[] | LocalRefusal {
   const read = weeklyHoursOf(typed(record, DROP_OFF_HOURS_KEY) ?? "")
   return "message" in read ? refusal(DROP_OFF_HOURS_KEY, read.message) : read
 }
 
-/** The exceptions the form's text names, read whole; the refusal at the field. */
 function exceptionsRead(record: BusinessRecord): OpeningException[] | LocalRefusal {
   const read = exceptionsOf(typed(record, DROP_OFF_EXCEPTIONS_KEY) ?? "")
   return "message" in read ? refusal(DROP_OFF_EXCEPTIONS_KEY, read.message) : read
@@ -83,11 +79,9 @@ function exceptionsFrom(record: BusinessRecord, context: MappingContext, before?
   return "message" in kept ? refusal(DROP_OFF_EXCEPTIONS_KEY, kept.message) : kept
 }
 
-/** The sets as their canonical text: two texts that read to the same set are the same set. */
 const sameHours = (a: readonly WeeklyWindow[], b: readonly WeeklyWindow[]) => weeklyHoursText(a) === weeklyHoursText(b)
 const sameExceptions = (a: readonly OpeningException[], b: readonly OpeningException[]) => exceptionsText(a) === exceptionsText(b)
 
-/** What a save sends: the point's own fields, and each set that changed. */
 type DropOffWrite = { point?: object; wasteFractionIds?: string[]; hours?: WeeklyWindow[]; exceptions?: OpeningException[] }
 
 export const dropOffPointAdapter: ResourceAdapter<DropOffPoint, unknown, DropOffWrite> = {
@@ -219,7 +213,6 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint, unknown, DropOff
       status,
       DROP_OFF_POINT_STATUSES,
     )
-    // Each set is written only where the form changed what it reads to: a set read and saved unchanged, or retyped to the same, writes nothing.
     const wasIds = isLocalRefusal(wasFractions) ? undefined : wasFractions
     const write: DropOffWrite = {
       ...(pointBody === null ? {} : { point: pointBody }),
@@ -230,7 +223,6 @@ export const dropOffPointAdapter: ResourceAdapter<DropOffPoint, unknown, DropOff
     return Object.keys(write).length === 0 ? null : write
   },
   create: (client, body) => create<DropOffPoint>(client, "/drop-off-points", body).then((created) => created.body),
-  // The point first, then each set through its own route; the answer is the point as it now stands.
   update: async (client, serverId, write) => {
     let point: DropOffPoint | undefined
     if (write.point !== undefined) point = await patch<DropOffPoint>(client, `/drop-off-points/${serverId}`, write.point)

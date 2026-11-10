@@ -19,7 +19,6 @@ import { memoryStorage } from "./memory-storage"
 
 type Call = { url: string; init: RequestInit }
 
-/** A `fetch` that answers from a script, in order, and records what it was asked. */
 function scripted(answers: Array<(call: Call) => Response | Promise<Response>>): { fetch: typeof fetch; calls: Call[] } {
   const calls: Call[] = []
   const fetchImpl = (async (input: RequestInfo | URL, init: RequestInit = {}) => {

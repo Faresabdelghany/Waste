@@ -56,7 +56,6 @@ export class SignInRefused extends Error {
  */
 export const EXPIRY_MARGIN_MS = 60_000
 
-/** Whether the session's token has expired, or will within the margin. */
 export function isExpired(session: Pick<ApiSession, "expiresAt">, now = Date.now()): boolean {
   return session.expiresAt - EXPIRY_MARGIN_MS <= now
 }
@@ -69,7 +68,6 @@ type TokenResponse = {
   user?: { id?: unknown; email?: unknown } | null
 }
 
-/** The session a token response stands for, or null when the body is not one. */
 export function sessionOf(body: unknown, now = Date.now()): ApiSession | null {
   if (typeof body !== "object" || body === null) return null
   const token = body as TokenResponse
@@ -105,7 +103,6 @@ function authSentence(body: unknown): string | null {
   return null
 }
 
-/** The sentence a sign-in refusal carries; a body that carries none falls back on the status. */
 export function refusalMessage(body: unknown, status: number): string {
   return authSentence(body) ?? (status === 400 || status === 401 ? "The e-mail address or the password is not right" : `Sign-in failed (HTTP ${status})`)
 }
@@ -143,7 +140,6 @@ async function callAuth(config: AuthConfig, path: string, { method, token, body 
   return { status: response.status, ok: response.ok, body: parsed }
 }
 
-/** The message of what `callAuth` rejected with: the sentence for an Auth that did not answer. */
 const unreachable = (error: unknown): string => (error instanceof Error ? error.message : "The identity provider did not answer")
 
 async function token(config: AuthConfig, grant: string, body: unknown, doFetch: typeof fetch, now: number): Promise<ApiSession> {
@@ -161,7 +157,6 @@ async function token(config: AuthConfig, grant: string, body: unknown, doFetch: 
 
 export type AuthOptions = { fetch?: typeof fetch; now?: () => number }
 
-/** A session for an e-mail address and its password; throws `SignInRefused` with Auth's sentence otherwise. */
 export function signInWithPassword(config: AuthConfig, email: string, password: string, { fetch: doFetch = fetch, now = Date.now }: AuthOptions = {}): Promise<ApiSession> {
   return token(config, "password", { email: email.trim(), password }, doFetch, now())
 }

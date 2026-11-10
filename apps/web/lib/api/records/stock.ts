@@ -17,7 +17,6 @@ import type { ActionOutcome, SendAction } from "./server-records"
 import type { CommandInput, MappingContext, RecordAction } from "./adapter"
 import type { LocalRefusal } from "@/lib/records/fields"
 
-/** The warehouse's action that replaces its minimums. */
 export const SET_STOCK_MINIMUMS = "set-stock-minimums"
 
 /** One minimum as the editor holds it: the type by web id, the count as typed, blank for none. */
@@ -25,7 +24,6 @@ export type MinimumDraft = { containerTypeId: string; minimum: string }
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** The editor's drafts as the PUT's body: the blank ones left out, each count a whole number of at least one, each type one the API holds. */
 export function stockMinimumsBody(input: CommandInput, _record: BusinessRecord, context: MappingContext): { minimums: Array<{ containerTypeId: string; minimum: number }> } | LocalRefusal {
   const drafts = Array.isArray(input.minimums) ? (input.minimums as MinimumDraft[]) : []
   const minimums: Array<{ containerTypeId: string; minimum: number }> = []
@@ -40,7 +38,6 @@ export function stockMinimumsBody(input: CommandInput, _record: BusinessRecord, 
   return { minimums }
 }
 
-/** `PUT /warehouses/:id/stock-minimums`, the warehouse's action. */
 export const SET_STOCK_MINIMUMS_ACTION: RecordAction<StockMinimums> = {
   toBody: stockMinimumsBody,
   run: (client, serverId, body) => put<StockMinimums>(client, `/warehouses/${serverId}/stock-minimums`, body),

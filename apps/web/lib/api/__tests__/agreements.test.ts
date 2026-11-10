@@ -2,11 +2,11 @@
 // Registry's effective-dated pair become the records of `customers.agreements`
 // — an agreement naming its customer and payer through the switched contacts
 // module, a subscription naming its agreement through the rows loaded before
-// it and its product and place as id chips until their modules are switched;
-// the records the workspace writes become the bodies the API's contracts
-// accept, held here against the contracts' own zod schemas; and the writes go
-// out through the store's seam over a scripted `fetch`, the API's refusals
-// coming back as its sentences.
+// it and its product and place as id chips where the store holds no row of
+// them; the records the workspace writes become the bodies the API's
+// contracts accept, held here against the contracts' own zod schemas; and the
+// writes go out through the store's seam over a scripted `fetch`, the API's
+// refusals coming back as its sentences.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

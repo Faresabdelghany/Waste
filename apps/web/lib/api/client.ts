@@ -58,7 +58,6 @@ export const UNREACHABLE_STATUS = 0
 
 type Query = Readonly<Record<string, string | number | undefined>>
 
-/** `/projects?limit=200&cursor=…`: undefined members are left out, nothing else is coerced. */
 export function withQuery(path: string, query: Query = {}): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
@@ -78,7 +77,6 @@ async function readBody(response: Response): Promise<unknown> {
   }
 }
 
-/** The problem a refused response stands for: its body when it is one, else its status alone. */
 export async function problemOfResponse(response: Response): Promise<Problem> {
   const body = await readBody(response)
   return problemOf(body) ?? genericProblem(response.status, typeof body === "string" && body !== "" ? body : undefined)
@@ -113,7 +111,6 @@ async function request(client: ApiClient, method: string, path: string, body?: u
   return response
 }
 
-/** `GET path`, the body parsed. */
 export async function get<Body>(client: ApiClient, path: string): Promise<Body> {
   const response = await request(client, "GET", path)
   return (await readBody(response)) as Body
@@ -154,7 +151,6 @@ export async function getFile(client: ApiClient, path: string, accept: string): 
   return { bytes: await response.arrayBuffer(), contentType: response.headers.get("content-type"), fileName: fileNameOf(response.headers.get("content-disposition")) }
 }
 
-/** One page of a list. */
 export async function listPage<Item>(client: ApiClient, path: string, query: Query = {}): Promise<Page<Item>> {
   return get<Page<Item>>(client, withQuery(path, { limit: PAGE_LIMIT_MAX, ...query }))
 }
@@ -177,7 +173,6 @@ export async function listAll<Item>(client: ApiClient, path: string, query: Quer
   return items
 }
 
-/** `POST path` with a JSON body; answers the created body and its `Location`. */
 export async function create<Body>(client: ApiClient, path: string, body: unknown): Promise<Created<Body>> {
   const response = await request(client, "POST", path, body)
   return { body: (await readBody(response)) as Body, location: response.headers.get("location") }
@@ -189,7 +184,6 @@ export async function patch<Body>(client: ApiClient, path: string, body: unknown
   return (await readBody(response)) as Body
 }
 
-/** `PUT path` with a JSON body; answers what the route answers. */
 export async function put<Body>(client: ApiClient, path: string, body: unknown): Promise<Body> {
   const response = await request(client, "PUT", path, body)
   return (await readBody(response)) as Body

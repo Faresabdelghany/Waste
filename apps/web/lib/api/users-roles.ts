@@ -35,7 +35,7 @@ export type RoleRow = {
   name: string
   type: string
   scope: string
-  /** The access summary the Roles table shows: the store's `permissions` text, or the API's role description. */
+  /** The access summary the Roles table shows: the API's role description. */
   permissions: string
 }
 
@@ -69,7 +69,6 @@ export function pilotEmptyState(module: ModuleState, noun: "users" | "roles"): {
   return { message: `Reading the company's ${noun} from the API…`, hint: `The list shows the API's ${noun} and nothing else.` }
 }
 
-/** The users the tab lists, sorted by name. */
 export function userRowsOf(module: ModuleState, companyName: string): UserRow[] {
   if (module.status !== "ready") return []
   return module.records
@@ -110,10 +109,6 @@ function apiRoleRow(record: BusinessRecord): RoleRow {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The pickers on the Pilot: what the store loaded, by web id
-// ---------------------------------------------------------------------------
-
 export type PickerOption = { id: string; name: string }
 
 const option = ({ id, name }: BusinessRecord): PickerOption => ({ id, name })
@@ -128,14 +123,9 @@ export function projectPickerOptions(organisationRecords: readonly BusinessRecor
   return projectRecordsOf(organisationRecords).map(option)
 }
 
-/** The service providers Add user offers: the providers module's rows. */
 export function providerPickerOptions(providerRecords: readonly BusinessRecord[]): PickerOption[] {
   return providerRecords.filter((record) => serviceProviderAdapter.owns(record)).map(option)
 }
-
-// ---------------------------------------------------------------------------
-// The invitation
-// ---------------------------------------------------------------------------
 
 /** Exactly one of the three ways an account reaches something, as `UserInvite` takes it. */
 export type InviteAccess =
@@ -247,7 +237,6 @@ export function newRoleRecord(role: NewRole, id: string): BusinessRecord {
   }
 }
 
-/** A matrix as one comparable text: each module granted something, its actions sorted. */
 const accessKey = (access: Readonly<Record<string, readonly string[]>>) =>
   JSON.stringify(
     Object.entries(access)

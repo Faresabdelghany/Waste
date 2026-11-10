@@ -7,16 +7,12 @@ import type { Problem } from "./problem"
 /** How a sentence names what it reads: `is` for a mass noun ("the master data is"), `notShown` where the role is told of it by another name. */
 export type ReadNoun = { readonly is?: boolean; readonly notShown?: string }
 
-/** "The planning areas are not shown to your role." */
 export const notShownSentence = (noun: string, { is = false }: Pick<ReadNoun, "is"> = {}): string => `The ${noun} ${is ? "is" : "are"} not shown to your role.`
 
-/** "Reading the planning areas from the API…" */
 const readingSentence = (noun: string): string => `Reading the ${noun} from the API…`
 
-/** "The planning areas could not be read from the API: <why>." */
 const unreadSentence = (noun: string, why: string): string => `The ${noun} could not be read from the API: ${why}`
 
-/** What a record's surface says while its module is read, and what it offers once read: "The routes are being read from the API; their commands follow." */
 export const waitingSentence = (noun: string, follows: string, { is = false }: Pick<ReadNoun, "is"> = {}): string => `The ${noun} ${is ? "is" : "are"} being read from the API; ${follows}.`
 
 /**

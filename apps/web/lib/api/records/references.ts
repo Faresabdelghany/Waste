@@ -26,7 +26,7 @@ export function nameVia(context: MappingContext, prefix: string, serverId: strin
 export type ReferenceRule = {
   /** Whether a loaded row is of the kind the field names; absent takes any row the store holds. */
   owns?: (record: BusinessRecord) => boolean
-  /** Whether the field takes a bare id as typed (a subscription's, until its module is switched). */
+  /** Whether the field takes a bare id as typed (a subscription's or a stock movement's). */
   bare?: boolean
 }
 

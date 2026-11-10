@@ -12,6 +12,9 @@ import { DEACTIVATE_USER, REACTIVATE_USER } from "./records/organisation"
 import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "./records/provider-activities"
 import { ASSIGN_ROUTE, DISPATCH_ROUTE } from "./records/routes"
 
+/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
+export const PATCH_RECORD = "patch"
+
 /**
  * The commands a Service Provider's account sends, by module (#291 slice
  * 23b): it crews a route it runs and sends it to its own driver, and switches
@@ -19,9 +22,6 @@ import { ASSIGN_ROUTE, DISPATCH_ROUTE } from "./records/routes"
  * a stop's, a ticket's, a ticket's patch — is the office's: the API finds no
  * row for a provider's, so no surface offers it one.
  */
-/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
-export const PATCH_RECORD = "patch"
-
 export const PROVIDER_COMMANDS: Readonly<Partial<Record<ModuleKey, readonly string[]>>> = {
   "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
   [moduleKeyOf(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)]: [DEACTIVATE_USER, REACTIVATE_USER],

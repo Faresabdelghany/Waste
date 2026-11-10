@@ -118,7 +118,6 @@ function loadedAreas(resolve: Resolver): readonly LoadedArea[] {
   return areas
 }
 
-/** Whether the boundary contains the point: inside its outer ring and inside none of its holes. */
 function contains({ rings: [outer, ...holes] }: LoadedArea, at: LngLat): boolean {
   return pointInPolygon(at, outer) && !holes.some((hole) => pointInPolygon(at, hole))
 }

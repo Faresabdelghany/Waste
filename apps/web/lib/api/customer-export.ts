@@ -14,7 +14,6 @@ import type { CustomerExportSectionKey, SectionOutcome } from "@/lib/data/custom
 
 type Row = { id: string }
 
-/** One family's read: its rows, or the refusal's sentence on a 403. */
 async function section(read: () => Promise<unknown>): Promise<SectionOutcome> {
   try {
     return { included: true, data: await read() }
@@ -24,7 +23,6 @@ async function section(read: () => Promise<unknown>): Promise<SectionOutcome> {
   }
 }
 
-/** Every family's outcome for the customer, by its server id. */
 export async function readCustomerExport(client: ApiClient, customerId: string): Promise<Record<CustomerExportSectionKey, SectionOutcome>> {
   const byCustomer = (path: string) => () => listAll<Row>(client, path, { customerId })
   const encoded = encodeURIComponent(customerId)

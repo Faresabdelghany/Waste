@@ -1,9 +1,9 @@
 // The server-backed half of the record store (Issue #81), without React or a
-// browser: a module's states, what `getRecords` answers in each, a load
-// through scripted adapters with the resolver seeing what loaded before, an
-// optimistic write reconciled or rolled back, the resolver over several
-// modules, and a module read into the store — the load's read, and the read
-// again after a command that changed its rows (Issue #198).
+// browser: a module's states, what a pane is told in each (`paneAnswerOf`),
+// a load through scripted adapters with the resolver seeing what loaded
+// before, an optimistic write reconciled or rolled back, the resolver over
+// several modules, and a module read into the store — the load's read, and
+// the read again after a command that changed its rows (Issue #198).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -72,7 +72,6 @@ const record = (id: string, name: string, overrides: Partial<BusinessRecord> = {
 
 type Thing = Resource & { name: string; parentId?: string }
 
-/** An adapter over a scripted list: `things` in, records out, writes recorded. A thing's status is `active` or `inactive` on the wire. */
 function thingAdapter(prefix: string, things: Thing[], calls: string[] = []): ResourceAdapter<Thing> & { calls: string[] } {
   return {
     prefix,
@@ -302,7 +301,6 @@ describe("reading a module into the store", () => {
   })
 
   describe("a read that fails on the way, not by the API's answer", () => {
-    /** A module whose list fails with `failures` in turn, then answers; the calls are counted. */
     function flaky(failures: readonly Problem[]) {
       let calls = 0
       const module = heldModule(async () => {
@@ -617,7 +615,6 @@ describe("what a module's mapping read", () => {
   const thing = (id: string, name: string, parentId?: string): Thing => ({ id, createdAt: "", updatedAt: "", name, ...(parentId === undefined ? {} : { parentId }) })
   const ready = (records: BusinessRecord[]) => loaded({ records, serverIds: new Map(records.map((row) => [row.id, row.id.slice(row.id.indexOf("-") + 1)])) }, 1)
   const parents = [record("p-p1", "Parent"), record("p-p2", "Other")]
-  /** The children, each naming its parent by server id. */
   const childrenOf = (things: Thing[]): ServerModule => ({ workspaceId: "resources", moduleId: "inventory", resources: [thingAdapter("c", things)] })
   const read = async (state: ServerRecordsState, module: ServerModule) => {
     const store = createExternalStore<ServerRecordsState>(state)

@@ -36,7 +36,6 @@ export type MessageDraft = { templateId: string; recipient: string }
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** The dialog's draft, or the refusal of what it left out. */
 export function messageDraftOf(input: CommandInput): MessageDraft | LocalRefusal {
   const draft = input.message as MessageDraft | undefined
   if (draft === undefined || draft.templateId === "") return refusal("templateId", "Pick a template")

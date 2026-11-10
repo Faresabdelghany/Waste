@@ -36,7 +36,6 @@ export const CREDENTIAL_LAST_DAY_KEY = "lastDay"
 
 const kept = "A credential's kind, number and holder are what it is: end it and register another"
 
-/** The project's today, on its own clock: the day a credential's status is read on. */
 const todayOf = (projectWebId: string, context: MappingContext): string =>
   todayIn(context, projectTimezoneOf({ projectIds: [projectWebId] }, context))
 

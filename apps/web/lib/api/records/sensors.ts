@@ -29,7 +29,6 @@ import { containerAdapter } from "./containers"
 import { createStatusOf, patchStatusOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, tokenOf, withStatus } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
-/** The workspace module the sensors are the rows of. */
 export const SENSORS_MODULE = moduleAt("resources.sensors")
 
 export const SENSOR_PREFIX = "sensor"
@@ -44,7 +43,6 @@ export const CHANGE_PAIRING = "change-pairing"
 export const PAIRING_ID_KEY = "pairingId"
 export const PAIRING_CONTAINER_KEY = "pairingContainerId"
 
-/** How each network is named. */
 export const NETWORK_LABELS: Readonly<Record<(typeof SENSOR_NETWORKS)[number], string>> = { lorawan: "LoRaWAN", sigfox: "Sigfox", "nb-iot": "NB-IoT" }
 
 const projectSetOnce = "A sensor stays in its project: register another sensor in the other project"
@@ -101,17 +99,15 @@ export function toSensorRecord(sensor: Sensor, context: MappingContext): RecordF
   }
 }
 
-/** A whole percent from 1 to 100 typed at `key`, or a refusal; undefined where nothing was typed. */
+/** A whole percent from 1 to 100, or a refusal; undefined where nothing was typed. */
 function thresholdOf(text: string | undefined): number | undefined | LocalRefusal {
   if (text === undefined) return undefined
   const value = Number(text)
   return Number.isInteger(value) && value >= 1 && value <= 100 ? value : refusal("fullThresholdPercent", "Give the full threshold as a whole percent from 1 to 100")
 }
 
-/** A yes or no the surface sent at `key`. */
 const flagOf = (value: unknown): boolean | undefined => (typeof value === "boolean" ? value : value === "true" ? true : value === "false" ? false : undefined)
 
-/** A day typed as `YYYY-MM-DD`, or a refusal at `key`. */
 function dayOf(text: string, key: string): string | LocalRefusal {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : refusal(key, "Give the day as a date")
 }

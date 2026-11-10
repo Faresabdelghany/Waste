@@ -17,7 +17,6 @@ import { refusal } from "./places"
 /** What a window with one end is told, at the end left blank. */
 export const BOTH_ENDS_OR_NEITHER = "Give both ends of the window, or neither"
 
-/** The form's keys a window is typed in. */
 export type WindowKeys = { from: string; to: string }
 
 const isTime = (value: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
@@ -41,7 +40,6 @@ export function windowOf(record: BusinessRecord, keys: WindowKeys): TimeWindow |
   return windowIsOrdered(window) ? window : refusal(keys.to, WINDOW_CLOSES_AFTER_IT_OPENS)
 }
 
-/** The driver form's shift fields. */
 export const SHIFT_KEYS = { from: "shiftStart", to: "shiftEnd", breakMinutes: "breakMinutes", breakFrom: "breakWindowStart", breakTo: "breakWindowEnd" } as const
 
 /** `07:00–15:00 · 30 min break 11:00–12:30`: a shift as a fact reads it. */

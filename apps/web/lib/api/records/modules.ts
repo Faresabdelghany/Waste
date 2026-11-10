@@ -112,7 +112,6 @@ const ADAPTERS = {
   "operate.scale-house": scaleHouseModule,
 } as const satisfies { readonly [Key in ModuleKey]?: ServerModule & LocationOf<Key> }
 
-/** A module switched onto the API: one the store reads from the server. */
 export type SwitchedModuleKey = keyof typeof ADAPTERS
 
 /** The switched modules, in the order the store first reads them. */
@@ -125,7 +124,6 @@ export function serverModuleOf(workspaceId: WorkspaceId, moduleId: string): Serv
   return byKey.get(moduleKeyOf(workspaceId, moduleId))
 }
 
-/** Whether a `workspace.module` reads from the server. */
 export function isServerBacked(workspaceId: WorkspaceId, moduleId: string): boolean {
   return byKey.has(moduleKeyOf(workspaceId, moduleId))
 }

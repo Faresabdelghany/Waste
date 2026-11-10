@@ -46,7 +46,6 @@ export type ContactDraft = {
 /** An empty draft: a new contact is the organisation's primary one until the person says otherwise. */
 export const NEW_CONTACT: ContactDraft = { name: "", role: "primary", email: "", phone: "", status: "active" }
 
-/** The draft of a stored contact, for its edit. */
 export const draftOf = (contact: CustomerContact): ContactDraft => ({
   contactId: contact.id,
   name: contact.name,

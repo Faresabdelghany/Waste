@@ -57,7 +57,6 @@ export type ServiceAreaResource = (ServiceArea | ServiceAreaDetail | ServiceArea
 
 const periodLabel = (validFrom: string, validTo: string | null) => `${validFrom} – ${validTo === null ? "open" : lastDayIn(validTo)}`
 
-/** The ids a multiselect names, each held to its kind: the server ids, or a refusal naming the field. */
 function setOf(record: BusinessRecord, key: string, prefix: string, owns: (named: BusinessRecord) => boolean, refused: string, context: MappingContext): string[] | LocalRefusal {
   const ids: string[] = []
   for (const webId of splitList(typed(record, key) ?? "")) {
@@ -247,10 +246,6 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource, unknown, A
     return row ?? (await get<ServiceArea>(client, path))
   },
 }
-
-// ---------------------------------------------------------------------------
-// Assignments
-// ---------------------------------------------------------------------------
 
 /** What an assignment's create carries: the area it is posted under, and the body the contract accepts. */
 type AssignmentWrite = { serviceAreaId: string; body: unknown }

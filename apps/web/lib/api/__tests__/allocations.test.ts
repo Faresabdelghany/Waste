@@ -167,7 +167,6 @@ describe("an allocation", () => {
     assert.deepEqual(allocationAdapter.toCreateBody?.(allocateRecord({ ...base, plannedStart: "" }), context()), { path: "plannedStart", message: "Give the planned start" })
     assert.deepEqual(allocationAdapter.toCreateBody?.(allocateRecord({ ...base, requiredCapacity: "12.5" }), context()), { path: "requiredCapacity", message: "Required capacity is whole kilograms, 1 or more" })
     assert.deepEqual(allocationAdapter.toCreateBody?.(allocateRecord({ ...base, allocationStatus: "released" }), context()), { path: "allocationStatus", message: "An allocation is released by its release command" })
-    // A row the store holds, of another kind: a driver is no vehicle, a fraction no depot.
     assert.deepEqual(allocationAdapter.toCreateBody?.(allocateRecord({ ...base, vehicleId: "driver-mads" }), context()), { path: "vehicleId", message: "Pick a vehicle the API holds" })
     assert.deepEqual(allocationAdapter.toCreateBody?.(allocateRecord({ ...base, depotId: residualRecord.id }), context()), { path: "depotId", message: "Pick a depot the API holds" })
   })
