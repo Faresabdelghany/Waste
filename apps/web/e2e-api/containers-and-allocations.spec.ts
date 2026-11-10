@@ -19,11 +19,9 @@ import { uniqueName } from "./env"
 type Container = { id: string; label: string; assetState: { status: string } | null }
 type Allocation = { id: string; status: string; vehicleId: string }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
-/** Opens a workspace module and waits for its rows to arrive from the API. */
 async function openLoaded(page: Page, url: string, listPath: RegExp) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(url)
@@ -36,7 +34,6 @@ async function pick(page: Page, field: string, option: RegExp) {
   await page.getByRole("option", { name: option }).first().click()
 }
 
-/** Runs one of the details' commands through its dialog and answers the API's response. */
 async function runCommand(page: Page, button: string, path: RegExp, fill: () => Promise<void> = async () => {}) {
   await page.getByTestId(/-commands$/).getByRole("button", { name: button, exact: true }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: button }) })
@@ -75,7 +72,6 @@ test("Containers: registered, received, refused a second receipt by sentence, mo
   expect(received.status()).toBe(201)
   await expect(details.getByText("In warehouse").first()).toBeVisible()
 
-  // A second receipt of a container that has a stock record: the API's 409, told in its own words.
   const again = await runCommand(page, "Receive", new RegExp(`^/containers/${container.id}/receive$`), () => pick(page, "Warehouse", /^Warehouse West/))
   expect(again.status()).toBe(409)
   const refusal = (await again.json()) as { detail?: string }

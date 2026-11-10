@@ -16,11 +16,9 @@ const fail = (why: string): never => {
   throw new Error(why)
 }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
-/** Picks an option of a select field in a dialog by its label and the start of the option's. */
 async function pick(dialog: Locator, page: Page, field: RegExp, option: RegExp) {
   await dialog.getByRole("combobox", { name: field }).click()
   await page.getByRole("option", { name: option }).first().click()
@@ -46,7 +44,6 @@ test("a walk-in weighed in and out at the window, the load split into lines by f
   await page.goto("/operate?module=scale-house")
   expect((await loaded).status()).toBe(200)
 
-  // Weigh in: a walk-in at the site's gross.
   await page.getByRole("button", { name: "Weigh in" }).click()
   const weighIn = dialogTitled(page, "Weigh in")
   await pick(weighIn, page, /^Project/, /^Copenhagen Central/)
@@ -60,7 +57,6 @@ test("a walk-in weighed in and out at the window, the load split into lines by f
   expect([ticket.status, ticket.unloadingStationId, ticket.party]).toEqual(["open", site.id, "cash"])
   await expect(weighIn).toBeHidden()
 
-  // Weigh out: a second pass, and the load split into two lines.
   const details = page.getByRole("dialog").filter({ has: page.getByTestId("scale-house-commands") })
   await details.getByTestId("scale-house-commands").getByRole("button", { name: "Weigh out" }).click()
   const weighOut = dialogTitled(page, "Weigh out")

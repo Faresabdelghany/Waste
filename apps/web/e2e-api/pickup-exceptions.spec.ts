@@ -56,7 +56,6 @@ test("the office charges a coded contamination by a rule in Settings, tags the s
   const code = (await madeCode.json()) as Code
 
   try {
-    // The driver runs the route: fails the property's stop for contamination, ends the day.
     const context = await freshContext(browser)
     try {
       const driverPage = await context.newPage()
@@ -81,7 +80,6 @@ test("the office charges a coded contamination by a rule in Settings, tags the s
       await context.close()
     }
 
-    // The office adds the rule: a failure for contamination coded with this run's code, none free over 30 days, then the ladder.
     const project = (await (await api.get(`/projects/${route.projectId}`)).json()) as { id: string; name: string }
     const read = answerOf(page, "GET", "/pickup-exception-rules")
     await page.goto("/settings?pane=pickup-exception-charges")
@@ -110,7 +108,6 @@ test("the office charges a coded contamination by a rule in Settings, tags the s
     await expect(row).toContainText("None free · counted over 30 days")
     await expect(row).toContainText(`From ${route.serviceDate}`)
 
-    // The office tags the failed stop with the code through its correction.
     await page.goto(`/route-studio?module=pickups&record=pickup-${stop.id}`)
     const stopDetails = page.getByRole("dialog").filter({ has: page.getByTestId("pickup-commands") })
     const correctButton = stopDetails.getByTestId("pickup-commands").getByRole("button", { name: "Correct outcome" })
@@ -126,7 +123,6 @@ test("the office charges a coded contamination by a rule in Settings, tags the s
     expect(corrected.request().postDataJSON()).toEqual({ outcome: "failed", reason: "contamination", note: "Paint tins in the residual bin", contaminantCodeId: code.id })
     await expect(stopDetails).toContainText(code.name)
 
-    // The property's details list the exception, charged the ladder's first product.
     const history = answerOf(page, "GET", `/properties/${propertyId}/pickup-exceptions`)
     await page.goto(`/customers?module=properties&record=property-${propertyId}`)
     const sheet = page.getByRole("dialog").filter({ has: page.getByTestId("place-commands") })

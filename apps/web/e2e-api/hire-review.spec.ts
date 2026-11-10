@@ -18,7 +18,6 @@ type BillableEvent = { id: string; status: string; hold: { at: string; by: strin
 /** A dialog by its heading: the details sheet and a form dialog may both be open. */
 const dialogTitled = (page: Page, title: string) => page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 
-/** Picks an option of a select field in a dialog by its label and the start of the option's. */
 async function pick(dialog: Locator, page: Page, field: RegExp, option: RegExp) {
   await dialog.getByRole("combobox", { name: field }).click()
   await page.getByRole("option", { name: option }).first().click()
@@ -113,7 +112,6 @@ test.describe("container hire (#293 M14)", () => {
     await expect(details.getByText(/Waiting for the driver's photo of the sofa/).first()).toBeVisible()
     await expect(details.getByRole("button", { name: "Hold for review" })).toHaveCount(0)
 
-    // A run's preview over the day passes over it, and says so.
     const preview = await api.post("/billing-runs/preview", { data: { projectId: copenhagen.id, periodFrom: day, periodTo: day } })
     expect(preview.status(), await preview.text()).toBe(200)
     expect(((await preview.json()) as { heldEventCount: number }).heldEventCount).toBeGreaterThanOrEqual(1)

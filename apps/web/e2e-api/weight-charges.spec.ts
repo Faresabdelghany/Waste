@@ -27,16 +27,13 @@ const RATE = 51_250
 const NET_KG = 2_480
 const CHARGED = 127_100
 
-/** A day `offset` days from today on the UTC calendar. */
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
 
-/** The browser's API call a press makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: RegExp) => page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
 /** A dialog by its heading: the details sheet and a form dialog may both be open. */
 const dialogTitled = (page: Page, title: string) => page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 
-/** A fact's row in a record's details, by its label. */
 const factOf = (details: Locator, label: string) => details.getByText(label, { exact: true }).locator("xpath=../..")
 
 /** One command as the Driver App queues it. */
@@ -60,7 +57,6 @@ test("a skip sold by the tonne, collected and weighed, is charged its reviewed w
   if (route.planned.vehicleId === null) throw new Error(`${route.label} was dispatched with no vehicle`)
   const projectId = route.projectId
 
-  // The office's ground: a product per tonne priced on the default list, an agreement, a subscription, a skip placed under it.
   const residual = (await listAll<Named & { key: string }>(api, "/waste-fractions")).find((fraction) => fraction.key === "residual")
   const station = (await listAll<Named & { wasteFractionIds: string[] }>(api, "/unloading-stations")).find((candidate) => residual !== undefined && candidate.wasteFractionIds.includes(residual.id))
   const [containerType] = await listAll<Named>(api, "/container-types")
@@ -81,7 +77,6 @@ test("a skip sold by the tonne, collected and weighed, is charged its reviewed w
     // The skip on the dispatched route, as Add stop asks for it.
     const stop = await made<{ id: string }>(`/routes/${route.id}/pickups`, { containerId: skip.id })
 
-    // The driver collects it and ends the day.
     const context = await freshContext(browser)
     try {
       const driverPage = await context.newPage()
@@ -106,11 +101,9 @@ test("a skip sold by the tonne, collected and weighed, is charged its reviewed w
       await context.close()
     }
 
-    // The office captures the weighbridge ticket after the collection.
     const ticket = `WB-E2E-${Date.now().toString(36)}`.toUpperCase()
     const unload = await made<Unload>(`/routes/${route.id}/unloads`, { unloadingStationId: station.id, wasteFractionId: residual.id, netKg: NET_KG, weighbridgeTicket: ticket, occurredAt: new Date(Date.now() - 60_000).toISOString() })
 
-    // Approved in Weight control.
     const loaded = answerOf(page, "GET", /^\/unloads$/)
     await page.goto(`/route-studio?module=weights&record=unload-${unload.id}`)
     expect((await loaded).status()).toBe(200)
@@ -119,13 +112,11 @@ test("a skip sold by the tonne, collected and weighed, is charged its reviewed w
     const [approved] = await Promise.all([answerOf(page, "POST", new RegExp(`^/unloads/${unload.id}/approve$`)), dialogTitled(page, "Approve weight").getByRole("button", { name: "Approve" }).click()])
     expect(approved.status(), await approved.text()).toBe(201)
 
-    // The worker charges the stop the whole net at the tonne's price.
     const chargeOf = async () => (await listAll<BillableEvent>(api, "/billable-events", { projectId, kind: "weight", routeId: route.id })).find((event) => event.links.unloadId === unload.id)
     await expect.poll(async () => (await chargeOf())?.status, { timeout: 60_000 }).toBe("ready")
     const charge = (await chargeOf())!
     expect([charge.links.pickupId, charge.weightKg, charge.unitPriceMinor, charge.netMinor]).toEqual([stop.id, NET_KG, CHARGED, CHARGED])
 
-    // Its details read it as a Weight charge with its kilograms.
     const events = answerOf(page, "GET", /^\/billable-events$/)
     await page.goto(`/commercial?module=events&record=event-${charge.id}`)
     expect((await events).status()).toBe(200)

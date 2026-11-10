@@ -101,7 +101,6 @@ test("the office opens a ticket about a route, assigns it to themselves, starts 
   expect(stored).toMatchObject({ status: "completed", resolution: "recollected", recollectionRouteId: recollection.id, assigneeUserAccountId: me.user.id })
   expect(stored.events.map((event) => event.kind)).toEqual(["created", "assigned", "status-changed", "comment", "status-changed"])
 
-  // Closed, the ticket leaves the open list; taking the chip off shows it again.
   await details.getByRole("button", { name: "Back to tickets" }).click()
   const search = page.getByRole("main").getByRole("textbox", { name: /^Search .+/ })
   await search.fill(subject)

@@ -149,7 +149,6 @@ test("the office sets a Visit Rule in Settings and registers a business's plate 
   const customer = await made<Named>(api, "/customers", { kind: "organisation", name: uniqueName("E2E Site business") })
   const agreement = await made<{ id: string; number: string }>(api, "/agreements", { projectId: project.id, number: uniqueName("E2E-GS").replace(/\s+/g, "-").toUpperCase(), customerId: customer.id, payerCustomerId: customer.id, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: ruleDay, validTo: null })
 
-  // The Visit Rule, through Settings.
   const read = answerOf(page, "GET", "/visit-rules")
   await page.goto("/settings?pane=commercial-visit-rules")
   const pane = page.locator("body")
@@ -169,7 +168,6 @@ test("the office sets a Visit Rule in Settings and registers a business's plate 
   expect(ruled.request().postDataJSON()).toEqual({ projectId: project.id, validFrom: ruleDay, validTo: dayAfter(ruleDay), freeVisits: 1, ladder: [step.id], freeFractionIds: [], businessVisitProductId: null, annualAccessProductId: null, tradeThreshold: 3, tradeWindowDays: 30 })
   await expect(pane.getByRole("row", { name: `Visit Rule ${ruleDay} to ${ruleDay}` })).toContainText(`1 free visit a year, then ${step.name} for each visit after`)
 
-  // The plate, through Site access's own dialog.
   const plate = `WEB${Date.now().toString(36).toUpperCase()}`
   const listed = answerOf(page, "GET", "/access-credentials")
   await page.goto("/customers?module=site-access")
@@ -189,7 +187,6 @@ test("the office sets a Visit Rule in Settings and registers a business's plate 
   expect(registered.status(), await registered.text()).toBe(201)
   expect(registered.request().postDataJSON()).toEqual({ projectId: project.id, kind: "plate", value: plate, customerId: customer.id, agreementId: agreement.id, label: "Van 1", validFrom: today, validTo: null })
 
-  // The attendant's check-in: the site, the plate as typed and a fraction chip; then an unknown plate.
   const sites = answerOf(page, "GET", "/site-visits/sites")
   await page.goto("/check-in")
   expect((await sites).status()).toBe(200)
@@ -219,7 +216,6 @@ test("the office sets a Visit Rule in Settings and registers a business's plate 
   await page.reload()
   await expect(page.getByLabel("Recycling centre")).toHaveValue(centre.id, { timeout: 30_000 })
 
-  // The ledger: the visit's details void it with why.
   const ledger = answerOf(page, "GET", "/site-visits")
   await page.goto(`/operate?module=site-visits&record=site-visit-${visit.id}`)
   expect((await ledger).status()).toBe(200)
@@ -233,7 +229,6 @@ test("the office sets a Visit Rule in Settings and registers a business's plate 
   expect(voided.request().postDataJSON()).toEqual({ reason: "Checked in twice" })
   await expect(commands).toContainText("Voided")
 
-  // Likely trades: the project's, read from the API.
   await page.goto("/operate?module=site-visits")
   await chainLanded(page)
   const [opened] = await Promise.all([answerOf(page, "GET", "/site-visits/frequent"), page.getByRole("button", { name: "Likely trades" }).click()])

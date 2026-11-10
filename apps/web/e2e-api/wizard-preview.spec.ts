@@ -9,12 +9,11 @@ import { expect, test } from "./fixtures"
 // a quota row, so the banner's readings are the browser's answer to the
 // quota read; the API suite proves the engine's own paths. Step 4's browser
 // pair — the road drawn along the preview, the spent quota's dashed estimate
-// — joins once the guided setup reaches step 4 on the API (#178).
+// — is guided-setup.spec.ts' (#178).
 
 type Place = { id: string; name: string; location: { type: "Point"; coordinates: [number, number] } | null }
 type PreviewLeg = { path: { type: "LineString"; coordinates: [number, number][] }; metres: number; seconds: number }
 
-/** A seeded place by name, through the API the browser signs in to. */
 async function placeNamed(api: APIRequestContext, path: "/depots" | "/unloading-stations", name: string): Promise<[number, number]> {
   const response = await api.get(`${path}?limit=200`)
   expect(response.status()).toBe(200)

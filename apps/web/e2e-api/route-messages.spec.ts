@@ -22,7 +22,6 @@ test("the office writes to a route's driver from its details, the driver reads i
   expect(made.status(), await made.text()).toBe(201)
   const route = (await made.json()) as { id: string; label: string }
 
-  // The office writes from the route's details.
   const officeText = uniqueName("Gate code at the depot is 4711")
   const details = await openRoute(office, route)
   await details.getByRole("tab", { name: "Messages" }).click()
@@ -34,7 +33,6 @@ test("the office writes to a route's driver from its details, the driver reads i
   expect(sent.request().postDataJSON()).toEqual({ body: officeText })
   await expect(section.getByText(officeText)).toBeVisible()
 
-  // The driver reads it on the route's screen and answers.
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
   const driverText = uniqueName("Thanks, on my way")
   try {
@@ -55,7 +53,6 @@ test("the office writes to a route's driver from its details, the driver reads i
     await context.close()
   }
 
-  // The office reads the thread: its message, then the driver's under his name.
   const read = (await (await api.get(`/routes/${route.id}/messages`)).json()) as RouteMessage[]
   expect(read.map((message) => [message.author, message.body, message.senderName])).toEqual([
     ["office", officeText, expect.any(String)],

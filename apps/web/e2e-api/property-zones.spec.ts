@@ -36,7 +36,6 @@ test("a property's details name the citizens' zone its point lies in today, and 
   const placed = await made<Named>(api, "/properties", { projectId: project.id, name: uniqueName("E2E Zoned property"), address: "Skovvej 3, 8600 Silkeborg", kind: "residential", location: { type: "Point", coordinates: [lng, lat] } })
   const unplaced = await made<Named>(api, "/properties", { projectId: project.id, name: uniqueName("E2E Unplaced property"), address: "Skovvej 5, 8600 Silkeborg", kind: "residential" })
 
-  // The API: the property's zones, the point's, and none for a property with no point.
   const own = (await (await api.get(`/properties/${placed.id}/zones`)).json()) as Zones
   expect([own.on, own.purpose, own.items.map((item) => item.id)]).toEqual([today, "notification", [zone.id]])
   const alone = await api.get(`/planning-areas/containing?projectId=${project.id}&lng=${lng}&lat=${lat}`)
@@ -44,7 +43,6 @@ test("a property's details name the citizens' zone its point lies in today, and 
   expect(((await alone.json()) as Zones).items.map((item) => item.id)).toEqual([zone.id])
   expect(((await (await api.get(`/properties/${unplaced.id}/zones`)).json()) as Zones).items).toEqual([])
 
-  // The web: the property's details read the zone and name it.
   const read = answerOf(page, "GET", `/properties/${placed.id}/zones`)
   await page.goto(`/customers?module=properties&record=property-${placed.id}`)
   expect((await read).status()).toBe(200)

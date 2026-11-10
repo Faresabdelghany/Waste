@@ -1,6 +1,6 @@
 // Settings on the Pilot shows no pane that only this browser keeps (#487):
-// Operations setup, Commercial defaults and the browser's Notifications save
-// values nothing reads, so they are fixture mode's alone, and a link to one
+// Operations setup, Commercial defaults and the browser's Notifications saved
+// values nothing read, so they are gone, and a link to one
 // opens where its subject lives on the API — Notifications the API's own pane
 // (O16 of #290), the one Notifications the nav offers. Account & appearance keeps its profile — /me's —
 // and its theme, without the personal defaults nothing reads, and without a

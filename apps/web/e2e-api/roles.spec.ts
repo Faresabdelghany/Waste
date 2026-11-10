@@ -27,7 +27,6 @@ test("Roles: a system role's matrix is read-only in the API's sentence; a new ro
   const dispatcher = (await (await api.get(`/roles/${(await roleNamed(api, "Dispatcher")).id}`)).json()) as RoleBody
   await openRoles(page)
 
-  // The system role: every box shown, none to tick, and why.
   await page.getByRole("row", { name: "Open permissions for Dispatcher" }).click()
   await expect(page.getByTestId("role-permissions-kept")).toHaveText("Dispatcher is a system role, whose permissions every seed restores to its charter; make a custom role to allow something else.")
   const boxes = page.getByRole("checkbox", { name: /^Can (view|edit|create|delete) — / })

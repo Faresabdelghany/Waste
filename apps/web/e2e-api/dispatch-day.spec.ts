@@ -30,14 +30,12 @@ function farWeekday(): string {
   return day
 }
 
-/** The next Saturday after a day. */
 function saturdayAfter(day: string): string {
   let next = addDays(day, 1)
   while (weekdayOf(next) !== "saturday") next = addDays(next, 1)
   return next
 }
 
-/** A scheme made for the run that runs on `day` alone, and the one route its generation over that day wrote. */
 async function routeOfDay(api: APIRequestContext, name: string, day: string): Promise<ApiRoute> {
   const scheme = await createScheme(api, name, { serviceDays: [weekdayOf(day)], validFrom: day })
   await generate(api, scheme.id, { from: day, to: day })
@@ -114,7 +112,6 @@ test("Optimise from a route's details asks for a Plan; once the worker has measu
   await expect.poll(async () => (await routeRead(api, route.id)).activePlan?.status, { timeout: 60_000 }).toBe("ready")
   expect((await routeRead(api, route.id)).activePlan?.solver).toBe("optimiser")
 
-  // Read again, the details carry the measure and the history marks the Plan the route runs by.
   const again = await openRoute(page, route)
   await expect(again).toContainText(/Distance\d[\d,.]* k?m/)
   await expect(again).toContainText(/Duration\d+ (min|h \d{2} min)/)

@@ -19,7 +19,7 @@ import { listAll, projectNamed } from "./tester"
 // the API for a run, and the page watches it until the worker has finished
 // it — the routes it wrote are read with slice 6 (#179). The last two are
 // step 4's preview through the API (#173's pair, added here since #173 merged
-// first); its fixture-mode reading is e2e/wizard-preview-geometry.spec.ts.
+// first).
 // Schemes the tests make are uniquely named and never cleaned up.
 type Named = { id: string; name: string }
 type Scheme = { id: string; name: string; status: string; collectionGroups: { name: string; rule: { wasteFractionIds: string[]; containerTypeIds: string[] } | null; vehicleId: string | null; driverId: string | null }[] }
@@ -30,7 +30,6 @@ const NO_MATCH = "No containers currently match the stop rule"
 /** Step 3's Containers cell of a group: its stop count, then its fractions and container types. */
 const groupContainers = (page: Page, group: string) => wizard(page).getByRole("row").filter({ hasText: group }).getByRole("cell").nth(4)
 
-/** A validated scheme with one rule group, made through the API: Residual inside Indre By Operations on Mondays and Thursdays, from tomorrow. */
 async function schemeThroughApi(api: APIRequestContext, name: string): Promise<Scheme> {
   const project = await projectNamed(api, "Copenhagen Central")
   const area = (await listAll<Named>(api, "/planning-areas")).find((row) => row.name === "Indre By Operations")
@@ -63,7 +62,6 @@ test("the wizard is a labelled dialog whose first step offers the API's rows and
   await page.keyboard.press("Tab")
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true)
 
-  // The fractions are the master data's, every one and nothing else.
   const fractions = (await listAll<Named>(api, "/waste-fractions")).map((row) => row.name)
   expect((await optionTexts(page, root, "Waste fraction")).sort()).toEqual([...fractions].sort())
   expect(await optionTexts(page, root, "Service type")).toEqual(["Container collection", "Underground collection", "Kerbside collection", "Crane collection", "Tank emptying"])

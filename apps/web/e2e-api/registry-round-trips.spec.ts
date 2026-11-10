@@ -12,7 +12,7 @@ import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 // `Location` read off the API's answer, the row is read back there under the
 // browser's own token, it is changed, and a create the API refuses is shown
 // to the person in the API's sentence (business-record-store.tsx,
-// `reportProblem`) and gone from the list.
+// `TOASTS.refused`) and gone from the list.
 //
 // The refusal is a stale list's: the form checks a registration number
 // against the rows the browser holds, so the duplicate it cannot see is one
@@ -49,7 +49,6 @@ type Container = { id: string; label: string }
  */
 const registrationNumber = () => `${Date.now() % 10_000}`.padStart(4, "0") + `${Math.floor(Math.random() * 10_000)}`.padStart(4, "0")
 
-/** The browser's API call the form submit makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname.startsWith(`/waste-api${path}`))
 
@@ -237,7 +236,6 @@ test("Contacts & Companies: created in the browser with Location, read back, mov
   // Said once the API has taken it, and only then (#210).
   await expect(page.getByText("Inactive recorded")).toBeVisible()
 
-  // A registration number somebody else takes after this page loaded: refused by the API, said in its sentence, and not in the list.
   await openLoaded(page, "/customers?module=contacts", "/customers")
   const taken = registrationNumber()
   const elsewhere = await organisationThroughApi(api, taken)
@@ -371,7 +369,6 @@ test("Agreements: created in the browser with Location, signed, its subscription
   expect(signed.request().postDataJSON()).toEqual({ status: "active" })
   expect(signed.request().headers()["waste-change-reason"]).toBe(encodeURIComponent(reason))
   expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
-  // The toast's sentence, which the History below says too.
   await expect(page.getByRole("region", { name: /^Notifications/ }).getByText("Draft → Active", { exact: true })).toBeVisible()
 
   // The sheet's History reads the audit log once the move has landed (#291): the move by the tester, with the reason, above the agreement's create.
@@ -445,15 +442,10 @@ test("Agreements: created in the browser with Location, signed, its subscription
   await expect(await rowNamed(page, otherNumber)).toHaveCount(0)
 })
 
-// ---------------------------------------------------------------------------
-// Properties, property groups and shared collection points (slice 9b, #184)
-// ---------------------------------------------------------------------------
-
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const byProperty = (a: Member, b: Member) => a.propertyId.localeCompare(b.propertyId)
 const byParty = (a: Party, b: Party) => `${a.customerId} ${a.role}`.localeCompare(`${b.customerId} ${b.role}`)
 
-/** Picks one option of a select in `dialog`, by the start of its label. */
 async function pickOne(page: Page, dialog: Locator, field: string, option: RegExp) {
   await dialog.getByRole("combobox", { name: new RegExp(`^${field}`) }).click()
   await page.getByRole("option", { name: option }).first().click()
@@ -469,10 +461,8 @@ async function pickMany(page: Page, dialog: Locator, field: string, names: reado
   await page.keyboard.press("Escape")
 }
 
-/** The browser's `PUT` of a set, by its path. */
 const setReplaced = (page: Page, path: string) => page.waitForResponse((response) => response.request().method() === "PUT" && new URL(response.url()).pathname === `/waste-api${path}`)
 
-/** A running agreement of the project a subscription can be added under, from 2026-10-01 to the year's end. */
 async function agreementThroughApi(api: APIRequestContext, projectId: string, customerId: string) {
   const number = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
   const response = await api.post("/agreements", { data: { projectId, number, customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-10-01", validTo: "2027-01-01" } })
@@ -508,7 +498,6 @@ test("a write to a row the containers read has them read again, once, after it; 
   const issued = await api.post(`/containers/${container.id}/placements`, { data: { subscriptionId: subscription.id, wasteFractionId: fractions[0].id, validFrom: "2026-10-01" } })
   expect(issued.status(), "POST /containers/:id/placements").toBe(201)
 
-  // The containers' first page, each time they are read.
   const containersRead = (request: { method: () => string; url: () => string }) => {
     const url = new URL(request.url())
     return request.method() === "GET" && url.pathname === "/waste-api/containers" && !url.searchParams.has("cursor")
@@ -591,7 +580,6 @@ test("Properties: created in the browser with its owner and its point, read back
   // Each party holds its role from a day (#374); who, and as what, is what the form wrote.
   expect(read.parties.map(({ customerId, role }) => ({ customerId, role })).sort(byParty)).toEqual([{ customerId: owner.id, role: "owner" }, { customerId: tenant.id, role: "tenant" }].sort(byParty))
 
-  // Inactive is the lifecycle's move the wire spells, behind the governed dialog.
   await sheet.getByRole("button", { name: "Inactive", exact: true }).click()
   const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
   const [deactivated] = await Promise.all([answerOf(page, "PATCH", `/properties/${property.id}`), governed.getByRole("button", { name: "Confirm inactive" }).click()])

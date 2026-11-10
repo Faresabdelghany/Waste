@@ -65,7 +65,6 @@ test("a project sends a ticket's customer the office's reply, and a cancelled ro
     boundary: { boundary: square(), validFrom: dayIn("Europe/Copenhagen") },
   })
 
-  // Settings › Message templates: the reply's template is a ticket reply's alone; the route notice goes to the area ticked.
   const read = answerOf(page, "GET", "/message-templates")
   await page.goto("/settings?pane=message-templates")
   expect((await read).status()).toBe(200)
@@ -88,7 +87,6 @@ test("a project sends a ticket's customer the office's reply, and a cancelled ro
   await expect(toasts(page)).toContainText("Customer notices saved")
 
   try {
-    // A ticket naming a customer of its own with an e-mail; the office replies to the customer on it.
     const customer = await made<Named>(api, "/customers", { kind: "person", name: uniqueName("E2E Reply customer"), email: "ticket-replies@waste-e2e.example", serviceMessagesAllowed: true })
     const ticket = await made<{ id: string; label: string }>(api, "/tickets", { projectId: project.id, subject: uniqueName("E2E Lid broken"), description: "The lid hangs by one hinge", kind: "complaint", links: { customerId: customer.id } })
     const words = "We replace the lid on Thursday."

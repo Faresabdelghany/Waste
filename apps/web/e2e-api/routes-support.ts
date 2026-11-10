@@ -6,9 +6,8 @@
 // force from tomorrow on Copenhagen's clock, and names neither a vehicle nor
 // a driver: a route it generates is planned and unassigned, with the seeded
 // containers the rule matches as its stops. It names a depot only where a
-// spec asks for one, and a route of one inside the horizon with fifty open
-// stops or fewer is ordered by the optimiser rather than measured in the
-// generated order (#172).
+// spec asks for one, and a route of one inside the horizon is ordered by the
+// optimiser rather than measured in the generated order (#172).
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
 import type { ActivePlan } from "@waste/contracts/plans"
 
@@ -31,7 +30,6 @@ export type Scheme = { id: string; name: string; projectId: string; editPolicy: 
 
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const
 
-/** A validated scheme made through the API for the run, uniquely named and never cleaned up: one rule group, Residual inside Indre By Operations, on `serviceDays` from `validFrom`, from the depot named `depot` where one is. */
 export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot, vehicleType }: { serviceDays: readonly string[]; validFrom: string; depot?: string; vehicleType?: string }): Promise<Scheme> {
   const [project, areas, fractions, depots, types] = await Promise.all([
     projectNamed(api, "Copenhagen Central"),
@@ -67,7 +65,6 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
   return (await created.json()) as Scheme
 }
 
-/** A scheme made for the run and its routes, generated over `days` from tomorrow, in the order they run: every one planned, unassigned, the scheme's own. */
 export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot, vehicleType }: { depot?: string; vehicleType?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
   const from = addDays(dayIn("Europe/Copenhagen"), 1)
   const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot, vehicleType })
@@ -98,7 +95,6 @@ export async function routeWithCrewFree(api: APIRequestContext, routes: readonly
   return free as ApiRoute
 }
 
-/** Picks `option` in the select whose label starts with `label`. */
 export async function pick(within: Locator, page: Page, label: string, option: string) {
   await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
   await page.getByRole("option", { name: option, exact: true }).click()
@@ -115,7 +111,6 @@ export async function openScheme(page: Page, name: string) {
   await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
 }
 
-/** The scheme page's Edit scheme dialog, from its Actions menu. */
 export async function openEdit(page: Page): Promise<Locator> {
   await page.getByRole("button", { name: "Actions", exact: true }).click()
   await page.getByRole("menuitem", { name: "Edit scheme" }).click()
@@ -131,13 +126,11 @@ export async function routeRead(api: APIRequestContext, id: string): Promise<Api
   return (await response.json()) as ApiRouteDetail
 }
 
-/** The browser's API call a click makes: the answer of `method` on `path`. */
 export const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
 export const toasts = (page: Page) => page.getByRole("region", { name: "Notifications alt+T" })
 
-/** The route's details on the Pilot: the generic details with the route's commands, once the routes module reads the API. */
 /** A route's own page on the Pilot: the region named for the route, which holds its commands, its stops and its facts. */
 export const routePage = (page: Page, route: Pick<Route, "label">): Locator => page.getByRole("region", { name: route.label, exact: true })
 
@@ -151,7 +144,6 @@ export async function routeCommand(page: Page, details: Locator, name: string): 
   return page.getByRole("menuitem", { name, exact: true })
 }
 
-/** The trigger of the route page's Actions menu, beside Dispatch over its stops. */
 export const routeMenu = (details: Locator): Locator => details.getByTestId("route-commands").getByRole("button", { name: "Actions", exact: true })
 
 export async function openRoute(page: Page, route: Pick<Route, "id" | "label">) {

@@ -26,7 +26,6 @@ type Scheme = {
 }
 type Named = { id: string; name: string }
 
-/** The browser's API call a click makes: the answer of `method` on the path `path`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
@@ -52,7 +51,6 @@ async function openScheme(page: Page, name: string) {
 /** A day a week ahead, which the forms accept as a first day in force. */
 const nextWeek = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
 
-/** A validated scheme with one rule group, made through the API (routes-support.ts): Residual inside Indre By Operations, Mondays and Thursdays from next week. */
 function schemeThroughApi(api: APIRequestContext, name: string) {
   return createScheme(api, name, { serviceDays: ["monday", "thursday"], validFrom: nextWeek() })
 }
