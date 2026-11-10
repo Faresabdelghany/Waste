@@ -83,7 +83,6 @@ describe("the weight control endpoints", { skip: database.skip || owner.skip }, 
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
   }
-  /** A ticket for a route at ARC Amager: 8,540 kg net at 12:40, with whatever else the test says. */
   const ticket = (values: Record<string, unknown> = {}) => ({
     unloadingStationId: fleet.stations.amager.id,
     wasteFractionId: ex.fractions.residual.id,
@@ -261,7 +260,6 @@ describe("the weight control endpoints", { skip: database.skip || owner.skip }, 
       )
       assert.deepEqual((await refused(await olivia(`/unloads?reviewStatus=needs-review`), 400)).errors?.map((error) => error.path), ["reviewStatus"], "the prototype's name is not a token")
 
-      // One unload's history, paged.
       const busy = await record(route.id, ticket({ occurredAt: at(ex.day, "10:40").toISOString() }))
       const first = await appended(await decide(busy.id, "approve"))
       const second = await appended(await decide(busy.id, "reject", { note: "On reflection, no" }))

@@ -86,7 +86,6 @@ describe("payments and reconciliation (#291 C6)", { skip: database.skip || owner
   }
   const invoiceRead = async (call: Call, id: string) => InvoiceDetail.parse(await (await ok(await call(`/invoices/${id}`))).json())
 
-  /** One invoice of the project for one job priced by hand today: the payer's run document. */
   async function invoiced(projectId: string, agreementId: string, productId: string, unitPriceMinor = 40_000): Promise<Invoice> {
     await ok(await olivia("/billable-events", { method: "POST", body: { projectId, agreementId, productId, quantity: 1, serviceDate: TODAY, unitPriceMinor, overrideReason: "Agreed by phone" } }), 201)
     const run = await created(olivia, "/billing-runs", await olivia("/billing-runs", { method: "POST", body: { projectId, periodFrom: TODAY, periodTo: TODAY } }), BillingRunDetail)
@@ -193,7 +192,6 @@ describe("payments and reconciliation (#291 C6)", { skip: database.skip || owner
     const mine = statement.lines.filter((line) => line.documentId === invoice.id || line.kind === "payment")
     assert.ok(mine.some((line) => line.documentId === invoice.id && line.kind === "invoice" && line.amountMinor === invoice.grossMinor))
     assert.ok(mine.some((line) => line.kind === "payment" && line.amountMinor === -10_000))
-    // Every line moves the balance by its amount.
     let balance = statement.openingBalanceMinor
     for (const line of statement.lines) {
       balance += line.amountMinor

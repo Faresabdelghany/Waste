@@ -13,7 +13,6 @@ import { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf } from "@w
 import { errorHandler, membersAt, notFound, problem, ProblemError, problemResponse, refusalOf, validate } from "../problem"
 import { readProblem } from "./read-problem"
 
-/** A log that remembers what it was given. */
 const recorder = () => {
   const entries: unknown[] = []
   return { entries, log: (error: unknown) => void entries.push(error) }

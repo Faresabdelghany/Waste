@@ -181,9 +181,7 @@ describe("a Service Provider's reach on the routes and the pickups", { skip: dat
   const pickupPage = async (call: Call, query = "?limit=200") => PickupPage.parse(await ok(await call(`/pickups${query}`)))
   const routeIds = async (call: Call, query = "?limit=200") => (await routePage(call, query)).items.map((item) => item.id).sort()
   const pickupIds = async (call: Call, query = "?limit=200") => (await pickupPage(call, query)).items.map((item) => item.id).sort()
-  /** The routes NordRen runs, as the fixtures put them. */
   const nordrens = () => [ex.routes.ready.id, ex.routes.planned.id, ex.routes.completed.id, routes.later.id].sort()
-  /** The routes NordRen does not run. */
   const notNordrens = () => [routes.beforeAssignment.id, routes.harbor.id, routes.cairo.id, routes.adHoc.id]
 
   describe("the routes", () => {

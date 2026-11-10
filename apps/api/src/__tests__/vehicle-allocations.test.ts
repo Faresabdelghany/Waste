@@ -39,7 +39,6 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -103,7 +102,6 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
 
   const create = async <T extends { id: string }>(call: Call, path: string, values: unknown, schema: Schema<T>): Promise<T> =>
     created(call, path, await call(path, { method: "POST", body: values }), schema)
-  /** A body on Copenhagen Central for WH-24 over the hours of a day, with whatever else the test says. */
   const body = (day: string, from: string, to: string, values: Record<string, unknown> = {}) => ({
     projectId: a.projects.copenhagen.id,
     vehicleId: fleet.vehicles.wh24.id,

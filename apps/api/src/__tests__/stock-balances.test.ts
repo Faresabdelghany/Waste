@@ -75,7 +75,6 @@ describe("a warehouse's stock balances and minimums (O30 of #290, row 9.8)", { s
     bigBin = await create(olivia, "/container-types", { name: "660 L bin", volumeLitres: 660 }, ContainerType)
     theirType = await create(other, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
 
-    // West: three 240 L bins in stock, one of them then taken into maintenance there; Havnen: one 240 L bin.
     const copenhagen = (label: string) => ({ projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id })
     await stocked(olivia, copenhagen("BIN-1"), west)
     await stocked(olivia, copenhagen("BIN-2"), west)

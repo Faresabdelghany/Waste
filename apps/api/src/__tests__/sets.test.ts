@@ -66,7 +66,6 @@ describe("eachPresent", () => {
   })
 
   test("hands the missing entry to the singular and asks the set again: a row that arrived between the two statements is there now", async () => {
-    // The first statement finds A alone; B arrives; the second finds both.
     const { tx, asked } = scripted((statement) => (statement === 0 ? [A.id] : [A.id, B.id]))
     const { singular, handed } = passing()
     await eachPresent(tx, wasteFraction, wasteFraction.id, COMPANY, [A, B], singular)

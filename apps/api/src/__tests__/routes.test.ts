@@ -45,7 +45,6 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
   let ownerPool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, seeded once and read from never again but to prove it is invisible. */
   let b: Tenant

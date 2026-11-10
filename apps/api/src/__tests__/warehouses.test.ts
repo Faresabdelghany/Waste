@@ -29,7 +29,6 @@ const sydhavn: Point = { type: "Point", coordinates: [12.5445, 55.6491] }
 describe("the warehouse endpoints", { skip: database.skip }, () => {
   let pool: Database
   let keys: SigningKeys
-  /** The company under test. */
   let a: Tenant
   /** The other company, written to once below and never again. */
   let b: Tenant
@@ -47,7 +46,6 @@ describe("the warehouse endpoints", { skip: database.skip }, () => {
   let nordhavnDepot: Depot
   /** A depot of this company in another project: not a Copenhagen warehouse's to name. */
   let pierDepot: Depot
-  /** The other company's. */
   let theirDepot: Depot
   let theirWarehouse: Warehouse
 

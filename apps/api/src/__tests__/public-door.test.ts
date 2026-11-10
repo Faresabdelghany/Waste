@@ -25,7 +25,6 @@ const database = databaseUnderTest()
 /** A slug no other run of this file has taken: the key is unique across every company on the shared database. */
 const freshSlug = (name: string) => `${name}-${testId().replaceAll("-", "").slice(-12)}`
 
-/** A project that set no branding. */
 const UNBRANDED = { brandColor: null, logoUrl: null, accessibilityStatementUrl: null }
 
 describe("a project's public slug and the public door", { skip: database.skip }, () => {
