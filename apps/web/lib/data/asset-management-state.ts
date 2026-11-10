@@ -1,5 +1,6 @@
-// The shape Settings › Asset management keeps in the browser, and how it is
-// read back (Issue #39, 2026-09-26) — beside the fixture catalogue in
+// The shape the asset management store
+// (components/platform/asset-management-store.tsx) keeps in the browser, and
+// how it is read back (Issue #39, 2026-09-26) — beside the fixture catalogue in
 // asset-catalogue.ts and out of the React store, so a test can hold the
 // hydration to its rules without a browser. The store persists the whole
 // state under one key; on load the stored state stands over the defaults,
