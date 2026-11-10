@@ -42,7 +42,6 @@ export function holidayEntryValues(entries: readonly HolidayEntry[]): {
   return { holidayDates: dates.join(", "), holidayNames: serializeHolidayNames(names) }
 }
 
-/** Every date of the year the lookup names, in order. */
 export function knownHolidaysOfYear(year: number, names: HolidayNameLookup): HolidayEntry[] {
   const entries: HolidayEntry[] = []
   const prefix = `${year}-`

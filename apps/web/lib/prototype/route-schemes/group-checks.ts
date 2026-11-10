@@ -44,7 +44,6 @@ function clashes(
   field: "vehicleId" | "driverId",
   kind: "vehicle" | "driver",
 ): GroupCheckIssue[] {
-  // (resource, day) → the groups holding it that day, in group order.
   const seen = new Map<string, CollectionGroup[]>()
   for (const group of input.groups) {
     const resourceId = group[field]
@@ -102,12 +101,6 @@ function outsideServiceType(input: GroupCheckInput): GroupCheckIssue[] {
   })
 }
 
-/**
- * The step's issue list: uncovered days first ("Friday has no collection
- * group"), then vehicle clashes, then driver clashes ("Vehicle WH-07 is on
- * Residual · large bins and Organic on Tuesday, Thursday"), then groups
- * outside the scheme's service type.
- */
 export function checkCollectionGroups(input: GroupCheckInput): GroupCheckIssue[] {
   const issues: GroupCheckIssue[] = []
   for (const day of sortServiceDays(input.serviceDays)) {

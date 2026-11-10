@@ -5,10 +5,9 @@
 //
 // Every number says what it is. Generation produces stop lists only — no
 // distance, duration, or weight. Distance and duration are the road's once a
-// routing engine has answered for the road through the stops (Issue #39,
-// 2026-09-25: the web asks the OSRM demo server through
-// lib/map-planning/road-geometry, the target system self-hosted Valhalla,
-// ADR-0002): the distance as routed, and the drive time plus the time at the
+// routing engine has answered for the road through the stops (Issue #39;
+// since #173 the web asks the API's `POST /routing/preview`, the target
+// system self-hosted Valhalla, ADR-0002): the distance as routed, and the drive time plus the time at the
 // stops — each container type's emptying time from the asset catalogue (the
 // caller passes that resolver), the prototype's allowance where the catalogue
 // has none — plus the closeout a route is allowed past its last stop
@@ -63,7 +62,6 @@ export const FALLBACK_FRACTION_FACTOR: Readonly<Record<string, number>> = {
 
 const DEFAULT_CONTAINER_KG = 20
 
-/** kg for one emptied container of the type carrying the fraction, from the fallback tables. */
 export function fallbackContainerWeightKg(
   containerType: string | undefined,
   fraction: string | undefined,
@@ -73,14 +71,12 @@ export function fallbackContainerWeightKg(
   return base * factor
 }
 
-/** A resolved container weight and where it came from. */
 export type ContainerWeight = {
   kg: number
   /** True when the fallback table supplied the weight, not the asset catalogue. */
   fallback: boolean
 }
 
-/** The fallback tables' weight, flagged as such. */
 export function fallbackContainerWeight(
   containerType: string | undefined,
   fraction: string | undefined,
@@ -101,7 +97,6 @@ export type LoadEstimate = {
   fallbackWeight: boolean
 }
 
-/** The load for emptying every container once, and whether any weight was a fallback. */
 export function estimateLoad(
   containers: readonly Pick<ContainerMatchProfile, "containerType" | "fractions">[],
   weight: ContainerWeightResolver = fallbackContainerWeight,
@@ -258,7 +253,6 @@ export const routeEstimateAdapter: RouteEstimateAdapter = {
   route: estimateRoute,
 }
 
-/** "7 h 41 min" / "45 min". */
 export function formatMinutes(mins: number): string {
   const hours = Math.floor(mins / 60)
   const rest = mins % 60

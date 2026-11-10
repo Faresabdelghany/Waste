@@ -19,8 +19,6 @@ import { lastDayIn } from "@waste/domain/periods"
 import { stringValue } from "./validation"
 import { CONTAINER_VEHICLE_COMPATIBILITY, STOP_MATCH_VEHICLE_TYPES, type FixtureContainerType } from "@waste/fixtures/taxonomy"
 
-/* ------------------------------ vocabulary -------------------------------- */
-
 /**
  * Only containers in service can be planned into routes — the prototype
  * analog of the server's in-force-agreement gate. Future, On hold, Defect, In storage, In transit,
@@ -131,7 +129,6 @@ function judgedOn(reading: ServingReading, schemeFrom: string | undefined, days?
 /** Whether a serving period holds on a day: half-open, as the wire spells periods. */
 export const periodHolds = (period: Pick<ServingPeriod, "from" | "until">, day: string) => period.from <= day && (period.until === null || day < period.until)
 
-/** Why none of `periods` holds on `day`, or undefined while one does. */
 function outOfService(periods: readonly ServingPeriod[], day: string): string | undefined {
   if (periods.some((period) => periodHolds(period, day))) return undefined
   const next = periods.filter((period) => period.from > day).map((period) => period.from).sort()[0]
@@ -166,7 +163,6 @@ export function containerAreaRefs(record: Pick<BusinessRecord, "submittedValues"
   }
 }
 
-/** The planning-area ids a container lies in today (`containerAreaRefs`). */
 export function containerAreaIds(record: Pick<BusinessRecord, "submittedValues" | "facts">): string[] {
   return containerAreaRefs(record).ids
 }
@@ -199,8 +195,6 @@ const FORM_CONTAINER_TYPE_LABELS: Readonly<Record<string, string>> = {
   "four-wheel-1100": "Four-wheel bin · 1,100 L",
   "wastewater-3000": "Wastewater tank · 3,000 L",
 } satisfies Record<string, FixtureContainerType>
-
-/* ------------------------------ rule model -------------------------------- */
 
 /** The selection rule one service day resolves stops with. */
 export type StopMatchRule = {
@@ -339,7 +333,6 @@ export function matchPlansFromValues(
   }
 }
 
-/** The rule one service day resolves with (per-day mode falls back to empty). */
 export function effectiveDayRules(
   serviceDays: readonly ServiceDay[],
   plans: SchemeMatchPlans,
@@ -352,7 +345,6 @@ export function effectiveDayRules(
   }))
 }
 
-/** "Residual, Glass · 240 L, 660 L · Rear loader" — the facts/review one-liner for a rule. */
 export function stopRuleSummary(rule: StopMatchRule): string {
   const fractions = rule.fractions.length > 0 ? rule.fractions.join(", ") : "No fractions"
   const parts = [fractions]
@@ -362,8 +354,6 @@ export function stopRuleSummary(rule: StopMatchRule): string {
   if (rule.vehicleType) parts.push(rule.vehicleType)
   return parts.join(" · ")
 }
-
-/* --------------------------- container profiles --------------------------- */
 
 /**
  * The minimal container shape the matcher reads — the fields both record
@@ -451,8 +441,6 @@ export function containerMatchProfile(
     projectIds: record.projectIds,
   }
 }
-
-/* -------------------------------- matching -------------------------------- */
 
 export type StopMatchExclusion = {
   id: string
@@ -593,8 +581,6 @@ export function resolveStopMatches(input: {
   excluded.sort((a, b) => a.name.localeCompare(b.name))
   return { matched, excluded, scopeTotal }
 }
-
-/* --------------------------- vehicle-type reading -------------------------- */
 
 /**
  * A vehicle record's type, read as a canonical-type prefix of its

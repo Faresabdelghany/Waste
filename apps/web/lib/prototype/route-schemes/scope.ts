@@ -1,7 +1,7 @@
 // Scheme-level scope vocabulary (guided setup step 1): the service type a
 // route scheme plans for and, defined ONCE here, the container types each
 // service type collects (round 3, 2026-09-16). The waste fraction is the
-// Settings master-data list (asset-management store) and is not repeated
+// Settings master-data list and is not repeated
 // here. No asset-type ↔ service-type relation exists in the data model, so
 // this table is the mapping; the group editor offers only a service type's
 // container types and checkCollectionGroups names a group whose types fall
@@ -51,7 +51,6 @@ export function allowedContainerTypes(serviceType: string | undefined): readonly
   return isSchemeServiceType(serviceType) ? SERVICE_TYPE_CONTAINER_TYPES[serviceType] : null
 }
 
-/** The given container types the service type does not collect, in the given order. */
 export function containerTypesOutsideServiceType(
   containerTypes: readonly string[],
   serviceType: string | undefined,

@@ -46,7 +46,6 @@ const or = (value: string | undefined): string => value?.trim() || NO_VALUE
 
 const dateOr = (iso: string): string => (iso ? formatOccurrenceDate(iso) : NO_VALUE)
 
-/** The group's stops in one phrase: its container types (rule) or how many it picked (manual). */
 export function groupStopsLabel(group: CollectionGroup): string {
   if (group.stopSource === "manual") return count(group.containerIds.length, "container")
   const types = (group.containerTypes ?? []).map(containerTypeShortLabel)
@@ -60,7 +59,6 @@ const groupResource = (
   name: string | undefined,
 ): string => (id ? named(resolve, id) : or(name))
 
-/** "Mon, Wed · WH-31 · Freja Nielsen · 240 L, 140 L" — the group in one line. */
 export function groupSummaryLabel(group: CollectionGroup, names: SchemeDraftNames): string {
   return [
     serviceDaysRangeLabel(group.days) || NO_VALUE,

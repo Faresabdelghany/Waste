@@ -104,7 +104,6 @@ describe("checkCollectionGroups", () => {
         ["g"],
       ],
     ])
-    // In scope, or no service type on the scheme: nothing to raise.
     assert.deepEqual(
       checkCollectionGroups({ groups, serviceDays: ["monday"], serviceType: "Container collection" }),
       [],
@@ -198,7 +197,6 @@ describe("crane-emptied and tank containers have a service type (issue #42)", ()
       }).map((issue) => issue.text),
       ["Glass igloos has container types outside Container collection: Igloo, Underground"],
     )
-    // Underground collection keeps its own, narrower scope.
     assert.deepEqual(
       checkCollectionGroups({
         groups: igloos,

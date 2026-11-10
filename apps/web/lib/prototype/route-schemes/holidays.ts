@@ -52,7 +52,6 @@ export function serializeHolidayNames(names: ReadonlyMap<string, string>): strin
   return JSON.stringify(Object.fromEntries([...names.entries()].sort(([a], [b]) => a.localeCompare(b))))
 }
 
-/** The project a stored scheme plans for: its typed projectId, else its record scope. */
 export function schemeProjectId(
   scheme: Pick<BusinessRecord, "submittedValues" | "projectIds">,
 ): string | undefined {

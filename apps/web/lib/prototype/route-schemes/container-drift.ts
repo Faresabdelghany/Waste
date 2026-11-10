@@ -67,8 +67,6 @@ export type GenerationMatchHistory = {
 
 type StoredValues = Record<string, string | boolean | undefined>
 
-/* --------------------------------- matches --------------------------------- */
-
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
 
@@ -112,7 +110,6 @@ export function serializeGenerationMatches(matches: GenerationMatches): string {
   return JSON.stringify(ordered)
 }
 
-/** The scheme's two stamps as stored (empty when it has none yet). */
 export function generationMatchHistoryOf(
   values: StoredValues | undefined,
 ): GenerationMatchHistory {
@@ -122,8 +119,6 @@ export function generationMatchHistoryOf(
     last: parseGenerationMatches(stringValue(stored, LAST_GENERATION_MATCHES_KEY)),
   }
 }
-
-/* ---------------------------------- drift ---------------------------------- */
 
 export type CollectionGroupContainerDrift = {
   groupId: string
@@ -181,7 +176,6 @@ const percentOf = (shift: number): string => `${Math.round(shift * 100)} %`
 const movementOf = (drift: CollectionGroupContainerDrift): string =>
   `${drift.joined.length} joined, ${drift.left.length} left of ${drift.previous}`
 
-/** "13 % — 4 joined, 0 left of 30": one group's movement, for a list row the caller labels. */
 export function containerDriftMovement(drift: CollectionGroupContainerDrift): string {
   return `${percentOf(drift.shift)} — ${movementOf(drift)}`
 }
