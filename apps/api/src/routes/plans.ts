@@ -21,16 +21,16 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import { OptimiseAnswer, Plan, PlanDetail, type OptimiseFallback } from "@waste/contracts/plans"
 import { plan } from "@waste/db/schema/routing"
 import { optimiseSolver } from "@waste/domain/routing/plans"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { findReachedRoute, noSuchRoute } from "./execution-shapes"
-import { ensurePlan, findPlan, findReachedPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planReach, type PlanRow } from "./plan-shapes"
+import { getReachedRoute, lockedRoute } from "./execution-shapes"
+import { ensurePlan, findPlan, getReachedPlan, legsOfPlan, listPlans, noSuchPlan, planOf, type PlanRow } from "./plan-shapes"
 import { labelOf } from "@waste/db/shapes/routes"
 import { pickupsOfRoute } from "@waste/db/shapes/pickups"
-import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
+import { ORDER_IS_FROZEN, requireNotStarted } from "./routes"
 
 const MODULE = "route-studio.routes"
 
@@ -64,17 +64,12 @@ export function planRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findReachedRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
-        const rows = await tx
-          .select(planColumns)
-          .from(plan)
-          .where(and(planReach(tx, principal), eq(plan.routeId, id), after === undefined ? undefined : gt(plan.id, after)))
-          .orderBy(asc(plan.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(planOf), limit))
+        await getReachedRoute(tx, principal, id)
+        const page = await listPlans(tx, principal, at, eq(plan.routeId, id))
+        return c.json(mapPage(page, planOf))
       },
     )
     .get(
@@ -96,8 +91,7 @@ export function planRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findReachedPlan(tx, principal, id)
-        if (row === undefined) throw noSuchPlan(id)
+        const row = await getReachedPlan(tx, principal, id)
         return c.json({ ...planOf(row), legs: await legsOfPlan(tx, principal.companyId, id) })
       },
     )

@@ -36,18 +36,18 @@ import { onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { ACTIVE_CUSTOMER_STATUSES } from "@waste/domain/registry/vocabulary"
 import { refuseUnless } from "@waste/domain/status-gates"
-import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
+import { and, eq, gte, lte } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
-import { lockRow } from "@waste/db/commands/shared"
 import { bookingAnswered, bookingOf, bookingStatusIs, bulkyItemsOf, selectBookings, statusOf, type BookingRow } from "@waste/db/shapes/bulky-bookings"
 
 import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
 import { stamp } from "./shared"
 
@@ -60,23 +60,11 @@ export const INACTIVE_CUSTOMER = "The customer is inactive; a bulky collection i
 /** What a query naming a project and a place of another is told. */
 const NOT_THE_PROJECTS_PLACE = "Not a place of the project the query names"
 
-const noSuchBooking = (id: string) => problem(404, { detail: `No bulky booking ${id} in the projects this account works in` })
-
-/** This company's bookings, in the projects the caller works in. */
-const bookingScope = (principal: Principal) => and(eq(bulkyBooking.companyId, principal.companyId), inProjects(bulkyBooking.projectId, principal))
-
-async function findBooking(tx: Tx, principal: Principal, id: string): Promise<BookingRow | undefined> {
-  const [row] = await selectBookings(tx)
-    .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
-    .limit(1)
-  return row
-}
+const { scope: bookingScope, find: findBooking, get: getBooking, locked: lockedBooking, list: listBookings } = scoped(bulkyBooking, { noun: "bulky booking", reach: "projects", read: selectBookings })
 
 /** One booking under its row lock, with what it stands as: the path's row (404), then a booked one (409 in the domain's sentence). */
 async function lockedBooked(tx: Tx, principal: Principal, id: string, command: "change" | "cancel"): Promise<BookingRow> {
-  await lockRow(tx, bulkyBooking, { companyId: principal.companyId, id })
-  const row = await findBooking(tx, principal, id)
-  if (row === undefined) throw noSuchBooking(id)
+  const row = await lockedBooking(tx, principal, id)
   const status = statusOf(row)
   if (status !== "booked") throw problem(409, { detail: onlyABookedBooking(status, command) })
   return row
@@ -125,28 +113,23 @@ export function bulkyBookingRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, customerId, propertyId, sharedCollectionPointId, planningAreaId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await selectBookings(tx)
-          .where(
-            and(
-              bookingScope(principal),
-              projectId === undefined ? undefined : eq(bulkyBooking.projectId, projectId),
-              status === undefined ? undefined : bookingStatusIs(status),
-              customerId === undefined ? undefined : eq(bulkyBooking.customerId, customerId),
-              propertyId === undefined ? undefined : eq(bulkyBooking.propertyId, propertyId),
-              sharedCollectionPointId === undefined ? undefined : eq(bulkyBooking.sharedCollectionPointId, sharedCollectionPointId),
-              planningAreaId === undefined ? undefined : eq(bulkyBooking.planningAreaId, planningAreaId),
-              from === undefined ? undefined : gte(bulkyBooking.day, from),
-              to === undefined ? undefined : lte(bulkyBooking.day, to),
-              after === undefined ? undefined : gt(bulkyBooking.id, after),
-            ),
-          )
-          .orderBy(asc(bulkyBooking.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listBookings(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(bulkyBooking.projectId, projectId),
+          status === undefined ? undefined : bookingStatusIs(status),
+          customerId === undefined ? undefined : eq(bulkyBooking.customerId, customerId),
+          propertyId === undefined ? undefined : eq(bulkyBooking.propertyId, propertyId),
+          sharedCollectionPointId === undefined ? undefined : eq(bulkyBooking.sharedCollectionPointId, sharedCollectionPointId),
+          planningAreaId === undefined ? undefined : eq(bulkyBooking.planningAreaId, planningAreaId),
+          from === undefined ? undefined : gte(bulkyBooking.day, from),
+          to === undefined ? undefined : lte(bulkyBooking.day, to),
+        )
         const items = await bulkyItemsOf(
           tx,
           principal.companyId,
@@ -247,8 +230,7 @@ export function bulkyBookingRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findBooking(tx, principal, id)
-        if (row === undefined) throw noSuchBooking(id)
+        const row = await getBooking(tx, principal, id)
         return c.json(await bookingAnswered(tx, principal.companyId, row))
       },
     )
@@ -288,8 +270,7 @@ export function bulkyBookingRoutes(deps: RouteDeps) {
           .set({ ...slot, ...(fields.note === undefined ? {} : { note: fields.note }), ...stamp() })
           .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
         if (fields.items !== undefined) await replaceBulkyItems(tx, scope, id, fields.items)
-        const row = await findBooking(tx, principal, id)
-        if (row === undefined) throw noSuchBooking(id)
+        const row = await getBooking(tx, principal, id)
         return c.json(await bookingAnswered(tx, principal.companyId, row))
       },
     )
@@ -322,8 +303,7 @@ export function bulkyBookingRoutes(deps: RouteDeps) {
           .update(bulkyBooking)
           .set({ cancelledAt: at, cancelledBy: principal.user.id, cancelReason: reason })
           .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
-        const row = await findBooking(tx, principal, id)
-        if (row === undefined) throw noSuchBooking(id)
+        const row = await getBooking(tx, principal, id)
         const answered = await bookingAnswered(tx, principal.companyId, row)
         await emit(tx, principal, { aggregateId: id, kind: "bulky-booking-cancelled", payload: answered, projectId: row.projectId, occurredAt: at })
         return c.json(answered)

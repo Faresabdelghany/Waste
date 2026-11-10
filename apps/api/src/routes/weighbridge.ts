@@ -50,12 +50,11 @@ import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import { fractionNamed, matchTicket, plateKey, WEIGHBRIDGE_BATCHES_PER_MINUTE, WEIGHBRIDGE_BODY_MAX_BYTES, type FractionCandidate } from "@waste/domain/execution/weighbridge"
-import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm"
 import type { MiddlewareHandler } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { dayInTimezone } from "@waste/domain/clock"
 import { newId } from "@waste/db/ids"
-import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import { aheadOfClock } from "@waste/domain/execution/commands"
 import { RAN_ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
@@ -65,8 +64,9 @@ import type { AuthEnv, Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { findRoute, noSuchRoute } from "./execution-shapes"
 import { requireRoute, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
@@ -124,26 +124,18 @@ function ticketOf(row: TicketRow): WeighbridgeTicket {
   }
 }
 
-/** The tickets of this company the caller reaches: its projects', and those of no known vehicle. */
-const ticketScope = (principal: Principal) =>
-  and(eq(weighbridgeTicket.companyId, principal.companyId), or(isNull(weighbridgeTicket.projectId), inProjects(weighbridgeTicket.projectId, principal)))
-
-const noSuchTicket = (id: string) => problem(404, { detail: `No weighbridge ticket ${id} in the projects this account works in` })
-
 /** What a ticket that is not waiting for the office is told when matched or dismissed. */
 export const notWaiting = (ticketNumber: string, status: string) => `Ticket ${ticketNumber} is ${status} already; only an unmatched ticket is matched or dismissed`
 
 /** What a match onto a route of another project than the ticket's vehicle is told. */
 export const OTHER_PROJECT = "The ticket's vehicle is in another project than this route"
 
-async function findTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(weighbridgeTicket)
-    .where(and(ticketScope(principal), eq(weighbridgeTicket.id, id)))
-    .limit(1)
-  return row
-}
+/** The tickets of this company the caller reaches: its projects', and those of no known vehicle. */
+const { get: getTicket, locked: lockedTicket, list: listTickets } = scoped(weighbridgeTicket, {
+  noun: "weighbridge ticket",
+  reach: (principal) => or(isNull(weighbridgeTicket.projectId), inProjects(weighbridgeTicket.projectId, principal)),
+  columns,
+})
 
 /** What one batch reads once: the company's stations by code, its fractions, and the caller's vehicles by plate. */
 type BatchContext = {
@@ -341,24 +333,17 @@ export function weighbridgeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(weighbridgeTicket)
-          .where(
-            and(
-              ticketScope(principal),
-              projectId === undefined ? undefined : eq(weighbridgeTicket.projectId, projectId),
-              status === undefined ? undefined : eq(weighbridgeTicket.status, status),
-              after === undefined ? undefined : gt(weighbridgeTicket.id, after),
-            ),
-          )
-          .orderBy(asc(weighbridgeTicket.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(ticketOf), limit))
+        const page = await listTickets(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(weighbridgeTicket.projectId, projectId),
+          status === undefined ? undefined : eq(weighbridgeTicket.status, status),
+        )
+        return c.json(mapPage(page, ticketOf))
       },
     )
     .get(
@@ -377,8 +362,7 @@ export function weighbridgeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findTicket(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchTicket(id)
+        const row = await getTicket(c.get("tx"), c.get("principal"), id)
         return c.json(ticketOf(row))
       },
     )
@@ -401,9 +385,7 @@ export function weighbridgeRoutes(deps: RouteDeps) {
         const { routeId, wasteFractionId } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, weighbridgeTicket, { companyId: principal.companyId, id })
-        const current = await findTicket(tx, principal, id)
-        if (current === undefined) throw noSuchTicket(id)
+        const current = await lockedTicket(tx, principal, id)
         if (current.status !== "unmatched") throw problem(409, { detail: notWaiting(current.ticketNumber, current.status) })
         await requireRoute(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, routeId)
         await requireWasteFraction(tx, principal.companyId, wasteFractionId)
@@ -440,9 +422,7 @@ export function weighbridgeRoutes(deps: RouteDeps) {
         const { note } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, weighbridgeTicket, { companyId: principal.companyId, id })
-        const current = await findTicket(tx, principal, id)
-        if (current === undefined) throw noSuchTicket(id)
+        const current = await lockedTicket(tx, principal, id)
         if (current.status !== "unmatched") throw problem(409, { detail: notWaiting(current.ticketNumber, current.status) })
         const [row] = await tx
           .update(weighbridgeTicket)

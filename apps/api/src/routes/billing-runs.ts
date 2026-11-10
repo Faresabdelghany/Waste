@@ -33,7 +33,7 @@ import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
-import { findRun, listRuns, noSuchRun } from "./billing-shapes"
+import { getRun, listRuns } from "./billing-shapes"
 
 const MODULE = "commercial.billing"
 
@@ -162,8 +162,7 @@ export function billingRunRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findRun(tx, principal, id)
-        if (row === undefined) throw noSuchRun(id)
+        const row = await getRun(tx, principal, id)
         return c.json(await runDetailOf(tx, principal.companyId, row))
       },
     )

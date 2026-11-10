@@ -42,14 +42,16 @@ import { and, desc, eq, gte, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseOverlap } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { describeProblem, invalidRequest } from "../problem"
 import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
+import { noSuchProperty, propertyScope } from "./property-writes"
 import { stamp } from "./shared"
+import { noSuchPoint, pointScope } from "./shared-collection-points"
 
 const MODULE = "commercial.price-rows"
 const STOPS = "route-studio.pickups"
@@ -395,9 +397,9 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         const [found] = await tx
           .select({ projectId: property.projectId })
           .from(property)
-          .where(and(eq(property.companyId, principal.companyId), inProjects(property.projectId, principal), eq(property.id, id)))
+          .where(and(propertyScope(principal), eq(property.id, id)))
           .limit(1)
-        if (found === undefined) throw problem(404, { detail: `No property ${id} in the projects this account works in` })
+        if (found === undefined) throw noSuchProperty(id)
         const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now))
         return c.json(await historyAt(tx, principal.companyId, found.projectId, { kind: "property", id }, day))
       },
@@ -427,9 +429,9 @@ export function pickupExceptionRoutes(deps: RouteDeps) {
         const [found] = await tx
           .select({ projectId: sharedCollectionPoint.projectId })
           .from(sharedCollectionPoint)
-          .where(and(eq(sharedCollectionPoint.companyId, principal.companyId), inProjects(sharedCollectionPoint.projectId, principal), eq(sharedCollectionPoint.id, id)))
+          .where(and(pointScope(principal), eq(sharedCollectionPoint.id, id)))
           .limit(1)
-        if (found === undefined) throw problem(404, { detail: `No shared collection point ${id} in the projects this account works in` })
+        if (found === undefined) throw noSuchPoint(id)
         const day = from ?? (await defaultFrom(tx, principal.companyId, found.projectId, now))
         return c.json(await historyAt(tx, principal.companyId, found.projectId, { kind: "point", id }, day))
       },

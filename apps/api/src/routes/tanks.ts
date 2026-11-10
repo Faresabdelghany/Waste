@@ -39,7 +39,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { property } from "@waste/db/schema/customers"
 import { tankInspection, tankInstallation } from "@waste/db/schema/tanks"
 import { tankDueOn } from "@waste/domain/planning/due-from-last"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
@@ -49,7 +49,7 @@ import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { periodAfter, requireOrdered } from "./periods"
@@ -142,6 +142,9 @@ const inspectionOf = (row: Pick<typeof tankInspection.$inferSelect, keyof typeof
   nextInspectionOn: row.nextInspectionOn,
   recordedBy: row.recordedBy,
 })
+
+/** A tank's inspections, read once the tank is the caller's. */
+const { list: listInspections } = scoped(tankInspection, { noun: "tank inspection", reach: "company", columns: inspectionColumns })
 
 export function tankRoutes(deps: RouteDeps) {
   const { now } = deps
@@ -300,17 +303,12 @@ export function tankRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         const tank = await getTank(tx, principal, id)
-        const rows = await tx
-          .select(inspectionColumns)
-          .from(tankInspection)
-          .where(and(eq(tankInspection.companyId, principal.companyId), eq(tankInspection.tankInstallationId, tank.id), after === undefined ? undefined : gt(tankInspection.id, after)))
-          .orderBy(asc(tankInspection.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(inspectionOf), limit))
+        const page = await listInspections(tx, principal, at, eq(tankInspection.tankInstallationId, tank.id))
+        return c.json(mapPage(page, inspectionOf))
       },
     )
     .post(

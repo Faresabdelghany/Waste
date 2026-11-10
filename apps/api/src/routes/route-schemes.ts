@@ -110,7 +110,7 @@ import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
-import { findScheme, fleetOf, groupsOf, MODULE, mergeReferences, noSuchScheme, pickOf, referencesOf, requireFleetInService, requireFleetThere, CREW_THERE, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, SCHEME_NAME_IN_FORCE, SCHEME_NAME_IN_FORCE_SENTENCE, listSchemes, schemeColumns, schemeScope, schemesOf, schemeWithGroups, writeGroupSets } from "./scheme-groups"
+import { CREW_THERE, fleetOf, getScheme, groupsOf, listSchemes, mergeReferences, MODULE, noSuchScheme, pickOf, referencesOf, requireFleetInService, requireFleetThere, requireGroupDriver, requireGroupReferences, requireNotArchived, requireNotPickedTwice, requireStructure, SCHEME_NAME_IN_FORCE, SCHEME_NAME_IN_FORCE_SENTENCE, schemeColumns, schemeScope, schemesOf, schemeWithGroups, writeGroupSets } from "./scheme-groups"
 import { stamp } from "./shared"
 
 const RouteSchemePage = Page(RouteScheme)
@@ -288,8 +288,7 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findScheme(tx, principal, id)
-        if (row === undefined) throw noSuchScheme(id)
+        const row = await getScheme(tx, principal, id)
         return c.json(await schemeWithGroups(tx, principal.companyId, row, now))
       },
     )
@@ -329,8 +328,7 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         // them are two halves of one rule, and they serialise here
         // (`@waste/db/commands/shared`); the group routes take this same lock.
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
-        const current = await findScheme(tx, principal, id)
-        if (current === undefined) throw noSuchScheme(id)
+        const current = await getScheme(tx, principal, id)
         requireNotArchived(current)
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
@@ -412,8 +410,7 @@ export function routeSchemeRoutes(deps: RouteDeps) {
         const window = c.req.valid("query")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const scheme = await findScheme(tx, principal, id)
-        if (scheme === undefined) throw noSuchScheme(id)
+        const scheme = await getScheme(tx, principal, id)
 
         // The project's holidays near enough to the window to bear on it: a
         // recurrence date lies inside it and a shift walks at most

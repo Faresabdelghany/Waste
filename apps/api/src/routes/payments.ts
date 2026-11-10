@@ -61,7 +61,7 @@ import { project } from "@waste/db/schema/organisation"
 import { bankLineKey, bankLineLabels, bankLineReference, matchBankLine, minorDigitsOf, type OpenInvoice } from "@waste/domain/finance/payments"
 import { numberOf } from "@waste/domain/numbering"
 import { INT4_MAX } from "@waste/domain/requests"
-import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql, sum, type SQL } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, isNull, lte, or, sql, sum } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { lockRow, lockRows, refuseDuplicate } from "@waste/db/commands/shared"
 import { invoiceColumns, labelOf, standingsOf, type InvoiceRow, type InvoiceStanding } from "@waste/db/shapes/invoices"
@@ -71,8 +71,9 @@ import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { invoiceScope } from "./billing-shapes"
 import { noSuchCustomer } from "./customer-writes"
 import { requireCustomer } from "./references"
@@ -117,9 +118,6 @@ export const remainsOnly = (minor: number, currency: string): string => `Only ${
 /** What a match of more than the invoice owes is told. */
 export const owesOnly = (label: string, minor: number, currency: string): string => `Invoice ${label} owes only ${amountText(minor, currency)}`
 
-export const noSuchPayment = (id: string) => problem(404, { detail: `No payment ${id} in the projects this account works in` })
-export const noSuchAllocation = (id: string) => problem(404, { detail: `No payment allocation ${id} in the projects this account works in` })
-
 const paymentColumns = {
   id: payment.id,
   recordedAt: payment.recordedAt,
@@ -148,8 +146,15 @@ const allocationColumns = {
 
 type AllocationRow = Pick<typeof paymentAllocation.$inferSelect, keyof typeof allocationColumns>
 
-/** The payments of this company, in the projects the caller works in. */
-const paymentScope = (principal: Principal): SQL | undefined => and(eq(payment.companyId, principal.companyId), inProjects(payment.projectId, principal))
+/** The payments of this company, in the projects the caller works in, each read with what its allocations apply. */
+const {
+  scope: paymentScope,
+  find: findPayment,
+  get: getPayment,
+  list: listPayments,
+} = scoped(payment, { noun: "payment", reach: "projects", read: (tx, principal) => paymentsFrom(tx, principal.companyId).query })
+
+const { get: getAllocation } = scoped(paymentAllocation, { noun: "payment allocation", reach: "projects", columns: allocationColumns })
 
 /**
  * Every payment is read through here: its row and what its allocations
@@ -197,14 +202,6 @@ const allocationOf = (row: AllocationRow): PaymentAllocation => ({
   reversesAllocationId: row.reversesAllocationId,
   recordedBy: row.recordedBy,
 })
-
-/** One payment of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findPayment(tx: Tx, principal: Principal, id: string): Promise<PaymentRow | undefined> {
-  const [row] = await paymentsFrom(tx, principal.companyId)
-    .query.where(and(paymentScope(principal), eq(payment.id, id)))
-    .limit(1)
-  return row
-}
 
 /** The payment with its allocations in recording order, read under the caller's scope: what every command answers. */
 async function paymentDetail(tx: Tx, principal: Principal, id: string): Promise<PaymentDetail> {
@@ -323,12 +320,13 @@ export function paymentRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, customerId, invoiceId, unmatched, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (customerId !== undefined) await requireCustomer(tx, principal.companyId, customerId, "customerId", "query")
-        const { query, allocated } = paymentsFrom(tx, principal.companyId)
+        // What the allocations apply, by the name the family's read gives it.
+        const { allocated } = paymentsFrom(tx, principal.companyId)
         const paying =
           invoiceId === undefined
             ? undefined
@@ -339,22 +337,18 @@ export function paymentRoutes(deps: RouteDeps) {
                   .from(paymentAllocation)
                   .where(and(eq(paymentAllocation.companyId, principal.companyId), eq(paymentAllocation.invoiceId, invoiceId))),
               )
-        const rows = await query
-          .where(
-            and(
-              paymentScope(principal),
-              projectId === undefined ? undefined : eq(payment.projectId, projectId),
-              customerId === undefined ? undefined : eq(payment.customerId, customerId),
-              paying,
-              unmatched === true ? sql`${allocated.allocatedMinor} < ${payment.amountMinor}` : undefined,
-              from === undefined ? undefined : gte(payment.paidOn, from),
-              to === undefined ? undefined : lte(payment.paidOn, to),
-              after === undefined ? undefined : gt(payment.id, after),
-            ),
-          )
-          .orderBy(asc(payment.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(paymentOf), limit))
+        const page = await listPayments(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(payment.projectId, projectId),
+          customerId === undefined ? undefined : eq(payment.customerId, customerId),
+          paying,
+          unmatched === true ? sql`${allocated.allocatedMinor} < ${payment.amountMinor}` : undefined,
+          from === undefined ? undefined : gte(payment.paidOn, from),
+          to === undefined ? undefined : lte(payment.paidOn, to),
+        )
+        return c.json(mapPage(page, paymentOf))
       },
     )
     .get(
@@ -376,7 +370,7 @@ export function paymentRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findPayment(tx, principal, id)) === undefined) throw noSuchPayment(id)
+        await getPayment(tx, principal, id)
         return c.json(await paymentDetail(tx, principal, id))
       },
     )
@@ -459,8 +453,7 @@ export function paymentRoutes(deps: RouteDeps) {
         const body: AllocationCreate = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const current = await findPayment(tx, principal, id)
-        if (current === undefined) throw noSuchPayment(id)
+        const current = await getPayment(tx, principal, id)
         const paid = await findDocument(tx, principal, body.invoiceId)
         const refuse = (message: string) => invalidRequest("body", [{ path: "invoiceId", message }])
         if (paid === undefined || paid.projectId !== current.projectId) throw refuse(NOT_AN_INVOICE_OF_THE_PROJECT)
@@ -498,12 +491,7 @@ export function paymentRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const [current] = await tx
-          .select(allocationColumns)
-          .from(paymentAllocation)
-          .where(and(eq(paymentAllocation.companyId, principal.companyId), inProjects(paymentAllocation.projectId, principal), eq(paymentAllocation.id, id)))
-          .limit(1)
-        if (current === undefined) throw noSuchAllocation(id)
+        const current = await getAllocation(tx, principal, id)
         if (current.reversesAllocationId !== null) throw problem(409, { detail: A_REVERSAL_IS_NOT_REVERSED })
         await lockRow(tx, project, { companyId: principal.companyId, id: current.projectId })
         const [reversal] = await tx

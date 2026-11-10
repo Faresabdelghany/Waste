@@ -87,7 +87,7 @@ import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agr
 import { placeOf, refuseUnservedPlace } from "@waste/domain/registry/served-places"
 import { refuseInactiveCustomer, type Party } from "@waste/domain/registry/agreements"
 import { refuseUnofferedProduct } from "@waste/domain/registry/catalogue"
-import { and, asc, eq, gt, isNull, or } from "drizzle-orm"
+import { and, eq, isNull, or } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { AGREEMENT_CHILDREN, carryPlacements, endAgreementHoldingsOn, endSubscriptionsOn, servingOn, SUBSCRIPTION_CHILDREN } from "@waste/db/commands/agreement-periods"
 import { refuseStrandedChildren, runsPast } from "@waste/db/commands/periods"
@@ -96,11 +96,11 @@ import { pauseSubscription } from "@waste/db/commands/subscription-pauses"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
 import { scoped } from "../scoped"
 import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requirePriceList, requireProduct, requireProperty, requireSharedCollectionPoint, type Scope } from "./references"
@@ -196,12 +196,6 @@ const PLACE_SUBSCRIBED_SENTENCE = "The agreement already subscribes to that prod
 /** What a bound outside the parent's period is told, on the create and on the patch alike. */
 const OUTSIDE_AGREEMENT = "Outside the agreement's period"
 
-const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
-
-/** The same for a subscription, which carries the project its agreement is in. */
-const subscriptionScope = (principal: Principal) =>
-  and(eq(subscription.companyId, principal.companyId), inProjects(subscription.projectId, principal))
-
 const { scope, noSuch: noSuchAgreement, find: findAgreement, get: getAgreement, locked: lockedAgreement, list: listAgreements } = scoped(agreement, { noun: "agreement", reach: "projects", columns })
 
 /** One agreement of the caller's projects as the wire carries it; undefined for one they do not reach. */
@@ -209,6 +203,9 @@ export async function readAgreement(tx: Tx, principal: Principal, id: string): P
   const row = await findAgreement(tx, principal, id)
   return row === undefined ? undefined : agreementOf(row)
 }
+
+/** The same for a subscription, which carries the project its agreement is in; its pauses hang on it. */
+export const { scope: subscriptionScope, noSuch: noSuchSubscription, list: listSubscriptions } = scoped(subscription, { noun: "subscription", reach: "projects", columns: subscriptionColumns })
 
 /**
  * One subscription, with the period of the agreement it hangs on: a patch has
@@ -614,24 +611,12 @@ export function agreementRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findAgreement(tx, principal, id)) === undefined) throw noSuchAgreement(id)
-        const rows = await tx
-          .select(subscriptionColumns)
-          .from(subscription)
-          .where(
-            and(
-              subscriptionScope(principal),
-              eq(subscription.agreementId, id),
-              day === undefined ? undefined : validOn(subscription, day),
-              after === undefined ? undefined : gt(subscription.id, after),
-            ),
-          )
-          .orderBy(asc(subscription.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(subscriptionOf), limit))
+        await getAgreement(tx, principal, id)
+        const page = await listSubscriptions(tx, principal, at, eq(subscription.agreementId, id), day === undefined ? undefined : validOn(subscription, day))
+        return c.json(mapPage(page, subscriptionOf))
       },
     )
     .post(
@@ -671,25 +656,18 @@ export function agreementRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, agreementId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(subscriptionColumns)
-          .from(subscription)
-          .where(
-            and(
-              subscriptionScope(principal),
-              projectId === undefined ? undefined : eq(subscription.projectId, projectId),
-              agreementId === undefined ? undefined : eq(subscription.agreementId, agreementId),
-              day === undefined ? undefined : validOn(subscription, day),
-              after === undefined ? undefined : gt(subscription.id, after),
-            ),
-          )
-          .orderBy(asc(subscription.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(subscriptionOf), limit))
+        const page = await listSubscriptions(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(subscription.projectId, projectId),
+          agreementId === undefined ? undefined : eq(subscription.agreementId, agreementId),
+          day === undefined ? undefined : validOn(subscription, day),
+        )
+        return c.json(mapPage(page, subscriptionOf))
       },
     )
     .get(

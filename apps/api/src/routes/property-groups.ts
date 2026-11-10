@@ -118,7 +118,7 @@ async function groupWithMembers(tx: Tx, companyId: string, row: Row): Promise<Pr
 const NAME_TAKEN = "property_group_project_id_name_key"
 const nameTaken = (name: string) => `This project already has a property group called ${JSON.stringify(name)}`
 
-const { scope, noSuch: noSuchGroup, find: findGroup, get: getGroup, list: listGroups } = scoped(propertyGroup, { noun: "property group", reach: "projects", columns })
+const { scope, noSuch: noSuchGroup, get: getGroup, list: listGroups } = scoped(propertyGroup, { noun: "property group", reach: "projects", columns })
 
 export function propertyGroupRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -235,7 +235,7 @@ export function propertyGroupRoutes(deps: RouteDeps) {
         // The row first, then what the patch points at: an id nobody minted
         // is a 404 here as in every other family, and not a 400 about a
         // customer that was never going to be written.
-        if ((await findGroup(tx, principal, id)) === undefined) throw noSuchGroup(id)
+        await getGroup(tx, principal, id)
         await requireCustomer(tx, principal.companyId, patch.responsibleCustomerId, "responsibleCustomerId")
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }

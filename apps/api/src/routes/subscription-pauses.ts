@@ -51,12 +51,13 @@ import { OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
+import { noSuchSubscription, subscriptionScope } from "./agreements"
 import { periodAfter, periodOf, requireWithin, type Period } from "./periods"
 import { askRuns, mergedRuns, runsBringingBack, stopsLeft, type Window } from "./service-ends"
 
@@ -68,8 +69,6 @@ export const ENDS_TODAY_OR_LATER = "A pause ends today or later: collections res
 export const KEEPS_ITS_FIRST_DAY = "A pause that has begun keeps its first day"
 export const pauseEnded = (day: string) => `This pause ended on ${day}; a later one is a new pause`
 export const pauseBegun = (day: string) => `This pause began on ${day}; give it an end instead`
-
-const noSuchSubscription = (id: string) => problem(404, { detail: `No subscription ${id} in the projects this account works in` })
 
 const columns = {
   id: subscriptionPause.id,
@@ -99,7 +98,7 @@ async function findSubscription(tx: Tx, principal: Principal, id: string): Promi
   const [row] = await tx
     .select({ id: subscription.id, projectId: subscription.projectId, agreementId: subscription.agreementId, validFrom: subscription.validFrom, validTo: subscription.validTo })
     .from(subscription)
-    .where(and(eq(subscription.companyId, principal.companyId), inProjects(subscription.projectId, principal), eq(subscription.id, id)))
+    .where(and(subscriptionScope(principal), eq(subscription.id, id)))
     .limit(1)
   return row
 }

@@ -35,12 +35,10 @@ import { refuseUnless } from "@waste/domain/status-gates"
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-
-import type { Principal } from "../auth/principal"
-import { projectIdsOf } from "../auth/projects"
+import { requireOwnProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { describeProblem, invalidRequest } from "../problem"
 
 const MODULE = "configure.templates"
 
@@ -59,12 +57,6 @@ type Rules = NotificationRulesPut["rules"]
 const columns = { id: notificationRule.id, event: notificationRule.event, templateId: notificationRule.templateId }
 type Row = { id: string; event: string; templateId: string }
 type AreaRow = { ruleId: string; planningAreaId: string }
-
-const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in the projects this account works in` })
-
-function requireOwnProject(principal: Principal, id: string): void {
-  if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
-}
 
 const rulesOf = (projectId: string, rows: readonly Row[], areas: readonly AreaRow[]): NotificationRules => ({
   projectId,

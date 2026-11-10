@@ -7,16 +7,16 @@
 // status gates a new decommission, never an existing one (@waste/domain/status-gates).
 import { Page } from "@waste/contracts/pagination"
 import { DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch } from "@waste/contracts/stock"
-import type { Tx } from "@waste/db/client"
 import { decommissionReason } from "@waste/db/schema/stock"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "configure.master"
 
@@ -41,16 +41,7 @@ const NAME_TAKEN = "decommission_reason_name_key"
 const codeTaken = (code: string) => `This company already has a decommission reason ${JSON.stringify(code)}`
 const nameTaken = (name: string) => `This company already has a decommission reason called ${JSON.stringify(name)}`
 
-const noSuchReason = (id: string) => problem(404, { detail: `No decommission reason ${id} in this company` })
-
-async function findReason(tx: Tx, companyId: string, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(decommissionReason)
-    .where(and(eq(decommissionReason.companyId, companyId), eq(decommissionReason.id, id)))
-    .limit(1)
-  return row
-}
+const { noSuch: noSuchReason, get: getReason, list: listReasons } = scoped(decommissionReason, { noun: "decommission reason", reach: "company", columns })
 
 export function decommissionReasonRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -71,16 +62,8 @@ export function decommissionReasonRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const { companyId } = c.get("principal")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(decommissionReason)
-          .where(and(eq(decommissionReason.companyId, companyId), status === undefined ? undefined : eq(decommissionReason.status, status), after === undefined ? undefined : gt(decommissionReason.id, after)))
-          .orderBy(asc(decommissionReason.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const at = pageAt({ cursor, limit })
+        const page = await listReasons(c.get("tx"), c.get("principal"), at, status === undefined ? undefined : eq(decommissionReason.status, status))
         return c.json({ ...page, items: page.items.map(reasonOf) })
       },
     )
@@ -129,8 +112,7 @@ export function decommissionReasonRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findReason(c.get("tx"), c.get("principal").companyId, id)
-        if (row === undefined) throw noSuchReason(id)
+        const row = await getReason(c.get("tx"), c.get("principal"), id)
         return c.json(reasonOf(row))
       },
     )

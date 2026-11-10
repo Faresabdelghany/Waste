@@ -42,12 +42,12 @@ import { newId } from "@waste/db/ids"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { projectIdsOf } from "../auth/projects"
+import { requireOwnProject } from "../auth/projects"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { pageAt } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { describeProblem, invalidRequest } from "../problem"
 import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, writeIds, type IdSet } from "./id-sets"
 import { NOT_A_TEAM, requireUserAccount } from "./references"
@@ -81,8 +81,6 @@ const teamOf = (row: Row, memberUserAccountIds: readonly string[]): Team => ({ i
 /** `unique (company_id, name)`: a name is one team's inside a company. */
 const NAME_TAKEN = "team_name_key"
 const nameTaken = (name: string) => `This company already has a team called ${JSON.stringify(name)}`
-
-const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in the projects this account works in` })
 
 const { scope, noSuch: noSuchTeam, get: getTeam, list: listTeams } = scoped(team, { noun: "team", reach: "company", columns })
 
@@ -288,7 +286,7 @@ export function ticketTeamRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
-        if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
+        requireOwnProject(principal, id)
         return c.json(defaultsAnswer(id, await defaultsOf(c.get("tx"), principal.companyId, id)))
       },
     )
@@ -315,7 +313,7 @@ export function ticketTeamRoutes(deps: RouteDeps) {
         const { defaults } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
+        requireOwnProject(principal, id)
         await advisoryLock(tx, `ticket-team-defaults:${principal.companyId}:${id}`)
         const current = new Map((await defaultsOf(tx, principal.companyId, id)).map((row) => [kindOrTypeKey(row), row]))
         // The 400s — the types', then the teams' — then the 409s on what is new: a team a row already names stands whatever its status, as a type the set already names does.

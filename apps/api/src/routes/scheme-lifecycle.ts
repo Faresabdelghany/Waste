@@ -84,7 +84,7 @@ import { describeCreated, describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { askGenerationBestEffort } from "./generation"
 import { writeScheme } from "./route-schemes"
-import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type SchemeRow } from "./scheme-groups"
+import { getScheme, MODULE, requireNotArchived, schemeColumns, type SchemeRow, schemeScope, schemeWithGroups } from "./scheme-groups"
 import { stamp } from "./shared"
 
 /** What an effective day before tomorrow is refused with, at its field. */
@@ -110,8 +110,7 @@ export function successorDayIssue(predecessor: { validFrom: string; validTo: str
 /** The scheme the path names, locked and read again under the lock, refused when it is not here or is archived. */
 async function lockedScheme(tx: Tx, principal: Principal, id: string): Promise<SchemeRow> {
   await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
-  const current = await findScheme(tx, principal, id)
-  if (current === undefined) throw noSuchScheme(id)
+  const current = await getScheme(tx, principal, id)
   requireNotArchived(current)
   return current
 }

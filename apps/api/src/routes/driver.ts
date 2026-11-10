@@ -200,11 +200,11 @@ import { type DriverProfile, NO_DRIVER_PROFILE, resolveDriver } from "../auth/dr
 import { actorOf, type Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problemBody } from "../problem"
 import { namedByCode } from "./container-identity"
 import { driverColumns, driverOf } from "./drivers"
-import { driverRouteScope, findAssignedRoute, noSuchAssignedRoute, routeWithSessions, sessionColumns, sessionOf, type SessionRow } from "./execution-shapes"
+import { driverRouteScope, findAssignedRoute, listReceipts, noSuchAssignedRoute, routeWithSessions, sessionColumns, sessionOf, type SessionRow } from "./execution-shapes"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { vehicleColumns } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
@@ -1261,24 +1261,12 @@ export function driverDoorRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, routeId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         const profile = await resolveDriver(tx, principal)
-        const rows = await tx
-          .select(receiptColumns)
-          .from(driverCommand)
-          .where(
-            and(
-              eq(driverCommand.companyId, principal.companyId),
-              eq(driverCommand.driverId, profile.id),
-              routeId === undefined ? undefined : eq(driverCommand.routeId, routeId),
-              after === undefined ? undefined : gt(driverCommand.id, after),
-            ),
-          )
-          .orderBy(asc(driverCommand.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(receiptOf), limit))
+        const page = await listReceipts(tx, principal, at, eq(driverCommand.driverId, profile.id), routeId === undefined ? undefined : eq(driverCommand.routeId, routeId))
+        return c.json(mapPage(page, receiptOf))
       },
     )
 }

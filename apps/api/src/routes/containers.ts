@@ -107,20 +107,20 @@ import { validOn } from "@waste/db/query/valid-on"
 import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { and, asc, eq, gt, or, sql } from "drizzle-orm"
+import { and, eq, or, sql } from "drizzle-orm"
 import { lockRow, refuseOverlap } from "@waste/db/commands/shared"
 import { ALREADY_PLACED, alreadyPlaced, issueContainer, OUTSIDE_SUBSCRIPTION } from "@waste/db/commands/stock-ledger"
 import { stampsOf } from "@waste/db/shapes/times"
 
-import { actorOf, type Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { actorOf } from "../auth/principal"
+import { projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { namedByCode } from "./container-identity"
-import { containerOf, containersFrom, createContainer, findContainer, patchContainer } from "./container-writes"
-import { containerScope, noSuchContainer } from "./lifecycle"
+import { containerOf, containersFrom, createContainer, getContainer, listContainers, patchContainer } from "./container-writes"
 import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireServiceFrequency, requireWarehouse, requireWasteFraction } from "./references"
 
@@ -180,16 +180,6 @@ function placementOf(row: PlacementRow): ContainerServicePlacement {
 /** What a patch setting an end on an open placement is told. */
 export const END_BY_COMMAND = "End this placement by returning or decommissioning the container"
 
-const noSuchPlacement = (id: string) =>
-  problem(404, { detail: `No container service placement ${id} in the projects this account works in` })
-
-/** The rows of this company, in the projects the caller works in: what every container statement is bounded by (spelled in lifecycle.ts, which the ledger's routes read too). */
-const scope = containerScope
-
-/** The same for a placement, which carries the project its container is in. */
-const placementScope = (principal: Principal) =>
-  and(eq(containerServicePlacement.companyId, principal.companyId), inProjects(containerServicePlacement.projectId, principal))
-
 /**
  * The one statement every placement is read through, and the three joins it
  * takes: the subscription because a place and a period hang off it, the
@@ -227,17 +217,18 @@ const servedPeriod = (row: { subscriptionValidFrom: string | null; subscriptionV
   row.subscriptionValidFrom === null ? null : { validFrom: row.subscriptionValidFrom, validTo: row.subscriptionValidTo }
 
 /**
- * One placement, with the two things a write of it is held against: the
+ * The same for a placement, which carries the project its container is in:
+ * one placement, with the two things a write of it is held against — the
  * container's label, which the overlap sentence names, and the period of the
  * subscription it serves. Both come off the statement above, so a patch costs
  * one round trip and not three.
  */
-async function findPlacement(tx: Tx, principal: Principal, id: string) {
-  const [row] = await placementsFrom(tx, principal.companyId)
-    .where(and(placementScope(principal), eq(containerServicePlacement.id, id)))
-    .limit(1)
-  return row
-}
+const {
+  scope: placementScope,
+  noSuch: noSuchPlacement,
+  get: getPlacement,
+  list: listPlacements,
+} = scoped(containerServicePlacement, { noun: "container service placement", reach: "projects", read: (tx, principal) => placementsFrom(tx, principal.companyId) })
 
 export function containerRoutes(deps: RouteDeps) {
   const { now } = deps
@@ -259,29 +250,26 @@ export function containerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, containerTypeId, assetStatus: status, warehouseId, identifier } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         // The warehouse asked about is one the caller may see: the project named, or any the caller works in.
         if (warehouseId !== undefined) await requireWarehouse(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, warehouseId, "warehouseId", "query")
-        const { state, query } = containersFrom(tx, principal.companyId)
-        const rows = await query
-          .where(
-            and(
-              scope(principal),
-              projectId === undefined ? undefined : eq(container.projectId, projectId),
-              containerTypeId === undefined ? undefined : eq(container.containerTypeId, containerTypeId),
-              // The ledger's reading, filtered in SQL: the status the latest movement folds onto, and the warehouse it arrived at.
-              status === undefined ? undefined : eq(assetStatus(state.toKind), status),
-              warehouseId === undefined ? undefined : eq(state.toWarehouseId, warehouseId),
-              identifier === undefined ? undefined : namedByCode(container, identifier),
-              after === undefined ? undefined : gt(container.id, after),
-            ),
-          )
-          .orderBy(asc(container.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(containerOf), limit))
+        // The ledger's reading, by the name the family's read gives it.
+        const { state } = containersFrom(tx, principal.companyId)
+        const page = await listContainers(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(container.projectId, projectId),
+          containerTypeId === undefined ? undefined : eq(container.containerTypeId, containerTypeId),
+          // The ledger's reading, filtered in SQL: the status the latest movement folds onto, and the warehouse it arrived at.
+          status === undefined ? undefined : eq(assetStatus(state.toKind), status),
+          warehouseId === undefined ? undefined : eq(state.toWarehouseId, warehouseId),
+          identifier === undefined ? undefined : namedByCode(container, identifier),
+        )
+        return c.json(mapPage(page, containerOf))
       },
     )
     .post(
@@ -319,8 +307,7 @@ export function containerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findContainer(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchContainer(id)
+        const row = await getContainer(c.get("tx"), c.get("principal"), id)
         return c.json(containerOf(row))
       },
     )
@@ -368,13 +355,11 @@ export function containerRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const into = await findContainer(tx, principal, id)
-        if (into === undefined) throw noSuchContainer(id)
+        const into = await getContainer(tx, principal, id)
         const movement = await issueContainer(tx, actorOf(principal), into, values, { ...(occurredAt === undefined ? {} : { occurredAt }), ...(reference === undefined ? {} : { reference }), at: now() })
         // Read back through the one select every placement is answered from,
         // since the cadence in force is a join and not a column.
-        const row = await findPlacement(tx, principal, movement.placementId)
-        if (row === undefined) throw noSuchPlacement(movement.placementId)
+        const row = await getPlacement(tx, principal, movement.placementId)
         return created(c, "/placements", placementOf(row))
       },
     )
@@ -395,27 +380,23 @@ export function containerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, containerId, subscriptionId, propertyId, sharedCollectionPointId, validOn: day } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await placementsFrom(c.get("tx"), principal.companyId)
-          .where(
-            and(
-              placementScope(principal),
-              projectId === undefined ? undefined : eq(containerServicePlacement.projectId, projectId),
-              containerId === undefined ? undefined : eq(containerServicePlacement.containerId, containerId),
-              subscriptionId === undefined ? undefined : eq(containerServicePlacement.subscriptionId, subscriptionId),
-              propertyId === undefined ? undefined : eq(subscription.propertyId, propertyId),
-              sharedCollectionPointId === undefined
-                ? undefined
-                : or(eq(subscription.sharedCollectionPointId, sharedCollectionPointId), eq(containerServicePlacement.sharedCollectionPointId, sharedCollectionPointId)),
-              day === undefined ? undefined : validOn(containerServicePlacement, day),
-              after === undefined ? undefined : gt(containerServicePlacement.id, after),
-            ),
-          )
-          .orderBy(asc(containerServicePlacement.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(placementOf), limit))
+        const page = await listPlacements(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(containerServicePlacement.projectId, projectId),
+          containerId === undefined ? undefined : eq(containerServicePlacement.containerId, containerId),
+          subscriptionId === undefined ? undefined : eq(containerServicePlacement.subscriptionId, subscriptionId),
+          propertyId === undefined ? undefined : eq(subscription.propertyId, propertyId),
+          sharedCollectionPointId === undefined
+            ? undefined
+            : or(eq(subscription.sharedCollectionPointId, sharedCollectionPointId), eq(containerServicePlacement.sharedCollectionPointId, sharedCollectionPointId)),
+          day === undefined ? undefined : validOn(containerServicePlacement, day),
+        )
+        return c.json(mapPage(page, placementOf))
       },
     )
     .get(
@@ -435,8 +416,7 @@ export function containerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findPlacement(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchPlacement(id)
+        const row = await getPlacement(c.get("tx"), c.get("principal"), id)
         return c.json(placementOf(row))
       },
     )
@@ -464,8 +444,7 @@ export function containerRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        let current = await findPlacement(tx, principal, id)
-        if (current === undefined) throw noSuchPlacement(id)
+        let current = await getPlacement(tx, principal, id)
         const within = { companyId: principal.companyId, projectId: current.projectId }
         await requireWasteFraction(tx, principal.companyId, patch.wasteFractionId)
         await requireServiceFrequency(tx, within, patch.serviceFrequencyId)
@@ -475,8 +454,7 @@ export function containerRoutes(deps: RouteDeps) {
           // read again underneath the lock: the read above only said which
           // subscription to lock.
           if (current.subscriptionId !== null) await lockRow(tx, subscription, { companyId: principal.companyId, id: current.subscriptionId })
-          current = await findPlacement(tx, principal, id)
-          if (current === undefined) throw noSuchPlacement(id)
+          current = await getPlacement(tx, principal, id)
           // The end is the ledger's to set and to keep: a form corrects a
           // day the container already left on, and nothing else (a null,
           // which would take the end off, never reaches here: the contracts
@@ -495,8 +473,7 @@ export function containerRoutes(deps: RouteDeps) {
             .returning({ id: containerServicePlacement.id }),
         )
         if (written === undefined) throw noSuchPlacement(id)
-        const row = await findPlacement(tx, principal, id)
-        if (row === undefined) throw noSuchPlacement(id)
+        const row = await getPlacement(tx, principal, id)
         return c.json(placementOf(row))
       },
     )

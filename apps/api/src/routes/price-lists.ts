@@ -426,7 +426,7 @@ export function priceListRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findList(tx, principal, id)) === undefined) throw noSuchList(id)
+        await getPriceList(tx, principal, id)
         const page = await listPriceRows(tx, principal, at, eq(priceListRow.priceListId, id), productId === undefined ? undefined : eq(priceListRow.productId, productId), day === undefined ? undefined : validOn(priceListRow, day))
         return c.json(mapPage(page, rowOf))
       },

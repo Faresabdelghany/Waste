@@ -17,13 +17,14 @@ import { Page } from "@waste/contracts/pagination"
 import { userAccount } from "@waste/db/schema/access"
 import { auditEvent } from "@waste/db/schema/audit"
 import { AUDITED_TABLES } from "@waste/domain/audit/vocabulary"
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm"
+import { and, eq, isNull, or, sql } from "drizzle-orm"
 import { inProjects } from "../auth/projects"
 import { requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { describeJson, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 
 const AuditPage = Page(AuditEvent)
 
@@ -75,6 +76,14 @@ const eventOf = (row: Row): AuditEvent => ({
   transactionId: String(row.transactionId),
 })
 
+/** The audit log the caller reads, newest first: the company's own rows and its projects' the caller works in, each with the name of the account that made the change. */
+const { list: listEvents } = scoped(auditEvent, {
+  noun: "audit event",
+  reach: (principal) => or(isNull(auditEvent.projectId), inProjects(auditEvent.projectId, principal)),
+  read: (tx) => tx.select(columns).from(auditEvent).leftJoin(userAccount, and(eq(userAccount.companyId, auditEvent.companyId), eq(userAccount.id, auditEvent.actorUserAccountId))),
+  order: "desc",
+})
+
 export function auditEventRoutes(deps: RouteDeps) {
   return routes(deps).get(
     "/audit-events",
@@ -92,28 +101,15 @@ export function auditEventRoutes(deps: RouteDeps) {
     },
     async (c) => {
       const { table, rowId, limit, cursor } = c.req.valid("query")
-      const after = afterCursor(cursor)
+      const at = pageAt({ cursor, limit })
       const tx = c.get("tx")
       const principal = c.get("principal")
       requireAllowed(principal.grants, AUDITED_TABLES[table], "view")
       // The row, its sets, and their sets: two levels, which every parent of the audit list is within.
       const children = sql`select ${auditEvent.rowId} from ${auditEvent} where ${auditEvent.companyId} = ${principal.companyId} and ${auditEvent.parentTable} = ${table} and ${auditEvent.parentId} = ${rowId}`
       const ofRow = or(and(eq(auditEvent.tableName, table), eq(auditEvent.rowId, rowId)), and(eq(auditEvent.parentTable, table), eq(auditEvent.parentId, rowId)), sql`${auditEvent.parentId} in (${children})`)
-      const rows = await tx
-        .select(columns)
-        .from(auditEvent)
-        .leftJoin(userAccount, and(eq(userAccount.companyId, auditEvent.companyId), eq(userAccount.id, auditEvent.actorUserAccountId)))
-        .where(
-          and(
-            eq(auditEvent.companyId, principal.companyId),
-            or(isNull(auditEvent.projectId), inProjects(auditEvent.projectId, principal)),
-            ofRow,
-            after === undefined ? undefined : lt(auditEvent.id, after),
-          ),
-        )
-        .orderBy(desc(auditEvent.id))
-        .limit(fetchLimit(limit))
-      return c.json(pageOf(rows.map(eventOf), limit))
+      const page = await listEvents(tx, principal, at, ofRow)
+      return c.json(mapPage(page, eventOf))
     },
   )
 }

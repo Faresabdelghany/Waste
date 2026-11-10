@@ -17,15 +17,16 @@ import { HolidayList, HolidayListCreate, HolidayListHolidaysSet, HolidayListList
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { holidayList, holidayListHoliday, project } from "@waste/db/schema/organisation"
-import { and, asc, count, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, count, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
+import { scoped } from "../scoped"
 import { stamp } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -52,7 +53,7 @@ const NAME_TAKEN = "holiday_list_name_key"
 const countryTaken = (country: string) => `This company already has a holiday list for ${country}`
 const nameTaken = (name: string) => `This company already has a holiday list called ${JSON.stringify(name)}`
 
-const noSuchList = (id: string) => problem(404, { detail: `No holiday list ${id} in this company` })
+const { noSuch: noSuchList, get: getList, list: listLists } = scoped(holidayList, { noun: "holiday list", reach: "company", columns })
 
 /** What a project naming a list the company does not hold is told, at `holidayList`. */
 export const NO_SUCH_HOLIDAY_LIST = "Not a holiday list of this company: add it in Settings › Holiday lists first"
@@ -106,15 +107,6 @@ async function projectsOn(tx: Tx, companyId: string, name: string): Promise<stri
   return rows.map((row) => row.id)
 }
 
-async function findList(tx: Tx, companyId: string, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(holidayList)
-    .where(and(eq(holidayList.companyId, companyId), eq(holidayList.id, id)))
-    .limit(1)
-  return row
-}
-
 /** One list on the wire, with its days and its projects counted. */
 async function readList(tx: Tx, companyId: string, row: Row): Promise<HolidayList> {
   const holidays = (await holidaysOf(tx, companyId, [row.id])).get(row.id) ?? []
@@ -149,16 +141,10 @@ export function holidayListRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const { companyId } = c.get("principal")
         const tx = c.get("tx")
-        const rows = await tx
-          .select(columns)
-          .from(holidayList)
-          .where(and(eq(holidayList.companyId, companyId), after === undefined ? undefined : gt(holidayList.id, after)))
-          .orderBy(asc(holidayList.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listLists(tx, c.get("principal"), at)
         const holidays = await holidaysOf(tx, companyId, page.items.map((row) => row.id))
         const projects = await projectCountsOf(tx, companyId, page.items.map((row) => row.name))
         return c.json({ ...page, items: page.items.map((row) => listOf(row, holidays.get(row.id) ?? [], projects.get(row.name) ?? 0)) })
@@ -212,8 +198,7 @@ export function holidayListRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const row = await findList(tx, companyId, id)
-        if (row === undefined) throw noSuchList(id)
+        const row = await getList(tx, c.get("principal"), id)
         return c.json(await readList(tx, companyId, row))
       },
     )
@@ -277,8 +262,7 @@ export function holidayListRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         // The list's row lock as a key share's opposite: a project naming it waits for this, or this for it.
         await lockRow(tx, holidayList, { companyId, id }, "update")
-        const row = await findList(tx, companyId, id)
-        if (row === undefined) throw noSuchList(id)
+        const row = await getList(tx, c.get("principal"), id)
         const projects = await projectsOn(tx, companyId, row.name)
         if (projects.length > 0) {
           throw problem(409, { detail: `${projects.length === 1 ? "A project rests" : `${projects.length} projects rest`} on this holiday list: move ${projects.length === 1 ? "it" : "them"} off it first` })

@@ -52,7 +52,7 @@ import { pageAt } from "../pagination"
 import { describeProblem } from "../problem"
 import { addressLookup, foundAddress } from "./addresses"
 import { areaOf } from "./planning-areas"
-import { createProperty, findProperty, partiesOf, partyInForce, patchProperty, propertyOf, listProperties, propertyWithParties, noSuchProperty, setPropertyParties } from "./property-writes"
+import { createProperty, getProperty, listProperties, partiesOf, partyInForce, patchProperty, propertyOf, propertyWithParties, setPropertyParties } from "./property-writes"
 
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
@@ -152,8 +152,7 @@ export function propertyRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findProperty(tx, principal, id)
-        if (row === undefined) throw noSuchProperty(id)
+        const row = await getProperty(tx, principal, id)
         return c.json(await propertyWithParties(tx, principal.companyId, row, now()))
       },
     )
@@ -179,8 +178,7 @@ export function propertyRoutes(deps: RouteDeps) {
         const { on, purpose } = c.req.valid("query")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findProperty(tx, principal, id)
-        if (row === undefined) throw noSuchProperty(id)
+        const row = await getProperty(tx, principal, id)
         const scope = { companyId: principal.companyId, projectId: row.projectId }
         const day = on ?? (await projectToday(tx, scope, now)())
         const location = row.location as FlatPoint | null

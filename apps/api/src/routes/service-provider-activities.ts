@@ -72,9 +72,9 @@ import {
   type ActivityCommand,
   type ActivitySide,
 } from "@waste/domain/service-providers/activities"
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, nextNumberOf } from "@waste/db/commands/shared"
+import { nextNumberOf } from "@waste/db/commands/shared"
 import { projectToday } from "@waste/db/query/project-clock"
 import { stampsOf } from "@waste/db/shapes/times"
 
@@ -84,8 +84,9 @@ import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, serve
 import { requireAllowed } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, operation, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
+import { scoped } from "../scoped"
 import { NOT_A_DRIVER, requireServiceProvider } from "./references"
 import { successorDayIssue, successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { archivedRefusal, MODULE as SCHEMES } from "./scheme-groups"
@@ -202,22 +203,19 @@ async function writeFractions(tx: Tx, row: Pick<Row, "id" | "projectId">, compan
 const sideOf = (principal: Principal): ActivitySide => (providerIdOf(principal) === null ? "office" : "provider")
 
 /** The rows the caller reaches: its own provider's for a provider's account, its projects' for the office's; never both widened. */
-function reach(principal: Principal) {
-  const providerId = providerIdOf(principal)
-  const fence = providerId === null ? inProjects(serviceProviderActivity.projectId, principal) : eq(serviceProviderActivity.serviceProviderId, providerId)
-  return and(eq(serviceProviderActivity.companyId, principal.companyId), fence)
-}
-
-const noSuchActivity = (id: string) => problem(404, { detail: `No service provider activity ${id} this account reaches` })
-
-async function findActivity(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(serviceProviderActivity)
-    .where(and(reach(principal), eq(serviceProviderActivity.id, id)))
-    .limit(1)
-  return row
-}
+const {
+  get: getActivity,
+  locked: lockedActivity,
+  list: listActivities,
+} = scoped(serviceProviderActivity, {
+  noun: "service provider activity",
+  reach: (principal) => {
+    const providerId = providerIdOf(principal)
+    return providerId === null ? inProjects(serviceProviderActivity.projectId, principal) : eq(serviceProviderActivity.serviceProviderId, providerId)
+  },
+  place: "this account reaches",
+  columns,
+})
 
 export const NOT_A_SCHEME = "Not a route scheme of this project"
 export const NOT_A_GROUP_OF_THE_SCHEME = "Not a collection group of this scheme"
@@ -500,9 +498,7 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
    * judgement and the write, an approval's change.
    */
   const close = async (tx: Tx, principal: Principal, id: string, command: ActivityCommand, reason: string | null, apply?: (row: Row) => Promise<string>): Promise<Row> => {
-    await lockRow(tx, serviceProviderActivity, { companyId: principal.companyId, id })
-    const current = await findActivity(tx, principal, id)
-    if (current === undefined) throw noSuchActivity(id)
+    const current = await lockedActivity(tx, principal, id)
     const move = closesWith({ number: current.number, kind: current.kind, status: current.status }, command, sideOf(principal))
     if (!move.ok) throw problem(move.status, { detail: move.detail })
     const successorSchemeId = apply === undefined ? null : await apply(current)
@@ -578,26 +574,18 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, serviceProviderId, kind, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined && providerIdOf(principal) === null) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(serviceProviderActivity)
-          .where(
-            and(
-              reach(principal),
-              projectId === undefined ? undefined : eq(serviceProviderActivity.projectId, projectId),
-              serviceProviderId === undefined ? undefined : eq(serviceProviderActivity.serviceProviderId, serviceProviderId),
-              kind === undefined ? undefined : eq(serviceProviderActivity.kind, kind),
-              status === undefined ? undefined : eq(serviceProviderActivity.status, status),
-              after === undefined ? undefined : gt(serviceProviderActivity.id, after),
-            ),
-          )
-          .orderBy(asc(serviceProviderActivity.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listActivities(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(serviceProviderActivity.projectId, projectId),
+          serviceProviderId === undefined ? undefined : eq(serviceProviderActivity.serviceProviderId, serviceProviderId),
+          kind === undefined ? undefined : eq(serviceProviderActivity.kind, kind),
+          status === undefined ? undefined : eq(serviceProviderActivity.status, status),
+        )
         return c.json({ items: await answers(c.get("tx"), principal.companyId, items), nextCursor })
       },
     )
@@ -679,8 +667,7 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findActivity(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchActivity(id)
+        const row = await getActivity(c.get("tx"), c.get("principal"), id)
         return c.json(await answer(c.get("tx"), c.get("principal").companyId, row))
       },
     )
@@ -708,9 +695,7 @@ export function serviceProviderActivityRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        await lockRow(tx, serviceProviderActivity, { companyId: principal.companyId, id })
-        const current = await findActivity(tx, principal, id)
-        if (current === undefined) throw noSuchActivity(id)
+        const current = await lockedActivity(tx, principal, id)
         const kind = current.kind
         if (!OPEN_STATUSES.includes(current.status)) throw problem(409, { detail: `${activityLabel(current.number)} is ${current.status.replace("-", " ")}: only an open activity is corrected` })
         if (!correctedBy(kind, sideOf(principal))) throw problem(403, { detail: createRefusal(kind, sideOf(principal)) ?? undefined })
