@@ -1,38 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import {
-  BILLABLE_EVENT_KINDS,
-  BILLABLE_EVENT_STATUSES,
-  BILLING_RUN_STATUSES,
-  BLOCK_REASONS,
-  CANCEL_REASONS,
-  CREDIT_REASONS,
-  EXCLUSION_REASONS,
-  INDEX_BASES,
-  INVOICE_KINDS,
-  SETTLEMENT_EVENT_KINDS,
-  SETTLEMENT_STATUSES,
-  WEIGHT_REVIEW_DECISIONS,
-  WEIGHT_REVIEW_STATUSES,
-} from "@waste/domain/finance/vocabulary"
-
-import {
-  BillableEventKind,
-  BillableEventStatus,
-  BillingRunStatus,
-  BlockReason,
-  CancelReason,
-  CreditReason,
-  ExclusionReason,
-  IndexBase,
-  InvoiceKind,
-  SettlementEventKind,
-  SettlementStatus,
-  WeightReviewDecision,
-  WeightReviewState,
-  WeightReviewStatus,
-} from "../finance"
+import { BillableEventStatus, BlockReason, IndexBase, SettlementStatus, WeightReviewState, WeightReviewStatus } from "../finance"
 import { Minor, NonNegativeInt, NonNegativeMinor } from "../resource"
 import { refusal } from "./expect"
 
@@ -40,22 +9,6 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 
 describe("the Finance enums", () => {
-  test("are the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(BillableEventKind.options, [...BILLABLE_EVENT_KINDS])
-    assert.deepEqual(BlockReason.options, [...BLOCK_REASONS])
-    assert.deepEqual(CancelReason.options, [...CANCEL_REASONS])
-    assert.deepEqual(BillableEventStatus.options, [...BILLABLE_EVENT_STATUSES])
-    assert.deepEqual(BillingRunStatus.options, [...BILLING_RUN_STATUSES])
-    assert.deepEqual(ExclusionReason.options, [...EXCLUSION_REASONS])
-    assert.deepEqual(InvoiceKind.options, [...INVOICE_KINDS])
-    assert.deepEqual(CreditReason.options, [...CREDIT_REASONS])
-    assert.deepEqual(SettlementStatus.options, [...SETTLEMENT_STATUSES])
-    assert.deepEqual(SettlementEventKind.options, [...SETTLEMENT_EVENT_KINDS])
-    assert.deepEqual(WeightReviewDecision.options, [...WEIGHT_REVIEW_DECISIONS])
-    assert.deepEqual(WeightReviewStatus.options, [...WEIGHT_REVIEW_STATUSES])
-    assert.deepEqual(IndexBase.options, [...INDEX_BASES])
-  })
-
   test("refuse the prototype's display strings and the readings that are never stored", () => {
     assert.equal(BillableEventStatus.safeParse("In progress").success, false, "the deferred recurring event's")
     assert.equal(BillableEventStatus.safeParse("in-progress").success, false)

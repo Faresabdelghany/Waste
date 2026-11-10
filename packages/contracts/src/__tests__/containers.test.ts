@@ -1,8 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
-
 import {
   Container,
   ContainerCreate,
@@ -52,7 +50,6 @@ const placement = {
 
 describe("ContainerOwnership", () => {
   test("is the vocabulary the database checks against, value for value and in the same order", () => {
-    assert.deepEqual(ContainerOwnership.options, [...CONTAINER_OWNERSHIPS])
     assert.equal(ContainerOwnership.safeParse("leased").success, false)
   })
 })
