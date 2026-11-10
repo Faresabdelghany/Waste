@@ -99,8 +99,6 @@ export function propertyRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        // Paged first, so the row that only proves there is a next page is
-        // not one of the properties whose parties are loaded.
         const { items, nextCursor } = await listProperties(
           tx,
           principal,

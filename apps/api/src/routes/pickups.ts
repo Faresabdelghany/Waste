@@ -5,7 +5,7 @@
 // `remove`, a stop taken off a route that has not started, and
 // `correct-outcome`, the audited change of an outcome the driver recorded. A
 // pickup is written by generation and by commands, never by a form
-// (contracts/pickups.ts), and never deleted: a stop removed is `skipped ·
+// (@waste/contracts/pickups), and never deleted: a stop removed is `skipped ·
 // removed-by-dispatcher`, and the address it named is still in the route's
 // record.
 //
@@ -294,7 +294,6 @@ async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: Pi
     if (wasteFractionId === null) throw invalidRequest("body", [{ path: "wasteFractionId", message: NAME_THE_FRACTION }])
     if (body.wasteFractionId != null) await requireWasteFraction(tx, scope.companyId, body.wasteFractionId)
     if (!inForceOn(under, serviceDate)) throw problem(409, { detail: notInForceOn(serviceDate) })
-    // The two statuses are text the columns' checks hold to the vocabulary, read as the statuses they are.
     refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus }, "stop")
     await requireDeparture(tx, principal.companyId, taken, "issue")
     return {
@@ -423,7 +422,6 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
       : isLedgerService(body.service)
         ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate)
         : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
-  // What the stop holds back from another booking: the delivery's container or the swap's replacement, and the container a removal or a swap takes away.
   const planned = { service: body.service, status: "planned" as const, containerId: stop.at.containerId, replacementContainerId: stop.booking.replacementContainerId }
   const reserved = reservedContainerOf(planned)
   const taken = takenContainerOf(planned)
@@ -435,7 +433,6 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
   if (stop.at.containerId !== null && (await officeStopPlanned(tx, principal.companyId, parent.id, { containerId: stop.at.containerId, service: body.service }))) {
     throw problem(409, { detail: bookedAlready(stop.label ?? stop.at.containerId, body.service, labelOf(parent)) })
   }
-  // And the ticket held to the stop's place, open, and answered by no other planned stop.
   const answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
   const added = await addStop(tx, principal.companyId, parent, {
     id: newId(),
@@ -530,7 +527,6 @@ export function pickupRoutes(deps: RouteDeps) {
           )
           .orderBy(asc(pickup.id))
           .limit(fetchLimit(limit))
-        // Paged first, so the row that only proves there is a next page brings no route of its own to read.
         const { items, nextCursor } = pageOf(rows, limit)
         const sequences = await sequencesOfRoutes(
           tx,

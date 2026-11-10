@@ -187,7 +187,6 @@ const nameTaken = (name: string) => `This project already has a property called 
 const REGISTRY_TAKEN = "property_registry_id_idx"
 const registryTaken = (registryId: string) => `This company already has a property with the registry identifier ${registryId}`
 
-/** The sentences a write here can earn, and only for the fields the body gave. */
 const collisions = (values: { name?: string; registryId?: string | null }): Record<string, string> => ({
   ...(values.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(values.name) }),
   ...(values.registryId == null ? {} : { [REGISTRY_TAKEN]: registryTaken(values.registryId) }),
