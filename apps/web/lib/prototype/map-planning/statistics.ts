@@ -1,12 +1,12 @@
 // What a map selection amounts to (2026-09-16): the Selected area panel's
 // numbers, every one derived at render time from the selected container
-// records and Settings' asset catalogue. Assumed weight and volume are one
-// emptying of each container — per the container type's fraction weight,
-// else its volume × the fraction's kg/L — multiplied by the collections
-// expected in the quantities range: generated route stops when a Route has
-// them, else the registry's next collection repeated at the container's
-// service frequency. Collected weight sums the Weight of completed Pickups
-// for those containers in the range. Pure data logic.
+// records and the asset-management store's catalogue. Assumed weight and
+// volume are one emptying of each container — per the container type's
+// fraction weight, else its volume × the fraction's kg/L — multiplied by the
+// collections expected in the quantities range: generated route stops when a
+// Route has them, else the registry's next collection repeated at the
+// container's service frequency. Collected weight sums the Weight of
+// completed Pickups for those containers in the range. Pure data logic.
 
 import type { BusinessRecord } from "../prototype-record"
 import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
@@ -19,14 +19,14 @@ import { nextCollectionDate, parseDisplayDate } from "./schedule"
 export type QuantityRange = { from: string; to: string } | null
 
 export type StatisticsInputs = {
-  /** Settings › Asset management container types — the volume and per-fraction weights. */
+  /** The asset-management store's container types — the volume and per-fraction weights. */
   containerTypes: ReadonlyArray<{
     name: string
     volume: number
     volumeUnit: "L" | "m³"
     wasteFractionWeights: Record<string, number>
   }>
-  /** Settings › Asset management waste fractions — the kg/L fallback. */
+  /** The asset-management store's waste fractions — the kg/L fallback. */
   wasteFractions: ReadonlyArray<{ id: string; name: string; weightToVolumeRatio: number }>
   /** Container id → generated collection dates (lib/prototype/map-planning/schedule). */
   stopIndex: ReadonlyMap<string, readonly string[]>
@@ -55,7 +55,6 @@ const DEFAULT_KG_PER_LITRE = 0.12
 /** Guard against runaway projections (daily over a long range is still < 400). */
 const MAX_PROJECTED_COLLECTIONS = 400
 
-/** "Two-wheel bin · 240 L" / "Igloo · 3,000 L" / "2.5 m³ skip" → litres, or null. */
 export function litresFromTypeName(name: string): number | null {
   const litres = /([\d,.]+)\s*L\b/i.exec(name)
   if (litres) return Number.parseFloat(litres[1].replace(/,/g, ""))
@@ -64,7 +63,6 @@ export function litresFromTypeName(name: string): number | null {
   return null
 }
 
-/** "148 kg" → 148, "8.2 t" → 8200, anything else → 0. */
 export function parseWeightKg(value: string | undefined): number {
   const match = /([\d,.]+)\s*(kg|t)\b/i.exec(value ?? "")
   if (!match) return 0
@@ -112,7 +110,6 @@ function containerUnitWeightKg(
   return volumeLitres * (fraction?.weightToVolumeRatio ?? DEFAULT_KG_PER_LITRE)
 }
 
-/** Collections expected for a container in the range — see the module comment. */
 export function expectedCollections(
   container: BusinessRecord,
   inputs: Pick<StatisticsInputs, "stopIndex" | "range" | "today">,

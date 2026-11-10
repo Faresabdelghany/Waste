@@ -17,7 +17,6 @@ import { answerOf, pick, toasts } from "./routes-support"
 // the same template through the API, and the worker withholds it. Records
 // are uniquely named and never cleaned up.
 
-/** Reads a message until the worker has settled it, and answers how it stands. */
 async function settled(api: import("@playwright/test").APIRequestContext, id: string): Promise<Message> {
   let message: Message | undefined
   await expect
@@ -36,7 +35,6 @@ test("a template written in Settings, sent to an organisation from its details t
   test.setTimeout(180_000)
   const templateName = uniqueName("E2E Collection moved")
 
-  // Settings › Message templates: an e-mail for service messages in Copenhagen Central.
   const read = answerOf(page, "GET", "/message-templates")
   await page.goto("/settings?pane=message-templates")
   expect((await read).status()).toBe(200)
@@ -53,7 +51,6 @@ test("a template written in Settings, sent to an organisation from its details t
   await expect(toasts(page)).toContainText("Template added")
   await expect(page.getByTestId("message-templates").getByText(templateName)).toBeVisible()
 
-  // An organisation of its own, with its e-mail and a contact person reached by phone.
   const name = uniqueName("E2E Messaging Housing")
   const made = await api.post("/customers", { data: { kind: "organisation", name, email: "kontor@messaging.example" } })
   expect(made.status(), await made.text()).toBe(201)
@@ -62,7 +59,6 @@ test("a template written in Settings, sent to an organisation from its details t
   expect(contact.status(), await contact.text()).toBe(201)
   expect(((await contact.json()) as CustomerContact).status).toBe("active")
 
-  // Its details: Send message, the template to the organisation's own address.
   const customers = answerOf(page, "GET", "/customers")
   await page.goto("/customers?module=contacts")
   expect((await customers).status()).toBe(200)
@@ -81,12 +77,10 @@ test("a template written in Settings, sent to an organisation from its details t
   expect(queued).toMatchObject({ status: "queued", recipient: "kontor@messaging.example", subject: `Your collection, ${name}` })
   await expect(toasts(page)).toContainText("Message queued")
 
-  // The worker sends it through the log-only sender; Refresh shows it Sent.
   expect(await settled(api, queued.id)).toMatchObject({ status: "sent", provider: "log", providerMessageId: `log-${queued.id}`, attempts: 1 })
   await section.getByRole("button", { name: "Refresh" }).click()
   await expect(section.getByTestId("customer-message-rows").getByText("Sent · E-mail to kontor@messaging.example")).toBeVisible()
 
-  // Consent: a person who allows no service messages is never sent one.
   const declined = await api.post("/customers", { data: { kind: "person", name: uniqueName("E2E No messages"), email: "no-messages@messaging.example", serviceMessagesAllowed: false } })
   expect(declined.status(), await declined.text()).toBe(201)
   const person = (await declined.json()) as Customer

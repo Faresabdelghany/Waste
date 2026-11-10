@@ -1,6 +1,3 @@
-// Settings' panes as one table (lib/modules/settings-panes.ts): the one pane
-// drawn without an API, the panes a page took the place of, and the
-// addresses built from it.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

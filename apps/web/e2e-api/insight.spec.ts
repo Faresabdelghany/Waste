@@ -81,7 +81,6 @@ async function downloaded(download: Download): Promise<string[][]> {
   return csvRows(await readFile(path, "utf8"))
 }
 
-/** Picks an option of one of the Dashboard's filters by its label. */
 async function choose(page: Page, filter: string, option: string) {
   await page.getByLabel(filter, { exact: true }).click()
   await page.getByRole("option", { name: option, exact: true }).click()
@@ -96,7 +95,6 @@ test("the Dashboard shows the tenant's numbers after a generated route is run, a
   const window = { projectId: route.projectId, from: addDays(today, -6), to: today, interval: "day" }
   const before = await report<ServiceReport>(api, "/reports/service", window)
 
-  // The driver runs the route: starts it, collects the first stop, fails the second, ends the day.
   const context = await freshContext(browser)
   try {
     const driverPage = await context.newPage()
@@ -128,7 +126,6 @@ test("the Dashboard shows the tenant's numbers after a generated route is run, a
   expect(after.pickups.missed).toBe(before.pickups.missed + stops.length - 1)
   expect(after.routes.started).toBe(before.routes.started + 1)
 
-  // The office captures the weighbridge ticket on it.
   const [station] = await listAll<Named>(api, "/unloading-stations")
   const residual = (await listAll<Named & { key: string }>(api, "/waste-fractions")).find((fraction) => fraction.key === "residual")
   if (station === undefined || residual === undefined) throw new Error("the seed has no station or no residual fraction")

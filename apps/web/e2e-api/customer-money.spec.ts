@@ -24,7 +24,6 @@ type InvoiceLine = { id: string; position: number; billableEventId: string | nul
 type InvoiceDetail = { id: string; label: string; kind: string; lines: InvoiceLine[]; creditNotes: { id: string; label: string }[] }
 type ListPage<T> = { items: T[]; nextCursor: string | null }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
@@ -62,7 +61,6 @@ async function agreementNumbered(api: APIRequestContext, number: string): Promis
   return agreement
 }
 
-/** A product of the project made through the API, active and with a VAT rate: what a test prices or bills. */
 async function newProduct(api: APIRequestContext, project: Project, prefix: string): Promise<Product> {
   const name = uniqueName(prefix)
   const response = await api.post("/products", { data: { projectId: project.id, name, kind: "additional-service", status: "active", unit: "job", invoiceName: name, invoiceCode: `E2E-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase(), vatPercent: 25 } })
@@ -84,7 +82,6 @@ function dayOfItsOwn(): string {
 /** A fact of a record's details, the row its label heads (`StatRow`). */
 const factOf = (details: Locator, label: string) => details.getByText(label, { exact: true }).locator("xpath=../..")
 
-/** Opens a Price Engine module and waits for its list read. */
 async function openModule(page: Page, moduleId: string, listPath: RegExp) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(`/commercial?module=${moduleId}`)
@@ -297,7 +294,6 @@ test("Billing Runs: a run previewed, then run over a day of its own; its invoice
   if (invoice === undefined) throw new Error("the run issued no invoice with the event's line")
   const line = invoice.lines.find((candidate) => candidate.billableEventId === event.id)!
 
-  // The run's details list the invoice it issued; it opens in Invoices with its lines.
   const runDetails = page.getByTestId("billing-run-commands")
   await expect(runDetails.getByTestId("run-invoices").getByText(new RegExp(`^${invoice.label} · `))).toBeVisible()
   await runDetails.getByTestId("run-invoices").getByText(new RegExp(`^${invoice.label} · `)).click()

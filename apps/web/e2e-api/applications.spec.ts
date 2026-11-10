@@ -19,7 +19,6 @@ type Application = { id: string; number: number; status: string; kind: string; c
 /** A day `offset` days from today, `YYYY-MM-DD` on the UTC calendar: never after today on the project's clock, which runs ahead of UTC. */
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
 
-/** The browser's API call a submit or a press makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
@@ -40,7 +39,6 @@ test("an application recorded, reviewed and decided in part, its letter printed,
   await page.goto("/customers?module=applications")
   expect((await loaded).status()).toBe(200)
 
-  // Recorded by the module's own form: the customer's statement, no place.
   await page.getByRole("main").getByRole("button", { name: "Record application" }).click()
   const form = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Record application" }) })
   await pick(form, page, "Project", TESTER_PROJECT)
@@ -76,7 +74,6 @@ test("an application recorded, reviewed and decided in part, its letter printed,
   const decision = ((await decided.json()) as Application).decision
   await expect(commands.getByTestId("application-decisions").getByRole("listitem")).toHaveText([new RegExp(`Partly granted · ${day(7)} to ${day(36)}$`)])
 
-  // The letter, printed from its own page.
   const [letterPage] = await Promise.all([page.context().waitForEvent("page"), commands.getByRole("link", { name: "Decision letter" }).click()])
   const letter = letterPage.getByTestId("decision-letter")
   await expect(letter.getByRole("heading", { name: `Decision on application ${application.number}: Fee correction` })).toBeVisible()
@@ -85,7 +82,6 @@ test("an application recorded, reviewed and decided in part, its letter printed,
   await expect(letter.getByText("Write to the municipality within four weeks.")).toBeVisible()
   await letterPage.close()
 
-  // Reopened on an appeal, then the appeal withdrawn: back to the Decision it had.
   const [reopened] = await Promise.all([answerOf(page, "POST", `/applications/${application.id}/reopen`), commands.getByRole("button", { name: "Reopen on appeal" }).click()])
   expect(reopened.status()).toBe(200)
   const [withdrawn] = await Promise.all([answerOf(page, "POST", `/applications/${application.id}/withdraw`), commands.getByRole("button", { name: "Withdraw appeal" }).click()])

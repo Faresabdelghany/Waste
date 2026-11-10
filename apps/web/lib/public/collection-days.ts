@@ -54,10 +54,8 @@ export type SearchPageView =
 /** What the search page asked the door, once: the search where the query is `askable`, whose answer names the project too, else the project alone. */
 export type SearchAsked = { asked: "project"; query: string | null; answer: DoorAnswer<PublishedProject> } | { asked: "search"; query: string; answer: DoorAnswer<AddressMatches> }
 
-/** Whether a query is long enough to ask the door with. */
 export const askable = (query: string | null): query is string => query !== null && query.length >= ADDRESS_SEARCH.min
 
-/** The search page the door's answer makes. */
 export function searchPageViewOf(asked: SearchAsked): SearchPageView {
   if (asked.asked === "project") {
     const { query, answer } = asked
@@ -78,12 +76,10 @@ export function dayLabelOf(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`))
 }
 
-/** A month heading: `October 2026`. */
 export function monthLabelOf(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`))
 }
 
-/** One date with every collection on it. */
 export type CalendarDate = { date: string; collections: PublicCollectionDay[] }
 
 /** The days by date, in order: one entry per date however many fractions or groups come that day. */
@@ -109,7 +105,6 @@ export function nextDatesOf(days: readonly PublicCollectionDay[], count: number)
   return next
 }
 
-/** The dates by month, in order. */
 export function monthsOf(days: readonly PublicCollectionDay[]): { month: string; dates: CalendarDate[] }[] {
   const months: { month: string; dates: CalendarDate[] }[] = []
   for (const date of datesOf(days)) {
@@ -131,7 +126,6 @@ export function calendarHrefOf(slug: string, { embed = false, addressId, query, 
   return asked === "" ? path : `${path}?${asked}`
 }
 
-/** Where the address's feed lives on the web's own origin. */
 export const feedPathOf = (slug: string, addressId: string): string => `${calendarHrefOf(slug, { addressId })}/calendar.ics`
 
 /** The feed as a calendar app subscribes to it (`webcal:`) and as a URL is pasted into one, on the origin the visitor reached. */

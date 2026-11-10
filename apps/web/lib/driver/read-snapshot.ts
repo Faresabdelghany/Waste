@@ -25,10 +25,8 @@ const SNAPSHOTS = "snapshots"
 /** How long a kept answer may be shown: a working day and its evening, never the next day's start. */
 export const SNAPSHOT_MAX_AGE_MS = 18 * 60 * 60 * 1000
 
-/** An answer of the door and when it came. */
 export type Kept<Answer> = { answer: Answer; readAt: string }
 
-/** One login's last answers: the start screen, and the routes by id. */
 export type ReadSnapshot = { me: Kept<DriverMe> | null; routes: Readonly<Record<string, Kept<DriverRouteDetail>>> }
 
 export const EMPTY_SNAPSHOT: ReadSnapshot = { me: null, routes: {} }

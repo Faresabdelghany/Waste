@@ -112,6 +112,5 @@ export function seasonsFromValues(values: Record<string, unknown> | null | undef
   return seasonProblems(stored).length === 0 ? schemeSeasonsOf(stored) : []
 }
 
-/** The JSON a record carries for a set of seasons, by the day each starts. */
 export const seasonsValue = (seasons: readonly StoredSchemeSeason[]): string =>
   JSON.stringify([...seasons].sort((a, b) => a.startsOn.localeCompare(b.startsOn)))

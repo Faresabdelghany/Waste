@@ -17,12 +17,9 @@ export const readDriverRouteMessages = (client: ApiClient, routeId: string): Pro
 /** A message's id, minted on the device: the key a send tried again is the same message by. */
 export const mintMessageId = (now = Date.now(), fill = (bytes: Uint8Array) => crypto.getRandomValues(bytes)): string => mintId(now, fill(new Uint8Array(ID_RANDOM_BYTES)))
 
-/** The driver's message to the office under the id the device minted, answered as the thread reads it. */
 export const sendDriverRouteMessage = (client: ApiClient, routeId: string, message: { id: string; body: string }): Promise<RouteMessage> =>
   post<RouteMessage>(client, `/driver/routes/${encodeURIComponent(routeId)}/messages`, { id: message.id, body: message.body.trim() }).then((answer) => answer.body)
 
-/** Whether the text may be sent: something, and not past the bound. */
 export const sendable = (text: string): boolean => routeMessageIssue(text) === null
 
-/** Who wrote a message, as the driver reads it: the office, or themselves. */
 export const authorLine = (message: Pick<RouteMessage, "author" | "senderName">): string => (message.author === "driver" ? "You" : `Office · ${message.senderName}`)

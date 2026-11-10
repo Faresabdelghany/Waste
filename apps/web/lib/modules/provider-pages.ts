@@ -12,7 +12,6 @@ export const PROVIDER_WORKSPACE_PATH = "/service-provider-workspace"
 type ProviderPageSpec = {
   id: ProviderPageId
   label: string
-  /** Whether the page offers its modules' primary action. */
   showWorkspaceActions: boolean
   /**
    * The primary action on the Pilot, where it differs. A provider's fleet is
@@ -38,7 +37,6 @@ const PAGES: readonly ProviderPageSpec[] = [
   { id: "team", label: "Team", showWorkspaceActions: true },
 ]
 
-/** Where a page of the provider's workspace is. */
 export function providerPagePath(id: ProviderPageId): string {
   return `${PROVIDER_WORKSPACE_PATH}/${id}`
 }

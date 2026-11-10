@@ -31,7 +31,6 @@ test("an organisation's contact persons: one added with a role and an e-mail, th
   const section = page.getByTestId("contact-persons")
   await expect(section.getByText("No one is registered to speak for this organisation yet.")).toBeVisible()
 
-  // Add contact: a billing contact reached by e-mail.
   await section.getByRole("button", { name: "Add contact" }).click()
   const add = page.getByRole("dialog", { name: `New contact person for ${name}` })
   await add.getByLabel("Name").fill("Hanne Holm")
@@ -57,7 +56,6 @@ test("an organisation's contact persons: one added with a role and an e-mail, th
   const read = (await (await api.get(`/customers/${organisation.id}/contacts`)).json()) as { items: CustomerContact[] }
   expect(read.items.map((contact) => [contact.name, contact.status])).toEqual([["Hanne Holm", "inactive"]])
 
-  // A person is their own contact: no section in their details.
   await page.keyboard.press("Escape")
   await search.fill(personName)
   await page.getByRole("button", { name: `Open ${personName}` }).first().click()

@@ -36,7 +36,6 @@ export function canonicalCalendarName(value: string | undefined) {
   return value ? legacyCalendarNames[value] ?? value : value
 }
 
-/** "2026-12-25, 2026-12-26" or newline-separated → valid ISO dates only. */
 export function parseHolidayDates(value: string | undefined): string[] {
   if (!value) return []
   return [

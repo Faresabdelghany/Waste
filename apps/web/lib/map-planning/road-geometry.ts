@@ -62,7 +62,6 @@ export function roadGeometryOfLegs(legs: readonly WireLeg[], source: RoadSource)
   }
 }
 
-/** The whole road, leg after leg, each joint vertex once. */
 export function roadPath(geometry: RoadGeometry): LngLat[] {
   const path: LngLat[] = []
   for (const leg of geometry.legs) {
@@ -73,8 +72,6 @@ export function roadPath(geometry: RoadGeometry): LngLat[] {
   }
   return path
 }
-
-/* ------------------------------- rendering ------------------------------- */
 
 /** Road paths are built once in world pixels at this zoom and moved by one group transform. */
 export const ROAD_REF_ZOOM = 16
@@ -109,7 +106,6 @@ export function roadOverlay(project: (lngLat: LngLat) => ScreenPoint | null): Ro
   return { transform: `translate(${origin.x} ${origin.y}) scale(${scale})`, scale }
 }
 
-/** The SVG path of a road in the overlay's own space — localPathData at ROAD_REF_ZOOM, relative to ROAD_ORIGIN. */
 export function roadOverlayPath(points: readonly LngLat[]): string {
   return localPathData(points, ROAD_REF_ZOOM, ROAD_ORIGIN)
 }

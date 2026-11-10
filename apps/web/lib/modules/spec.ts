@@ -32,7 +32,6 @@ export type ModulePlacement =
 /** A page of the service provider's own workspace (`/service-provider-workspace/<page>`). */
 export type ProviderPageId = "routes" | "fleet" | "tickets" | "activities" | "team"
 
-/** How one rich module's record table behaves. */
 export type RichModuleTable = {
   /** Fact columns seeded into view options when the module opens. */
   seededFactColumns: readonly string[]
@@ -117,7 +116,6 @@ export type ModuleSpec = {
   filters?: ModuleFilters
   /** Its rows are a party's own (a provider's fleet, routes, awards, money): a provider's scope offers its own alone, never the unattributed ones. */
   providerOperated?: true
-  /** Its form as a service provider's account is shown it. */
   providerForm?: ProviderForm
   picked?: ModulePicked
   /** A receive, transfer, reserve, adjust, release or issue appends a movement to its ledger rather than changing the row. */
@@ -152,7 +150,6 @@ export type WorkspaceSpec<W extends WorkspaceKey> = {
   modules: { readonly [Module in ModuleIdOf<W>]: ModuleSpec }
 } & WorkspacePath<W>
 
-/** A workspace's spec, named by its key. */
 export function workspaceSpec<W extends WorkspaceKey>(id: W, spec: WorkspaceSpec<W>): WorkspaceSpec<W> & { id: W } {
   return { id, ...spec }
 }

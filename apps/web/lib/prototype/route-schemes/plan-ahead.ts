@@ -9,7 +9,6 @@ export function isPlanAheadEnabled(scheme: BusinessRecord): boolean {
   return value === true || value === "true"
 }
 
-/** The toggled scheme record to upsert; the input is left untouched. */
 export function setPlanAhead(
   scheme: BusinessRecord,
   enabled: boolean,

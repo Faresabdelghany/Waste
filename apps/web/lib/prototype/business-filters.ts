@@ -2,10 +2,10 @@
  * The shared filter model behind every record toolbar: the one
  * `BusinessFilters` shape the filter popover variants edit, the chip labels
  * the toolbar renders active selections as, and the pure matching used by
- * surfaces that filter records outside `BusinessWorkspace` (the Route Scheme
- * detail tabs). The workspace component keeps its own per-module matching
- * with legacy-key fallbacks; both read this file for the shape and labels so
- * a new category is declared in exactly one place.
+ * surfaces that filter records through readers. The workspace component keeps
+ * its own per-module matching with legacy-key fallbacks for a module without
+ * readers; both read this file for the shape and labels so a new category is
+ * declared in exactly one place.
  */
 import { EMPTY_FACT } from "./record-values"
 import type { BusinessRecord } from "./prototype-record"
@@ -124,12 +124,10 @@ export const emptyBusinessFilters: BusinessFilters = Object.fromEntries(
   BUSINESS_FILTER_KEYS.map((key) => [key, [] as string[]]),
 ) as BusinessFilters
 
-/** A single-valued fact as filter values; the "—" placeholder is no value. */
 export function singleFilterValue(value: string | undefined): string[] {
   return value && value !== EMPTY_FACT ? [value] : []
 }
 
-/** A " · "-joined multi-valued fact (waste fractions, service scope) as values. */
 export function splitFilterValues(value: string | undefined): string[] {
   if (!value || value === EMPTY_FACT) return []
   return value
@@ -147,7 +145,6 @@ export type FilterValueReaders = Partial<
   Record<BusinessFilterKey, (record: BusinessRecord) => string[]>
 >
 
-/** AND across categories, OR within one; empty categories always pass. */
 export function matchesBusinessFilters(
   record: BusinessRecord,
   filters: BusinessFilters,
@@ -164,7 +161,6 @@ export function matchesBusinessFilters(
   return true
 }
 
-/** The workspace search semantics: every display field and fact value. */
 export function matchesBusinessQuery(record: BusinessRecord, query: string): boolean {
   const normalized = query.trim().toLowerCase()
   if (!normalized) return true
@@ -203,7 +199,6 @@ export function applyBusinessFilters<T extends BusinessRecord>(
  */
 export type BusinessFilterChip = { key: BusinessFilterKey; label: string; value: string }
 
-/** Active selections as removable chips, in category order. */
 export function businessFilterChips(filters: BusinessFilters): BusinessFilterChip[] {
   const chips: BusinessFilterChip[] = []
   for (const key of BUSINESS_FILTER_KEYS) {
@@ -214,7 +209,6 @@ export function businessFilterChips(filters: BusinessFilters): BusinessFilterChi
   return chips
 }
 
-/** Removes one value from one category; a value that is not selected leaves the filters as they are. */
 export function removeBusinessFilterValue(
   filters: BusinessFilters,
   key: BusinessFilterKey,

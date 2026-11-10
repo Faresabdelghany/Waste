@@ -12,13 +12,11 @@ export type LocalRefusal = { path: string; message: string }
 export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
   typeof value === "object" && value !== null && typeof (value as LocalRefusal).path === "string" && typeof (value as LocalRefusal).message === "string"
 
-/** `<prefix>-<uuid>`: a resource's web id. */
 export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`
 
 /** The server's id a `webIdOf` id carries, for an address that names a row by the API's id where no resolver is at hand. */
 export const serverIdIn = (prefix: string, webId: string): string => webId.slice(prefix.length + 1)
 
-/** True for a record whose id carries the prefix — a browser-minted one or a `webIdOf`. */
 export const hasPrefix = (prefix: string) => (record: Pick<BusinessRecord, "id">) => record.id.startsWith(`${prefix}-`)
 
 /**
@@ -39,12 +37,10 @@ export function statusLabel(token: string): string {
   return capitalised(token.replace(/[-_]+/g, " "))
 }
 
-/** The inverse: `Active` → `active`, `Service contact` → `service-contact`. */
 export function statusToken(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, "-")
 }
 
-/** A typed form value read as a non-blank string, or undefined. */
 export function typed(record: Pick<BusinessRecord, "submittedValues">, key: string): string | undefined {
   const value = record.submittedValues?.[key]
   if (typeof value !== "string") return undefined
@@ -52,7 +48,6 @@ export function typed(record: Pick<BusinessRecord, "submittedValues">, key: stri
   return trimmed === "" ? undefined : trimmed
 }
 
-/** A typed form value read as a boolean, or undefined when it is not one. */
 export function typedFlag(record: Pick<BusinessRecord, "submittedValues">, key: string): boolean | undefined {
   const value = record.submittedValues?.[key]
   return typeof value === "boolean" ? value : undefined

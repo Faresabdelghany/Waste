@@ -18,7 +18,7 @@ type Grant = { moduleKey: string; actions: string[] }
 // then withdrawn from the role while the page is open, and the change the
 // role may no longer make is refused by the API — `about:blank` 403 — and
 // the person told in the API's own words (business-record-store.tsx,
-// `reportProblem`) while the session stays open: authentication and
+// `TOASTS.refused`) while the session stays open: authentication and
 // authorization are apart (lib/api/session.ts), and only the account's own
 // refusal ends a session. Read again, `/me` grants no edit on the contacts,
 // and no status change is offered.
@@ -51,11 +51,9 @@ test("a grant withdrawn in-session is refused in the API's words, stays signed i
     await page.goto("/customers?module=contacts")
     expect((await customersRead).status()).toBe(200)
 
-    // The organisation is not the role's to view: the store never asked, so there is nothing to say.
     expect(asked.filter((call) => /\/waste-api\/(company|projects)\b/.test(call))).toEqual([])
     await expect(page.getByText("configure.organization could not be read from the API")).toHaveCount(0)
 
-    // A status change on a customer is an edit the role holds: offered.
     // The search is typed once: the modules landing after it no longer clear it (#197), and a module not granted loses no row (#200).
     await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
     await page.getByRole("button", { name: `Open ${name}` }).click()
@@ -65,7 +63,6 @@ test("a grant withdrawn in-session is refused in the API's words, stays signed i
     const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
     await expect(governed.getByRole("button", { name: "Confirm inactive" })).toBeEnabled()
 
-    // The edit is withdrawn while the page is open: the change is still sent, and refused in the API's words.
     const withdrawn = await api.put(`/roles/${roleId}/grants`, { data: { grants: planner.grants } })
     expect(withdrawn.status(), await withdrawn.text()).toBe(200)
     const [patched] = await Promise.all([
@@ -86,7 +83,6 @@ test("a grant withdrawn in-session is refused in the API's words, stays signed i
     await expect(governed).toBeHidden()
     await expect(sheet.getByRole("button", { name: "Inactive" })).toBeVisible()
 
-    // Still here, still signed in: the page was not sent to /login, and the token the browser holds is still taken.
     await expect(page).toHaveURL(/\/customers/)
     const token = await accessTokenOf(context)
     expect(token).not.toBeNull()
@@ -103,7 +99,6 @@ test("a grant withdrawn in-session is refused in the API's words, stays signed i
       await tester.dispose()
     }
 
-    // Read again on a page loaded afresh, `/me` grants no edit on the contacts: the customer opens, and no status change is offered.
     const meRead = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/me")
     await page.goto("/customers?module=contacts")
     expect((await meRead).status()).toBe(200)
@@ -138,7 +133,6 @@ test("a pane backed by a module the role does not view says so in place of rows,
 
     // Each page's whole load runs, the modules the role views included, and nothing is told on any of them.
     await page.goto("/settings?pane=master-data")
-    // Nothing was read, so nothing failed: the pane says the rows are not the role's, with the store's sentence beneath.
     await expect(page.getByText("The master data is not shown to your role.")).toBeVisible()
     await expect(page.getByText("Your role does not allow view on configure.master")).toBeVisible()
     await expect(page.getByText(/could not be read from the API/)).toHaveCount(0)

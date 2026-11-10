@@ -81,12 +81,15 @@ export function resolvedDraftGroups(
   })
 }
 
-/** Day-flattened view: every stop any group serves per service day (counts line). */
 export function resolvedDraftPlans(
   data: GuidedSchemeData,
   containers: readonly BusinessRecord[],
 ): SchemeDayPlan[] {
   return flattenGroupPlans(resolvedDraftGroups(data, containers), data.serviceDays)
+}
+
+function draftFractions(data: GuidedSchemeData): string[] {
+  return [...new Set(draftGroups(data).flatMap((group) => group.fractions))]
 }
 
 /**
@@ -96,11 +99,6 @@ export function resolvedDraftPlans(
  * needed to resolve the matches and each group's vehicle type. The resolved
  * stops also feed the promised-service-frequency reconciliation (issue #21).
  */
-/** The distinct fractions the draft's groups name, in first-seen order. */
-function draftFractions(data: GuidedSchemeData): string[] {
-  return [...new Set(draftGroups(data).flatMap((group) => group.fractions))]
-}
-
 export function validateGuidedScheme(
   data: GuidedSchemeData,
   existingSchemes: readonly BusinessRecord[],
@@ -149,7 +147,7 @@ export function validateGuidedScheme(
   return result
 }
 
-/** The draft's recurrence fields — what the step 2 simulation (simulation.ts) lets a candidate change. */
+/** The draft's recurrence fields — what the step 2 simulation (simulation-panel.tsx) lets a candidate change. */
 export type DraftRecurrenceFields = Pick<
   GuidedSchemeData,
   | "frequency"

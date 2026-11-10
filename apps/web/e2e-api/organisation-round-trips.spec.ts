@@ -2,13 +2,10 @@ import { expect, problemOf, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { projectNamed, roleNamed, TESTER_PROJECT, type User } from "./tester"
 
-// Scenario 4, the two switched modules whose product surfaces do not yet
-// write to the API — Company & Projects and Users & Roles read from it but
-// Settings still writes to the browser's organisation store until #163 —
-// so their round trips run through the API under the administrator's own
+// Scenario 4, the two switched modules Company & Projects and Users & Roles:
+// their round trips run through the API under the administrator's own
 // browser session: create, `Location`, read back there, edit, and the API's
-// refusal in its own sentence. When #163 lands they move into the browser,
-// as the providers' and the customers' already are (registry-round-trips).
+// refusal in its own sentence.
 type Project = { id: string; name: string; kind: string; status: string }
 
 test("Company & Projects: a project round-trips with Location, and a second of the same name is refused by name", async ({ api }) => {

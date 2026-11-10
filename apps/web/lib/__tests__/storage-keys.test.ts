@@ -13,7 +13,6 @@ import {
   readPersisted,
 } from "../storage-keys"
 
-/** The browser `Storage` surface, in memory, so a test can read it back. */
 function memoryStorage(entries: Readonly<Record<string, string>> = {}): Storage {
   const map = new Map<string, string>(Object.entries(entries))
   return {
@@ -56,7 +55,6 @@ describe("readPersisted", () => {
     assert.equal(readPersisted(storage, BUSINESS_RECORDS_STORAGE_KEY), "legacy")
     assert.equal(storage.getItem(BUSINESS_RECORDS_STORAGE_KEY), "legacy")
     assert.equal(storage.getItem(LEGACY_BUSINESS_RECORDS), null)
-    // The move is idempotent: the second read finds the current key.
     assert.equal(readPersisted(storage, BUSINESS_RECORDS_STORAGE_KEY), "legacy")
     assert.equal(storage.length, 1)
   })
@@ -70,8 +68,6 @@ describe("readPersisted", () => {
     assert.equal(readPersisted(storage, ACTIVE_ROUTES_STORAGE_KEY), "newer")
     assert.equal(storage.getItem(ACTIVE_ROUTES_STORAGE_KEY), "newer")
     assert.equal(storage.getItem(LEGACY_ACTIVE_ROUTES), null)
-    // Only the key that was read is moved; the older one waits for a load
-    // that finds nothing newer.
     assert.equal(storage.getItem(LEGACY_SERVICE_PROVIDER_ROUTES), "older")
   })
 

@@ -24,7 +24,6 @@ test("a person asks for critical alerts and their assignments in Settings › No
   const none: NotificationPreferences = { alertRaisedMinSeverity: null, ticketAssigned: false }
   expect((await api.put("/me/notification-preferences", { data: none })).status()).toBe(200)
 
-  // Settings › Notifications: critical alerts, and a ticket assigned to me.
   const read = answerOf(page, "GET", "/me/notification-preferences")
   await page.goto("/settings?pane=notifications-on-api")
   expect((await read).status()).toBe(200)
@@ -37,7 +36,6 @@ test("a person asks for critical alerts and their assignments in Settings › No
   await expect(toasts(page)).toContainText("Notifications saved")
 
   try {
-    // A critical alert and a ticket assigned to me, through the API.
     const project = await projectNamed(api, TESTER_PROJECT)
     const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")
     expect(vehicle, "the seed holds WH-24").toBeTruthy()
@@ -50,7 +48,6 @@ test("a person asks for critical alerts and their assignments in Settings › No
     expect(opened.status(), await opened.text()).toBe(201)
     const ticket = (await opened.json()) as Ticket
 
-    // The worker queues and sends both; the API lists them as mine, sent by the log-only sender.
     const expected = [`Critical alert · ${title}`, `Ticket ${ticket.label} assigned to you · ${subject}`]
     await expect
       .poll(
@@ -62,7 +59,6 @@ test("a person asks for critical alerts and their assignments in Settings › No
       )
       .toEqual(["sent", "sent"])
 
-    // Sent to you shows them.
     await pane.getByRole("button", { name: "Refresh" }).click()
     const sent = pane.getByRole("list", { name: "Notices sent to you" })
     for (const wanted of expected) await expect(sent.getByText(wanted)).toBeVisible()

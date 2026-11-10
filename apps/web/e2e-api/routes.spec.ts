@@ -49,7 +49,6 @@ test("a generated route is the API's row: listed under its label, opened under t
   await expect(details.getByTestId("route-sessions")).toHaveCount(0)
   await expect(details).toContainText("Not started: no driver has started this route.")
 
-  // The scheme's page lists its routes, the API's, once read; a row opens the same details.
   await page.goto(`/route-studio?module=schemes&record=scheme-${scheme.id}`)
   // The scheme's page stands in for the workspace once the schemes are read; before it does, "Routes" is the workspace's module tab.
   await expect(page.getByRole("tab", { name: "Details" })).toBeVisible()
@@ -220,7 +219,6 @@ test("the Live board reads what the driver's device reports, and the office's ca
   const { route } = await dispatchedRouteFor(api)
   const stops = [...route.pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position))
 
-  // The driver starts the route on the planned vehicle and completes its first stop, where the phone stands.
   const phone = await freshContext(browser, { viewport: { width: 390, height: 844 }, geolocation: POSITION, permissions: ["geolocation"] })
   try {
     const driverPage = await phone.newPage()
@@ -270,7 +268,6 @@ test("the Live board reads what the driver's device reports, and the office's ca
   const ended = await routeRead(api, route.id)
   expect(ended.status).toBe("cancelled")
   expect(ended.session).toBeNull()
-  // The one session the driver opened, ended at the cancel's own instant.
   expect(ended.sessions.map((session) => session.endedAt)).toEqual([ended.cancelledAt])
   expect((await listAll<LiveRoute>(api, "/routes/live", { projectId: route.projectId })).some((candidate) => candidate.id === route.id)).toBe(false)
 })

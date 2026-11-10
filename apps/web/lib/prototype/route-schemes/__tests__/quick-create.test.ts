@@ -1,6 +1,3 @@
-// The quick form's seams beside quickSchemeDraftFromValues (draft.test.ts):
-// the edit seed, the edit-save write of the scheme's fraction onto the rule
-// or the groups, and the two field-id sets (issue #43).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -44,7 +41,6 @@ describe("seedSchemeEditValues: the fraction and service type selects", () => {
     })
     assert.equal(seeded.wasteFraction, "Glass")
     assert.equal(seeded.serviceType, "Kerbside collection")
-    // The retired field is not seeded under its old id.
     assert.equal("matchFractions" in seeded, false)
   })
 
@@ -111,7 +107,6 @@ describe("applySchemeWasteFraction: the edit-save writes the scheme's fraction w
       vehicleType: "Glass crane",
       containerTypes: ["Igloo · 2,500 L"],
     })
-    // A record without per-day rules does not gain the key.
     assert.equal("matchRulesByDay" in values, false)
   })
 
@@ -151,7 +146,6 @@ describe("applySchemeWasteFraction: the edit-save writes the scheme's fraction w
         ["b", ["Glass"], null, ["c1"]],
       ],
     )
-    // The legacy keys are not written for an explicit-groups scheme.
     assert.equal("matchFractions" in values, false)
   })
 

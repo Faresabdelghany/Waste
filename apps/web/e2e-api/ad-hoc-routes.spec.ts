@@ -35,7 +35,6 @@ type ApiTicket = { id: string; label: string; status: string; resolution: string
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-/** Picks the option whose name matches `option` in the select whose label starts with `label`. */
 async function pickMatching(within: Locator, page: Page, label: string, option: RegExp) {
   await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
   await page.getByRole("option", { name: option }).click()
@@ -82,7 +81,6 @@ test("New route makes the office's own route on a project's day with no scheme; 
   expect({ scheme: route.routeSchemeId, status: route.status, serviceDate: route.serviceDate }).toEqual({ scheme: null, status: "planned", serviceDate: today })
   await expect(toasts(page)).toContainText("Route created")
 
-  // The route made opens in its details: the office's own, a fact rather than a scheme's placeholder, its note under its own name, with no stop yet.
   const details = routePage(page, route)
   await expect(details).toContainText("OriginMade by the office")
   await expect(details).toContainText(`Note${note}`)
@@ -120,7 +118,6 @@ test("New route makes the office's own route on a project's day with no scheme; 
     { origin: "office", status: "planned", containerId: null, propertyId: property.id, wasteFractionId: residual.id, note: "Three sofas by the gate" },
   ])
 
-  // The driver's phone: the stop is its address and its fraction, with no container to name.
   const phone = await freshContext(browser, { viewport: { width: 390, height: 844 } })
   try {
     const driverPage = await phone.newPage()
@@ -159,7 +156,6 @@ test("a stop the office adds at a container to a generated route stands through 
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
   await addStop.click()
   const dialog = page.getByRole("dialog", { name: "Add stop" })
-  // A container is what a stop collects at unless the office says otherwise.
   await expect(dialog.getByRole("combobox", { name: /^Collect/ })).toContainText("A container")
   await expect(dialog.getByRole("combobox", { name: /^Waste fraction/ })).toHaveCount(0)
   await pickMatching(dialog, page, "Container", new RegExp(`^${escaped(container.label)}( · |$)`))
@@ -177,7 +173,6 @@ test("a stop the office adds at a container to a generated route stands through 
   })
   for (const cell of ["Planned", "Added by the office"]) await expect(stopRows(details).filter({ hasText: container.label })).toContainText(cell)
 
-  // The scheme is generated again over the route's day: the route is refreshed in place, and the office's stop stands as it was added.
   await generate(api, scheme.id, { from: route.serviceDate, to: route.serviceDate })
   const sameDay = await listAll<{ id: string }>(api, "/routes", { routeSchemeId: scheme.id, from: route.serviceDate, to: route.serviceDate })
   expect(sameDay.map((row) => row.id)).toEqual([route.id])
@@ -185,11 +180,9 @@ test("a stop the office adds at a container to a generated route stands through 
   expect(after.status).toBe("planned")
   const kept = after.pickups.find((pickup) => pickup.id === stop.id)
   expect(kept && { origin: kept.origin, status: kept.status, containerId: kept.containerId, position: kept.position }).toEqual({ origin: "office", status: "planned", containerId: container.id, position: stop.position })
-  // Generation's own stops are what its rule still matches, and the added container is not planned a second time.
   expect(after.pickups.filter((pickup) => pickup.origin !== "office").map((pickup) => pickup.containerId).sort()).toEqual(before.pickups.map((pickup) => pickup.containerId).sort())
   expect(after.pickups.filter((pickup) => pickup.containerId === container.id)).toHaveLength(1)
 
-  // Read again, the details still name it the office's.
   const again = await openRoute(page, route)
   for (const cell of ["Planned", "Added by the office"]) await expect(stopRows(again).filter({ hasText: container.label })).toContainText(cell)
 })
@@ -202,7 +195,6 @@ test("a ticket's re-collection names the stop the office added for it: complete 
   const [project, residual, aboutRead] = await Promise.all([projectNamed(api, "Copenhagen Central"), residualOf(api), routeRead(api, about.id)])
   const property = await propertyFor(api, project, "E2E Re-collection property")
 
-  // The office adds the re-collection to a later route of the scheme, at the address, with the fraction missed.
   const addedResponse = await api.post(`/routes/${recollection.id}/pickups`, { data: { propertyId: property.id, wasteFractionId: residual.id, note: "Re-collection of a missed bin" } })
   expect(addedResponse.status(), await addedResponse.text()).toBe(201)
   const added = (await addedResponse.json()) as AddedPickup
@@ -244,7 +236,6 @@ test("a stop says what it is for: the office books a wash of a container its dis
   const [washed, emptiedTwice] = generated
   const washedLabel = labels.get(washed.containerId ?? "") ?? ""
 
-  // The office books the wash through Add stop: the service, then the container the route empties already.
   const details = await openRoute(page, route)
   const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
@@ -259,17 +250,14 @@ test("a stop says what it is for: the office books a wash of a container its dis
   const wash = (await added.json()) as AddedPickup
   expect({ origin: wash.origin, service: wash.service, containerId: wash.containerId }).toEqual({ origin: "office", service: "wash", containerId: washed.containerId })
 
-  // And an extra emptying of another of the route's containers, as a second stop of it.
   const extraResponse = await api.post(`/routes/${route.id}/pickups`, { data: { containerId: emptiedTwice.containerId, note: "Overflowing after the market" } })
   expect(extraResponse.status(), await extraResponse.text()).toBe(201)
   const extra = (await extraResponse.json()) as AddedPickup
   expect({ origin: extra.origin, service: extra.service }).toEqual({ origin: "office", service: "empty" })
 
-  // The wash's details say what it is for.
   await page.goto(`/route-studio?module=pickups&record=pickup-${wash.id}`)
   await expect(page.getByRole("dialog").filter({ hasText: "Added by" })).toContainText("Wash", { timeout: 30_000 })
 
-  // The driver's phone labels the wash and the extra emptying, and leaves generation's stops of the two containers as their collections.
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
   try {
     const phone = await context.newPage()
@@ -324,7 +312,6 @@ test("a swap is booked through Add stop with its replacement from stock and its 
   const replacement = await inStock("E2E-SWAP")
   const label = replacement.label
 
-  // The office books the swap: the service, the container taken, its replacement, the warehouse it goes back to.
   const details = await openRoute(page, route)
   const addStop = await routeCommand(page, details, "Add stop")
   await expect(addStop).toBeEnabled({ timeout: 30_000 })
@@ -339,13 +326,11 @@ test("a swap is booked through Add stop with its replacement from stock and its 
   expect(added.request().postDataJSON()).toEqual({ service: "swap", containerId: taken.id, replacementContainerId: replacement.id, warehouseId: warehouse?.id })
   const swap = (await added.json()) as AddedPickup
 
-  // The stop's details say what it is for and what the driver brings.
   await page.goto(`/route-studio?module=pickups&record=pickup-${swap.id}`)
   const stopDetails = page.getByRole("dialog").filter({ hasText: "Added by" })
   await expect(stopDetails).toContainText("Swap", { timeout: 30_000 })
   await expect(stopDetails).toContainText(label)
 
-  // The driver starts the route, completes the swap by its label, and ends the route.
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
   try {
     const phone = await context.newPage()
@@ -367,7 +352,6 @@ test("a swap is booked through Add stop with its replacement from stock and its 
     await context.close()
   }
 
-  // The ledger moved both in the completion: the container taken stands in the warehouse, the replacement serves where it served, under the same subscription and fraction.
   const back = await containerRead(taken.id)
   expect({ status: back.assetState?.status, warehouseId: back.assetState?.warehouseId }).toEqual({ status: "in-warehouse", warehouseId: warehouse?.id })
   const serving = await containerRead(replacement.id)
@@ -390,7 +374,6 @@ test("a defective bin's ticket books its repair on a dispatched route from the t
   expect(opened.status(), await opened.text()).toBe(201)
   const ticket = (await opened.json()) as ApiTicket
 
-  // The office books the repair from the ticket: the route first, the service and the bin opened on what the ticket is about.
   await page.goto(`/tickets?module=tickets&record=ticket-${ticket.id}`)
   const details = page.getByRole("dialog", { name: subject })
   const book = details.getByTestId("ticket-booking").getByRole("button", { name: "Book a stop" })
@@ -406,7 +389,6 @@ test("a defective bin's ticket books its repair on a dispatched route from the t
   const repair = (await added.json()) as AddedPickup
   await expect(details.getByTestId("ticket-booking")).toContainText("Booked stop", { timeout: 30_000 })
 
-  // The driver starts the route, completes the repair, and ends the route.
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
   try {
     const phone = await context.newPage()
@@ -427,7 +409,6 @@ test("a defective bin's ticket books its repair on a dispatched route from the t
     await context.close()
   }
 
-  // The ticket names the stop that answered it, and the stop's completion serviced it.
   const after = await api.get(`/tickets/${ticket.id}`)
   expect(after.status()).toBe(200)
   const served = (await after.json()) as ApiTicket

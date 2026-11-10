@@ -24,7 +24,6 @@ type ServiceProvider = { id: string; legalName: string }
 /** A dialog by its heading: the details sheet and a form dialog may both be open. */
 const dialogTitled = (page: Page, title: string) => page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
 
-/** An award of NordRen's in Copenhagen Central, made through the API with its first assignment. */
 async function newAward(api: APIRequestContext, project: Project): Promise<{ code: string; assignmentId: string }> {
   const provider = (await listAll<ServiceProvider>(api, "/service-providers")).find((candidate) => candidate.legalName.startsWith("NordRen"))
   if (provider === undefined) throw new Error("the seed has no NordRen")

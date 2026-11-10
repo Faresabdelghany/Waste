@@ -23,7 +23,6 @@ const fail = (why: string): never => {
   throw new Error(why)
 }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
@@ -56,7 +55,6 @@ test("a hazardous fraction is marked in Master data, and an unload's details sav
   const fraction = (await made.json()) as Fraction
   expect(fraction.hazardous).toBe(false)
 
-  // Settings › Master data files it under its starred code and ticks it hazardous.
   await page.goto("/settings?pane=master-data")
   await page.getByPlaceholder("Search waste fractions").fill(name)
   await page.getByRole("button", { name: `Edit ${name}` }).click()
@@ -88,7 +86,6 @@ test("a hazardous fraction is marked in Master data, and an unload's details sav
     await page.goto("/route-studio?module=weights")
     expect((await loaded).status()).toBe(200)
 
-    // The load the station took saves its note: the API's file, byte for byte.
     await page.getByPlaceholder("Search weight records").fill(ticket)
     await page.getByRole("table").getByText(`${ticket} · ${name}`, { exact: true }).click()
     const note = page.getByRole("dialog").getByTestId("transfer-note")
@@ -101,7 +98,6 @@ test("a hazardous fraction is marked in Master data, and an unload's details sav
     expect((await direct.body()).equals(Uint8Array.from(file)), "the saved file is the API's, byte for byte").toBe(true)
     await page.keyboard.press("Escape")
 
-    // The load it turned away has none, and the details say why.
     await page.getByPlaceholder("Search weight records").fill(`${ticket}-R`)
     await page.getByRole("table").getByText(`${ticket}-R · ${name}`, { exact: true }).click()
     const withheld = page.getByRole("dialog").getByTestId("transfer-note")

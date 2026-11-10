@@ -10,7 +10,6 @@ import type { GuidedSchemeData } from "../route-schemes/quick-create"
 import type { LngLat } from "@waste/domain/map-planning/geo"
 import type { MapPoint } from "./points"
 
-/** The selected points. */
 function selectedPoints(
   points: readonly MapPoint[],
   selectedIds: ReadonlySet<string>,
@@ -18,7 +17,6 @@ function selectedPoints(
   return points.filter((point) => selectedIds.has(point.id))
 }
 
-/** The Containers list: selected points by address, then by container id. */
 export function selectedContainerRows(
   points: readonly MapPoint[],
   selectedIds: ReadonlySet<string>,

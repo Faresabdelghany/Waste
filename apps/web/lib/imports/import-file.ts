@@ -39,10 +39,8 @@ export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
 
 export const kindOption = (kind: ImportKind): ImportKindOption => IMPORT_KIND_OPTIONS.find((option) => option.kind === kind) ?? IMPORT_KIND_OPTIONS[0]
 
-/** Whether the role reads the imports run here: the import's own `view`. */
 export const mayView = (grants: Grants | null): boolean => mayOn(grants, "improve.imports", "view")
 
-/** Whether the role may run an import at all: the import's own `create`. */
 export const mayImport = (grants: Grants | null): boolean => mayOn(grants, "improve.imports", "create")
 
 /** The kinds a role may import: those whose module it may write a row to, by making a record or changing one. */
@@ -71,7 +69,6 @@ export type FileReading = { file: ImportFile; blocking: string[]; ignored: strin
 /** Whether a kind reads a GeoJSON file: the planning areas, whose text then opens as a JSON object does. */
 const readsGeoJson = (kind: ImportKind, text: string): boolean => kind === "planning-areas" && text.trimStart().replace(/^\uFEFF/, "").startsWith("{")
 
-/** The files the file picker offers for a kind: a CSV, and for the planning areas a GeoJSON file too. */
 export const acceptedFiles = (kind: ImportKind): string => (kind === "planning-areas" ? ".geojson,.json,application/geo+json,application/json,.csv,text/csv" : ".csv,text/csv")
 
 export function readImportFile(kind: ImportKind, text: string): FileReading {
@@ -91,7 +88,6 @@ export function readImportFile(kind: ImportKind, text: string): FileReading {
 const listed = (items: readonly string[]): string =>
   items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
 
-/** A commit's rows in the batches it sends them in, each at most what one batch may write. */
 export function batchesOf<Row>(rows: readonly Row[], size: number = IMPORT_BATCH_MAX): Row[][] {
   const batches: Row[][] = []
   for (let start = 0; start < rows.length; start += size) batches.push(rows.slice(start, start + size))
@@ -109,7 +105,6 @@ export function importReason(fileName: string, typed?: string): string {
   return (given === "" ? `CSV import ${fileName}` : given).slice(0, PARAGRAPH_MAX)
 }
 
-/** How many rows came out each way. */
 export type OutcomeCounts = Record<ImportRowResult["outcome"], number>
 
 export function countsOf(results: readonly ImportRowResult[]): OutcomeCounts {

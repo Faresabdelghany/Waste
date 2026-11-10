@@ -18,11 +18,9 @@ type Warehouse = { id: string; projectId: string; code: string; name: string; ad
 type UnloadingStation = { id: string; code: string; name: string; ownership: string; weighbridge: boolean; wasteFractionIds: string[] }
 type WasteFraction = { id: string; key: string; name: string }
 
-/** The browser's API call the form submit makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname.startsWith(`/waste-api${path}`))
 
-/** Opens a workspace page and waits for the switched module's rows to arrive from the API, then for the store's whole chain to land (fixtures.ts, `chainLanded`). */
 async function openLoaded(page: Page, url: string, listPath: string) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(url)
@@ -30,7 +28,6 @@ async function openLoaded(page: Page, url: string, listPath: string) {
   await chainLanded(page)
 }
 
-/** The row's opener, after narrowing the list to the name through the module's own search. */
 async function rowNamed(page: Page, name: string) {
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
   return page.getByRole("button", { name: `Open ${name}` })

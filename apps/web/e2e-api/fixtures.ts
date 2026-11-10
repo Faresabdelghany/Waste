@@ -2,7 +2,7 @@
 // request context, so a spec can read back through the API what it just did
 // in the browser — a `Location` the browser followed, a row's shape — under
 // the very token the page holds, and can prepare what the product's surfaces
-// do not yet write (an Invitation, until #163 lands).
+// do not yet write.
 import { test as baseTest, request, type APIRequestContext, type APIResponse, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test"
 
 import { API_SESSION_STORAGE_KEY } from "../lib/storage-keys"
@@ -38,7 +38,6 @@ export function newApiRequestContext(options: NonNullable<Parameters<typeof requ
   return request.newContext({ ...options, extraHTTPHeaders: { ...options.extraHTTPHeaders, connection: "close" } })
 }
 
-/** A request context on the API's own origin, speaking as the holder of `token`. */
 export function apiAs(token: string): Promise<APIRequestContext> {
   return newApiRequestContext({
     baseURL: E2E.apiUrl,

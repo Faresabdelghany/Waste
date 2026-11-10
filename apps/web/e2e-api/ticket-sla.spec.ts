@@ -4,14 +4,14 @@ import { answerOf, pick, toasts } from "./routes-support"
 import { projectNamed } from "./tester"
 
 // A project's ticket SLA on the API (O4 of #290): the office sets Copenhagen
-// Central's targets in Settings › Ticket SLA — every kind at High within a
-// day, Overflow at High within four hours — and the body is the whole set the
-// contracts take. A ticket the office opens there without a due date is then
-// due four hours after it opens, which its details read as on track; one
-// already past its due date is what the list's SLA filter finds as overdue.
-// Copenhagen Central is the project the workspace is pinned to, so the list
-// reads its tickets; its targets are put back as they were, since the stack
-// is shared.
+// Central's targets in Settings › Tickets' Deadlines — every kind at High
+// within a day, Overflow at High within four hours — and the body is the
+// whole set the contracts take. A ticket the office opens there without a due
+// date is then due four hours after it opens, which its details read as on
+// track; one already past its due date is what the list's SLA filter finds as
+// overdue. Copenhagen Central is the project the workspace is pinned to, so
+// the list reads its tickets; its targets are put back as they were, since
+// the stack is shared.
 
 type Sla = { projectId: string; targets: { id: string; kind: string | null; priority: string; hours: number }[] }
 type ApiTicket = { id: string; label: string; subject: string; dueAt: string | null; occurredAt: string }
@@ -66,7 +66,6 @@ test("the office sets a project's SLA in Settings, a ticket opened without a due
     const details = page.getByRole("dialog", { name: subject })
     await expect(details).toContainText("On track")
 
-    // A ticket an hour past its due date is what the list's SLA filter finds as overdue.
     const lateSubject = uniqueName("E2E SLA late")
     const late = await api.post("/tickets", { data: { projectId: project.id, subject: lateSubject, description: "Promised by this morning", kind: "complaint", priority: "high", dueAt: new Date(Date.now() - HOUR).toISOString() } })
     expect(late.status(), await late.text()).toBe(201)

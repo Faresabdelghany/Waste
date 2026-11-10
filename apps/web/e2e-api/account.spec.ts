@@ -17,7 +17,6 @@ test("Settings › Account & appearance shows the person signed in as /me answer
   await expect(pane.getByText(me.role.name, { exact: false }).first()).toBeVisible()
   const names = me.projects.map((project) => project.name).join(", ")
   await expect(pane.locator("#account-projects")).toHaveText(me.user.allProjects ? `All projects: ${names}` : names)
-  // Read, not set: no field to type a name or an address into.
   await expect(pane.getByRole("textbox", { name: "Full name" })).toHaveCount(0)
   await expect(pane.getByRole("textbox", { name: "Email address" })).toHaveCount(0)
   await expect(pane).not.toContainText("Olivia Larsen")

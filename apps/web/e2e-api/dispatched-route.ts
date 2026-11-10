@@ -1,13 +1,12 @@
 // A route dispatched to a driver for today, reached the way the office
-// reaches one and through the API alone (Issue #145): there is no manual
-// route create in the pilot, so the helper triggers generation on a seeded
-// scheme (`POST /route-schemes/:id/generate`, which the worker runs), takes a
-// planned route of today's out of the run, and moves it with the office's
-// route commands — assign the driver, reschedule it onto today where the day
-// has none (a weekend, a holiday, or a developer stack whose earlier runs
-// used today's up), dispatch. The Driver App's flow (driver-app.spec.ts)
-// reads it; the office's Routes module (#179) and the e2e lane's generation
-// scenario are meant to as well, so it names nothing of the Driver App.
+// reaches one and through the API alone (Issue #145): the helper triggers
+// generation on a seeded scheme (`POST /route-schemes/:id/generate`, which
+// the worker runs), takes a planned route of today's out of the run, and
+// moves it with the office's route commands — assign the driver, reschedule
+// it onto today where the day has none (a weekend, a holiday, or a developer
+// stack whose earlier runs used today's up), dispatch. The Driver App's flow
+// (driver-app.spec.ts) and the office's specs read it, so it names nothing of
+// the Driver App.
 //
 // On the seeded tenant `RS-Central · Week A` runs every weekday in
 // Copenhagen Central with WH-24 and Mads Jensen (packages/db/src/seed/
@@ -46,7 +45,6 @@ export type GenerationRun = { id: string; status: string; routesCreated: number;
 /** How far ahead the helper generates: four weeks is twenty weekday routes, room for a developer stack's reruns. */
 const WINDOW_DAYS = 28
 
-/** The calendar day it is now in a timezone, `YYYY-MM-DD`. */
 export function dayIn(timezone: string, at: Date = new Date()): string {
   return dayInTimezone(at, timezone)
 }
@@ -123,7 +121,6 @@ export async function dispatchedRouteFor(api: APIRequestContext, { schemeName = 
   const today = dayIn(timezone)
   const window = { from: today, to: addDays(today, WINDOW_DAYS - 1) }
 
-  // A run that stopped midway left the driver on a route; the office ends that before handing them another.
   for (const stale of await listAll<Route>(api, "/routes", { plannedDriverId: driver.id, status: "active" })) {
     await command(api, `/routes/${stale.id}/cancel`, { reasonCode: "other", reason: "Left active by an interrupted end-to-end run" })
   }

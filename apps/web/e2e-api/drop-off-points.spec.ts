@@ -53,7 +53,6 @@ test("the office registers a drop-off point with what it takes, its hours and an
   await dialog.getByLabel("Closed on the project's holidays").check()
   await dialog.getByLabel("Note on the public map").fill("Husk ID.")
 
-  // A line the domain refuses is told in the form, in its words, and nothing is sent.
   await dialog.getByLabel("Weekly hours").fill("Mon 18:00–10:00")
   await dialog.getByRole("button", { name: "Save drop-off point" }).click()
   await expect(page.getByText(`${name} was not saved`)).toBeVisible()
@@ -87,7 +86,6 @@ test("the office registers a drop-off point with what it takes, its hours and an
     expect(((await rehoured.json()) as DropOffPoint).hours).toHaveLength(5)
     expect(requests).toEqual([`PUT /drop-off-points/${point.id}/hours`])
 
-    // Published, the map answers it by its fraction's key; the project's own slug is put back after.
     const before = ((await (await api.get(`/projects/${point.projectId}`)).json()) as { publicSlug: string | null }).publicSlug
     const slug = before ?? `e2e-drop-off-office-${Date.now().toString(36)}`
     try {

@@ -79,7 +79,6 @@ test.describe("finance settings (#291 C4)", () => {
     await expect(row).toContainText("FIK 71")
     expect((await (await api.get(`/projects/${harbor.id}`)).json()) as ApiProject).toMatchObject({ paymentTermsDays: 14, paymentReferenceScheme: "fik-71" })
 
-    // The creditor number a project's invoices name is not cleared under it: the API's sentence, the identity kept.
     await page.getByLabel("FIK creditor number", { exact: true }).fill("")
     const [refused] = await Promise.all([answerOf(page, "PATCH", "/company"), page.getByRole("button", { name: "Save identity" }).click()])
     expect(refused.status()).toBe(409)

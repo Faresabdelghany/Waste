@@ -15,12 +15,10 @@ import { holidayNamesForCountry } from "@waste/domain/planning/holiday-names"
 import type { HolidayEntry } from "./holiday-lists"
 import { HOLIDAY_NAMES_KEY, parseHolidayNames } from "./holidays"
 
-/** The record kind a holiday list carries. */
 export const HOLIDAY_LIST_KIND = "Holiday List"
 /** The id prefix a holiday list carries: `holiday-list-<uuid>` on the Pilot. */
 export const HOLIDAY_LIST_PREFIX = "holiday-list"
 
-/** The typed values a holiday list record keeps. */
 export const HOLIDAY_LIST_KEYS = {
   name: "listName",
   country: "country",
@@ -51,7 +49,6 @@ export function holidayListNamed(name: string | null | undefined, records: reado
   return records.find((record) => isHolidayListRecord(record) && holidayListName(record) === name)
 }
 
-/** Every holiday of the list in date order: a name it carries, else what its country's known list says, else unnamed. */
 export function holidayListEntries(record: BusinessRecord): HolidayEntry[] {
   const carried = parseHolidayNames(record.submittedValues?.[HOLIDAY_LIST_KEYS.names])
   const known = holidayNamesForCountry(holidayListCountry(record))
@@ -60,7 +57,6 @@ export function holidayListEntries(record: BusinessRecord): HolidayEntry[] {
     .map((date) => ({ date, name: carried.get(date) ?? known(date) ?? "" }))
 }
 
-/** The years the list holds a holiday in, latest first. */
 export function holidayListYears(entries: readonly HolidayEntry[]): number[] {
   return [...new Set(entries.map((entry) => Number(entry.date.slice(0, 4))))].filter(Number.isInteger).sort((a, b) => b - a)
 }

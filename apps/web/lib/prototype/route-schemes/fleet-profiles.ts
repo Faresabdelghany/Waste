@@ -18,7 +18,7 @@
 // resources/licence.ts over the vocabulary's lowercase tokens (Issue #101);
 // this module keeps the prototype's uppercase display tuple, maps a display
 // class onto its token, and asks `coversClass`. The tokens and the display
-// tuple are held together by resources/__tests__/vocabulary.test.ts.
+// tuple are held together by __tests__/fleet-profiles.test.ts.
 
 import { groupDriverIssue, type JudgedDay } from "@waste/domain/planning/checks"
 import type { BusinessRecord } from "../prototype-record"
@@ -36,7 +36,6 @@ export const LICENCE_CLASSES = ["B", "C", "CE"] as const satisfies readonly Uppe
 
 export type LicenceClass = (typeof LICENCE_CLASSES)[number]
 
-/** The display class as the vocabulary's token: `CE` is `ce`. */
 const tokenOf = (licenceClass: LicenceClass): LicenceClassToken => licenceClass.toLowerCase() as LicenceClassToken
 
 export function isLicenceClass(value: unknown): value is LicenceClass {
@@ -92,7 +91,6 @@ export function vehicleProfile(record: FleetRecord): VehicleProfile {
   }
 }
 
-/** "WH-24 · Rear loader · 18 t" — the vehicle select's option text. */
 export function vehicleOptionLabel(profile: VehicleProfile): string {
   return [profile.callsign, profile.type, profile.capacityT !== null ? `${profile.capacityT} t` : null]
     .filter(Boolean)
@@ -202,7 +200,6 @@ export function driverOptions(
   return drivers.map((driver) => driverEligibility(driver, vehicle.licenceClass, on))
 }
 
-/** "Mads Jensen · CE" — the driver select's option text; name alone when the licence is unknown. */
 export function driverOptionLabel(driver: DriverProfile): string {
   return driver.licenceClass !== null ? `${driver.name} · ${driver.licenceClass}` : driver.name
 }

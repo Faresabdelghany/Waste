@@ -16,11 +16,8 @@ import {
 import { COLLECTION_GROUPS_KEY, collectionGroupsOf } from "../groups"
 import { schemeAttention } from "../lifecycle"
 
-/* --------------------------------- fixtures -------------------------------- */
-
 const AREA = "area-indreby"
 
-/** An in-service 240 L residual bin inside the scheme's planning area. */
 const container = (id: string, fraction = "Residual"): BusinessRecord => ({
   id,
   name: id.toUpperCase(),
@@ -38,7 +35,6 @@ const container = (id: string, fraction = "Residual"): BusinessRecord => ({
   submittedValues: { planningAreaId: AREA },
 })
 
-/** c01 … cNN — the container base one run resolves against. */
 const containersOf = (n: number, fraction = "Residual"): BusinessRecord[] =>
   Array.from({ length: n }, (_, index) =>
     container(`c${String(index + 1).padStart(2, "0")}`, fraction),
@@ -46,7 +42,6 @@ const containersOf = (n: number, fraction = "Residual"): BusinessRecord[] =>
 
 const ids = (records: readonly BusinessRecord[]) => records.map((record) => record.id).sort()
 
-/** A weekly Mon–Fri rule scheme (one implicit shared group) matching Residual in the area. */
 function ruleScheme(values: Record<string, string | boolean> = {}, status = "Validated"): BusinessRecord {
   return {
     id: "scheme-drift",
@@ -86,8 +81,6 @@ const stamp = (rule: string, containerIds: string[]): GenerationMatches => ({
 })
 
 const groups = collectionGroupsOf(ruleScheme().submittedValues, { facts: {} })
-
-/* ------------------------------- the threshold ------------------------------ */
 
 describe("the 10 % threshold", () => {
   const rule = `${AREA}|Residual||`
@@ -134,8 +127,6 @@ describe("the 10 % threshold", () => {
     )
   })
 })
-
-/* ------------------------------- the badge -------------------------------- */
 
 describe("the Attention badge reads the two stamps the scheme carries", () => {
   const rule = `${AREA}|Residual||`
@@ -202,8 +193,6 @@ describe("the Attention badge reads the two stamps the scheme carries", () => {
     assert.equal(containerDriftWarning(containerDriftBetween(previous, last, collectionGroupsOf(explicit.submittedValues, { facts: {} }))), sentence)
   })
 })
-
-/* --------------------------------- storage --------------------------------- */
 
 describe("the stamp's storage", () => {
   test("serializes with sorted keys and ids, and the empty stamp as an absent value", () => {

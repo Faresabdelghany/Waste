@@ -163,7 +163,6 @@ describe("schemeDraftChanges", () => {
       driverName: "Mads Sørensen",
     }
     assert.equal(groupSummaryLabel(stored, {}), "Mon, Wed · WH-24 · Mads Sørensen · 240 L, 140 L")
-    // The display name is never offered to the id lookup — only an id is.
     const asked: string[] = []
     const spying: SchemeDraftNames = {
       vehicle: (id) => {

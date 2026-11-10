@@ -61,7 +61,6 @@ const FORMER = {
     [...stops].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position)),
 }
 
-/** Every token of every closed list the domain declares in a context's vocabulary. */
 async function everyToken(): Promise<string[]> {
   const src = join(import.meta.dirname, "..", "..", "..", "..", "..", "packages", "domain", "src")
   const contexts = readdirSync(src).filter((context) => context !== "__tests__" && existsSync(join(src, context, "vocabulary.ts")))

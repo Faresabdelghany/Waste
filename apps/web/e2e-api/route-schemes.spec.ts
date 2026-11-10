@@ -11,10 +11,9 @@ import { listAll, TESTER_PROJECT } from "./tester"
 // slice) port by behaviour: the seeded schemes are the API's rows under the
 // server's ids, a quick create is a POST the API answers with its Location,
 // and an edit is the scheme's PATCH — the stored policy lands and is read
-// back, a shaping edit and a rename save without a question (on the Pilot
-// the question over future routes waits for the routes on the API, slice 6),
-// and a refusal is the API's sentence over the dialog, still holding what
-// was typed. Schemes the tests make are uniquely named and never cleaned up.
+// back, a shaping edit and a rename save without a question, and a refusal is
+// the API's sentence over the dialog, still holding what was typed. Schemes
+// the tests make are uniquely named and never cleaned up.
 type Scheme = {
   id: string
   name: string
@@ -26,7 +25,6 @@ type Scheme = {
 }
 type Named = { id: string; name: string }
 
-/** The browser's API call a click makes: the answer of `method` on the path `path`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
@@ -52,7 +50,6 @@ async function openScheme(page: Page, name: string) {
 /** A day a week ahead, which the forms accept as a first day in force. */
 const nextWeek = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
 
-/** A validated scheme with one rule group, made through the API (routes-support.ts): Residual inside Indre By Operations, Mondays and Thursdays from next week. */
 function schemeThroughApi(api: APIRequestContext, name: string) {
   return createScheme(api, name, { serviceDays: ["monday", "thursday"], validFrom: nextWeek() })
 }

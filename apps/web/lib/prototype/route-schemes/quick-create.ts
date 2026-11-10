@@ -96,7 +96,6 @@ export interface GuidedSchemeData {
 
 type StoredValues = Record<string, string | boolean | undefined>
 
-/** Quick Create reads its form values as strings; a missing one is "". */
 const stringOf = (values: StoredValues, key: string): string => typedString(values, key) ?? ""
 
 const optionalId = typedString
@@ -209,7 +208,6 @@ export function quickSchemeDraftFromValues(values: StoredValues): GuidedSchemeDa
   }
 }
 
-/** The fleet record the quick form's `plannedVehicleId` names; undefined when it names none, or none that exists. */
 export function quickPlannedVehicle<T extends FleetRecord>(
   values: StoredValues,
   vehicles: readonly T[],
@@ -364,7 +362,6 @@ export function applySchemeWasteFraction<T extends StoredValues>(values: T): T {
   return {
     ...values,
     ...shared,
-    // A record without per-day rules does not gain the key.
     ...(Object.keys(rulesByDay).length > 0 ? { matchRulesByDay } : {}),
   }
 }

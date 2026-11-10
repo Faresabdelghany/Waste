@@ -49,7 +49,6 @@ export type SchemeComparison = {
   membership: ReadonlyMap<string, CompareMembership>
 }
 
-/** Every comparable scheme with its resolved stops, by name. */
 export function schemeStopSets(
   schemes: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],

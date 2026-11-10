@@ -22,7 +22,6 @@ type Pause = { id: string; subscriptionId: string; validFrom: string; validTo: s
 /** A day `offset` days from today, `YYYY-MM-DD` on the UTC calendar: a week out is today or later on any clock the tests run under. */
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
 
-/** The browser's API call a dialog's submit makes: the answer of the request path `path`, method `method`. */
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
@@ -32,7 +31,6 @@ async function made<T>(api: APIRequestContext, path: string, data: unknown): Pro
   return (await response.json()) as T
 }
 
-/** An agreement running from a month ago to four months on, its one subscription from the same day: what the lifecycle moves. */
 async function subscribedThroughApi(api: APIRequestContext) {
   const project = await projectNamed(api, TESTER_PROJECT)
   const customer = await made<{ id: string; name: string }>(api, "/customers", { kind: "organisation", name: uniqueName("E2E Lifecycle") })
@@ -44,7 +42,6 @@ async function subscribedThroughApi(api: APIRequestContext) {
   return { agreement, subscription, product, customer }
 }
 
-/** Opens Agreements once the switched module is the server's, then the row named, through the module's own search. */
 async function openRow(page: Page, name: string) {
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
   await page.getByRole("button", { name: `Open ${name}` }).click()
@@ -57,7 +54,6 @@ test("a subscription paused and the pause cancelled, its service changed from a 
   await page.goto("/customers?module=agreements")
   expect((await loaded).status()).toBe(200)
 
-  // The subscription's sheet: its lifecycle, no pause yet.
   const subscriptionName = `${agreement.number} · ${product.name}`
   await openRow(page, subscriptionName)
   const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: subscriptionName }) })
@@ -76,13 +72,11 @@ test("a subscription paused and the pause cancelled, its service changed from a 
   const pauses = lifecycle.getByTestId("subscription-pauses")
   await expect(pauses.getByRole("listitem")).toHaveText([new RegExp(`^Paused ${day(7)} – ${day(13)} · planned`)])
 
-  // Cancelled before it begins: gone from the API and from the list.
   const [cancelled] = await Promise.all([answerOf(page, "POST", `/subscription-pauses/${pause.id}/cancel`), pauses.getByRole("button", { name: "Cancel pause" }).click()])
   expect(cancelled.status()).toBe(200)
   await expect(lifecycle.getByText("No pause.")).toBeVisible()
   expect((await api.get(`/subscription-pauses/${pause.id}`)).status()).toBe(404)
 
-  // The service changed from a week on: two of the product, the old one ending there and the replacement from then.
   await lifecycle.getByRole("button", { name: "Change service" }).click()
   const changing = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Change service" }) })
   await changing.getByLabel("New service from").fill(day(7))

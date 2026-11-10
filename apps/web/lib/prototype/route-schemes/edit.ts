@@ -14,8 +14,6 @@ import { isSchemeEditPolicy, type SchemeEditPolicy } from "./creation"
 import { addDays } from "@waste/domain/days"
 import { stringValue } from "./validation"
 
-/* --------------------------- the edit policy ------------------------------ */
-
 /** The stored policy; a record that predates the field, or carries a stray value, asks — the default creation stamps. */
 export function schemeEditPolicy(values: Record<string, string | boolean | undefined> | undefined): SchemeEditPolicy {
   const policy = values?.editPolicy
@@ -113,7 +111,6 @@ export function editChangesGeneration(before: BusinessRecord, after: BusinessRec
 
 const REFRESHABLE_STATUSES = new Set(["Draft", "Planned"])
 
-/** A route generation may still reshape: Draft or Planned — nothing that has reached operations. */
 const routeIsRefreshable = (route: BusinessRecord): boolean => REFRESHABLE_STATUSES.has(route.status)
 
 /** The scheme's future (from tomorrow) routes a run may still reshape — what "ask" counts. */

@@ -1,5 +1,5 @@
-// Ticket work priced on the web (#291 C3w): Settings › Commercial › Ticket
-// charges sets the product a ticket kind's work is charged at, replaced
+// Ticket work priced on the web (#291 C3w): Settings › Tickets' Charges
+// sets the product a ticket kind's work is charged at, replaced
 // whole; a completion that names none is charged at it, and one whose
 // "Charged at" names a product of its own is charged at that one. The
 // worker's consumer prices each ticket's event; both are read back through
@@ -17,7 +17,6 @@ type Agreement = { id: string; number: string }
 type ApiTicket = { id: string; label: string; chargeProductId: string | null }
 type Event = { id: string; status: string; productId: string | null; netMinor: number | null; links: { ticketId: string | null } }
 
-/** A seeded product of the project by its name. */
 async function productNamed(api: APIRequestContext, project: Project, name: string): Promise<Product> {
   const product = (await listAll<Product>(api, "/products", { projectId: project.id })).find((candidate) => candidate.name === name)
   if (product === undefined) throw new Error(`the seed has no ${name} in ${project.name}`)
@@ -32,7 +31,6 @@ async function overflow(api: APIRequestContext, project: Project, agreement: Agr
   return { ticket: (await created.json()) as ApiTicket, subject }
 }
 
-/** The ticket's billable event once the worker has recorded it. */
 async function eventOf(api: APIRequestContext, ticket: ApiTicket): Promise<Event> {
   let found: Event | undefined
   await expect

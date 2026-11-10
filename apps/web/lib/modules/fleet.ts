@@ -23,7 +23,6 @@ export const FLEET = workspaceSpec("fleet", {
       shown: "tab",
       providerOperated: true,
       picked: {
-        // A trailer is a vehicle of the fleet: a trailer field offers the trailers alone, a vehicle field the rest.
         offers: (fieldId, record) => (fieldId === "trailerId" ? isTrailerRecord(record) : fieldId === "vehicleId" ? !isTrailerRecord(record) : true),
         // A vehicle's name carries its registration plate; its facts show the callsign.
         named: (record) => record.name.split(" · ")[0],
