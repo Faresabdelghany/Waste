@@ -14,15 +14,7 @@ import { useMemo, useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
-import {
-  AssetPanelShell,
-  AssetToolbar,
-  EmptyRow,
-  RecordsSection,
-  defaultAssetView,
-  sortByView,
-  type AssetView,
-} from "@/components/settings/settings-pane-kit"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { useLinkedRecord } from "@/components/settings/use-linked-record"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -45,6 +37,10 @@ import {
 } from "@/components/platform/business-record-store"
 import { recordStatusTone } from "@/components/platform/business-record-views"
 import { useActorName } from "@/components/platform/shell-identity"
+import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { cn } from "@/lib/utils"
+import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
 import type {
   BusinessFormField,
   BusinessFormOption,
@@ -76,9 +72,8 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const actorName = useActorName()
   const hydrated = useBusinessRecordsHydrated()
   const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [projects, setProjects] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingCalendar, setEditingCalendar] = useState<BusinessRecord | null>(null)
 
@@ -152,10 +147,8 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
       ...calendarRowSummary(record),
     }
   })
-  const statusOptions = Array.from(
-    new Set([...calendarsModule.lifecycle, ...calendarRecords.map((record) => record.status)]),
-  )
-  const projectOptions = Array.from(new Set(rows.map((row) => row.project))).sort()
+  const projectOf = new Map(rows.map((row) => [row.record.id, row.project]))
+  const readers: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status), projects: (record) => singleFilterValue(projectOf.get(record.id)) }
   const filtered = sortByView(
     rows
       .filter(({ record, project }) =>
@@ -164,8 +157,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
           .toLowerCase()
           .includes(query.trim().toLowerCase()),
       )
-      .filter(({ record }) => statuses.length === 0 || statuses.includes(record.status))
-      .filter(({ project }) => projects.length === 0 || projects.includes(project)),
+      .filter(({ record }) => matchesBusinessFilters(record, filters, readers)),
     view,
     ({ record }) => record.name,
     // Records carry a fuzzy "updated" label, not a sortable timestamp — the
@@ -206,23 +198,19 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   return (
     <AssetPanelShell
       toolbar={
-        <AssetToolbar
-          searchPlaceholder="Search collection calendars"
+        <RecordToolbar
+          placeholder="Search collection calendars"
           query={query}
           onQueryChange={setQuery}
-          statuses={statuses}
-          onStatusesChange={setStatuses}
-          statusOptions={statusOptions}
-          extraFilters={[
-            {
-              label: "Project",
-              options: projectOptions,
-              value: projects,
-              onChange: setProjects,
-            },
-          ]}
+          records={calendarRecords}
+          readers={readers}
+          filters={filters}
+          onFiltersChange={setFilters}
           view={view}
           onViewChange={setView}
+          orderingOptions={RECENT_ORDERS}
+          defaults={listView("updated")}
+          detailsLabel="Details"
         />
       }
     >
@@ -237,7 +225,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
         }
       >
         <div className="overflow-x-auto">
-          <Table className="min-w-[880px]">
+          <Table className={cn("min-w-[880px]", densityClass(view))}>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
@@ -256,7 +244,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
                   <TableRow key={row.record.id}>
                     <TableCell className="min-w-[220px]">
                       <p className="text-sm font-medium text-foreground">{row.record.name}</p>
-                      {view.showDetails && (
+                      {view.showDescription && (
                         <p className="text-xs text-muted-foreground">{row.record.context}</p>
                       )}
                     </TableCell>

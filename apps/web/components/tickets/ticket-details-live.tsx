@@ -65,6 +65,7 @@ import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { editFieldsForm, fieldValuesAfterEdit, formValuesOfFields, shownFieldValue, typeFieldsOf } from "@/lib/data/ticket-types"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
 import { cn } from "@/lib/utils"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import type { StopTicketKind } from "@waste/domain/resolution/ticket-stops"
 import { isAutomationLine } from "@waste/domain/resolution/automation"
@@ -316,7 +317,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7 sm:py-7">
               <div className="mx-auto max-w-4xl space-y-6">
-                {!ready && <p className="text-sm text-muted-foreground">The tickets are being read from the API; the ticket&apos;s commands follow.</p>}
+                {!ready && <p className="text-sm text-muted-foreground">{waitingSentence("tickets", "the ticket's commands follow")}</p>}
                 <article className="rounded-xl border border-border/70 bg-card px-4 py-3.5 shadow-sm">
                   <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{live.description}</p>
                   <div className="mt-3 flex flex-wrap gap-2">

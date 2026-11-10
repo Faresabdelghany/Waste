@@ -32,6 +32,7 @@ import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord } from "@/li
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { agreementsOfCustomer, availabilityWindow, bookingPlaceOf, placesOfAgreement, withBookingDay, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const ROUTES = moduleAt("route-studio.routes") satisfies ModuleLocation
 
@@ -359,7 +360,7 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="bulky-booking-commands">
       <h3 className="text-sm font-semibold">Bulky booking</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The bookings are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("bookings", "their commands follow")}</p>}
       {moves ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setRouting(true)}>

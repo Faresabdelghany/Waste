@@ -20,6 +20,7 @@ import { applicationDecisions } from "@/lib/api/records/applications"
 import { shownOn } from "@/lib/format/clock"
 import { APPLICATION_SERVER_ID_KEY, applicationCommandsOffered, APPLICATIONS_MODULE, DECIDE_FORM, decisionLetterHref, letterOffered, outcomeLabel, periodText, type ApplicationOffer } from "@/lib/data/applications"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { Decision } from "@waste/contracts/applications"
 
 const { workspaceId, moduleId } = APPLICATIONS_MODULE
@@ -49,7 +50,7 @@ export function ApplicationCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="application-commands">
       <h3 className="text-sm font-semibold">Application</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The applications are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("applications", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {applicationCommandsOffered(record).map((offer) => (
           <Button key={offer.command} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => (offer.command === "decide" ? setDeciding(true) : send(offer))}>

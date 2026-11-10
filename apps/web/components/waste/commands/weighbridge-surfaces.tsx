@@ -20,6 +20,7 @@ import { DISMISS_TICKET, MATCH_TICKET, ticketCommandsOffered } from "@/lib/api/r
 import type { BusinessFormOption, BusinessFormValues } from "@/lib/data/business-form-types"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { DISMISS_FORM, MATCH_FORM, WEIGHBRIDGE_MODULE } from "@/lib/data/weighbridge"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const MASTER_MODULE = moduleAt("configure.master")
 
@@ -62,7 +63,7 @@ export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="weighbridge-ticket-commands">
       <h3 className="text-sm font-semibold">Weighbridge ticket</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The tickets are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("tickets", "their commands follow")}</p>}
       {offered.length === 0 && moduleReady && <p className="text-sm text-muted-foreground">{record.description}</p>}
       <div className="flex flex-wrap gap-2">
         {offered.map((name) => (

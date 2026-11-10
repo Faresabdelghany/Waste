@@ -25,7 +25,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
-import { AssetPanelShell, AssetToolbar, EmptyRow, RecordsSection, defaultAssetView, sortByView, type AssetView } from "@/components/settings/settings-pane-kit"
+import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { useApiClient } from "@/components/platform/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/platform/business-record-store"
@@ -33,13 +33,17 @@ import { recordStatusTone } from "@/components/platform/business-record-views"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/platform/use-command-support"
+import { densityClass, listView, RECENT_ORDERS, RecordToolbar, sortByView } from "@/components/platform/record-toolbar"
+import { type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
+import { cn } from "@/lib/utils"
+import { type BusinessFilters, emptyBusinessFilters, type FilterValueReaders, matchesBusinessFilters, singleFilterValue } from "@/lib/prototype/business-filters"
 import { typed } from "@/lib/records/fields"
 import { indexPriceList } from "@/lib/api/records/indexation"
 import { dayIn } from "@/lib/format/clock"
 
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
@@ -52,8 +56,8 @@ function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: strin
 /** A dialog open on a snapshot of the row, or on a new one. */
 type Editing = { schema: BusinessFormSchema; values: BusinessFormValues; record: BusinessRecord | null }
 
-const PRODUCT_STATUS_OPTIONS = ["Draft", "Active", "Inactive"] as const
-const PRODUCT_TYPE_OPTIONS = Object.values(PRODUCT_KIND_LABELS)
+/** A product's status and its type, the values the list filters by. */
+const PRODUCT_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status), types: (record) => singleFilterValue(record.facts.Type) }
 
 // ---------------------------------------------------------------------------
 // Products
@@ -65,17 +69,15 @@ export function ProductsPane() {
   const pickers = useCommercialPickers()
   const answer = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [types, setTypes] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [editing, setEditing] = useState<Editing | null>(null)
   const [saving, setSaving] = useState(false)
 
   const filtered = sortByView(
     answer.records
       .filter((record) => [record.name, record.facts.Type, record.facts["Invoice code"], record.facts["Waste fraction"]].join(" ").toLowerCase().includes(query.trim().toLowerCase()))
-      .filter((record) => statuses.length === 0 || statuses.includes(record.status))
-      .filter((record) => types.length === 0 || types.includes(record.facts.Type ?? "")),
+      .filter((record) => matchesBusinessFilters(record, filters, PRODUCT_READERS)),
     view,
     (record) => record.name,
     () => "",
@@ -102,16 +104,19 @@ export function ProductsPane() {
   return (
     <AssetPanelShell
       toolbar={
-        <AssetToolbar
-          searchPlaceholder="Search products"
+        <RecordToolbar
+          placeholder="Search products"
           query={query}
           onQueryChange={setQuery}
-          statuses={statuses}
-          onStatusesChange={setStatuses}
-          statusOptions={PRODUCT_STATUS_OPTIONS}
-          extraFilters={[{ label: "Type", options: PRODUCT_TYPE_OPTIONS, value: types, onChange: setTypes }]}
+          records={answer.records}
+          readers={PRODUCT_READERS}
+          filters={filters}
+          onFiltersChange={setFilters}
           view={view}
           onViewChange={setView}
+          orderingOptions={RECENT_ORDERS}
+          defaults={listView("updated")}
+          detailsLabel="Project"
         />
       }
     >
@@ -134,7 +139,7 @@ export function ProductsPane() {
         }
       >
         <div className="overflow-x-auto">
-          <Table className="min-w-[960px]" data-testid="products-on-api">
+          <Table className={cn("min-w-[960px]", densityClass(view))} data-testid="products-on-api">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
@@ -155,7 +160,7 @@ export function ProductsPane() {
                   <TableRow key={product.id}>
                     <TableCell className="min-w-[220px]">
                       <p className="text-sm font-medium text-foreground">{product.name}</p>
-                      {view.showDetails && <p className="text-xs text-muted-foreground">{product.facts.Project ?? product.context}</p>}
+                      {view.showDescription && <p className="text-xs text-muted-foreground">{product.facts.Project ?? product.context}</p>}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[11px] font-normal">
@@ -195,7 +200,8 @@ export function ProductsPane() {
 // Price lists, in both modes
 // ---------------------------------------------------------------------------
 
-const LIST_STATUS_OPTIONS = ["Scheduled", "Active", "Expired"] as const
+/** A price list's status, read on each project's day: the value the list filters by. */
+const LIST_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
 
 /** Apply index over one list on the Pilot (#291 C8): each line named by its row — the product and its conditions — from today on the list's project's clock, and the rows and the products read again once it lands. */
 function ApplyListIndex({ list, onClose }: { list: BusinessRecord; onClose: () => void }) {
@@ -236,8 +242,8 @@ export function PriceListsPane() {
   const pickers = useCommercialPickers()
   const answer = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
   const [query, setQuery] = useState("")
-  const [statuses, setStatuses] = useState<string[]>([])
-  const [view, setView] = useState<AssetView>(defaultAssetView)
+  const [filters, setFilters] = useState<BusinessFilters>(emptyBusinessFilters)
+  const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [editing, setEditing] = useState<Editing | null>(null)
   const [indexing, setIndexing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
@@ -258,7 +264,7 @@ export function PriceListsPane() {
   const filtered = sortByView(
     lists
       .filter((list) => [list.name, list.facts.Code, list.description].join(" ").toLowerCase().includes(query.trim().toLowerCase()))
-      .filter((list) => statuses.length === 0 || statuses.includes(list.status)),
+      .filter((list) => matchesBusinessFilters(list, filters, LIST_READERS)),
     view,
     (list) => list.name,
     () => "",
@@ -284,7 +290,22 @@ export function PriceListsPane() {
 
   return (
     <AssetPanelShell
-      toolbar={<AssetToolbar searchPlaceholder="Search price lists" query={query} onQueryChange={setQuery} statuses={statuses} onStatusesChange={setStatuses} statusOptions={LIST_STATUS_OPTIONS} view={view} onViewChange={setView} />}
+      toolbar={
+        <RecordToolbar
+          placeholder="Search price lists"
+          query={query}
+          onQueryChange={setQuery}
+          records={lists}
+          readers={LIST_READERS}
+          filters={filters}
+          onFiltersChange={setFilters}
+          view={view}
+          onViewChange={setView}
+          orderingOptions={RECENT_ORDERS}
+          defaults={listView("updated")}
+          detailsLabel="Notes"
+        />
+      }
     >
       <RecordsSection
         shown={filtered.length}
@@ -297,7 +318,7 @@ export function PriceListsPane() {
         }
       >
         <div className="overflow-x-auto">
-          <Table className="min-w-[880px]" data-testid="price-lists">
+          <Table className={cn("min-w-[880px]", densityClass(view))} data-testid="price-lists">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
@@ -320,7 +341,7 @@ export function PriceListsPane() {
                     <TableRow key={list.id}>
                       <TableCell className="min-w-[200px]">
                         <p className="text-sm font-medium text-foreground">{list.name}</p>
-                        {view.showDetails && <p className="line-clamp-1 text-xs text-muted-foreground">{list.description || "No notes"}</p>}
+                        {view.showDescription && <p className="line-clamp-1 text-xs text-muted-foreground">{list.description || "No notes"}</p>}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{String(values.code ?? "—")}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{String(values.currency || "The project's")}</TableCell>

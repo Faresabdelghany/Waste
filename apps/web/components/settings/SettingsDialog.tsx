@@ -17,6 +17,7 @@ import { ReportNotice } from "@/components/insight/report-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApiConfigured } from "@/components/platform/api-session-store"
+import { CONTENT_FRAME } from "@/components/page-layout"
 import { keptOnApi } from "@/lib/api/records/server-records"
 import { settingsAddressHref, settingsAddressShown, settingsNav, settingsPane, settingsPaneDrawnWithoutApi, type SettingsAddress, type SettingsPaneId, type SettingsParams } from "@/lib/modules/settings-panes"
 import { cn } from "@/lib/utils"
@@ -110,7 +111,7 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
         </nav>
       </aside>
 
-      <main className="mx-2 mb-2 min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-sidebar bg-background sm:my-2 sm:ml-0" id="settings-content">
+      <main className={cn("mx-2 mb-2 min-h-0 min-w-0 flex-1 overflow-y-auto sm:my-2 sm:ml-0", CONTENT_FRAME)} id="settings-content">
         <div className="flex min-h-full w-full flex-col">
           <div className="flex min-w-0 flex-1 flex-col">
             <SettingsPaneFrameProvider pane={shownPane}>

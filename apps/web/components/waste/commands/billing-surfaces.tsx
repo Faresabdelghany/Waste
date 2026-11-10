@@ -75,6 +75,7 @@ import {
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 import { dayIn } from "@/lib/format/clock"
 import { ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
+import { waitingSentence } from "@/lib/api/read-state"
 
 // ---------------------------------------------------------------------------
 // Billable events
@@ -148,7 +149,7 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="event-commands">
       <h3 className="text-sm font-semibold">Event commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The events are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("events", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {offered.map((name) => (
           <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(EVENT_COMMAND_FORMS[name])} onClick={() => setOpen(name)}>

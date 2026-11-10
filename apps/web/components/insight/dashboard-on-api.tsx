@@ -21,12 +21,13 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { Breadcrumbs } from "@/components/ui/breadcrumbs"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { PageActions, PageTopBar } from "@/components/page-layout"
+import { CONTENT_FRAME, PageActions, PageTopBar } from "@/components/page-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApiConfigured, useApiSession } from "@/components/platform/api-session-store"
 import { modulesMayView } from "@/lib/modules/grants"
 import { keptOnApi } from "@/lib/api/records/server-records"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
+import { cn } from "@/lib/utils"
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
 import { mayView as mayViewImports } from "@/lib/imports/import-file"
@@ -92,7 +93,7 @@ export function DashboardOnApi() {
   const windowed = tab?.id !== "compliance"
 
   return (
-    <Tabs value={tab?.id ?? ""} onValueChange={(value) => choose(value as DashboardTabId)} className="m-2 flex min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-lg border border-sidebar bg-background" data-testid="dashboard-on-api">
+    <Tabs value={tab?.id ?? ""} onValueChange={(value) => choose(value as DashboardTabId)} className={cn("m-2 flex min-w-0 flex-1 flex-col gap-0 overflow-hidden", CONTENT_FRAME)} data-testid="dashboard-on-api">
       <header className="shrink-0 border-b border-border/70">
         <PageTopBar>
           <Breadcrumbs items={[{ label: "Dashboard" }]} />

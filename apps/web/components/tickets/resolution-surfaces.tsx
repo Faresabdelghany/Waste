@@ -26,6 +26,7 @@ import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/data/provider-workspace"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers, useTicketForm } from "./resolution-pickers"
@@ -174,7 +175,7 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="alert-commands">
       <h3 className="text-sm font-semibold">Alert commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The alerts are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("alerts", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         {status === "new" && (
           <Button variant="outline" size="sm" disabled={!offered} onClick={() => run(ACKNOWLEDGE_ALERT)}>

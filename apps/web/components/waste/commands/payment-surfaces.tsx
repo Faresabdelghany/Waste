@@ -40,6 +40,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { INVOICES_MODULE, PAYMENTS_MODULE } from "@/lib/data/commercial"
 import { allocateForm, BANK_IMPORT_FORM, blankNone, createPaymentRecord, PAYMENT_FORM, STATEMENT_FORM, text } from "@/lib/data/commercial-forms"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
+import { waitingSentence } from "@/lib/api/read-state"
 
 // ---------------------------------------------------------------------------
 // Register payment and Import bank statement
@@ -265,7 +266,7 @@ export function PaymentCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="payment-commands">
       <h3 className="text-sm font-semibold">Payment</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The payments are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("payments", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !remains || !pickers.readyFor(allocateForm(record))} onClick={() => setMatching(true)}>
           Match to invoice

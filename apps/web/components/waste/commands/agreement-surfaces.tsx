@@ -28,6 +28,7 @@ import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { CHANGE_SERVICE_FORM, PAUSE_FORM, pauseLine, pauseOffers, stopsToRemoveSentence, TERMINATE_FORM } from "@/lib/data/subscription-lifecycle"
+import { waitingSentence } from "@/lib/api/read-state"
 import type { SubscriptionPause } from "@waste/contracts/agreements"
 
 /** The project a row is in, as its form typed it. */
@@ -78,7 +79,7 @@ function TerminateSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-3" data-testid="agreement-lifecycle">
       <h3 className="text-sm font-semibold">Agreement lifecycle</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The agreements are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("agreements", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(true)}>
           Terminate
@@ -130,7 +131,7 @@ function SubscriptionLifecycleSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="subscription-lifecycle">
       <h3 className="text-sm font-semibold">Subscription lifecycle</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The subscriptions are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("subscriptions", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen("change")}>
           Change service

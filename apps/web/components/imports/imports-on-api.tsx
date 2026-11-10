@@ -37,9 +37,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { PageTopBar } from "@/components/page-layout"
+import { CONTENT_FRAME, PageTopBar } from "@/components/page-layout"
 import { ReportCard, ReportNotice } from "@/components/insight/report-card"
 import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
+import { cn } from "@/lib/utils"
 import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { importTemplate, previewImport, sendImportBatch, startImportRun } from "@/lib/api/imports"
 import { ApiProblem, genericProblem, problemOfError, problemSentence, type Problem } from "@/lib/api/problem"
@@ -204,7 +205,7 @@ export function ImportsOnApi() {
   const progress = phase.step === "previewing" ? phase.done : committedResults?.length ?? 0
 
   return (
-    <div className="m-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sidebar bg-background" data-testid="imports-on-api">
+    <div className={cn("m-2 flex min-w-0 flex-1 flex-col overflow-hidden", CONTENT_FRAME)} data-testid="imports-on-api">
       <header>
         <PageTopBar>
           <Breadcrumbs items={[{ label: "Dashboard", href: "/performance" }, { label: "Imports" }]} />

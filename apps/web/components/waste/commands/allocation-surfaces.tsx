@@ -20,6 +20,7 @@ import { allocationEvents, CONFIRM_ALLOCATION, RELEASE_ALLOCATION, VEHICLE_PLANN
 import { shownOn } from "@/lib/format/clock"
 import { ALLOCATE_FORM, allocationChangeForm, allocationFormValues, changedAllocationRecord, createAllocationRecord, RELEASE_FORM } from "@/lib/data/allocations"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
+import { waitingSentence } from "@/lib/api/read-state"
 
 const { workspaceId, moduleId } = VEHICLE_PLANNING_MODULE
 
@@ -72,7 +73,7 @@ export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="allocation-commands">
       <h3 className="text-sm font-semibold">Allocation commands</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The allocations are being read from the API; their commands follow.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("allocations", "their commands follow")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(changeForm)} onClick={() => setOpen({ kind: "change", schema: changeForm, values: allocationFormValues(record) })}>
           Change

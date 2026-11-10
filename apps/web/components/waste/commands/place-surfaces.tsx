@@ -25,6 +25,7 @@ import { TanksSection } from "@/components/waste/commands/tank-section"
 import { useModuleReady, useRelationPickers } from "@/components/platform/use-command-support"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
+import { waitingSentence } from "@/lib/api/read-state"
 import {
   createPropertyGroupRecord,
   createPropertyRecord,
@@ -114,7 +115,7 @@ function EditSurface({ record, module, schema, noun }: RowSurfaceProps & { modul
 
   return (
     <section className="space-y-3" data-testid="place-commands">
-      {!moduleReady && <p className="text-sm text-muted-foreground">The rows are being read from the API; the edit follows.</p>}
+      {!moduleReady && <p className="text-sm text-muted-foreground">{waitingSentence("rows", "the edit follows")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(schema)} onClick={() => setOpened(formValuesOf(schema, record))}>
           Edit {noun.toLowerCase()}

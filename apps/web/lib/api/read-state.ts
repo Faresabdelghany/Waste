@@ -16,6 +16,9 @@ const readingSentence = (noun: string): string => `Reading the ${noun} from the 
 /** "The planning areas could not be read from the API: <why>." */
 const unreadSentence = (noun: string, why: string): string => `The ${noun} could not be read from the API: ${why}`
 
+/** What a record's surface says while its module is read, and what it offers once read: "The routes are being read from the API; their commands follow." */
+export const waitingSentence = (noun: string, follows: string, { is = false }: Pick<ReadNoun, "is"> = {}): string => `The ${noun} ${is ? "is" : "are"} being read from the API; ${follows}.`
+
 /**
  * A module's records as a pane reads them (`useModuleRecords`): being read,
  * not the role's, or refused, in the API's own words; null once they are read,

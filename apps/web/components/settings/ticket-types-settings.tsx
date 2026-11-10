@@ -20,7 +20,7 @@ import { toast } from "sonner"
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
 import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import { type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind } from "@waste/domain/resolution/vocabulary"
-import { RecordPageHeader } from "@/components/page-layout"
+import { PillTab, PillTabsList, RecordPageHeader } from "@/components/page-layout"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useApiSession } from "@/components/platform/api-session-store"
@@ -286,7 +286,6 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
     onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }), freezeSavedKeys)
   }
 
-  const tabClass = "h-7 rounded-full px-3 text-xs data-[state=active]:bg-background"
   return (
     <Tabs value={tab} onValueChange={setTab} className="flex min-w-0 flex-1 flex-col gap-0">
       <header className="flex flex-col border-b border-border/40">
@@ -312,22 +311,22 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
         {/* What the API refused of the last save, under the header rather than among its buttons. */}
         {refusal !== null && <p className="border-b border-border px-4 py-2 text-sm text-destructive">{refusal}</p>}
         <div className="overflow-x-auto px-4 py-3">
-          <TabsList className="inline-flex h-8 rounded-full border border-border/50 bg-muted px-1 py-0.5 text-xs" aria-label="Ticket type">
-            <TabsTrigger value="details" className={tabClass}>
+          <PillTabsList aria-label="Ticket type">
+            <PillTab value="details">
               Details
-            </TabsTrigger>
-            <TabsTrigger value="fields" className={tabClass}>
+            </PillTab>
+            <PillTab value="fields">
               Fields
               <span className="ml-1.5 text-[10px] text-muted-foreground">{fields.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="permissions" className={tabClass}>
+            </PillTab>
+            <PillTab value="permissions">
               Status permissions
-            </TabsTrigger>
-            <TabsTrigger value="automation" className={tabClass}>
+            </PillTab>
+            <PillTab value="automation">
               Automation
               <span className="ml-1.5 text-[10px] text-muted-foreground">{actions.length}</span>
-            </TabsTrigger>
-          </TabsList>
+            </PillTab>
+          </PillTabsList>
           {/* Outside the tabs' fieldset, so a role that only reads the page can open it too. */}
           {tab === "permissions" && (
             <Tooltip>
