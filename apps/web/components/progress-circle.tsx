@@ -20,7 +20,6 @@ export function ProgressCircle({ progress, color, size = 18, strokeWidth = 2 }: 
   return (
     <div className="relative flex items-center justify-center" style={{ width: s, height: s }}>
       <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} aria-hidden>
-        {/* Background ring */}
         <circle
           cx={cx}
           cy={cy}
@@ -31,7 +30,6 @@ export function ProgressCircle({ progress, color, size = 18, strokeWidth = 2 }: 
           className="text-border"
         />
 
-        {/* Progress ring */}
         <circle
           cx={cx}
           cy={cy}

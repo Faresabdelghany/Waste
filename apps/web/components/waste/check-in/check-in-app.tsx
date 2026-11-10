@@ -34,7 +34,6 @@ import { CHECK_IN_SITE_STORAGE_KEY } from "@/lib/storage-keys"
 import { cn } from "@/lib/utils"
 import { useGrants } from "@/components/platform/use-grants"
 
-/** How long the address search waits after the last key before it asks. */
 const SEARCH_DELAY_MS = 300
 
 /** The site the device remembers, by project: read defensively, since a browser may hold anything there; a store that refuses writes has it picked again next time. */
@@ -45,7 +44,6 @@ const keptPick = persistedStore<{ projectId: string; siteId: string }>(CHECK_IN_
   },
 })
 
-/** The sites read for a project, or why they could not be. */
 type SitesRead = { status: "reading" } | { status: "read"; projectId: string; sites: VisitSite[] } | { status: "refused"; sentence: string }
 
 export function CheckInApp() {
@@ -118,7 +116,6 @@ function CheckInForm({ projects }: { projects: readonly { id: string; name: stri
   const [answer, setAnswer] = useState<SiteVisitCheckInAnswer | null>(null)
   const identifierRef = useRef<HTMLInputElement>(null)
 
-  // The project's sites, read again whenever the project moves; the remembered one kept while the project still offers it.
   useEffect(() => {
     if (client === null) return
     let live = true
@@ -137,7 +134,6 @@ function CheckInForm({ projects }: { projects: readonly { id: string; name: stri
     }
   }, [client, pick.projectId])
 
-  // The address search, once the person has stopped typing; a later query wins over a read still on its way.
   useEffect(() => {
     const q = query.trim()
     if (client === null || mode !== "address" || q.length < VISIT_ADDRESS_QUERY.min) return

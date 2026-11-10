@@ -19,7 +19,6 @@ import { useApiClient } from "@/components/platform/api-session-store"
 import type { ApiClient } from "@/lib/api/client"
 import { routingQuota } from "@/lib/api/routing"
 
-/** How often a mounted banner reads the quota again. */
 export const QUOTA_REREAD_MS = 60_000
 
 let reading: RoutingQuota | null = null
@@ -49,7 +48,6 @@ function read(): void {
   )
 }
 
-/** One more banner reading the quota with `client`; the returned function is its leaving. */
 function watch(client: ApiClient): () => void {
   reader = client
   watchers += 1

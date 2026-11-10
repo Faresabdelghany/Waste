@@ -45,7 +45,6 @@ export function LoginView() {
     if (new URLSearchParams(window.location.search).has("next")) router.replace(SIGN_IN_PATH)
   }, [session, ended, router])
 
-  /** After sign-in, and on Continue. */
   const land = async () => {
     if (!apiConfigured) {
       router.push(FIXTURE_SIGNED_IN_HOME)

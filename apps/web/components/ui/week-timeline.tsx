@@ -6,7 +6,6 @@ import { Separator } from "@/components/ui/separator"
 import { CaretLeft, CaretRight, CalendarBlank, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
 import { cn } from "@/lib/utils"
 
-/** One bar of the timeline: a named span of days and how far along it is. */
 export type TimelineItem = {
   id: string
   name: string

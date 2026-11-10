@@ -59,9 +59,7 @@ function StatusBadge({
   ...props
 }: Omit<React.ComponentProps<typeof Badge>, "variant"> & {
   tone?: StatusTone
-  /** A leading dot in the tone's solid colour. */
   dot?: boolean
-  /** A border in the tone; without it the badge is the tint alone. */
   outlined?: boolean
 }) {
   return (

@@ -5,7 +5,6 @@ import type { ReactNode } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
-/** A row led by a round check mark, struck through once checked: its title, an optional suffix and subtitle, and trailing meta. */
 export function CheckRow({
   checked,
   title,
