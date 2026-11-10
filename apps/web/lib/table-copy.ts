@@ -1,6 +1,5 @@
 import { problemSentence, type Problem } from "./api/problem"
 
-/** "1 record", "12 records", or "3 of 12 records": a table's count line, the noun agreeing with the total. */
 export function recordCountLabel(shown: number, total: number = shown): string {
   const noun = total === 1 ? "record" : "records"
   return shown === total ? `${total} ${noun}` : `${shown} of ${total} ${noun}`
@@ -12,7 +11,6 @@ export function recordCountLabel(shown: number, total: number = shown): string {
  */
 export const NARROWED_HINT = "Try a different search or filter."
 
-/** What a table reads of its module's state in the store: how its read stands, and why it failed. */
 type ModuleRead = { readonly status: string; readonly problem: Problem | null }
 
 /**

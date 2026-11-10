@@ -29,10 +29,8 @@ function resolved(from: string, spec: string): string | undefined {
   return found === undefined ? undefined : relative(WEB, join(WEB, found))
 }
 
-/** A file's folder: its first two path segments, or the file itself at a root. */
 const folderOf = (file: string) => file.split("/").slice(0, 2).join("/")
 
-/** Every folder's imports of another folder, each with the files that make it. */
 function folderEdges(): Map<string, Map<string, string[]>> {
   const edges = new Map<string, Map<string, string[]>>()
   for (const file of ROOTS.flatMap(sourcesUnder)) {

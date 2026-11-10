@@ -60,7 +60,6 @@ const companyWideFixtureRecordIds = [
   "sales-lead-greenloop",
 ] as const
 
-/** The projects each fixture record is filed under, by id. */
 const fixtureProjectsById: Readonly<Record<string, readonly FixtureProjectId[]>> = Object.freeze(
   Object.fromEntries([
     ...copenhagenFixtureRecordIds.map((id) => [id, [FIXTURE_PROJECT_IDS.copenhagen]] as const),

@@ -99,7 +99,6 @@ export const CONFIGURE = workspaceSpec("configure", {
               ? { pane: "tickets", params: { type: serverIdIn(TICKET_TYPE_PREFIX, recordId) } }
               : { pane: "tickets", params: {} },
       },
-      // A template field offers the message templates alone, of the records the module holds.
       picked: { offers: (fieldId, record) => fieldId !== "templateId" || record.id.startsWith("template-") },
       form: false,
       label: "Tickets & Communication",
@@ -118,7 +117,6 @@ export const CONFIGURE = workspaceSpec("configure", {
     },
     finance: {
       shown: { pane: "finance-invoicing" },
-      // A schedule field offers the billing schedules alone, of the finance records.
       picked: { offers: (fieldId, record) => fieldId !== "scheduleId" || record.id.startsWith("billing-schedule-") },
       form: false,
       label: "Finance & Invoicing",

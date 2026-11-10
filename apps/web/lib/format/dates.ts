@@ -3,7 +3,6 @@
 // render and the browser's agree. Pure functions.
 import { MONTH_LABELS, MONTH_SHORT_LABELS } from "@waste/domain/days"
 
-/** "2026-09-16" → "September 16, 2026". */
 export function formatLongDate(iso: string): string {
   const [year, month, day] = iso.split("-").map((part) => Number.parseInt(part, 10))
   const monthName = MONTH_LABELS[(month ?? 1) - 1] ?? MONTH_LABELS[0]

@@ -241,7 +241,6 @@ export const DEFAULT_SETTINGS_PANE: SettingsPaneId = "account"
 
 type PaneOf<Id> = Extract<(typeof PANES)[number], { id: Id }>
 
-/** A pane's tab, by value. */
 export type SettingsTabOf<Id extends SettingsPaneId> = Id extends SettingsPaneId ? (PaneOf<Id> extends { tabs: readonly { value: infer Value }[] } ? Value : never) : never
 
 type ParamsOf<Id> = Id extends SettingsPaneId ? (PaneOf<Id> extends { params: readonly (infer Param extends SettingsParam)[] } ? Param : never) | (PaneOf<Id> extends { tabs: readonly unknown[] } ? "tab" : never) : never
@@ -249,20 +248,16 @@ type ParamsOf<Id> = Id extends SettingsPaneId ? (PaneOf<Id> extends { params: re
 /** What an address of the pane may say: its own params, and `from`, where Back to app returns. */
 export type SettingsParamsOf<Id extends SettingsPaneId> = { readonly [Param in ParamsOf<Id>]?: (Param extends "tab" ? SettingsTabOf<Id> : string) | null } & { readonly from?: string }
 
-/** A pane's params as an address holds them: the ones it declares, each a value. */
 export type SettingsParams = Partial<Readonly<Record<SettingsParam | "tab", string>>>
 
-/** What every pane's view is handed: its own params, and the moves it makes in the address. */
 export type SettingsPaneProps = {
   paneId: SettingsPaneId
-  /** The params of its own the address gives it. */
   params: SettingsParams
   /** Moves its params, in place in the address, or as a new entry Back returns from. */
   onParamsChange: (params: SettingsParams, how?: "push" | "replace") => void
   onOpenPane: (paneId: SettingsPaneId, params?: SettingsParams) => void
 }
 
-/** What Settings shows: a pane, and the params of its own it was asked with. */
 export type SettingsAddress = { readonly pane: SettingsPaneId; readonly params: SettingsParams }
 
 export function settingsPaneOf(id: string | undefined): SettingsPane | undefined {
@@ -275,12 +270,10 @@ export function settingsPane(id: SettingsPaneId): SettingsPane {
   return pane
 }
 
-/** A pane's tabs, each typed as the pane spells it. */
 export function settingsTabsOf<Id extends SettingsPaneId>(paneId: Id): readonly { readonly value: SettingsTabOf<Id>; readonly label: string }[] {
   return (settingsPane(paneId).tabs ?? []) as readonly { readonly value: SettingsTabOf<Id>; readonly label: string }[]
 }
 
-/** The params `given` holds that the pane reads: its own, and one of its tabs. */
 function paramsRead(pane: SettingsPane, given: Readonly<Record<string, string | null | undefined>>): SettingsParams {
   const read: Partial<Record<SettingsParam | "tab", string>> = {}
   for (const param of pane.params ?? []) {
@@ -292,11 +285,6 @@ function paramsRead(pane: SettingsPane, given: Readonly<Record<string, string | 
   return read
 }
 
-/**
- * The pane an address shows, and the params it reads: a retired pane's id
- * opens the pane that absorbed it at its tab; an id no pane answers to opens
- * the default pane.
- */
 export function settingsAddressShown(requested: string | undefined, given: Readonly<Record<string, string | null | undefined>>): SettingsAddress {
   const absorbing = requested === undefined ? undefined : SETTINGS_PANES.find((pane) => pane.absorbs !== undefined && Object.hasOwn(pane.absorbs, requested))
   const pane = absorbing ?? settingsPaneOf(requested)
@@ -305,12 +293,10 @@ export function settingsAddressShown(requested: string | undefined, given: Reado
   return { pane: pane.id, params: paramsRead(pane, params) }
 }
 
-/** Whether a pane draws where no API is configured: its subject is the browser's own, not the API's. */
 export function settingsPaneDrawnWithoutApi(pane: SettingsPane): boolean {
   return pane.withoutApi === true
 }
 
-/** The bar above a pane: its section, or the pane itself where its tabs or records title themselves. */
 export function settingsPaneHeading(pane: SettingsPane): string {
   return pane.headedBy === "label" ? pane.label : (SETTINGS_SECTIONS.find((section) => section.id === pane.section)?.label ?? pane.label)
 }
@@ -334,7 +320,6 @@ export function settingsHref<Id extends SettingsPaneId>(paneId: Id, params?: Set
   return hrefOf(paneId, params ?? {})
 }
 
-/** The address of what Settings shows, `from` where Back to app returns where one is given. */
 export function settingsAddressHref(address: SettingsAddress, from?: string): string {
   return hrefOf(address.pane, { ...address.params, from })
 }

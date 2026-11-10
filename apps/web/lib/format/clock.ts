@@ -24,7 +24,6 @@ function knownZone(timezone: string | undefined): string | undefined {
 
 const pad = (value: number) => String(value).padStart(2, "0")
 
-/** The day as the browser's calendar has it. */
 const localDay = (now: Date): string => `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 
 /**
@@ -43,7 +42,6 @@ export function dayIn(now: Date, timezone: string | undefined): string {
   return localDay(now)
 }
 
-/** The wall clock an instant reads on the project's clock, or on the browser's where the zone is not one. */
 function wallOn(instant: string, timezone: string | undefined): WallClock {
   const date = new Date(instant)
   const zone = knownZone(timezone)
@@ -74,7 +72,6 @@ export function instantOn(value: string, timezone: string | undefined): string |
   return instantOnDay(onDay, hour * 3600 + minute * 60 + second, zone).toISOString()
 }
 
-/** An instant as a person reads it on the project's clock: `2026-10-01 05:30`. */
 export const shownOn = (instant: string, timezone: string | undefined): string => wallClockIn(instant, timezone).replace("T", " ")
 
 /** An instant as a list reads it on the project's clock, its day and time without the year: `24 Oct, 04:32` (#255). */

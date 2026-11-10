@@ -55,12 +55,10 @@ export const WORKSPACES: { readonly [W in WorkspaceId]: Workspace<W> } = {
   },
 }
 
-/** Every module's spec by its key. */
 export const MODULES = Object.fromEntries(
   WORKSPACE_KEYS.flatMap((workspaceId) => Object.entries(WORKSPACES[workspaceId].modules).map(([moduleId, spec]) => [`${workspaceId}.${moduleId}`, spec])),
 ) as { readonly [Key in ModuleKey]: ModuleSpec }
 
-/** The spec of the module at a location, or undefined where the registry holds none. */
 export function moduleSpecOf({ workspaceId, moduleId }: ModuleLocation): ModuleSpec | undefined {
   return Object.hasOwn(WORKSPACES, workspaceId) && Object.hasOwn(WORKSPACES[workspaceId].modules, moduleId) ? WORKSPACES[workspaceId].modules[moduleId] : undefined
 }
@@ -71,12 +69,10 @@ export function moduleSpecOfKey(key: string): ModuleSpec | undefined {
   return dot < 0 ? undefined : moduleSpecOf({ workspaceId: key.slice(0, dot) as WorkspaceId, moduleId: key.slice(dot + 1) })
 }
 
-/** The ids of the modules a workspace's page shows, tabs and More, in its order: not one shown elsewhere or in Settings. */
 export function pageModuleIds(workspaceId: WorkspaceId): string[] {
   return Object.entries(WORKSPACES[workspaceId].modules).flatMap(([moduleId, spec]) => (spec.shown === "tab" || spec.shown === "more" ? [moduleId] : []))
 }
 
-/** The modules a page of the provider's workspace shows, in the manifest's order: each one's workspace and id. */
 export function providerPageModules(page: ProviderPageId): ModuleLocation[] {
   return Object.values(WORKSPACES).flatMap((workspace) =>
     Object.entries(workspace.modules).flatMap(([moduleId, spec]) => (spec.providerPage === page ? [{ workspaceId: workspace.id, moduleId }] : [])),

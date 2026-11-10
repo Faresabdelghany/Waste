@@ -1,6 +1,3 @@
-// The module manifest: one spec per module of the domain's `MODULE_KEYS`,
-// and the registries read off it — the workspaces' pages, the Settings panes,
-// the provider's pages.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

@@ -1,6 +1,5 @@
-// The clock's timers, as the Driver App's controller, its location helper and
-// a generation run's watcher take them: the browser's in the page, a
-// hand-moved set in the tests.
+// The clock's timers: the browser's in the page, a hand-moved set in the
+// tests.
 export type Timers = {
   set: (run: () => void, ms: number) => unknown
   clear: (handle: unknown) => void
