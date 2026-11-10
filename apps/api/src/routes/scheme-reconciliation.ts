@@ -40,7 +40,6 @@ import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/voc
 import { schemeSeasonsOf } from "@waste/domain/planning/scheme-seasons"
 import { and, eq, inArray, sql } from "drizzle-orm"
 
-/** What the reconciliation reads of one scheme: its row's recurrence and period, its groups, and what its runs matched. */
 export type SchemeToReconcile = {
   id: string
   projectId: string
@@ -63,7 +62,6 @@ type PromiseRow = {
   daysBetween: number | null
 }
 
-/** Each running group's days with the containers it collects: a manual group's picks, a rule group's latest match. */
 function plansOf(scheme: SchemeToReconcile): Array<{ day: ServiceDay; containerIds: string[] }> {
   const matched = new Map(scheme.generation.groups.map((group) => [group.groupId, group.latest.containerIds]))
   return scheme.groups.flatMap((group) => {
@@ -72,13 +70,11 @@ function plansOf(scheme: SchemeToReconcile): Array<{ day: ServiceDay; containerI
   })
 }
 
-/** The day a scheme is judged on: its start or today, whichever is later, held inside its period. */
 export function reconciledOn(scheme: Pick<SchemeToReconcile, "validFrom" | "validTo">, today: string): string {
   const from = today > scheme.validFrom ? today : scheme.validFrom
   return scheme.validTo !== null && from >= scheme.validTo ? lastDayIn(scheme.validTo) : from
 }
 
-/** The promises of the containers asked for, as their placements in force on `day` say them. */
 async function promisesOn(tx: Tx, companyId: string, day: string, containerIds: readonly string[]): Promise<PromiseRow[]> {
   if (containerIds.length === 0) return []
   return tx

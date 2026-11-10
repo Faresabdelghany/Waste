@@ -1,7 +1,7 @@
 // Proof objects (O1 of #290): where a photo's or a signature's bytes go and
 // how they are read back, signed by the API and never carried by it. The
 // bytes live in the private `proofs` bucket under the key the command names
-// (`objectKeyOf`, @waste/domain/execution/commands), and the API holds
+// (`objectKeyOf`, @waste/domain/storage-objects), and the API holds
 // Storage's service-role key (`@waste/db/storage`):
 //
 //   POST /driver/uploads           the driver door: the upload URL of one of
@@ -60,12 +60,10 @@ export const STORAGE_REFUSED = "Storage refused the request: this deployment's p
 
 export function proofObjectRoutes(deps: RouteDeps) {
   const { storage, now, log } = deps
-  /** Storage, or the deployment's 503. */
   const required = (): ProofStorage => {
     if (storage === null) throw problem(503, { kind: NO_PROOF_STORAGE, detail: NO_PROOF_STORAGE_DETAIL })
     return storage
   }
-  /** A call to Storage: its silence a 502, its refusal the deployment's 503, and the cause of either in the log. */
   const asking = async <T>(ask: () => Promise<T>): Promise<T> => {
     try {
       return await ask()

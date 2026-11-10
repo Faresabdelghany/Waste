@@ -66,7 +66,7 @@ const columns = {
 
 type Row = Pick<typeof project.$inferSelect, keyof typeof columns>
 
-/** The row on the wire. `status` is text with a CHECK in the database and this enum here; packages/db holds the two lists in lockstep. `weekend` is a `text[]` held to the seven by the same tuple the enum reads. */
+/** The row on the wire. `status` is text with a CHECK in the database and this enum here; @waste/domain/access/vocabulary holds the two lists in lockstep. `weekend` is a `text[]` held to the seven by the same tuple the enum reads. */
 function projectOf(row: Row): Project {
   return {
     id: row.id,

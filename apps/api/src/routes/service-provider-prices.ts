@@ -171,7 +171,6 @@ const {
   list: listPrices,
 } = scoped(serviceProviderPrice, { noun: "service provider price", reach: "projects", reads: readable, place: "this account reaches", columns })
 
-/** The prices under every assignment naming a provider, for the list's `serviceProviderId` filter. */
 const underProvider = (tx: Tx, companyId: string, serviceProviderId: string) =>
   exists(
     tx
@@ -289,7 +288,6 @@ export function serviceProviderPriceRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         const dryRun = index.dryRun === true
 
-        // The scope named: an award of the caller's projects, or a provider of this company.
         let asked: SQL
         if (index.serviceAreaAssignmentId !== undefined) {
           await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, index.serviceAreaAssignmentId)

@@ -44,7 +44,6 @@ const MODULE = "route-studio.live"
 /** What a sessionId that is not one of the route's own is told. */
 export const NOT_A_SESSION_OF_THE_ROUTE = "Not a session of this route"
 
-/** A position row on the wire. */
 const positionOf = (row: { fixedAt: Date | string; location: unknown; accuracyM: number; speedKmh: number | null; headingDeg: number | null }): Position => ({
   at: new Date(row.fixedAt).toISOString(),
   // The column is `geometry(Point, 4326)`, flat: what it holds is the contracts' `FlatPoint`.
@@ -54,7 +53,6 @@ const positionOf = (row: { fixedAt: Date | string; location: unknown; accuracyM:
   headingDeg: row.headingDeg,
 })
 
-/** One session's track in order, thinned to `TRACK_POINTS_MAX` evenly with its last point kept, in one statement. */
 async function trackOf(tx: Tx, companyId: string, sessionId: string): Promise<{ points: Position[]; thinned: boolean }> {
   const [{ total }] = await tx
     .select({ total: sql<number>`count(*)::int` })
@@ -77,7 +75,6 @@ async function trackOf(tx: Tx, companyId: string, sessionId: string): Promise<{ 
   return { points, thinned: step > 1 }
 }
 
-/** The newest position of each open session named, by session, in one statement. */
 export async function newestPositionsBySession(tx: Tx, companyId: string, sessionIds: readonly string[]): Promise<Map<string, Position>> {
   if (sessionIds.length === 0) return new Map()
   const rows = await tx
@@ -88,10 +85,8 @@ export async function newestPositionsBySession(tx: Tx, companyId: string, sessio
   return new Map(rows.map((row) => [row.sessionId, positionOf(row)] as const))
 }
 
-/** A route's estimates as instants: the active Plan's stops with each one's, and the trip's end. */
 export type RouteEtaReading = { planId: string | null; stops: { kind: "pickup" | "unload"; pickupId: string | null; position: number; eta: Date | null }[]; finishAt: Date | null }
 
-/** The route's estimates at `now`, over its active Plan, its stops and its clock. */
 export async function routeEtaOf(tx: Tx, companyId: string, routeRow: RouteRow, now: Date): Promise<RouteEtaReading> {
   if (routeRow.activePlanId === null) return { planId: null, stops: [], finishAt: null }
   const [planRow] = await tx

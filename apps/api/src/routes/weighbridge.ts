@@ -201,7 +201,6 @@ export async function routesOf(tx: Tx, companyId: string, truck: { id: string; p
   return { sessionRouteIds: sessions.map((row) => row.routeId), dayRouteIds: days.map((row) => row.id) }
 }
 
-/** One ticket of a batch, judged and kept in its own savepoint. */
 async function ingestOne(tx: Tx, principal: Principal, context: BatchContext, sent: WeighbridgeTicketIn, at: Date): Promise<WeighbridgeTicketOutcome> {
   const named = { stationCode: sent.stationCode, ticketNumber: sent.ticketNumber }
   const station = context.stations.get(sent.stationCode)

@@ -152,7 +152,6 @@ export function mergedRuns(...all: RunWindows[]): RunWindows {
   return merged
 }
 
-/** Asks the runs, as the header says: best effort, and never a refusal of the command that asks them. */
 export async function askRuns(tx: Tx, principal: Principal, jobs: JobSender, scope: Scope, runs: RunWindows, now: () => Date): Promise<void> {
   if (runs.size === 0 || !allows(principal.grants, SCHEMES_MODULE, "edit")) return
   const today = await projectToday(tx, scope, now)()

@@ -185,7 +185,6 @@ const eventOf = (row: EventRow): SettlementEvent => ({
   recordedBy: row.recordedBy,
 })
 
-/** The history's row for a command that moved the settlement: the kind, the status and the totals after it, the reason of a reopening, who did it. */
 async function appendEvent(tx: Tx, principal: Principal, row: SettlementRow, kind: SettlementEventKind, reason: string | null): Promise<void> {
   await tx.insert(settlementEvent).values({
     id: newId(),
@@ -201,7 +200,6 @@ async function appendEvent(tx: Tx, principal: Principal, row: SettlementRow, kin
   })
 }
 
-/** What a command sets on the row beside the status. */
 type Stamped = Partial<Pick<typeof settlement.$inferInsert, "calculatedAt" | "closedAt" | "closedBy" | "lineCount" | "netMinor">>
 
 /** Moves the row to a status with what the command carries beside it, and answers it as written — the provider carried over from the read, since the assignment does not move. */
@@ -215,7 +213,6 @@ async function setStatus(tx: Tx, principal: Principal, current: SettlementRow, s
   return { ...row, serviceProviderId: current.serviceProviderId, providerLegalName: current.providerLegalName }
 }
 
-/** The machine's answer for a command on the row as read, on the project's day: the 409 in its words, `stay`, or the status to move to. */
 async function transitionOf(tx: Tx, principal: Principal, current: SettlementRow, command: SettlementCommand, now: () => Date): Promise<{ kind: "stay" } | { kind: "move"; to: SettlementStatus }> {
   const today = await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)()
   const state = { status: current.status, label: labelOf(current), firstDay: current.validFrom, lastDay: lastDayOf(current) }

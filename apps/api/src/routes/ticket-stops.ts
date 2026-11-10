@@ -33,7 +33,6 @@ import type { Scope } from "./references"
 /** What a ticket the body names is told when it is no ticket of the route's project. */
 export const NOT_A_TICKET = "Not a ticket of this project"
 
-/** Where the stop is, as the ticket is held to it. */
 type StopAt = { service: PickupService; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null }
 
 /**

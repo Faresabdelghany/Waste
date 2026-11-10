@@ -149,7 +149,6 @@ const activityOf = (row: Row, containerIds: string[] | null = null, wasteFractio
   ...stampsOf(row),
 })
 
-/** Each stop-set change's containers, in stop order, by activity id, in one statement; an activity of another kind has none. */
 async function containersOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<Map<string, string[]>> {
   const ids = rows.filter((row) => row.kind === "stop-set-change").map((row) => row.id)
   const sets = new Map<string, string[]>(ids.map((id) => [id, []]))
@@ -163,7 +162,6 @@ async function containersOf(tx: Tx, companyId: string, rows: readonly Row[]): Pr
   return sets
 }
 
-/** Each waste-fraction change's fractions by activity id, in one statement; an activity of another kind has none. */
 async function fractionsOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<Map<string, string[]>> {
   const ids = rows.filter((row) => row.kind === "waste-fraction-change").map((row) => row.id)
   const sets = new Map<string, string[]>(ids.map((id) => [id, []]))
@@ -177,29 +175,24 @@ async function fractionsOf(tx: Tx, companyId: string, rows: readonly Row[]): Pro
   return sets
 }
 
-/** Activities on the wire, each stop-set change with its containers and each waste-fraction change with its fractions. */
 async function answers(tx: Tx, companyId: string, rows: readonly Row[]): Promise<ServiceProviderActivity[]> {
   const containers = await containersOf(tx, companyId, rows)
   const fractions = await fractionsOf(tx, companyId, rows)
   return rows.map((row) => activityOf(row, containers.get(row.id) ?? null, fractions.get(row.id) ?? null))
 }
 
-/** One Activity on the wire. */
 const answer = async (tx: Tx, companyId: string, row: Row): Promise<ServiceProviderActivity> => (await answers(tx, companyId, [row]))[0]
 
-/** A stop-set change's containers written as its set, replacing whatever it held, in stop order. */
 async function writeContainers(tx: Tx, row: Pick<Row, "id" | "projectId">, companyId: string, containerIds: readonly string[]): Promise<void> {
   await tx.delete(serviceProviderActivityContainer).where(and(eq(serviceProviderActivityContainer.companyId, companyId), eq(serviceProviderActivityContainer.activityId, row.id)))
   await tx.insert(serviceProviderActivityContainer).values(containerIds.map((containerId, index) => ({ id: newId(), companyId, projectId: row.projectId, activityId: row.id, containerId, position: index + 1 })))
 }
 
-/** A waste-fraction change's fractions written as its set, replacing whatever it held. */
 async function writeFractions(tx: Tx, row: Pick<Row, "id" | "projectId">, companyId: string, wasteFractionIds: readonly string[]): Promise<void> {
   await tx.delete(serviceProviderActivityFraction).where(and(eq(serviceProviderActivityFraction.companyId, companyId), eq(serviceProviderActivityFraction.activityId, row.id)))
   await tx.insert(serviceProviderActivityFraction).values(wasteFractionIds.map((wasteFractionId) => ({ id: newId(), companyId, projectId: row.projectId, activityId: row.id, wasteFractionId })))
 }
 
-/** The side of an Activity the caller is on: a provider's account, or the office's. */
 const sideOf = (principal: Principal): ActivitySide => (providerIdOf(principal) === null ? "office" : "provider")
 
 /** The rows the caller reaches: its own provider's for a provider's account, its projects' for the office's; never both widened. */
@@ -227,10 +220,8 @@ export const groupParked = (name: string): string => `${name} is parked: it runs
 export const notServed = (provider: string, day: string): string => `${provider} does not serve this scheme on ${day}: no Service Area assigned to it then holds the scheme's planning area`
 export const KIND_CARRIES_NOT = "Not a member of this kind of activity"
 
-/** The scheme and the group a proposal names, as its rules read them. */
 type Subject = { scheme: { id: string; name: string; validFrom: string; validTo: string | null; archivedAt: Date | null }; group: { id: string; name: string; days: string[]; stopSource: string; vehicleId: string | null; driverId: string | null } }
 
-/** What a proposal asks, by kind: a route-day change the group's days, a vehicle change its vehicle and, where named, its driver; both from a day. */
 type Proposal = { routeSchemeId: string; collectionGroupId: string; effectiveFrom: string } & (
   | { kind: "route-day-change"; serviceDays: readonly ServiceDay[] }
   | { kind: "vehicle-change"; vehicleId: string; driverId: string | null }
@@ -238,7 +229,6 @@ type Proposal = { routeSchemeId: string; collectionGroupId: string; effectiveFro
   | { kind: "waste-fraction-change"; wasteFractionIds: readonly string[] }
 )
 
-/** A stored proposal as its rules read it again, a stop-set change with the containers its set holds. */
 async function proposalOf(tx: Tx, companyId: string, row: Row): Promise<Proposal> {
   const base = { routeSchemeId: row.routeSchemeId as string, collectionGroupId: row.collectionGroupId as string, effectiveFrom: row.effectiveFrom as string }
   if (row.kind === "vehicle-change") return { ...base, kind: "vehicle-change", vehicleId: row.vehicleId as string, driverId: row.driverId }
@@ -377,7 +367,6 @@ async function judgeProposal(
   return { scheme, group }
 }
 
-/** The provider's legal name, as a sentence names it. */
 async function providerName(tx: Tx, companyId: string, id: string): Promise<string> {
   const [row] = await tx
     .select({ legalName: serviceProvider.legalName })
@@ -475,7 +464,6 @@ const fractionsAmendment =
     }
   }
 
-/** What approving a proposal amends the scheme's next version by. */
 function amendmentOf(proposal: Proposal) {
   switch (proposal.kind) {
     case "route-day-change":

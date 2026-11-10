@@ -74,7 +74,6 @@ export const NOT_A_ROLE = "Not a role of this company"
 
 const { scope, noSuch: noSuchType, get: getType, locked: lockedType, list: listTypes } = scoped(ticketType, { noun: "ticket type", reach: "company", columns })
 
-/** The types on the wire, each with its fields in order, its permissions in the commands' order and its actions by trigger and place: three reads for the whole page. */
 async function typesOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<TicketType[]> {
   if (rows.length === 0) return []
   const ids = rows.map((row) => row.id)
@@ -130,7 +129,6 @@ async function unmakeDefaults(tx: Tx, companyId: string, kind: TicketKind, excep
     .where(and(eq(ticketType.companyId, companyId), eq(ticketType.kind, kind), eq(ticketType.isDefault, true), except === undefined ? undefined : ne(ticketType.id, except)))
 }
 
-/** Which of the ids a set names are the company's: one read for the whole set. */
 async function heldIds(tx: Tx, table: typeof team | typeof userAccount | typeof ticketType, companyId: string, ids: readonly string[], also?: SQL): Promise<Set<string>> {
   if (ids.length === 0) return new Set()
   const found = await tx
@@ -163,7 +161,6 @@ async function vehicleProjects(tx: Tx, principal: Principal, typeId: string, act
   return new Map(found.map((one) => [one.id, one.projectId]))
 }
 
-/** A set's team, person, follow-up type and vehicle each the company's, the person not deactivated, and a plan in a route only of a kind a planned stop answers: every one that is not, at its action. */
 async function referenceIssues(tx: Tx, companyId: string, kind: TicketKind, actions: readonly TicketTypeActionBody[], vehicles: ReadonlyMap<string, string>): Promise<{ path: string; message: string }[]> {
   const named = (key: "teamId" | "userAccountId" | "followUpTypeId") => [...new Set(actions.flatMap((action) => (action[key] === null ? [] : [action[key]])))]
   const teams = await heldIds(tx, team, companyId, named("teamId"))

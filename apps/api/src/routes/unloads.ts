@@ -18,7 +18,7 @@
 // a full truck unloads where it can and the route's planned one is a default
 // the device offers, not a rule — and the fraction one of the company's, each
 // a 400 at its field; the weights hold the table's own sentence at the
-// boundary (contracts/unloads.ts: net given, gross and tare together or not
+// boundary (@waste/contracts/unloads: net given, gross and tare together or not
 // at all, and net gross less tare where both are); and `occurredAt` may run
 // ahead of the request's clock by the ledger's skew (`OCCURRED_AT_SKEW_MS`,
 // `@waste/domain/execution/commands`, the one constant the ledger, the driver door and this
@@ -101,7 +101,6 @@ export function unloadRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
-        // The review's reading, by the name the family's read gives it.
         const { review } = unloadsFrom(tx, principal.companyId)
         const { items, nextCursor } = await listUnloads(
           tx,
@@ -116,7 +115,6 @@ export function unloadRoutes(deps: RouteDeps) {
           from === undefined ? undefined : gte(unload.occurredAt, new Date(from)),
           to === undefined ? undefined : lte(unload.occurredAt, new Date(to)),
         )
-        // Paged first, so the row that only proves there is a next page brings no route of its own to read.
         return c.json({ items: await unloadsAnswered(tx, principal.companyId, items), nextCursor })
       },
     )

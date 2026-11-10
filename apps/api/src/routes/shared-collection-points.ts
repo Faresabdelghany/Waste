@@ -93,7 +93,6 @@ const columns = {
 
 type Row = Pick<typeof sharedCollectionPoint.$inferSelect, keyof typeof columns>
 
-/** The members of a Shared Collection Point: a Property of the same project, and what it is to the point. */
 const members: MemberSet<typeof sharedCollectionPointMember> = {
   table: sharedCollectionPointMember,
   parentId: sharedCollectionPointMember.sharedCollectionPointId,

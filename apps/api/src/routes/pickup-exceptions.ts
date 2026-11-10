@@ -142,16 +142,11 @@ async function requireRuleCode(tx: Tx, companyId: string, id: string | null | un
   refuseUnless(found.status, ACTIVE_CONTAMINANT_CODE_STATUSES, retiredCode(found.code, "a rule"))
 }
 
-/** Writes a rule's ladder, position 1 first. */
 async function writeLadder(tx: Tx, rule: { companyId: string; projectId: string; id: string }, ladder: readonly string[]): Promise<void> {
   await tx.insert(pickupExceptionRuleStep).values(
     ladder.map((productId, index) => ({ id: newId(), companyId: rule.companyId, projectId: rule.projectId, ruleId: rule.id, position: index + 1, productId })),
   )
 }
-
-// ---------------------------------------------------------------------------
-// The exception history
-// ---------------------------------------------------------------------------
 
 /** The place a history is read at: a Property or a Shared Collection Point, by its column on the stop. */
 type Place = { kind: "property" | "point"; id: string }
@@ -224,7 +219,6 @@ async function historyAt(tx: Tx, companyId: string, projectId: string, place: Pl
   }
 }
 
-/** The first service date a history reads when the query names none: the 365 days before the project's today. */
 async function defaultFrom(tx: Tx, companyId: string, projectId: string, now: () => Date): Promise<string> {
   return addDays(await projectToday(tx, { companyId, projectId }, now)(), -365)
 }

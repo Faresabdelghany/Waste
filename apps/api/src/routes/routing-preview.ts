@@ -47,9 +47,7 @@ import { describeProblem, problem } from "../problem"
 
 const MODULE = "route-studio.schemes"
 
-/** How many answers the cache holds. */
 export const PREVIEW_CACHE_ENTRIES = 50
-/** How long an answer stands: a day. */
 export const PREVIEW_CACHE_MS = 24 * 60 * 60 * 1000
 
 /** Why there is no road while the day's directions are spent, or the day has too few calls left for the points. */
@@ -117,7 +115,6 @@ function legsOver(points: readonly Position2D[], routed: readonly RoutedLeg[]): 
   return legs
 }
 
-/** What the engine's outcome says to a person looking at the preview. */
 function answerOf(provider: string, points: readonly Position2D[], outcome: Outcome<{ legs: RoutedLeg[] }>): RoutingPreview {
   switch (outcome.kind) {
     case "answered": {
@@ -146,14 +143,12 @@ export function routingPreviewRoutes(deps: RouteDeps) {
   const cache = new PreviewCache()
   const asking = new Map<string, Promise<RoutingPreview>>()
 
-  /** One call through the engine, bracketed by the company's readings — taken before, written after when the engine learned something — and the answer cached where it stands. */
   async function ask(key: string, companyId: string, fenced: Transact, points: readonly Position2D[]): Promise<RoutingPreview> {
     const keys = { companyId, provider: engine.name }
     const rows = await fenced((tx) => quotaRows(tx, keys))
     for (const { family, updatedAt, ...standing } of rows) engine.refresh(family, { ...standing, observedAt: updatedAt })
     const before = engine.state("directions").observedAt?.getTime() ?? null
     const distinct = distinctConsecutive(points)
-    // Every point at one place spans no road, and asks nothing.
     let outcome: Outcome<{ legs: RoutedLeg[] }> = { kind: "answered", result: { legs: [] } }
     if (distinct.length >= 2) {
       try {
