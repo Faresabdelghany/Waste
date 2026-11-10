@@ -25,8 +25,7 @@ import { unload } from "@waste/db/schema/execution"
 import { vehicle } from "@waste/db/schema/fleet"
 import { materialAdjustment, outboundLoad } from "@waste/db/schema/haul-out"
 import { project } from "@waste/db/schema/organisation"
-import { unloadingStation } from "@waste/db/schema/places"
-import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm"
+import { and, eq, inArray, ne, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 import { newId } from "@waste/db/ids"
@@ -34,14 +33,15 @@ import { lockRow } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { AuthEnv, Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { requireServiceProvider, requireUnloadingStation, requireVehicle, requireWasteFraction } from "./references"
 import { requireNotAhead } from "./shared"
+import { findStation, getStation } from "./unloading-stations"
 
 const MODULE = "route-studio.weights"
 
@@ -91,8 +91,6 @@ type AdjustmentRow = Pick<typeof materialAdjustment.$inferSelect, keyof typeof a
 
 const adjustmentOf = (row: AdjustmentRow): MaterialAdjustment => ({ ...row, recordedAt: row.recordedAt.toISOString() })
 
-const noSuchStation = (id: string) => problem(404, { detail: `No unloading station ${id} in this company` })
-
 /** Each project's weight tolerance, for the projects named: what a receipt is read against. */
 async function tolerancesOf(tx: Tx, companyId: string, projectIds: readonly string[]): Promise<Map<string, number>> {
   if (projectIds.length === 0) return new Map()
@@ -116,18 +114,9 @@ async function loadsOf(tx: Tx, companyId: string, rows: readonly LoadRow[]): Pro
   })
 }
 
-const { noSuch: noSuchLoad, find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, { noun: "outbound load", reach: "projects", columns: loadColumns })
+const { find: findLoad, get: getLoad, list: listLoads } = scoped(outboundLoad, { noun: "outbound load", reach: "projects", columns: loadColumns })
 
-/** A station of the company the caller reaches: an account that works in no project reaches none, as on the stations' own routes. */
-async function findStation(tx: Tx, principal: Principal, id: string): Promise<{ id: string; name: string; transfer: boolean } | undefined> {
-  if (projectIdsOf(principal).length === 0 && !principal.user.allProjects) return undefined
-  const [row] = await tx
-    .select({ id: unloadingStation.id, name: unloadingStation.name, transfer: unloadingStation.transfer })
-    .from(unloadingStation)
-    .where(and(eq(unloadingStation.companyId, principal.companyId), eq(unloadingStation.id, id)))
-    .limit(1)
-  return row
-}
+const { list: listAdjustments } = scoped(materialAdjustment, { noun: "material adjustment", reach: "projects", columns: adjustmentColumns })
 
 /** A sum of whole kilograms, as a number. */
 const kilograms = (column: PgColumn) => sql<number>`coalesce(sum(${column}), 0)`.mapWith(Number)
@@ -206,7 +195,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
   async function command(c: Context<AuthEnv>, id: string, name: OutboundLoadCommand, sets: (found: LoadRow) => Partial<typeof outboundLoad.$inferInsert>): Promise<Response> {
     const principal = c.get("principal")
     const tx = c.get("tx")
-    if ((await findLoad(tx, principal, id)) === undefined) throw noSuchLoad(id)
+    await getLoad(tx, principal, id)
     await lockRow(tx, outboundLoad, { companyId: principal.companyId, id })
     const found = (await findLoad(tx, principal, id))!
     const transition = outboundLoadTransition(found.status, name)
@@ -341,7 +330,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const patch = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        if ((await findLoad(tx, principal, id)) === undefined) throw noSuchLoad(id)
+        await getLoad(tx, principal, id)
         await lockRow(tx, outboundLoad, { companyId: principal.companyId, id })
         const found = (await findLoad(tx, principal, id))!
         if (patch.note === null && found.status === "disputed") throw invalidRequest("body", [{ path: "note", message: SAY_WHY }])
@@ -377,7 +366,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const tx = c.get("tx")
-        if ((await findStation(tx, principal, id)) === undefined) throw noSuchStation(id)
+        await getStation(tx, principal, id)
         return c.json({ unloadingStationId: id, rows: await stockOf(tx, principal, id, projectId) })
       },
     )
@@ -403,25 +392,17 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         const tx = c.get("tx")
-        if ((await findStation(tx, principal, id)) === undefined) throw noSuchStation(id)
-        const after = afterCursor(cursor)
-        const rows = await tx
-          .select(adjustmentColumns)
-          .from(materialAdjustment)
-          .where(
-            and(
-              eq(materialAdjustment.companyId, principal.companyId),
-              inProjects(materialAdjustment.projectId, principal),
-              eq(materialAdjustment.unloadingStationId, id),
-              projectId === undefined ? undefined : eq(materialAdjustment.projectId, projectId),
-              wasteFractionId === undefined ? undefined : eq(materialAdjustment.wasteFractionId, wasteFractionId),
-              after === undefined ? undefined : gt(materialAdjustment.id, after),
-            ),
-          )
-          .orderBy(asc(materialAdjustment.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
-        return c.json({ ...page, items: page.items.map(adjustmentOf) })
+        await getStation(tx, principal, id)
+        const at = pageAt({ cursor, limit })
+        const page = await listAdjustments(
+          tx,
+          principal,
+          at,
+          eq(materialAdjustment.unloadingStationId, id),
+          projectId === undefined ? undefined : eq(materialAdjustment.projectId, projectId),
+          wasteFractionId === undefined ? undefined : eq(materialAdjustment.wasteFractionId, wasteFractionId),
+        )
+        return c.json(mapPage(page, adjustmentOf))
       },
     )
     .post(
@@ -447,8 +428,7 @@ export function outboundLoadRoutes(deps: RouteDeps) {
         const values = c.req.valid("json")
         const principal = c.get("principal")
         const tx = c.get("tx")
-        const station = await findStation(tx, principal, id)
-        if (station === undefined) throw noSuchStation(id)
+        const station = await getStation(tx, principal, id)
         requireProject(principal, values.projectId)
         await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
         if (!station.transfer) throw problem(409, { detail: notATransferStation(station.name) })

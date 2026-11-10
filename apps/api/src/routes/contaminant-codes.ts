@@ -14,17 +14,17 @@ import {
   ContaminantCodeListQuery,
   ContaminantCodePatch,
 } from "@waste/contracts/pickup-exceptions"
-import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { contaminantCode, contaminantCodeFraction } from "@waste/db/schema/pickup-exceptions"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireWasteFraction } from "./references"
 
@@ -62,16 +62,7 @@ const NAME_TAKEN = "contaminant_code_name_key"
 const codeTaken = (code: string) => `This company already has a contaminant code ${JSON.stringify(code)}`
 const nameTaken = (name: string) => `This company already has a contaminant code called ${JSON.stringify(name)}`
 
-const noSuchCode = (id: string) => problem(404, { detail: `No contaminant code ${id} in this company` })
-
-async function findCode(tx: Tx, companyId: string, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(contaminantCode)
-    .where(and(eq(contaminantCode.companyId, companyId), eq(contaminantCode.id, id)))
-    .limit(1)
-  return row
-}
+const { noSuch: noSuchCode, get: getCode, list: listCodes } = scoped(contaminantCode, { noun: "contaminant code", reach: "company", columns })
 
 export function contaminantCodeRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -92,16 +83,10 @@ export function contaminantCodeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const rows = await tx
-          .select(columns)
-          .from(contaminantCode)
-          .where(and(eq(contaminantCode.companyId, companyId), status === undefined ? undefined : eq(contaminantCode.status, status), after === undefined ? undefined : gt(contaminantCode.id, after)))
-          .orderBy(asc(contaminantCode.id))
-          .limit(fetchLimit(limit))
-        const page = pageOf(rows, limit)
+        const page = await listCodes(tx, c.get("principal"), at, status === undefined ? undefined : eq(contaminantCode.status, status))
         const fractions = await idsOf(tx, codeFractions, companyId, page.items.map((row) => row.id))
         return c.json({ ...page, items: page.items.map((row) => codeOf(row, fractions.get(row.id) ?? [])) })
       },
@@ -155,8 +140,7 @@ export function contaminantCodeRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
-        const row = await findCode(tx, companyId, id)
-        if (row === undefined) throw noSuchCode(id)
+        const row = await getCode(tx, c.get("principal"), id)
         return c.json(codeOf(row, await idsFor(tx, codeFractions, companyId, row.id)))
       },
     )

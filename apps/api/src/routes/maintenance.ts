@@ -35,7 +35,7 @@ import { projectTodays } from "@waste/db/query/project-clock"
 import { maintenanceDue, planIssue, type VehicleReadings } from "@waste/domain/resources/maintenance"
 import { ACTIVE_MAINTENANCE_PLAN_STATUSES } from "@waste/domain/resources/vocabulary"
 import { takesReference } from "@waste/domain/status-gates"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 import { lockRow } from "@waste/db/commands/shared"
@@ -45,7 +45,7 @@ import type { Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageAt, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { scoped } from "../scoped"
 import { stamp } from "./shared"
@@ -65,8 +65,6 @@ export const alreadyClosed = (title: string, status: string): string => `The ord
 /** What a plan's service is told without the reading its next limit counts from. */
 export const NEEDS_THE_ODOMETER = "The plan counts kilometres: give the odometer at the service"
 export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the service"
-
-const noSuchOrder = (id: string) => problem(404, { detail: `No maintenance order ${id} in the projects this account works in` })
 
 /** What a list refuses beside the page rule. */
 const LIST_INVALID = ["a filter is malformed", "`projectId` is not a project this account works in"]
@@ -169,13 +167,11 @@ const orderOf = (row: OrderRow): MaintenanceOrder => ({
   closedAt: instantOf(row.closedAt),
 })
 
-const orderScope = (principal: Principal) => and(eq(maintenanceOrder.companyId, principal.companyId), inProjects(maintenanceOrder.projectId, principal))
+const { get: getOrder, locked: lockedOrder, list: listOrders } = scoped(maintenanceOrder, { noun: "maintenance order", reach: "projects", columns: orderColumns })
 
 /** An open order of the caller's projects, locked, or the 404, or the 409 of one already closed. */
 async function openOrder(tx: Tx, principal: Principal, id: string): Promise<OrderRow> {
-  await lockRow(tx, maintenanceOrder, { companyId: principal.companyId, id })
-  const [row] = await tx.select(orderColumns).from(maintenanceOrder).where(and(orderScope(principal), eq(maintenanceOrder.id, id))).limit(1)
-  if (row === undefined) throw noSuchOrder(id)
+  const row = await lockedOrder(tx, principal, id)
   if (row.status !== "open") throw problem(409, { detail: alreadyClosed(row.title, row.status) })
   return row
 }
@@ -316,26 +312,18 @@ export function maintenanceRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, vehicleId, planId, status } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await c
-          .get("tx")
-          .select(orderColumns)
-          .from(maintenanceOrder)
-          .where(
-            and(
-              orderScope(principal),
-              projectId === undefined ? undefined : eq(maintenanceOrder.projectId, projectId),
-              vehicleId === undefined ? undefined : eq(maintenanceOrder.vehicleId, vehicleId),
-              planId === undefined ? undefined : eq(maintenanceOrder.planId, planId),
-              status === undefined ? undefined : eq(maintenanceOrder.status, status),
-              after === undefined ? undefined : gt(maintenanceOrder.id, after),
-            ),
-          )
-          .orderBy(asc(maintenanceOrder.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listOrders(
+          c.get("tx"),
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(maintenanceOrder.projectId, projectId),
+          vehicleId === undefined ? undefined : eq(maintenanceOrder.vehicleId, vehicleId),
+          planId === undefined ? undefined : eq(maintenanceOrder.planId, planId),
+          status === undefined ? undefined : eq(maintenanceOrder.status, status),
+        )
         return c.json({ items: items.map(orderOf), nextCursor })
       },
     )
@@ -385,14 +373,7 @@ export function maintenanceRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const [row] = await c
-          .get("tx")
-          .select(orderColumns)
-          .from(maintenanceOrder)
-          .where(and(orderScope(c.get("principal")), eq(maintenanceOrder.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchOrder(id)
-        return c.json(orderOf(row))
+        return c.json(orderOf(await getOrder(c.get("tx"), c.get("principal"), id)))
       },
     )
     .post(

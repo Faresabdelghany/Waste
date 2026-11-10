@@ -27,15 +27,16 @@ import { Project, ProjectBranding, ProjectBrandingReplace, ProjectCreate, Projec
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { company, project } from "@waste/db/schema/organisation"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { changeProjectCalendars } from "@waste/db/commands/route-holds"
 import { lockRow, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { requireHolidayList } from "./holiday-lists"
 
 const MODULE = "configure.organization"
@@ -116,7 +117,7 @@ const nameTaken = (name: string) => `This company already has a project called $
 const SLUG_TAKEN = "project_public_slug_key"
 const slugTaken = (slug: string) => `Another project already publishes itself as ${JSON.stringify(slug)}; choose another slug`
 
-const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in this company` })
+const { noSuch: noSuchProject, get: getProject, list: listProjects } = scoped(project, { noun: "project", reach: "company", columns })
 
 export function projectRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -136,15 +137,9 @@ export function projectRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(project)
-          .where(and(eq(project.companyId, c.get("principal").companyId), after === undefined ? undefined : gt(project.id, after)))
-          .orderBy(asc(project.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(projectOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listProjects(c.get("tx"), c.get("principal"), at)
+        return c.json(mapPage(page, projectOf))
       },
     )
     .post(
@@ -196,13 +191,7 @@ export function projectRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const [row] = await c
-          .get("tx")
-          .select(columns)
-          .from(project)
-          .where(and(eq(project.companyId, c.get("principal").companyId), eq(project.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchProject(id)
+        const row = await getProject(c.get("tx"), c.get("principal"), id)
         return c.json(projectOf(row))
       },
     )

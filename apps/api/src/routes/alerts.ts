@@ -57,49 +57,25 @@ import { raiseAlerts } from "@waste/db/commands/alerts"
 import { alert } from "@waste/db/schema/resolution"
 import { alertLinkRefusal, alertTransition, type AlertCommand } from "@waste/domain/resolution/transitions"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { linkAlert } from "@waste/db/commands/alert-links"
 import { alertColumns, alertOf, type AlertRow } from "@waste/db/shapes/alerts"
-import { lockRow } from "@waste/db/commands/shared"
 
 import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
 import { requireContainer, requireDriver, requireRoute, requireTicket, requireVehicle, type Scope } from "./references"
-import { alertScope, noSuchAlert } from "./resolution-shapes"
+import { alertScope, getAlert, listAlerts, lockedAlert, noSuchAlert } from "./resolution-shapes"
 import { requireNotAhead } from "./shared"
 
 /** The grant every route here runs under: the exceptions board's. */
 const MODULE = "operate.exceptions"
 
 const AlertPage = Page(Alert)
-
-/** One alert of this company by id, inside the caller's projects; undefined when it is neither. */
-async function findAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow | undefined> {
-  const [row] = await tx
-    .select(alertColumns)
-    .from(alert)
-    .where(and(alertScope(principal), eq(alert.id, id)))
-    .limit(1)
-  return row
-}
-
-/**
- * The alert the path names, locked and read: every command holds a rule the
- * API rather than the database holds — the machine, the one link — so it
- * takes the row lock first and reads afterwards (`@waste/db/commands/shared`), and two
- * commands on one alert take turns.
- */
-async function lockedAlert(tx: Tx, principal: Principal, id: string): Promise<AlertRow> {
-  await lockRow(tx, alert, { companyId: principal.companyId, id })
-  const current = await findAlert(tx, principal, id)
-  if (current === undefined) throw noSuchAlert(id)
-  return current
-}
 
 /** What the machine says of a command on this alert: the next status, undefined when the command is already done, or the 409 thrown. */
 function judged(current: AlertRow, command: AlertCommand): AlertStatus | undefined {
@@ -143,33 +119,26 @@ export function alertRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, rule, severity, kind, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(alertColumns)
-          .from(alert)
-          .where(
-            and(
-              alertScope(principal),
-              projectId === undefined ? undefined : eq(alert.projectId, projectId),
-              status === undefined ? undefined : eq(alert.status, status),
-              rule === undefined ? undefined : eq(alert.rule, rule),
-              severity === undefined ? undefined : eq(alert.severity, severity),
-              kind === undefined ? undefined : eq(alert.kind, kind),
-              routeId === undefined ? undefined : eq(alert.routeId, routeId),
-              vehicleId === undefined ? undefined : eq(alert.vehicleId, vehicleId),
-              driverId === undefined ? undefined : eq(alert.driverId, driverId),
-              containerId === undefined ? undefined : eq(alert.containerId, containerId),
-              ticketId === undefined ? undefined : eq(alert.ticketId, ticketId),
-              outboundLoadId === undefined ? undefined : eq(alert.outboundLoadId, outboundLoadId),
-              after === undefined ? undefined : gt(alert.id, after),
-            ),
-          )
-          .orderBy(asc(alert.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listAlerts(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(alert.projectId, projectId),
+          status === undefined ? undefined : eq(alert.status, status),
+          rule === undefined ? undefined : eq(alert.rule, rule),
+          severity === undefined ? undefined : eq(alert.severity, severity),
+          kind === undefined ? undefined : eq(alert.kind, kind),
+          routeId === undefined ? undefined : eq(alert.routeId, routeId),
+          vehicleId === undefined ? undefined : eq(alert.vehicleId, vehicleId),
+          driverId === undefined ? undefined : eq(alert.driverId, driverId),
+          containerId === undefined ? undefined : eq(alert.containerId, containerId),
+          ticketId === undefined ? undefined : eq(alert.ticketId, ticketId),
+          outboundLoadId === undefined ? undefined : eq(alert.outboundLoadId, outboundLoadId),
+        )
         return c.json({ items: items.map(alertOf), nextCursor })
       },
     )
@@ -243,8 +212,7 @@ export function alertRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findAlert(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchAlert(id)
+        const row = await getAlert(c.get("tx"), c.get("principal"), id)
         return c.json(alertOf(row))
       },
     )

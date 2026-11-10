@@ -27,30 +27,19 @@ import { stockMinimum } from "@waste/db/schema/stock"
 import { stockBalances } from "@waste/domain/resources/stock-balance"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow } from "@waste/db/commands/shared"
-
-import type { Principal } from "../auth/principal"
 import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { describeProblem, problem } from "../problem"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 import { requireContainerType, requireWarehouse } from "./references"
 import { eachPresent } from "./sets"
 
 const INVENTORY = "resources.inventory"
 const WAREHOUSES = "resources.warehouses"
 
-const noSuchWarehouse = (id: string) => problem(404, { detail: `No warehouse ${id} in the projects this account works in` })
-
-/** One warehouse of this company by id, inside the caller's projects: its project, or undefined. */
-async function findWarehouse(tx: Tx, principal: Principal, id: string): Promise<{ id: string; projectId: string } | undefined> {
-  const [row] = await tx
-    .select({ id: warehouse.id, projectId: warehouse.projectId })
-    .from(warehouse)
-    .where(and(eq(warehouse.companyId, principal.companyId), inProjects(warehouse.projectId, principal), eq(warehouse.id, id)))
-    .limit(1)
-  return row
-}
+/** A warehouse of this company inside the caller's projects, as its minimums read it: its project. */
+const { get: getWarehouse, locked: lockedWarehouse } = scoped(warehouse, { noun: "warehouse", reach: "projects", columns: { id: warehouse.id, projectId: warehouse.projectId } })
 
 /** A warehouse's minimums as they stand, in the order they were written. */
 async function minimumsOf(tx: Tx, companyId: string, warehouseId: string): Promise<StockMinimums> {
@@ -141,7 +130,7 @@ export function stockBalanceRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findWarehouse(tx, principal, id)) === undefined) throw noSuchWarehouse(id)
+        await getWarehouse(tx, principal, id)
         return c.json(await minimumsOf(tx, principal.companyId, id))
       },
     )
@@ -168,9 +157,7 @@ export function stockBalanceRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The parent's lock queues two replacements of one set; an id nobody minted locks nothing and is the 404 below.
-        await lockRow(tx, warehouse, { companyId: principal.companyId, id })
-        const found = await findWarehouse(tx, principal, id)
-        if (found === undefined) throw noSuchWarehouse(id)
+        const found = await lockedWarehouse(tx, principal, id)
         await eachPresent(
           tx,
           containerType,

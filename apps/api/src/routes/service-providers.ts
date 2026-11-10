@@ -17,14 +17,15 @@
 import { ServiceProvider, ServiceProviderCreate, ServiceProviderPatch } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { serviceProvider } from "@waste/db/schema/organisation"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "service-providers.service-providers"
 const ServiceProviderPage = Page(ServiceProvider)
@@ -61,7 +62,7 @@ const registrationTaken = (registrationNumber: string | undefined, country: stri
     ? "This company already has a service provider with that registration number in that country"
     : `This company already has a service provider with the registration number ${registrationNumber}${country === undefined ? "" : ` in ${country}`}`
 
-const noSuchProvider = (id: string) => problem(404, { detail: `No service provider ${id} in this company` })
+const { noSuch: noSuchProvider, get: getProvider, list: listProviders } = scoped(serviceProvider, { noun: "service provider", reach: "company", columns })
 
 export function serviceProviderRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -81,17 +82,9 @@ export function serviceProviderRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(serviceProvider)
-          .where(
-            and(eq(serviceProvider.companyId, c.get("principal").companyId), after === undefined ? undefined : gt(serviceProvider.id, after)),
-          )
-          .orderBy(asc(serviceProvider.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(serviceProviderOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listProviders(c.get("tx"), c.get("principal"), at)
+        return c.json(mapPage(page, serviceProviderOf))
       },
     )
     .post(
@@ -141,13 +134,7 @@ export function serviceProviderRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const [row] = await c
-          .get("tx")
-          .select(columns)
-          .from(serviceProvider)
-          .where(and(eq(serviceProvider.companyId, c.get("principal").companyId), eq(serviceProvider.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchProvider(id)
+        const row = await getProvider(c.get("tx"), c.get("principal"), id)
         return c.json(serviceProviderOf(row))
       },
     )

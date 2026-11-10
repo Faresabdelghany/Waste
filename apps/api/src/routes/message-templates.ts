@@ -59,7 +59,7 @@ const templateOf = (row: Row): MessageTemplate => ({
   ...stampsOf(row),
 })
 
-const { scope, noSuch: noSuchTemplate, find: findTemplate, get: getTemplate, locked: lockedTemplate, list: listTemplates } = scoped(messageTemplate, { noun: "message template", reach: "projects", columns })
+const { scope, get: getTemplate, locked: lockedTemplate, list: listTemplates } = scoped(messageTemplate, { noun: "message template", reach: "projects", columns })
 
 export function messageTemplateRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -159,7 +159,7 @@ export function messageTemplateRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const patch = c.req.valid("json")
-        if ((await findTemplate(tx, principal, id)) === undefined) throw noSuchTemplate(id)
+        await getTemplate(tx, principal, id)
         const current = await lockedTemplate(tx, principal, id, strengthFor(messageTemplate, patch))
         const issue = channelShapeIssue({
           channel: (patch.channel ?? current.channel),

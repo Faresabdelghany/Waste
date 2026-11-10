@@ -44,7 +44,7 @@ import type { Tx } from "@waste/db/client"
 import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { ONE_CADENCE, serviceFrequencyShape } from "@waste/domain/registry/catalogue"
 import { HAZARDOUS_CODE, hazardousOf, isHazardousCode } from "@waste/domain/registry/waste-code"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseCheck, refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
@@ -53,8 +53,8 @@ import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, mapPage, pageAt, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem } from "../problem"
+import { mapPage, pageAt } from "../pagination"
+import { describeProblem, invalidRequest } from "../problem"
 import { scoped } from "../scoped"
 
 const MODULE = "configure.master"
@@ -90,7 +90,7 @@ const fractionNameTaken = (name: string) => `This company already has a waste fr
 /** `waste_fraction_hazardous_shape`: a patch telling a fraction under a starred code it is not hazardous (O18 of #290); a create's body is judged whole by the contract. */
 const FRACTION_CHECKS = { waste_fraction_hazardous_shape: { input: "hazardous", sentence: HAZARDOUS_CODE } }
 
-const noSuchFraction = (id: string) => problem(404, { detail: `No waste fraction ${id} in this company` })
+const { noSuch: noSuchFraction, list: listFractions } = scoped(wasteFraction, { noun: "waste fraction", reach: "company", columns: fractionColumns })
 
 const typeColumns = {
   id: containerType.id,
@@ -111,7 +111,7 @@ function typeOf(row: TypeRow): ContainerType {
 const TYPE_NAME_TAKEN = "container_type_name_key"
 const typeNameTaken = (name: string) => `This company already has a container type called ${JSON.stringify(name)}`
 
-const noSuchType = (id: string) => problem(404, { detail: `No container type ${id} in this company` })
+const { noSuch: noSuchType, list: listTypes } = scoped(containerType, { noun: "container type", reach: "company", columns: typeColumns })
 
 // The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
 // O30 of #290) share, so an imported row is held to every rule a form's is and
@@ -243,17 +243,9 @@ export function catalogueRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(fractionColumns)
-          .from(wasteFraction)
-          .where(
-            and(eq(wasteFraction.companyId, c.get("principal").companyId), after === undefined ? undefined : gt(wasteFraction.id, after)),
-          )
-          .orderBy(asc(wasteFraction.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(fractionOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listFractions(c.get("tx"), c.get("principal"), at)
+        return c.json(mapPage(page, fractionOf))
       },
     )
     .post(
@@ -336,15 +328,9 @@ export function catalogueRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(typeColumns)
-          .from(containerType)
-          .where(and(eq(containerType.companyId, c.get("principal").companyId), after === undefined ? undefined : gt(containerType.id, after)))
-          .orderBy(asc(containerType.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(typeOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listTypes(c.get("tx"), c.get("principal"), at)
+        return c.json(mapPage(page, typeOf))
       },
     )
     .post(

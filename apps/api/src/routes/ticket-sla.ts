@@ -29,25 +29,16 @@ import { TICKET_KINDS, TICKET_PRIORITIES, type TicketKind, type TicketPriority }
 import { advisoryLock } from "@waste/db/commands/shared"
 import { and, eq, inArray } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-
-import type { Principal } from "../auth/principal"
-import { projectIdsOf } from "../auth/projects"
+import { requireOwnProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { describeProblem, problem } from "../problem"
+import { describeProblem } from "../problem"
 import { requireSetTypes } from "./ticket-type-rules"
 
 const MODULE = "configure.templates"
 
 const columns = { id: ticketSla.id, kind: ticketSla.kind, ticketTypeId: ticketSla.ticketTypeId, priority: ticketSla.priority, hours: ticketSla.hours }
 type Row = { id: string; kind: string | null; ticketTypeId: string | null; priority: string; hours: number }
-
-const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in the projects this account works in` })
-
-/** The project of the path, held to the caller's: a 404 otherwise. */
-function requireOwnProject(principal: Principal, id: string): void {
-  if (!projectIdsOf(principal).includes(id)) throw noSuchProject(id)
-}
 
 /** By priority in the vocabulary's order, every kind before the kinds, the kinds in theirs, then the types by id. */
 const order = (target: Pick<Row, "kind" | "ticketTypeId" | "priority">): number =>

@@ -26,13 +26,11 @@
 // customer-writes.ts's, which the CSV import runs too.
 import { Customer, CustomerCreate, CustomerPatch } from "@waste/contracts/customers"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { customer } from "@waste/db/schema/customers"
-import { and, asc, eq, gt } from "drizzle-orm"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem } from "../problem"
-import { createCustomer, customerColumns as columns, customerOf, noSuchCustomer, patchCustomer } from "./customer-writes"
+import { createCustomer, customerOf, getCustomer, listCustomers, patchCustomer } from "./customer-writes"
 
 const MODULE = "customers.contacts"
 const CustomerPage = Page(Customer)
@@ -55,15 +53,9 @@ export function customerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(columns)
-          .from(customer)
-          .where(and(eq(customer.companyId, c.get("principal").companyId), after === undefined ? undefined : gt(customer.id, after)))
-          .orderBy(asc(customer.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(customerOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listCustomers(c.get("tx"), c.get("principal"), at)
+        return c.json(mapPage(page, customerOf))
       },
     )
     .post(
@@ -100,13 +92,7 @@ export function customerRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const [row] = await c
-          .get("tx")
-          .select(columns)
-          .from(customer)
-          .where(and(eq(customer.companyId, c.get("principal").companyId), eq(customer.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchCustomer(id)
+        const row = await getCustomer(c.get("tx"), c.get("principal"), id)
         return c.json(customerOf(row))
       },
     )

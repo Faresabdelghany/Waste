@@ -59,7 +59,7 @@ import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
 import { describeProblem, invalidRequest, problem } from "../problem"
 import { createAgreement, createSubscription, patchAgreement, readAgreement, readSubscription } from "./agreements"
-import { findProperty, noSuchProperty, propertyWithParties } from "./property-writes"
+import { getProperty, noSuchProperty, propertyWithParties } from "./property-writes"
 import { requireCustomer } from "./references"
 import { stamp } from "./shared"
 
@@ -85,8 +85,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
   const { on } = body
 
   await lockRow(tx, property, { companyId, id })
-  const row = await findProperty(tx, principal, id)
-  if (row === undefined) throw noSuchProperty(id)
+  const row = await getProperty(tx, principal, id)
 
   // The body's own 400s: three customers of this company, and the number the subscriptions owe.
   await requireCustomer(tx, companyId, body.outgoingCustomerId, "outgoingCustomerId")
@@ -185,8 +184,7 @@ async function performMove(tx: Tx, principal: Principal, id: string, body: MoveC
   // The parties are part of the property on the wire, so the property moved.
   const [stamped] = await tx.update(property).set(stamp()).where(and(eq(property.companyId, companyId), eq(property.id, id))).returning({ id: property.id })
   if (stamped === undefined) throw noSuchProperty(id)
-  const moved = await findProperty(tx, principal, id)
-  if (moved === undefined) throw noSuchProperty(id)
+  const moved = await getProperty(tx, principal, id)
 
   return {
     dryRun: false,

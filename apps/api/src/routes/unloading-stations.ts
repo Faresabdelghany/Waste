@@ -61,17 +61,18 @@ import { UnloadingStation, UnloadingStationCreate, UnloadingStationFractionsSet,
 import type { Tx } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
-import { and, asc, eq, exists, gt, sql } from "drizzle-orm"
+import { and, eq, exists, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
-import { lockRow, refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
+import { refuseCheck, refuseDuplicate, strengthFor } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
 import { projectIdsOf } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
@@ -149,8 +150,6 @@ const CHECKS = { ...pointInvalid(LOCATION_INVALID), ...placeShapeInvalid("unload
 /** What an account that works in no project is told when it tries to register a station: the rule in the header, as a 403 since a better body would not help. */
 const REACHES_NO_STATION = "This account works in no project and reaches no unloading station"
 
-const noSuchStation = (id: string) => problem(404, { detail: `No unloading station ${id} in this company` })
-
 /** Whether the caller works in any project of the company — or in all of them, which is a grant and holds while the company has none yet: what reaching a station, which serves every project, takes. */
 const worksInAProject = (principal: Principal): boolean => principal.user.allProjects || projectIdsOf(principal).length > 0
 
@@ -160,17 +159,12 @@ const worksInAProject = (principal: Principal): boolean => principal.user.allPro
  * works in none, as `inProjects` answers such an account for a project-scoped
  * row, so its page is empty and its reads and writes find nothing.
  */
-const reaches = (principal: Principal) => and(eq(unloadingStation.companyId, principal.companyId), worksInAProject(principal) ? undefined : sql`false`)
-
-/** One station of this company by id, for an account that reaches it; undefined otherwise. */
-async function findStation(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
-  const [row] = await tx
-    .select(columns)
-    .from(unloadingStation)
-    .where(and(reaches(principal), eq(unloadingStation.id, id)))
-    .limit(1)
-  return row
-}
+export const { scope: reaches, noSuch: noSuchStation, find: findStation, get: getStation, locked: lockedStation, list: listStations } = scoped(unloadingStation, {
+  noun: "unloading station",
+  reach: (principal) => (worksInAProject(principal) ? undefined : sql`false`),
+  place: "in this company",
+  columns,
+})
 
 /** The stations that accept a fraction: one `exists` over the set, so a station accepting it twice could never read as two. */
 const accepting = (companyId: string, wasteFractionId: string) =>
@@ -197,27 +191,20 @@ export function unloadingStationRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, status, wasteFractionId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The fraction asked about is one of this company's, like the containers list's warehouse: a filter that names a row is held to it.
         await requireWasteFraction(tx, principal.companyId, wasteFractionId, "wasteFractionId", "query")
-        const rows = await tx
-          .select(columns)
-          .from(unloadingStation)
-          .where(
-            and(
-              reaches(principal),
-              status === undefined ? undefined : eq(unloadingStation.status, status),
-              wasteFractionId === undefined ? undefined : accepting(principal.companyId, wasteFractionId),
-              after === undefined ? undefined : gt(unloadingStation.id, after),
-            ),
-          )
-          .orderBy(asc(unloadingStation.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is
         // not one of the stations whose fractions are loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listStations(
+          tx,
+          principal,
+          at,
+          status === undefined ? undefined : eq(unloadingStation.status, status),
+          wasteFractionId === undefined ? undefined : accepting(principal.companyId, wasteFractionId),
+        )
         const held = await idsOf(tx, fractions, principal.companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => stationOf(row, held.get(row.id) ?? [])), nextCursor })
       },
@@ -278,8 +265,7 @@ export function unloadingStationRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findStation(tx, principal, id)
-        if (row === undefined) throw noSuchStation(id)
+        const row = await getStation(tx, principal, id)
         return c.json(await stationWithFractions(tx, principal.companyId, row))
       },
     )
@@ -312,9 +298,7 @@ export function unloadingStationRoutes(deps: RouteDeps) {
         // row, and two patches of one station each read and then write, so
         // the lock makes the second read what the first wrote. An id nobody
         // minted locks nothing and is a 404 here as in every other family.
-        await lockRow(tx, unloadingStation, { companyId: principal.companyId, id }, strengthFor(unloadingStation, patch))
-        const current = await findStation(tx, principal, id)
-        if (current === undefined) throw noSuchStation(id)
+        const current = await lockedStation(tx, principal, id, strengthFor(unloadingStation, patch))
         // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).
         await requirePlacePatch(tx, principal.companyId, current, patch)
 

@@ -60,7 +60,7 @@ import { route } from "@waste/db/schema/execution"
 import { weightReview } from "@waste/db/schema/finance"
 import { weightReviewTransition } from "@waste/domain/finance/transitions"
 import type { WeightReviewDecision } from "@waste/domain/finance/vocabulary"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { emit } from "@waste/db/commands/outbox"
 import { newId } from "@waste/db/ids"
 import type { UnloadRow } from "@waste/db/shapes/unloads"
@@ -71,9 +71,10 @@ import { appendUnload } from "@waste/db/commands/unloads"
 import type { Principal } from "../auth/principal"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
-import { findUnload, noSuchUnload } from "./execution-shapes"
+import { scoped } from "../scoped"
+import { getUnload } from "./execution-shapes"
 
 const MODULE = "route-studio.weights"
 
@@ -87,11 +88,9 @@ const ReviewPage = Page(WeightReview)
  * may have moved while the lock was waited for.
  */
 async function lockedUnload(tx: Tx, principal: Principal, id: string): Promise<UnloadRow> {
-  const found = await findUnload(tx, principal, id)
-  if (found === undefined) throw noSuchUnload(id)
+  const found = await getUnload(tx, principal, id)
   await lockRow(tx, route, { companyId: principal.companyId, id: found.routeId })
-  const current = await findUnload(tx, principal, id)
-  if (current === undefined) throw noSuchUnload(id)
+  const current = await getUnload(tx, principal, id)
   return current
 }
 
@@ -150,6 +149,9 @@ const APPENDED = "Answers 201 with the review and no `Location`, like the ledger
 const CORRECTED = "An unload that was corrected is refused (409, `This unload was corrected by unload <id>; review that one`): the correction is the row to review."
 const EMITS = "A decision that writes its review emits `weight-reviewed` with the review in the same transaction, which Finance reads to charge or uncharge a weight sold by the tonne; one that stays emits nothing."
 const LOCKED = "Runs under the unload's route's row lock — a ledger row cannot be locked by the API role, which may not update it — with the reading read again under it, so two reviews take turns and the fold never forks."
+
+/** An unload's reviews, read once the unload is the caller's. */
+const { list: listReviews } = scoped(weightReview, { noun: "weight review", reach: "company", columns: reviewColumns })
 
 export function weightControlRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -289,18 +291,12 @@ export function weightControlRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findUnload(tx, principal, id)) === undefined) throw noSuchUnload(id)
-        const rows = await tx
-          .select(reviewColumns)
-          .from(weightReview)
-          .where(and(eq(weightReview.companyId, principal.companyId), eq(weightReview.unloadId, id), after === undefined ? undefined : gt(weightReview.id, after)))
-          .orderBy(asc(weightReview.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(reviewOf), nextCursor })
+        await getUnload(tx, principal, id)
+        const page = await listReviews(tx, principal, at, eq(weightReview.unloadId, id))
+        return c.json(mapPage(page, reviewOf))
       },
     )
 }

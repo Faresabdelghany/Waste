@@ -11,17 +11,11 @@ import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import type { TicketVisibility } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, type SQL } from "drizzle-orm"
 import { alertColumns, type AlertRow } from "@waste/db/shapes/alerts"
-import { eventColumns, ticketColumns, type TicketEventRow, type TicketRow } from "@waste/db/shapes/tickets"
+import { eventColumns, ticketColumns, type TicketEventRow } from "@waste/db/shapes/tickets"
 
 import type { Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import { providerIdOf, reachesThroughRoute } from "../auth/provider"
-import { problem } from "../problem"
 import { scoped } from "../scoped"
-
-export const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id} in the projects this account works in` })
-
-export const { scope: ticketScope, noSuch: noSuchTicket, find: findTicket } = scoped(ticket, { noun: "ticket", reach: "projects", columns: ticketColumns })
 
 /**
  * The tickets of this company the caller reads (#291 slice 23b): its
@@ -33,15 +27,23 @@ export const { scope: ticketScope, noSuch: noSuchTicket, find: findTicket } = sc
 export const ticketReach = (tx: Tx, principal: Principal): SQL | undefined =>
   and(eq(ticket.companyId, principal.companyId), reachesThroughRoute(tx, principal, { companyId: ticket.companyId, projectId: ticket.projectId, routeId: ticket.routeId }))
 
-/** One ticket of this company by id that the caller reads (`ticketReach`); undefined when it is not one. What a read and a comment read. */
-export async function findReachedTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
-  const [row] = await tx
-    .select(ticketColumns)
-    .from(ticket)
-    .where(and(ticketReach(tx, principal), eq(ticket.id, id)))
-    .limit(1)
-  return row
-}
+/**
+ * The tickets: a read and a comment read what `ticketReach` reaches
+ * (`findReachedTicket`, `getReachedTicket`, the page), a command what the
+ * office's projects hold — `findTicket`, and `lockedTicket`, the ticket the
+ * path names locked and read, since every command and the patch hold a rule
+ * the API holds and so take the row lock first and read afterwards
+ * (`@waste/db/commands/shared`).
+ */
+export const {
+  scope: ticketScope,
+  noSuch: noSuchTicket,
+  find: findReachedTicket,
+  get: getReachedTicket,
+  commanded: findTicket,
+  locked: lockedTicket,
+  list: listTickets,
+} = scoped(ticket, { noun: "ticket", reach: "projects", columns: ticketColumns, reads: ticketReach })
 
 /** One ticket's history in recording order: a cursor over time-ordered ids is a cursor over recording order. `readable` narrows it to what the caller may read (`historyReadable`). */
 export async function eventsOfTicket(tx: Tx, companyId: string, ticketId: string, readable?: SQL): Promise<TicketEventRow[]> {
@@ -65,8 +67,8 @@ export const PROVIDER_THREAD = "service-provider" satisfies TicketVisibility
 export const historyReadable = (principal: Principal): SQL | undefined =>
   providerIdOf(principal) === null ? undefined : and(eq(ticketEvent.kind, "comment"), eq(ticketEvent.visibility, PROVIDER_THREAD))
 
-/** The alerts of this company, in the projects the caller works in: what every alert statement is bounded by. */
-export const alertScope = (principal: Principal): SQL | undefined => and(eq(alert.companyId, principal.companyId), inProjects(alert.projectId, principal))
+/** The alerts of this company, in the projects the caller works in: what every alert statement is bounded by; a command (`lockedAlert`) takes the row lock first and reads afterwards, and two commands on one alert take turns. */
+export const { scope: alertScope, noSuch: noSuchAlert, get: getAlert, locked: lockedAlert, list: listAlerts } = scoped(alert, { noun: "alert", reach: "projects", columns: alertColumns })
 
 /** The alerts linked to one ticket, oldest first: what "linked to ticket" reads as from the ticket's side. */
 export async function alertsNamingTicket(tx: Tx, companyId: string, ticketId: string): Promise<AlertRow[]> {

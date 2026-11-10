@@ -20,14 +20,14 @@ import { message } from "@waste/db/schema/messaging"
 import { notificationPreference } from "@waste/db/schema/notifications"
 import type { NotificationEvent } from "@waste/domain/notifications/vocabulary"
 import type { AlertSeverity } from "@waste/domain/resolution/vocabulary"
-import { and, desc, eq, lt } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 
 import type { Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
+import { scoped } from "../scoped"
 import { messageColumns, messageOf } from "./messages"
 
 const NoticePage = Page(Message)
@@ -58,6 +58,9 @@ async function putPreference(tx: Tx, principal: Principal, event: NotificationEv
     .values({ id: newId(), companyId: principal.companyId, userAccountId: principal.user.id, event, minSeverity: asked.minSeverity })
     .onConflictDoUpdate({ target: [notificationPreference.companyId, notificationPreference.userAccountId, notificationPreference.event], set: { minSeverity: asked.minSeverity } })
 }
+
+/** The staff notices of this company in the projects the caller works in, newest first: the messages the worker queued for its accounts. */
+const { list: listNotices } = scoped(message, { noun: "notice", reach: "projects", columns: messageColumns, order: "desc" })
 
 export function notificationRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -109,22 +112,9 @@ export function notificationRoutes(deps: RouteDeps) {
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const principal = c.get("principal")
-        const after = afterCursor(cursor)
-        const rows = await c
-          .get("tx")
-          .select(messageColumns)
-          .from(message)
-          .where(
-            and(
-              eq(message.companyId, principal.companyId),
-              inProjects(message.projectId, principal),
-              eq(message.userAccountId, principal.user.id),
-              after === undefined ? undefined : lt(message.id, after),
-            ),
-          )
-          .orderBy(desc(message.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(messageOf), limit))
+        const at = pageAt({ cursor, limit })
+        const page = await listNotices(c.get("tx"), principal, at, eq(message.userAccountId, principal.user.id))
+        return c.json(mapPage(page, messageOf))
       },
     )
 }

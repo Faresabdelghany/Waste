@@ -37,18 +37,18 @@ import type { Grant } from "@waste/contracts/permissions"
 import type { Tx } from "@waste/db/client"
 import { role, roleGrant } from "@waste/db/schema/access"
 import { PROVIDER_ROLE_SCOPE, systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { refuseDuplicate } from "@waste/db/commands/shared"
 import { stampsOf } from "@waste/db/shapes/times"
 
 import { grantsOfRows, normalisedGrants } from "../access-shape"
-import type { Principal } from "../auth/principal"
 import { accessModuleOf, providerIdOf } from "../auth/provider"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { pageAt } from "../pagination"
 import { describeProblem, problem } from "../problem"
+import { scoped } from "../scoped"
 
 const MODULE = "configure.access"
 const RolePage = Page(Role)
@@ -110,26 +110,24 @@ const grantRowsOf = (companyId: string, roleId: string, grants: readonly Grant[]
 const NAME_TAKEN = "role_name_key"
 const nameTaken = (name: string) => `This company already has a role called ${JSON.stringify(name)}`
 
-const noSuchRole = (id: string) => problem(404, { detail: `No role ${id} in this company` })
-
 /**
  * The roles of this company the caller reads: every one for the office, and
  * for a Service Provider's account the roles of a provider's team
  * (`PROVIDER_ROLE_SCOPE`), the ones its team door may give (#291 slice 23b,
- * routes/users.ts holds the rest of that rule when one is given).
+ * routes/users.ts holds the rest of that rule when one is given). A command
+ * reads the company's, every one (`findRole`).
  */
-const roleScope = (principal: Principal) => and(eq(role.companyId, principal.companyId), providerIdOf(principal) === null ? undefined : eq(role.scope, PROVIDER_ROLE_SCOPE))
-
-/** The role of the path, or the family's 404. */
-async function findRole(tx: Tx, companyId: string, id: string): Promise<Row> {
-  const [row] = await tx
-    .select(columns)
-    .from(role)
-    .where(and(eq(role.companyId, companyId), eq(role.id, id)))
-    .limit(1)
-  if (row === undefined) throw noSuchRole(id)
-  return row
-}
+const {
+  noSuch: noSuchRole,
+  get: getRole,
+  commanded: findRole,
+  list: listRoles,
+} = scoped(role, {
+  noun: "role",
+  reach: "company",
+  reads: (_tx, principal) => and(eq(role.companyId, principal.companyId), providerIdOf(principal) === null ? undefined : eq(role.scope, PROVIDER_ROLE_SCOPE)),
+  columns,
+})
 
 export function roleRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -150,19 +148,13 @@ export function roleRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        const rows = await tx
-          .select(columns)
-          .from(role)
-          .where(and(roleScope(principal), after === undefined ? undefined : gt(role.id, after)))
-          .orderBy(asc(role.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not
         // one of the roles whose matrix is loaded.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listRoles(tx, principal, at)
         const byRole = await grantsOf(tx, companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => roleOf(row, byRole.get(row.id) ?? [])), nextCursor })
       },
@@ -219,12 +211,7 @@ export function roleRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        const [row] = await tx
-          .select(columns)
-          .from(role)
-          .where(and(roleScope(principal), eq(role.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchRole(id)
+        const row = await getRole(tx, principal, id)
         return c.json(await roleWithGrants(tx, companyId, row))
       },
     )
@@ -250,8 +237,10 @@ export function roleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const current = await findRole(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const current = await findRole(tx, principal, id)
+        if (current === undefined) throw noSuchRole(id)
         if (current.system && patch.scope !== undefined && patch.scope !== current.scope) throw problem(409, { detail: systemRoleScopeKept(current.name) })
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
@@ -287,8 +276,10 @@ export function roleRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const { grants: asked } = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const current = await findRole(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const current = await findRole(tx, principal, id)
+        if (current === undefined) throw noSuchRole(id)
         if (current.system) throw problem(409, { detail: systemRoleKept(current.name) })
         // The matrix is part of the role on the wire, so replacing it changes
         // the role: the update is what says so. The trigger would stamp

@@ -66,7 +66,7 @@ import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
 import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { findInvoice, listInvoices, noSuchInvoice } from "./billing-shapes"
+import { getInvoice, listInvoices } from "./billing-shapes"
 import { requireCustomer } from "./references"
 
 const MODULE = "commercial.invoices"
@@ -235,8 +235,7 @@ export function invoiceRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findInvoice(tx, principal, id)
-        if (row === undefined) throw noSuchInvoice(id)
+        const row = await getInvoice(tx, principal, id)
         const standing = await standings(tx, principal.companyId, [row])
         return c.json(await invoiceDetailOf(tx, principal.companyId, row, standing.get(row.id)))
       },
@@ -261,8 +260,7 @@ export function invoiceRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findInvoice(tx, principal, id)
-        if (row === undefined) throw noSuchInvoice(id)
+        const row = await getInvoice(tx, principal, id)
         const model = invoiceDocumentOf(await invoiceDocumentInputOf(tx, principal.companyId, row))
         const { renderInvoiceDocument } = await import("@waste/documents/invoice")
         const bytes = await renderInvoiceDocument(model)
@@ -300,8 +298,7 @@ export function invoiceRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The invoice row never changes, so it is read before the lock; what moves under it — the credit lines naming its lines — is read after.
-        const current = await findInvoice(tx, principal, id)
-        if (current === undefined) throw noSuchInvoice(id)
+        const current = await getInvoice(tx, principal, id)
         if (current.kind !== "invoice" || current.billingRunId === null) throw problem(409, { detail: CREDIT_NOTE_NOT_CREDITED })
         await lockRow(tx, billingRun, { companyId: principal.companyId, id: current.billingRunId })
         const lines = await linesOf(tx, principal.companyId, current.id)

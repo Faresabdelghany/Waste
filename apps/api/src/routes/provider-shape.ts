@@ -24,7 +24,7 @@ export function providerShapeIssue(owner: string, body: { serviceProviderId: str
   return providerShape(owner, body) ? undefined : { path: "serviceProviderId", message: sentence }
 }
 
-/** Holds a row as a write leaves it to the contracts' provider rule, refusing at `serviceProviderId` with the family's sentence: `providerShapeIssue`, thrown. */
+/** Holds a row as a write leaves it to the domain's provider rule, refusing at `serviceProviderId` with the family's sentence: `providerShapeIssue`, thrown. */
 export function requireProviderShape(owner: string, body: { serviceProviderId: string | null }, sentence: string): void {
   const issue = providerShapeIssue(owner, body, sentence)
   if (issue !== undefined) throw invalidRequest("body", [issue])

@@ -96,14 +96,14 @@ import { ACTIVE_VEHICLE_STATUSES, type VehicleStatus } from "@waste/domain/resou
 import { refuseUnless } from "@waste/domain/status-gates"
 import { count } from "@waste/domain/text"
 import { refuseUnavailableDriver } from "@waste/domain/resources/fleet"
-import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
+import { and, count as countRows, eq, gte, inArray, isNull, lte } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { emit } from "@waste/db/commands/outbox"
 import { labelOf, routeColumns, routesOf, type RouteRow } from "@waste/db/shapes/routes"
 import { lockRow, lockRows, nextNumber } from "@waste/db/commands/shared"
 import { pickupColumns, pickupOf, pickupsOfRoute } from "@waste/db/shapes/pickups"
 import { projectToday, readProjectCalendar } from "@waste/db/query/project-clock"
-import { receiptColumns, receiptOf } from "@waste/db/shapes/driver-commands"
+import { receiptOf } from "@waste/db/shapes/driver-commands"
 import { routeFitStops } from "@waste/db/commands/fleet-fit"
 import { vehicleLabel } from "@waste/db/shapes/vehicles"
 import { handBackWindow } from "@waste/db/commands/route-holds"
@@ -115,9 +115,9 @@ import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows } from "../auth/require"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem, refusalOf } from "../problem"
-import { detailOf, findReachedRoute, findRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
+import { detailOf, getReachedRoute, listReceipts, listRoutes, lockedRoute, noSuchRoute, routeReach, routeScope } from "./execution-shapes"
 import { findDriver, findVehicle, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
@@ -187,30 +187,14 @@ export const orderMismatch = (missing: number, strangers: number): string =>
   `The order names every open pickup of the route once: ${count(missing, "open pickup")} left out, ${count(strangers, "id")} not an open pickup of this route`
 
 /**
- * The route the path names, locked and read: every command holds a rule the
- * API rather than the database holds — the status, the licence, the order —
- * so it takes the row lock first and reads afterwards (`@waste/db/commands/shared`).
- * Exported for the Plan endpoints (routes/plans.ts), whose optimise is a
- * command over the route.
- */
-export async function lockedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow> {
-  await lockRow(tx, route, { companyId: principal.companyId, id })
-  const current = await findRoute(tx, principal, id)
-  if (current === undefined) throw noSuchRoute(id)
-  return current
-}
-
-/**
  * The route `assign` or `dispatch` names, locked and read through the reach
  * (#291 slice 23b): a route of the office's projects for an office account,
- * as `lockedRoute` reads it, and for a Service Provider's account a route its
+ * as `lockedRoute` reads it (execution-shapes.ts), and for a Service Provider's account a route its
  * provider runs — the two commands a provider crews its routes with.
  */
 async function lockedCrewedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow> {
   await lockRow(tx, route, { companyId: principal.companyId, id })
-  const current = await findReachedRoute(tx, principal, id)
-  if (current === undefined) throw noSuchRoute(id)
-  return current
+  return await getReachedRoute(tx, principal, id)
 }
 
 /** The provider a provider's account crews with, or undefined for an office account: what `assign`'s and `dispatch`'s fleet is held to. */
@@ -598,32 +582,25 @@ export function routeRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, routeSchemeId, collectionGroupId, from, to, serviceDate, status, plannedDriverId, plannedVehicleId } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        const rows = await tx
-          .select(routeColumns)
-          .from(route)
-          .where(
-            and(
-              routeReach(tx, principal),
-              projectId === undefined ? undefined : eq(route.projectId, projectId),
-              routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId),
-              collectionGroupId === undefined ? undefined : eq(route.collectionGroupId, collectionGroupId),
-              from === undefined ? undefined : gte(route.operatingDate, from),
-              to === undefined ? undefined : lte(route.operatingDate, to),
-              serviceDate === undefined ? undefined : eq(route.serviceDate, serviceDate),
-              status === undefined ? undefined : eq(route.status, status),
-              plannedDriverId === undefined ? undefined : eq(route.plannedDriverId, plannedDriverId),
-              plannedVehicleId === undefined ? undefined : eq(route.plannedVehicleId, plannedVehicleId),
-              after === undefined ? undefined : gt(route.id, after),
-            ),
-          )
-          .orderBy(asc(route.id))
-          .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose progress is counted.
-        const { items, nextCursor } = pageOf(rows, limit)
+        const { items, nextCursor } = await listRoutes(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(route.projectId, projectId),
+          routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId),
+          collectionGroupId === undefined ? undefined : eq(route.collectionGroupId, collectionGroupId),
+          from === undefined ? undefined : gte(route.operatingDate, from),
+          to === undefined ? undefined : lte(route.operatingDate, to),
+          serviceDate === undefined ? undefined : eq(route.serviceDate, serviceDate),
+          status === undefined ? undefined : eq(route.status, status),
+          plannedDriverId === undefined ? undefined : eq(route.plannedDriverId, plannedDriverId),
+          plannedVehicleId === undefined ? undefined : eq(route.plannedVehicleId, plannedVehicleId),
+        )
         const [listed, plans, workloads] = await Promise.all([routesOf(tx, principal.companyId, items), activePlansByRoute(tx, principal.companyId, items), workloadsByRoute(tx, principal.companyId, items)])
         const shifts = await shiftsByRoute(tx, principal.companyId, items, workloads)
         const page: RouteListItem[] = listed.map((item) => ({ ...item, activePlan: plans.get(item.id) ?? null, workload: workloads.get(item.id) ?? NO_WORKLOAD, shift: shifts.get(item.id) ?? NO_SHIFT }))
@@ -675,8 +652,7 @@ export function routeRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findReachedRoute(tx, principal, id)
-        if (row === undefined) throw noSuchRoute(id)
+        const row = await getReachedRoute(tx, principal, id)
         return c.json(await detailOf(tx, principal.companyId, row))
       },
     )
@@ -1038,17 +1014,12 @@ export function routeRoutes(deps: RouteDeps) {
       async (c) => {
         const { id } = c.req.valid("param")
         const { limit, cursor } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findReachedRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
-        const rows = await tx
-          .select(receiptColumns)
-          .from(driverCommand)
-          .where(and(eq(driverCommand.companyId, principal.companyId), eq(driverCommand.routeId, id), after === undefined ? undefined : gt(driverCommand.id, after)))
-          .orderBy(asc(driverCommand.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(receiptOf), limit))
+        await getReachedRoute(tx, principal, id)
+        const page = await listReceipts(tx, principal, at, eq(driverCommand.routeId, id))
+        return c.json(mapPage(page, receiptOf))
       },
     )
 }

@@ -66,20 +66,17 @@ import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/voc
 import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { fitsInt4, INT4_MAX } from "@waste/domain/requests"
 import { refuseUnofferedProduct, unofferedProduct } from "@waste/domain/registry/catalogue"
-import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
+import { and, eq, exists, gte, lte, sql } from "drizzle-orm"
 import { newId } from "@waste/db/ids"
 import { priceWindowLine, windowLinesOf } from "@waste/db/commands/window-prices"
 import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, priceWeightCharge, productFacts, recordBillableEvent, type ComposedEvent } from "@waste/db/commands/billable-writes"
 import { eventColumns, eventOf, eventsFrom, statusIs, statusOf, UNNAMED, type EventReading } from "@waste/db/shapes/billable-events"
-import { lockRow } from "@waste/db/commands/shared"
-
-import type { Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { created, describeCreated, describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, invalidRequest, problem } from "../problem"
-import { eventScope, findEvent, noSuchEvent } from "./billing-shapes"
+import { eventScope, getEvent, listEvents, lockedEvent, noSuchEvent } from "./billing-shapes"
 import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import { requireTicketWorkProduct } from "./ticket-charges"
 
@@ -214,14 +211,6 @@ const payerIs = (tx: Tx, companyId: string, customerId: string) =>
       .where(and(eq(agreement.companyId, companyId), eq(agreement.id, billableEvent.agreementId), eq(agreement.payerCustomerId, customerId))),
   )
 
-/** The event the path names, locked and read with its reading: both commands hold a rule the API holds, so they take the row lock first and read afterwards (`@waste/db/commands/shared`). */
-async function lockedEvent(tx: Tx, principal: Principal, id: string): Promise<EventReading> {
-  await lockRow(tx, billableEvent, { companyId: principal.companyId, id })
-  const current = await findEvent(tx, principal, id)
-  if (current === undefined) throw noSuchEvent(id)
-  return current
-}
-
 const commandProblems = {
   404: describeProblem("No billable event with that id in the projects this account works in."),
 }
@@ -246,34 +235,31 @@ export function billableEventRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { limit, cursor, projectId, status, kind, blockReason, agreementId, customerId, productId, routeId, pickupId, ticketId, from, to } = c.req.valid("query")
-        const after = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
         if (customerId !== undefined) await requireCustomer(tx, principal.companyId, customerId, "customerId", "query")
-        const { query, line, reversing } = eventsFrom(tx, principal.companyId)
-        const rows = await query
-          .where(
-            and(
-              eventScope(principal),
-              projectId === undefined ? undefined : eq(billableEvent.projectId, projectId),
-              status === undefined ? undefined : statusIs(status, { line, reversing }),
-              kind === undefined ? undefined : eq(billableEvent.kind, kind),
-              blockReason === undefined ? undefined : eq(billableEvent.blockReason, blockReason),
-              agreementId === undefined ? undefined : eq(billableEvent.agreementId, agreementId),
-              customerId === undefined ? undefined : payerIs(tx, principal.companyId, customerId),
-              productId === undefined ? undefined : eq(billableEvent.productId, productId),
-              routeId === undefined ? undefined : eq(billableEvent.routeId, routeId),
-              pickupId === undefined ? undefined : eq(billableEvent.pickupId, pickupId),
-              ticketId === undefined ? undefined : eq(billableEvent.ticketId, ticketId),
-              from === undefined ? undefined : gte(billableEvent.serviceDate, from),
-              to === undefined ? undefined : lte(billableEvent.serviceDate, to),
-              after === undefined ? undefined : gt(billableEvent.id, after),
-            ),
-          )
-          .orderBy(asc(billableEvent.id))
-          .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(eventOf), limit))
+        // The LATERAL columns a status is read over, by the names the family's read gives them.
+        const { line, reversing } = eventsFrom(tx, principal.companyId)
+        const page = await listEvents(
+          tx,
+          principal,
+          at,
+          projectId === undefined ? undefined : eq(billableEvent.projectId, projectId),
+          status === undefined ? undefined : statusIs(status, { line, reversing }),
+          kind === undefined ? undefined : eq(billableEvent.kind, kind),
+          blockReason === undefined ? undefined : eq(billableEvent.blockReason, blockReason),
+          agreementId === undefined ? undefined : eq(billableEvent.agreementId, agreementId),
+          customerId === undefined ? undefined : payerIs(tx, principal.companyId, customerId),
+          productId === undefined ? undefined : eq(billableEvent.productId, productId),
+          routeId === undefined ? undefined : eq(billableEvent.routeId, routeId),
+          pickupId === undefined ? undefined : eq(billableEvent.pickupId, pickupId),
+          ticketId === undefined ? undefined : eq(billableEvent.ticketId, ticketId),
+          from === undefined ? undefined : gte(billableEvent.serviceDate, from),
+          to === undefined ? undefined : lte(billableEvent.serviceDate, to),
+        )
+        return c.json(mapPage(page, eventOf))
       },
     )
     .post(
@@ -355,8 +341,7 @@ export function billableEventRoutes(deps: RouteDeps) {
       },
       async (c) => {
         const { id } = c.req.valid("param")
-        const row = await findEvent(c.get("tx"), c.get("principal"), id)
-        if (row === undefined) throw noSuchEvent(id)
+        const row = await getEvent(c.get("tx"), c.get("principal"), id)
         return c.json(eventOf(row))
       },
     )

@@ -148,7 +148,7 @@ async function pointWithMembers(tx: Tx, companyId: string, row: Row): Promise<Sh
 const NAME_TAKEN = "shared_collection_point_project_id_name_key"
 const nameTaken = (name: string) => `This project already has a shared collection point called ${JSON.stringify(name)}`
 
-const { scope, noSuch: noSuchPoint, find: findPoint, get: getPoint, list: listPoints } = scoped(sharedCollectionPoint, { noun: "shared collection point", reach: "projects", columns })
+export const { scope: pointScope, noSuch: noSuchPoint, get: getPoint, list: listPoints } = scoped(sharedCollectionPoint, { noun: "shared collection point", reach: "projects", columns })
 
 export function sharedCollectionPointRoutes(deps: RouteDeps) {
   return routes(deps)
@@ -265,7 +265,7 @@ export function sharedCollectionPointRoutes(deps: RouteDeps) {
         // The row first, then what the patch points at: an id nobody minted
         // is a 404 here as in every other family, and not a 400 about a
         // customer that was never going to be written.
-        if ((await findPoint(tx, principal, id)) === undefined) throw noSuchPoint(id)
+        await getPoint(tx, principal, id)
         await requireCustomer(tx, principal.companyId, patch.responsibleCustomerId, "responsibleCustomerId")
 
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
@@ -273,7 +273,7 @@ export function sharedCollectionPointRoutes(deps: RouteDeps) {
           tx
             .update(sharedCollectionPoint)
             .set(patch)
-            .where(and(scope(principal), eq(sharedCollectionPoint.id, id)))
+            .where(and(pointScope(principal), eq(sharedCollectionPoint.id, id)))
             .returning(columns),
         )
         if (row === undefined) throw noSuchPoint(id)
@@ -306,7 +306,7 @@ export function sharedCollectionPointRoutes(deps: RouteDeps) {
           tx
             .update(sharedCollectionPoint)
             .set(stamped)
-            .where(and(scope(principal), eq(sharedCollectionPoint.id, id)))
+            .where(and(pointScope(principal), eq(sharedCollectionPoint.id, id)))
             .returning(columns),
         )
         if (row === undefined) throw noSuchPoint(id)

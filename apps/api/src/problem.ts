@@ -128,6 +128,9 @@ export function problem(status: ProblemStatus, options: ProblemOptions = {}): Pr
   return new ProblemError(status, options)
 }
 
+/** The 404 for a row out of the caller's reach, in the one sentence every family answers: "No <noun> <id> <place>". */
+export const noSuchRow = (noun: string, id: string, place: string): ProblemError => problem(404, { detail: `No ${noun} ${id} ${place}` })
+
 // The SQLSTATEs with a meaning on the wire, read through `@waste/db/sqlstate`
 // since Issue #109 part B, where the worker reads them too (a unique
 // violation on `ticket_source_event_id_idx` is an event handled before). Both

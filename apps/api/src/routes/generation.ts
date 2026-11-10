@@ -64,16 +64,16 @@ import { GENERATE_ROUTES_QUEUE, startGenerationRun } from "@waste/db/commands/ge
 import type { Tx } from "@waste/db/client"
 import { jobHeld, QueueMissing, type Send } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
-import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { instantOf, stampsOf } from "@waste/db/shapes/times"
 
 import type { Principal } from "../auth/principal"
-import { inProjects } from "../auth/projects"
 import type { RouteDeps } from "../deps"
 import { describeJson, IdParam, routes } from "../operation"
-import { afterCursor, fetchLimit, pageOf } from "../pagination"
+import { mapPage, pageAt } from "../pagination"
 import { describeProblem, problem, WORKER_QUEUE_MISSING } from "../problem"
-import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
+import { scoped } from "../scoped"
+import { getScheme, MODULE, requireNotArchived } from "./scheme-groups"
 
 const GenerationRunPage = Page(GenerationRun)
 
@@ -82,8 +82,6 @@ export const DRAFT_GENERATES_NOTHING = "A draft scheme generates nothing; valida
 
 /** What a send pg-boss refused is told when no held run shows for it: a job of the scheme is queued or active that this transaction cannot see the run of. */
 export const GENERATION_ALREADY_QUEUED = "A generation of this scheme is already queued or running; ask again in a moment"
-
-const noSuchRun = (id: string) => problem(404, { detail: `No generation run ${id} in the projects this account works in` })
 
 /** The columns a run is read with: everything but the tenant and pg-boss's job id, which is the worker's bookkeeping. */
 const runColumns = {
@@ -119,8 +117,8 @@ const runOf = (row: RunRow): GenerationRun => ({
   finishedAt: instantOf(row.finishedAt),
 })
 
-/** The runs of this company, in the projects the caller works in. */
-const runScope = (principal: Principal): SQL | undefined => and(eq(generationRun.companyId, principal.companyId), inProjects(generationRun.projectId, principal))
+/** The runs of this company, in the projects the caller works in; a scheme's newest first. */
+const { scope: runScope, find: findRun, get: getRun, list: listRuns } = scoped(generationRun, { noun: "generation run", reach: "projects", columns: runColumns, order: "desc" })
 
 /** What asking for a run answered: the run the request started; the scheme's run already queued or in flight, which it did not start; or a send refused with no held run to show for it. */
 export type AskedRun = { kind: "started"; run: GenerationRun } | { kind: "held"; run: GenerationRun } | { kind: "refused" }
@@ -136,11 +134,7 @@ export type AskedRun = { kind: "started"; run: GenerationRun } | { kind: "held";
 export async function askGeneration(tx: Tx, principal: Principal, send: Send, scheme: { id: string; projectId: string }, window: { from: string; to: string }): Promise<AskedRun> {
   const started = await startGenerationRun(tx, send, { companyId: principal.companyId, projectId: scheme.projectId, routeSchemeId: scheme.id, trigger: "on-demand", window })
   if (started !== null) {
-    const [run] = await tx
-      .select(runColumns)
-      .from(generationRun)
-      .where(and(runScope(principal), eq(generationRun.id, started)))
-      .limit(1)
+    const run = await findRun(tx, principal, started)
     if (run === undefined) throw new Error(`generation run ${started} started and then not there`)
     return { kind: "started", run: runOf(run) }
   }
@@ -199,8 +193,7 @@ export function generationRoutes(deps: RouteDeps) {
         const window = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const scheme = await findScheme(tx, principal, id)
-        if (scheme === undefined) throw noSuchScheme(id)
+        const scheme = await getScheme(tx, principal, id)
         requireNotArchived(scheme)
         if (scheme.status !== "validated") throw problem(409, { detail: DRAFT_GENERATES_NOTHING })
 
@@ -230,25 +223,12 @@ export function generationRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const { limit, cursor, status } = c.req.valid("query")
         // The cursor is the last run of the page before; newest first, so the next page is the runs below it.
-        const below = afterCursor(cursor)
+        const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findScheme(tx, principal, id)) === undefined) throw noSuchScheme(id)
-        const rows = await tx
-          .select(runColumns)
-          .from(generationRun)
-          .where(
-            and(
-              runScope(principal),
-              eq(generationRun.routeSchemeId, id),
-              status === undefined ? undefined : eq(generationRun.status, status),
-              below === undefined ? undefined : lt(generationRun.id, below),
-            ),
-          )
-          .orderBy(desc(generationRun.id))
-          .limit(fetchLimit(limit))
-        const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: items.map(runOf), nextCursor })
+        await getScheme(tx, principal, id)
+        const page = await listRuns(tx, principal, at, eq(generationRun.routeSchemeId, id), status === undefined ? undefined : eq(generationRun.status, status))
+        return c.json(mapPage(page, runOf))
       },
     )
     .get(
@@ -270,12 +250,7 @@ export function generationRoutes(deps: RouteDeps) {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const [row] = await tx
-          .select(runColumns)
-          .from(generationRun)
-          .where(and(runScope(principal), eq(generationRun.id, id)))
-          .limit(1)
-        if (row === undefined) throw noSuchRun(id)
+        const row = await getRun(tx, principal, id)
         return c.json(runOf(row))
       },
     )
