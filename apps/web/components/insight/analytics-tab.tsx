@@ -22,20 +22,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { reportKey, revenueReport, tonnageReport } from "@/lib/api/reports"
 import { formatMinor } from "@/lib/commercial/money"
 import { csvFileName, csvOf, downloadCsv } from "@/lib/data/csv"
-import {
-  countChange,
-  countedOf,
-  countOf,
-  intervalLabel,
-  percentOf,
-  REVENUE_MODULE,
-  TONNAGE_GROUPINGS,
-  tonnageCsvOf,
-  tonnageLines,
-  weightOf,
-  WEIGHTS_MODULE,
-  type TonnageGrouping,
-} from "@/lib/insight/dashboard"
+import { countChange, intervalLabel, percentOf, REVENUE_MODULE, TONNAGE_GROUPINGS, tonnageCsvOf, tonnageLines, WEIGHTS_MODULE, type TonnageGrouping } from "@/lib/insight/dashboard"
+import { weightOf } from "@/lib/format/measures"
+import { countedOf, countOf } from "@/lib/format/counts"
 
 import type { TabProps } from "./performance-tab"
 import { ReportCard, ReportNotice } from "./report-card"

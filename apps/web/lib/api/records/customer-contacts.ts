@@ -24,7 +24,6 @@ export const ADD_CONTACT = "add-contact"
 /** The customer's action that changes one of its contact persons. */
 export const EDIT_CONTACT = "edit-contact"
 
-
 /** The wire's roles, in the order the form offers them, each with the words a person reads. */
 export const CONTACT_ROLE_LABELS: Readonly<Record<ContactRole, string>> = {
   primary: "Primary contact",

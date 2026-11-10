@@ -40,7 +40,7 @@ import {
 } from "@/lib/data/provider-activities"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { SERVICE_PROVIDERS_MODULE, serviceAreaKindOf } from "@/lib/data/provider-money"
-import { PATCH_RECORD } from "@/lib/api/provider-workspace"
+import { PATCH_RECORD } from "@/lib/api/provider-commands"
 import type { ServiceProviderActivityKind } from "@waste/domain/service-providers/vocabulary"
 import type { ActivitySide } from "@waste/domain/service-providers/activities"
 

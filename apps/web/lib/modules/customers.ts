@@ -124,6 +124,7 @@ export const CUSTOMERS = workspaceSpec("customers", {
       valueLabel: "Service timeline",
       primaryAction: "Preview citizen portal",
       deepLink: "/portal",
+      previewOpens: "deepLink",
       lifecycle: ["Available", "Draft", "Submitted", "In progress", "Waiting for citizen", "Resolved"],
       rules: [
         "A portal user sees only properties they are authorized to represent and never sees other customers, service provider data, or operational-only fields.",

@@ -109,7 +109,6 @@ import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-
 /** The year filter's value for every year. */
 const ALL_YEARS = "all"
 
@@ -158,7 +157,6 @@ type ListDialogState = { mode: "create"; country?: string } | { mode: "edit"; re
 
 export function HolidayListsSettings() {
   const { upsertRecord, sendAction, refreshModule } = useBusinessRecordStore()
-  // Who saves: the account on the Pilot, the persona in fixture mode.
   const actorName = useActorName()
   const [openListId, setOpenListId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<ListDialogState | null>(null)

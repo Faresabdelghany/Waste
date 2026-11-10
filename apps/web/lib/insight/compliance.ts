@@ -13,18 +13,12 @@
 // takes — both days, the last on or after the first, at most a year's days —
 // so the tab says why in a plain sentence rather than asking; from which day
 // the report reads is the API's to judge, in its own sentence.
-import type { WasteDataFileQuery } from "@waste/contracts/reports"
 import { windowDays } from "@waste/domain/insight/intervals"
 import { REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import { addDays } from "@waste/domain/days"
 
 import { dayLabel, type DayWindow } from "./dashboard"
-
-/** The waste-data report's question: one project's or every one the caller works in, a filing's period of days both inclusive, no series. */
-export type WasteDataQuery = { projectId?: string; from: string; to: string }
-
-/** How the file separates its fields: commas, or semicolons for a spreadsheet under a Danish locale. */
-export type FileSeparator = WasteDataFileQuery["separator"]
+import type { FileSeparator, WasteDataQuery } from "./waste-data"
 
 /** The periods a filing is asked for: the national system's year first, which the tab opens on. */
 export const COMPLIANCE_PERIODS = [
@@ -66,7 +60,6 @@ export function periodOf(id: CompliancePeriodId, today: string): DayWindow | nul
       return null
   }
 }
-
 
 /** What the tab says of a period the report would refuse, in place of asking the API. */
 export const PERIOD_INCOMPLETE = "Pick the period's first and last day"

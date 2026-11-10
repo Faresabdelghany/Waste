@@ -89,20 +89,7 @@ export function percentOf(rate: Rate): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`
 }
 
-const counts = new Intl.NumberFormat("en")
-const tonnes = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const days = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" })
-
-/** A count with its thousands separated. */
-export const countOf = (value: number): string => counts.format(value)
-
-/** A count and its noun, the noun plural but for one: "1 unload", "3 unloads". */
-export const countedOf = (value: number, noun: string): string => `${countOf(value)} ${value === 1 ? noun : `${noun}s`}`
-
-/** Kilograms as a person reads a load: in tonnes with one decimal from a tonne up, in kilograms below. */
-export function weightOf(kg: number): string {
-  return kg >= 1000 ? `${tonnes.format(kg / 1000)} t` : `${counts.format(kg)} kg`
-}
 
 /** A day as an axis and a table read it: `Oct 5`. */
 export function dayLabel(day: string): string {

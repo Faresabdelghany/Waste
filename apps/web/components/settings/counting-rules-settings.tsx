@@ -92,7 +92,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const [writes, setWrites] = useState(0)
   const rules = useReport<CountingRule[]>(access.view ? `counting-rules:${writes}` : null, (asking) => listAll<CountingRule>(asking, "/counting-rules"))
   const read = useReport<Omit<Choices, "types">>(access.view ? "counting-rule-choices" : null, choicesOf)
-  const types = useTicketTypeChoices()
+  const types = useTicketTypeChoices(access.view)
   const choices: Choices = { ...(read.report ?? NO_CHOICES), types: types === null || types === "failed" ? [] : types }
   // A rule's type the list does not hold reads as the other Tickets tabs say it: being read, not shown to the role, or not read.
   const typeNameOf = (id: string | null) => (id === null ? null : (choices.types.find((type) => type.id === id)?.name ?? unknownTypeName(types)))
@@ -168,6 +168,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
           key={editing === "new" ? "new" : editing.id}
           rule={editing === "new" ? undefined : editing}
           choices={choices}
+          typeNameOf={typeNameOf}
           noTeam={noTeam}
           onOpenTeams={onOpenTeams}
           access={access}
@@ -184,10 +185,10 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
 const offered = <Row extends { id: string; name: string; status?: string }>(rows: readonly Row[]): readonly Row[] => rows.filter((row) => row.status === undefined || row.status === "active")
 
 /** A select over a list by id, with an "every one" choice where the list may be left open. */
-function PickRow({ id, label, value, rows, every, invalid, disabled, onChange }: { id: string; label: string; value: string | null; rows: readonly { id: string; name: string; status?: string }[]; every?: string; invalid?: boolean; disabled?: boolean; onChange: (value: string | null) => void }) {
-  // The reference the rule holds still reads, retired or not, by its name where the list has it and by its id where it does not.
+function PickRow({ id, label, value, rows, every, invalid, disabled, onChange, nameOf = (held) => nameIn(rows, held) ?? held }: { id: string; label: string; value: string | null; rows: readonly { id: string; name: string; status?: string }[]; every?: string; invalid?: boolean; disabled?: boolean; onChange: (value: string | null) => void; nameOf?: (held: string) => string }) {
+  // The reference the rule holds still reads, retired or not: as the table names it (`nameOf`), its name where the list has it.
   const choices = offered(rows)
-  const held = value !== null && !choices.some((row) => row.id === value) ? [...choices, { id: value, name: nameIn(rows, value) ?? value }] : choices
+  const held = value !== null && !choices.some((row) => row.id === value) ? [...choices, { id: value, name: nameOf(value) }] : choices
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
@@ -212,6 +213,7 @@ function PickRow({ id, label, value, rows, every, invalid, disabled, onChange }:
 function CountingRuleDialog({
   rule,
   choices,
+  typeNameOf,
   noTeam,
   onOpenTeams,
   access,
@@ -221,6 +223,8 @@ function CountingRuleDialog({
 }: {
   rule: CountingRule | undefined
   choices: Choices
+  /** A rule's type as the table names it, a type the list does not hold among them. */
+  typeNameOf: (id: string | null) => string | null
   noTeam: boolean
   onOpenTeams?: () => void
   access: ReturnType<typeof countingRulesAccessOf>
@@ -324,7 +328,7 @@ function CountingRuleDialog({
             <PickRow id="counting-rule-fraction" label="Waste fraction" value={draft.wasteFractionId} rows={choices.fractions} every="Every fraction" disabled={!may} onChange={(wasteFractionId) => change({ wasteFractionId })} />
             <PickRow id="counting-rule-container-type" label="Container type" value={draft.containerTypeId} rows={choices.containerTypes} every="Every container type" disabled={!may} onChange={(containerTypeId) => change({ containerTypeId })} />
             <div className="grid gap-1">
-              <PickRow id="counting-rule-type" label="Ticket type" value={draft.ticketTypeId} rows={choices.types} invalid={refused("ticketTypeId") !== null} disabled={!may} onChange={(ticketTypeId) => change({ ticketTypeId })} />
+              <PickRow id="counting-rule-type" label="Ticket type" value={draft.ticketTypeId} rows={choices.types} nameOf={(held) => typeNameOf(held) ?? held} invalid={refused("ticketTypeId") !== null} disabled={!may} onChange={(ticketTypeId) => change({ ticketTypeId })} />
               {said("ticketTypeId")}
             </div>
             <div className="grid gap-1">

@@ -16,7 +16,7 @@ import type {
   WasteDataReport,
 } from "@waste/contracts/reports"
 
-import type { FileSeparator, WasteDataQuery } from "@/lib/insight/compliance"
+import type { FileSeparator, WasteDataQuery } from "@/lib/insight/waste-data"
 
 import { get, getFile, withQuery, type ApiClient, type ApiFile } from "./client"
 
@@ -50,7 +50,6 @@ export function ticketReport(client: ApiClient, window: ReportWindowQuery): Prom
 export function revenueReport(client: ApiClient, window: ReportWindowQuery): Promise<RevenueReport> {
   return get<RevenueReport>(client, withQuery("/reports/revenue", query(window)))
 }
-
 
 const periodQuery = (query: WasteDataQuery) => ({ projectId: query.projectId, from: query.from, to: query.to })
 

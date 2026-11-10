@@ -8,8 +8,6 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-
-
 import { actionDecisionShape, actionRecordedSentence } from "../action-decision"
 
 describe("the status dialog in fixture mode", () => {

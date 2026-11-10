@@ -24,7 +24,8 @@ import { VehicleUnavailabilitySurface } from "@/components/waste/commands/availa
 import { VehicleMaintenanceSurface } from "@/components/waste/commands/maintenance-surfaces"
 import { useCommandRunner, useModuleReady } from "@/components/platform/use-command-support"
 import { compartmentDraftsOf, SET_COMPARTMENTS, type CompartmentDraft } from "@/lib/api/records/fleet"
-import { isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
+import { VEHICLES_MODULE } from "@/lib/data/allocations"
+import { isTrailerRecord } from "@/lib/modules/fleet"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
 const blank = (): CompartmentDraft => ({ name: "", capacityKg: "", volumeLitres: "", wasteFractionIds: [] })

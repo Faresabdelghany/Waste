@@ -10,27 +10,9 @@ import { describe, test } from "node:test"
 import type { PickupStandings, RouteCounts, ServiceInterval, TonnageReport, TonnageRow } from "@waste/contracts/reports"
 import { intervalsOver, windowDays } from "@waste/domain/insight/intervals"
 
-import {
-  countChange,
-  countedOf,
-  DASHBOARD_RANGES,
-  intervalLabel,
-  percentOf,
-  previousWindow,
-  AD_HOC_ROUTES,
-  rangeOf,
-  rateChange,
-  schemeKeyOf,
-  schemeNameOf,
-  schemeRowOf,
-  schemesByAttention,
-  throughputOf,
-  tonnageCsvOf,
-  tonnageLabelOf,
-  tonnageLines,
-  weightOf,
-  windowEnding,
-} from "../dashboard"
+import { countChange, DASHBOARD_RANGES, intervalLabel, percentOf, previousWindow, AD_HOC_ROUTES, rangeOf, rateChange, schemeKeyOf, schemeNameOf, schemeRowOf, schemesByAttention, throughputOf, tonnageCsvOf, tonnageLabelOf, tonnageLines, windowEnding } from "../dashboard"
+import { weightOf } from "@/lib/format/measures"
+import { countedOf } from "@/lib/format/counts"
 
 describe("the period picker", () => {
   test("offers a week and a month by the day and a quarter by the week", () => {

@@ -204,7 +204,7 @@ export type PlanningAreaResource = PlanningArea & { boundaries: PlanningAreaBoun
 export function versionInForce(boundaries: readonly PlanningAreaBoundary[], day: string): { status: "Draft" | "Active" | "Upcoming" | "Expired"; version: PlanningAreaBoundary | null } {
   const inForce = boundaries.find((version) => inForceOn(version, day))
   if (inForce) return { status: "Active", version: inForce }
-  const upcoming = boundaries.filter((version) => version.validFrom > day).sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0]
+  const upcoming = boundaries.filter((version) => periodOn(version, day) === "upcoming").sort((a, b) => a.validFrom.localeCompare(b.validFrom))[0]
   if (upcoming) return { status: "Upcoming", version: upcoming }
   const ended = [...boundaries].sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0]
   if (ended) return { status: "Expired", version: ended }

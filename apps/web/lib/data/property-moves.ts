@@ -26,7 +26,6 @@ export type MoveTyped = { on: string; outgoing: string; incoming: string; payer:
 /** Whether the role may move a property's occupant: the move writes the parties and the agreements, so it asks edit on both, as the API does. */
 export const moveOffered = (grants: Grants | null): boolean => mayOn(grants, "customers.properties", "edit") && mayOn(grants, "customers.agreements", "edit")
 
-
 /** Who may move out: every customer the record names today, in any role, each once, in the order the roles are listed. */
 export function movingOutOf(record: Pick<BusinessRecord, "submittedValues">): string[] {
   const named = PROPERTY_PARTY_ROLES.flatMap((role) => {

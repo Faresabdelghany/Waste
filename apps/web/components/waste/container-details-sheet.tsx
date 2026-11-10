@@ -26,6 +26,10 @@ import {
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { canonicalCalendarName } from "@/components/platform/business-filter-popover"
+import { useApiConfigured } from "@/components/platform/api-session-store"
+import { useActorName } from "@/components/platform/shell-identity"
+import { RecordHistory } from "@/components/waste/record-history"
+import { CONTAINERS_MODULE } from "@/lib/data/containers"
 
 type ContainerProfile = {
   id: string
@@ -189,6 +193,8 @@ export function ContainerDetailsSheet({
   onAction: (action: string) => void
 }) {
   const [activeTab, setActiveTab] = useState("configuration")
+  const apiConfigured = useApiConfigured()
+  const actorName = useActorName()
   const profile = record ? profileFor(record) : null
   const temporaryLocation = record ? fact(record, "Temporary location") : "None"
   const hasGroup = Boolean(profile && profile.group !== "—")
@@ -282,15 +288,20 @@ export function ContainerDetailsSheet({
                 </TabsContent>
 
                 <TabsContent value="history" className="mt-0">
-                  <DetailSection title="Audited event history">
-                    {["Status synchronized from agreement", "Collection configuration updated", "Location confirmed", "Container created"].map((event, index) => (
-                      <div key={event} className="grid grid-cols-[18px_1fr] gap-3 pb-5 last:pb-0">
-                        <span className={cn("mt-1 h-2.5 w-2.5 rounded-full", index === 0 ? "bg-primary" : "bg-muted-foreground/35")} />
-                        <div><p className="text-sm font-medium">{event}</p><p className="mt-1 text-xs text-muted-foreground">{index === 0 ? record.updated : `${index * 3 + 2} months ago`} · Olivia Larsen · before/after retained</p></div>
-                      </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => toast.success("Container history PDF queued")}>Download history PDF</Button>
-                  </DetailSection>
+                  {apiConfigured ? (
+                    // On the Pilot the container's history is the API's audit log of it, never the prototype's events.
+                    <RecordHistory workspaceId={CONTAINERS_MODULE.workspaceId} moduleId={CONTAINERS_MODULE.moduleId} record={record} />
+                  ) : (
+                    <DetailSection title="Audited event history">
+                      {["Status synchronized from agreement", "Collection configuration updated", "Location confirmed", "Container created"].map((event, index) => (
+                        <div key={event} className="grid grid-cols-[18px_1fr] gap-3 pb-5 last:pb-0">
+                          <span className={cn("mt-1 h-2.5 w-2.5 rounded-full", index === 0 ? "bg-primary" : "bg-muted-foreground/35")} />
+                          <div><p className="text-sm font-medium">{event}</p><p className="mt-1 text-xs text-muted-foreground">{index === 0 ? record.updated : `${index * 3 + 2} months ago`} · {actorName} · before/after retained</p></div>
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={() => toast.success("Container history PDF queued")}>Download history PDF</Button>
+                    </DetailSection>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="tickets" className="mt-0">

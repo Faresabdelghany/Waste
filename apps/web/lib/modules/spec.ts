@@ -133,6 +133,8 @@ export type ModuleSpec = {
   primaryAction: string
   /** The surface of its own a module shown `elsewhere` or as an `app` opens: its workspace offers a link there. */
   deepLink?: string
+  /** A preview of its form opens that surface once it is ready (the citizen portal's); any other preview stays where it was asked. */
+  previewOpens?: "deepLink"
   /** The fixture records of a module still on the browser's path; a switched module has none. */
   records?: BusinessRecord[]
   lifecycle: string[]

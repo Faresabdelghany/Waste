@@ -15,6 +15,9 @@ export const isLocalRefusal = (value: unknown): value is LocalRefusal =>
 /** `<prefix>-<uuid>`: a resource's web id. */
 export const webIdOf = (prefix: string, serverId: string) => `${prefix}-${serverId.toLowerCase()}`
 
+/** The server's id a `webIdOf` id carries, for an address that names a row by the API's id where no resolver is at hand. */
+export const serverIdIn = (prefix: string, webId: string): string => webId.slice(prefix.length + 1)
+
 /** True for a record whose id carries the prefix — a browser-minted one or a `webIdOf`. */
 export const hasPrefix = (prefix: string) => (record: Pick<BusinessRecord, "id">) => record.id.startsWith(`${prefix}-`)
 

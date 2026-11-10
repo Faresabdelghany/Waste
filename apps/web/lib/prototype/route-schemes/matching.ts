@@ -493,7 +493,6 @@ const fractionsIntersect = (
     ),
   )
 
-
 /**
  * Resolves one rule against the container records. Area and project bound the
  * scope; inside it, a container matches when a fraction intersects the rule,

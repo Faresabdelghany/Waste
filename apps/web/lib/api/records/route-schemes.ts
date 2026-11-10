@@ -183,7 +183,6 @@ function allOf<T>(items: readonly string[], each: (item: string) => T | LocalRef
   return out
 }
 
-
 const isServiceType = (value: string): value is ServiceType => (SERVICE_TYPES as readonly string[]).includes(value)
 
 /** An object without its undefined members, as the domain's group shape is compacted. */
