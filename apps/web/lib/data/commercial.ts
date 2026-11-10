@@ -6,7 +6,7 @@
 // through lib/api/records/pricing.ts, billing.ts and payments.ts.
 // This file is what every side of them shares: where each module lives, the
 // prefix and the kind a record of it carries, which adapter owns a record
-// (the id's prefix first, then the kind a form stamped: adapter.ts, `ofKind`)
+// (the id's prefix first, then the kind a form stamped: `ofKind`)
 // and how a wire token reads to a person.
 //
 // The price lists are the first kind of `commercial.price-rows`, the module
@@ -62,10 +62,6 @@ export const isInvoiceDocument = (record: Pick<BusinessRecord, "id" | "recordKin
   ofKind(INVOICE_PREFIX, [INVOICE_RECORD_KIND])(record) || ofKind(CREDIT_NOTE_PREFIX, [CREDIT_NOTE_RECORD_KIND])(record)
 export const isPaymentRecord = ofKind(PAYMENT_PREFIX, [PAYMENT_RECORD_KIND])
 
-// ---------------------------------------------------------------------------
-// Wire tokens as a person reads them
-// ---------------------------------------------------------------------------
-
 /** A Product's kind, as the fixtures' Type spells it. */
 export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
   "container-collection": "Container collection",
@@ -73,7 +69,6 @@ export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
   "additional-service": "Additional service",
 }
 
-/** A Product's unit, as a price is quoted per it: `/pickup`. */
 export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day", visit: "/visit", item: "/item", tonne: "/t", m3: "/m³" }
 
 /** A price row's customer-kind condition, as the prototype's Customer type read: a person is a household, an organisation is commercial. */
@@ -81,7 +76,6 @@ export const CUSTOMER_KIND_LABELS: Readonly<Record<CustomerKind, string>> = { pe
 
 export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire", "pickup-exception": "Pickup exception", visit: "Recycling-centre visit", weight: "Weight charge", "scale-ticket": "Scale ticket" }
 
-/** Why an event is blocked, each a sentence saying what to do. */
 export const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {
   "no-subscription": "No subscription",
   "agreement-draft": "Agreement still a draft",
@@ -105,16 +99,13 @@ export const CREDIT_REASON_LABELS: Readonly<Record<CreditReason, string>> = {
 /** What an invoice reads as from its payments (@waste/domain/finance/payments, `invoicePayment`). */
 export const PAYMENT_STATUS_LABELS: Readonly<Record<InvoicePaymentStatus, string>> = { open: "Open", "partially-paid": "Partially paid", paid: "Paid", overdue: "Overdue", credited: "Credited" }
 
-/** Where a payment came from. */
 export const PAYMENT_SOURCE_LABELS: Readonly<Record<PaymentSource, string>> = { manual: "By hand", "bank-file": "Bank statement" }
 
-/** A payment as its row reads: nothing of it allocated, some, or all of it. */
 export function paymentRecordStatus(payment: { allocatedMinor: number; unallocatedMinor: number }): "Unmatched" | "Partially allocated" | "Allocated" {
   if (payment.allocatedMinor === 0) return "Unmatched"
   return payment.unallocatedMinor === 0 ? "Allocated" : "Partially allocated"
 }
 
-/** The options a select offers over a vocabulary, in its order. */
 export const optionsOf = <Token extends string>(tokens: readonly Token[], labels: Readonly<Record<Token, string>>) => tokens.map((value) => ({ value, label: labels[value] }))
 
 export const PRODUCT_KIND_OPTIONS = optionsOf(PRODUCT_KINDS, PRODUCT_KIND_LABELS)
@@ -122,7 +113,6 @@ export const PRODUCT_UNIT_OPTIONS = PRODUCT_UNITS.map((value) => ({ value, label
 export const CUSTOMER_KIND_OPTIONS = optionsOf(CUSTOMER_KINDS, CUSTOMER_KIND_LABELS)
 /** The consumer's reasons, never a person's to give: a corrected pickup, a voided visit (M4 of #293), a weight no longer approved (O28 of #290), a voided scale ticket (M16b of #293). */
 const CONSUMER_CANCEL_REASONS = ["pickup-corrected", "visit-voided", "weight-revised", "scale-ticket-voided"] as const satisfies readonly CancelReason[]
-/** The office's three. */
 export const OFFICE_CANCEL_REASONS = CANCEL_REASONS.filter((reason): reason is Exclude<CancelReason, (typeof CONSUMER_CANCEL_REASONS)[number]> => !(CONSUMER_CANCEL_REASONS as readonly CancelReason[]).includes(reason))
 export const CREDIT_REASON_OPTIONS = optionsOf(CREDIT_REASONS, CREDIT_REASON_LABELS)
 export { BILLABLE_EVENT_KINDS, BLOCK_REASONS }

@@ -14,9 +14,7 @@ import { statusLabel } from "@/lib/records/fields"
 
 /** A column that moved: its label, and its value before and after in words, null where it had none. */
 export type HistoryChange = { label: string; before: string | null; after: string | null }
-/** What happened to one row in a request. */
 export type HistoryLine = { what: string; changes: HistoryChange[] }
-/** One request's changes. */
 export type HistoryEntry = { key: string; when: string; who: string; reason: string | null; lines: HistoryLine[] }
 
 export type HistoryReading = {
@@ -26,7 +24,6 @@ export type HistoryReading = {
   when: (recordedAt: string, event: AuditEvent) => string
 }
 
-/** `role_grant` → "role grant": a table's name in words. */
 const tableWords = (table: string): string => table.replaceAll("_", " ")
 
 /** `payer_customer_id` → "Payer customer": the database's spelling in words, a reference by what it names. */
@@ -38,7 +35,6 @@ function valueOf(column: string, value: unknown, nameOf: HistoryReading["nameOf"
   if (value === null || value === undefined) return null
   if (typeof value === "string") {
     if (column.endsWith("_id")) return nameOf(value) ?? value
-    // `in-progress` → "In progress": a status token as the lifecycle reads it.
     return column === "status" ? statusLabel(value) : value
   }
   if (typeof value === "boolean") return value ? "Yes" : "No"
@@ -53,7 +49,6 @@ function lineOf(event: AuditEvent, subject: { table: string; rowId: string }, na
   const own = event.table === subject.table && event.rowId === subject.rowId
   if (own && event.action !== "update") return { what: OWN[event.action], changes: [] }
   const changes = Object.entries(event.changed)
-    // A set row's column naming its parent says only whose row it is.
     .filter(([column, [before, after]]) => own || !(column.endsWith("_id") && (before === event.parentId || after === event.parentId) && event.parentId !== null))
     .map(([column, [before, after]]) => ({ label: labelOf(column), before: valueOf(column, before, nameOf), after: valueOf(column, after, nameOf) }))
   return { what: own ? OWN.update : `${OF_A_SET[event.action]} ${tableWords(event.table)}`, changes }

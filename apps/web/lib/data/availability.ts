@@ -10,7 +10,6 @@ import { statusLabel } from "@/lib/records/fields"
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValidationRule } from "./business-form-types"
 
-/** What the last day is told when it comes before the first. */
 export const LAST_DAY_ON_OR_AFTER = "The last day away is on or after the first"
 
 const reasonOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((token) => ({ value: token, label: statusLabel(token) }))
@@ -25,7 +24,6 @@ const periodFields = (reasons: readonly string[]): readonly BusinessFormField[] 
   { id: "note", label: "Note", type: "textarea" },
 ]
 
-/** Record absence, from a driver's details. */
 export const ABSENCE_FORM: BusinessFormSchema = {
   key: "fleet.drivers",
   mode: "action",
