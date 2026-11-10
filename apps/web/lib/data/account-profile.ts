@@ -24,12 +24,6 @@ function projectsOf(me: Me): string {
   return me.serviceProvider === null ? "No project" : `Through ${me.serviceProvider.legalName}'s service areas`
 }
 
-/**
- * Who acts in a shell: the name a record made, changed or deleted there
- * names, and the account menu shows. On the Pilot the account `/me` names
- * (`profileOf`'s, Auth's e-mail until `/me` answers); in fixture mode the
- * shell's persona.
- */
 export function actorNameOf(apiConfigured: boolean, me: Me | null, signedInEmail: string | null | undefined, persona: { name: string }): string {
   return apiConfigured ? profileOf(me, signedInEmail).name : persona.name
 }
