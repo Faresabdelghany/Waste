@@ -84,7 +84,6 @@ function schemaFields(schema: BusinessFormSchema): BusinessFormField[] {
   return schema.sections.flatMap((section) => section.fields)
 }
 
-/** The purpose options the form offers — value is the typed purpose, label the display. */
 export function planningAreaPurposeOptions(): readonly BusinessFormOption[] {
   return (
     schemaFields(planningAreaSchema()).find((field) => field.id === "purpose")
@@ -168,7 +167,6 @@ export function planningAreaFormValues(
 export type PlanningAreaLookups = {
   /** Display name of a project (configure.organization record). */
   projectName: (projectId: string) => string | undefined
-  /** Display name of any related record, by relation target and id. */
   recordName: (relation: ModuleLocation, recordId: string) => string | undefined
 }
 
@@ -181,7 +179,6 @@ export type PlanningAreaTableRow = {
   status: string
 }
 
-/** The Settings table cells for one planning area. */
 export function planningAreaTableRow(
   record: BusinessRecord,
   lookups: Pick<PlanningAreaLookups, "projectName">,
@@ -212,10 +209,7 @@ export function planningAreaTableRow(
   }
 }
 
-/* --------------------------------- writes --------------------------------- */
-
 export type PlanningAreaWriteContext = {
-  /** Who is saving — stamped as the creator. */
   actorName: string
   /** Milliseconds since the epoch — the id suffix. */
   now: number
@@ -240,11 +234,6 @@ type FormDerivation = {
   projectIds: string[]
 }
 
-/**
- * The shared label-keyed derivation (lib/data/business-form-records.ts) with
- * this module's lookups, minus the name field's own fact — the record's name
- * already carries it — plus the project scope.
- */
 function deriveFromForm(
   schema: BusinessFormSchema,
   values: BusinessFormValues,
@@ -310,13 +299,6 @@ export function createPlanningAreaRecord(
   }
 }
 
-/**
- * An edited planning area: the form's facts layer over the stored ones — a
- * cleared field drops its stale fact, and a fixture alias fact (`Code`,
- * `Effective`) goes once its field carries the value — the name and context
- * follow the form, typed values merge, relations and project scope are
- * rebuilt, and status, owner, coverage and related chips stay.
- */
 export function updatePlanningAreaRecord(
   existing: BusinessRecord,
   values: BusinessFormValues,

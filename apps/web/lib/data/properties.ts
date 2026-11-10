@@ -71,12 +71,11 @@ export const PROPERTY_RECORD_KIND = "Property"
 export const PROPERTY_GROUP_RECORD_KIND = "Property Group"
 export const SHARED_POINT_RECORD_KIND = "Shared Collection Point"
 
-/** Whether a record is of each kind: its id's prefix, else the kind the form stamped on it (adapter.ts, `ofKind`). */
+/** Whether a record is of each kind: its id's prefix, else the kind the form stamped on it (`ofKind`). */
 export const isPropertyRecord: (record: Pick<BusinessRecord, "id" | "recordKind">) => boolean = ofKind(PROPERTY_PREFIX, [PROPERTY_RECORD_KIND])
 export const isPropertyGroupRecord: (record: Pick<BusinessRecord, "id" | "recordKind">) => boolean = ofKind(GROUP_PREFIX, [PROPERTY_GROUP_RECORD_KIND])
 export const isSharedPointRecord: (record: Pick<BusinessRecord, "id" | "recordKind">) => boolean = ofKind(SHARED_POINT_PREFIX, [SHARED_POINT_RECORD_KIND])
 
-/** The field each party role is picked in, in the wire's role order. */
 export const PARTY_FIELDS: Readonly<Record<PropertyPartyRole, string>> = {
   owner: "ownerIds",
   payer: "payerIds",
@@ -93,10 +92,6 @@ export const MEMBERS_KEY = "memberPropertyIds"
 export const MEMBER_ROLE_KEY = "memberRole"
 export const MEMBER_ROLES_KEY = "memberRoles"
 
-// ---------------------------------------------------------------------------
-// The words: every closed list as the registry's forms spell it
-// ---------------------------------------------------------------------------
-
 export const PROPERTY_KIND_LABELS: Readonly<Record<PropertyKind, string>> = {
   residential: "Residential",
   commercial: "Commercial",
@@ -104,7 +99,6 @@ export const PROPERTY_KIND_LABELS: Readonly<Record<PropertyKind, string>> = {
   mixed: "Mixed use",
   other: "Other",
 }
-/** A role as its field and its fact are called: the parties who hold it. */
 export const PARTY_ROLE_LABELS: Readonly<Record<PropertyPartyRole, string>> = {
   owner: "Owners",
   payer: "Payers",
@@ -124,7 +118,6 @@ export const GROUP_MEMBER_ROLE_LABELS: Readonly<Record<PropertyGroupMemberRole, 
   payer: "Payer",
   reporting: "Reporting only",
 }
-/** A group role as its fact is called: the members who hold it. */
 export const GROUP_MEMBER_FACTS: Readonly<Record<PropertyGroupMemberRole, string>> = {
   member: "Members",
   administrator: "Administrators",
@@ -162,7 +155,6 @@ export const POINT_MEMBER_ROLE_LABELS: Readonly<Record<SharedCollectionPointMemb
   payer: "Payer",
   "notification-contact": "Notification contact",
 }
-/** A point role as its fact is called: the members who hold it. */
 export const POINT_MEMBER_FACTS: Readonly<Record<SharedCollectionPointMemberRole, string>> = {
   "service-member": "Service members",
   administrator: "Administrators",
@@ -173,17 +165,12 @@ export const POINT_MEMBER_FACTS: Readonly<Record<SharedCollectionPointMemberRole
 const optionsOf = <Token extends string>(tokens: readonly Token[], labels: Readonly<Record<Token, string>>): BusinessFormOption[] => tokens.map((value) => ({ value, label: labels[value] }))
 const statusOptions = (tokens: readonly string[]): BusinessFormOption[] => tokens.map((value) => ({ value, label: statusLabel(value) }))
 
-// ---------------------------------------------------------------------------
-// The forms
-// ---------------------------------------------------------------------------
-
 const project: BusinessFormField = { id: "projectId", label: "Operating project", type: "select", required: true, relation: ORGANISATION_MODULE }
 const heldProject: BusinessFormField = { ...project, readOnly: true }
 const latitude = (required: boolean, description?: string): BusinessFormField => ({ id: "latitude", label: "Latitude", type: "number", required, min: -90, max: 90, description })
 const longitude = (required: boolean): BusinessFormField => ({ id: "longitude", label: "Longitude", type: "number", required, min: -180, max: 180 })
 const responsibleCustomer = (label: string): BusinessFormField => ({ id: "responsibleCustomerId", label, type: "select", relation: CONTACTS_MODULE })
 const members = (label: string): BusinessFormField => ({ id: MEMBERS_KEY, label, type: "multiselect", relation: PROPERTIES_MODULE, description: "Properties of the same project." })
-/** What the driver is told at a property or a point: the Driver App's stop shows it. */
 const DRIVER_INSTRUCTIONS: BusinessFormField = {
   id: "driverInstructions",
   label: "Driver instructions",
@@ -370,11 +357,6 @@ export const SHARED_POINT_EDIT_FORM: BusinessFormSchema = {
   sections: pointSections(heldProject, false),
 }
 
-// ---------------------------------------------------------------------------
-// The records the forms make
-// ---------------------------------------------------------------------------
-
-/** The values an edit form opens with: the record's typed values for the form's fields. */
 export function formValuesOf(schema: BusinessFormSchema, record: BusinessRecord): BusinessFormValues {
   const fieldIds = new Set(schema.sections.flatMap((section) => section.fields.map((field) => field.id)))
   return Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && typeof value === "string"))
@@ -387,17 +369,14 @@ export function createPropertyRecord(values: BusinessFormValues, { now }: { now:
   return mintedRecord({ id: `properties-property-${now}`, name: said(values, "displayName"), status: "Active", recordKind: PROPERTY_RECORD_KIND, values })
 }
 
-/** A group the create form made, in the state its form chose. */
 export function createPropertyGroupRecord(values: BusinessFormValues, { now }: { now: number }): BusinessRecord {
   return mintedRecord({ id: `groups-property-group-${now}`, name: said(values, "name"), status: statusLabel(said(values, "status") || "draft"), recordKind: PROPERTY_GROUP_RECORD_KIND, values })
 }
 
-/** A point the create form made, in the state its form chose. */
 export function createSharedPointRecord(values: BusinessFormValues, { now }: { now: number }): BusinessRecord {
   return mintedRecord({ id: `shared-shared-collection-point-${now}`, name: said(values, "name"), status: statusLabel(said(values, "status") || "draft"), recordKind: SHARED_POINT_RECORD_KIND, values })
 }
 
-/** An edited row: its identity kept, the form's values over its typed ones, the name from the form's name field. */
 export function updatedRecord(record: BusinessRecord, values: BusinessFormValues, nameField: string): BusinessRecord {
   const name = said(values, nameField)
   return { ...record, name: name === "" ? record.name : name, submittedValues: { ...record.submittedValues, ...values } }
