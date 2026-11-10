@@ -2374,8 +2374,8 @@ export function BusinessWorkspace({
       toast.success(formSchema.recordKind, {
         description: formSchema.execution.completionMessage,
       })
-      // A preview opens the surface its module is shown on (the citizen portal).
-      if (formModule?.deepLink !== undefined) {
+      // A preview whose module says so opens the surface it is shown on (the citizen portal's).
+      if (formModule?.previewOpens === "deepLink" && formModule.deepLink !== undefined) {
         router.push(formModule.deepLink)
       }
       return
