@@ -133,7 +133,6 @@ export const problem = (status: number, detail: string) =>
 export const outcomes = (commands: readonly { id: string }[], decide: (id: string, index: number) => Partial<CommandOutcomeRow> = () => ({})) =>
   json({ outcomes: commands.map((command, index) => ({ commandId: command.id, outcome: "applied", ...decide(command.id, index) })) })
 
-/** The commands of a batch the door was sent. */
 export const commandsOf = (body: unknown) => (body as { commands: { id: string }[] }).commands
 
 /** Storage as the API signs for it: another origin than the API's, the bucket's objects under its upload path. */

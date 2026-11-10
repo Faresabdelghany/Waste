@@ -26,7 +26,6 @@ import { pickupIdOf, type PilotCommandKind } from "./commands"
 
 const OUTCOMES: readonly PilotCommandKind[] = ["complete-pickup", "skip-pickup", "fail-pickup"]
 
-/** A route's commands still in the queue. */
 export function waitingOn(waiting: readonly QueueEntry[], routeId: string): QueueEntry[] {
   return waiting.filter((entry) => entry.command.routeId === routeId)
 }
@@ -123,7 +122,6 @@ export function routeMapsHref(route: Pick<DriverRouteDetail, "id" | "pickups">, 
   return `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destination)}${waypoints.length > 0 ? `&waypoints=${encodeURIComponent(waypoints.join("|"))}` : ""}`
 }
 
-/** Whether the route is underway as far as offering goes: active, or its start waiting to be sent. */
 const underway = (route: Pick<Route, "id" | "status">, waiting: readonly QueueEntry[]): boolean => route.status === "active" || (route.status === "ready" && waits(waiting, route.id, ["start-route"]))
 
 export type StopActions = {
@@ -193,12 +191,10 @@ export function keptNotice(readAt: string, timeZone?: string): string {
   return `Offline copy: the server's answer at ${time}. What you do now is sent when the connection returns.`
 }
 
-/** The banner while the server is out of reach. */
 export function unreachableBanner(waiting: number): string {
   return `Can't reach the server · ${count(waiting, "action")} waiting`
 }
 
-/** The start screen's order: by operating date, then planned start, then number. */
 export function routesInDayOrder<Item extends Pick<Route, "operatingDate" | "plannedStartTime" | "number">>(routes: readonly Item[]): Item[] {
   return [...routes].sort((a, b) => a.operatingDate.localeCompare(b.operatingDate) || (a.plannedStartTime ?? "").localeCompare(b.plannedStartTime ?? "") || a.number - b.number)
 }

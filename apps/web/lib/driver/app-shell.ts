@@ -5,11 +5,9 @@
 // build only: the development server's files are neither named by their
 // content nor stable, and a worker over them would serve yesterday's code.
 
-/** The worker's script and the pages it answers for. */
 export const SHELL_SCRIPT = "/driver-sw.js"
 export const SHELL_SCOPE = "/driver"
 
-/** What a page tells the worker to keep: its own path, then the build's static files it loaded, each once. */
 export function shellUrls(pathname: string, resources: readonly string[], origin: string): string[] {
   const statics = resources.filter((resource) => {
     try {
@@ -56,5 +54,4 @@ export async function keepShell(scope: ShellScope, enabled: boolean): Promise<vo
   worker.postMessage({ type: "keep", urls: shellUrls(scope.location.pathname, resources, scope.location.origin) })
 }
 
-/** Whether this build keeps a shell: production only. */
 export const SHELL_ENABLED = process.env.NODE_ENV === "production"
