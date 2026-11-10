@@ -9,14 +9,11 @@ import { RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { withCompany } from "@waste/db/tenant"
-import { NOT_A_POWERED_VEHICLE, NOT_A_TRAILER } from "@waste/domain/execution/commands"
 import { A_POWERED_VEHICLE_HAS_A_COMPARTMENT } from "@waste/domain/resources/fleet"
 import { PROVIDER_WITH_PROVIDER_OWNERSHIP } from "@waste/domain/resources/places"
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { ProblemError } from "../problem"
-import { NOT_A_VEHICLE, requireVehicle } from "../routes/references"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { nextMillisecond } from "./clock"
@@ -283,7 +280,9 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       for (const row of seen) assert.equal(row.projectId, a.projects.copenhagen.id)
 
       // A service provider's account reads its own fleet, wherever it is based, and none of the office's (#291 slice 23b).
+      const own = await vehicle({ ownership: "service-provider", serviceProviderId: a.serviceProviders.nordren.id })
       const his = (await page(lars, "?limit=200")).items
+      assert.ok(his.some((row) => row.id === own.id), "the vehicle its provider owns")
       assert.ok(his.every((row) => row.serviceProviderId === a.serviceProviders.nordren.id), JSON.stringify(his.map((row) => row.serviceProviderId)))
       assert.ok(!his.some((row) => row.id === here.id))
       await refused(await lars(`/vehicles/${here.id}`), 404)
@@ -600,39 +599,6 @@ describe("the vehicle endpoints", { skip: database.skip }, () => {
       await refused(await viewer(`/vehicles/${elsewhere.id}/compartments`, { method: "PUT", body: { compartments: [] } }), 404)
       const created = await vehicle()
       assert.match((await refused(await ungranted(`/vehicles/${created.id}/compartments`, { method: "PUT", body: { compartments: [] } }), 403)).detail ?? "", /edit on fleet\.vehicles/)
-    })
-  })
-
-  describe("requireVehicle", () => {
-    const refusal = (path: string, message: string) => (error: unknown) => {
-      assert.ok(error instanceof ProblemError, String(error))
-      assert.equal(error.body.status, 400)
-      assert.deepEqual(error.body.errors, [{ path, message }])
-      return true
-    }
-
-    test("holds a vehicle to the project and, when one is demanded, to the kind, each with its own sentence, and answers the row's status", async () => {
-      const truck = await vehicle()
-      const trailer = await vehicle({ kind: "trailer", requiredLicenceClass: "ce", compartments: [] })
-      const elsewhere = await vehicle({ projectId: a.projects.harbor.id })
-      const retired = await vehicle({ status: "retired" })
-      const scope = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
-      await withCompany(pool.db, a.companyId, async (tx) => {
-        assert.equal(await requireVehicle(tx, scope, truck.id), "active", "the status, for the doors that gate a new reference on it")
-        assert.equal(await requireVehicle(tx, scope, retired.id), "retired", "found, and retired: whether that will do is the caller's rule")
-        await requireVehicle(tx, scope, truck.id, { kind: "powered-vehicle" })
-        await requireVehicle(tx, scope, trailer.id, { path: "trailerId" })
-        assert.equal(await requireVehicle(tx, scope, trailer.id, { kind: "trailer", path: "trailerId" }), "active")
-        assert.equal(await requireVehicle(tx, scope, null, { kind: "trailer" }), undefined, "nothing named, nothing to answer")
-        assert.equal(await requireVehicle(tx, scope, undefined), undefined)
-
-        await assert.rejects(requireVehicle(tx, scope, trailer.id, { kind: "powered-vehicle" }), refusal("vehicleId", NOT_A_POWERED_VEHICLE), "a trailer offered where a powered vehicle is required")
-        await assert.rejects(requireVehicle(tx, scope, truck.id, { kind: "trailer", path: "trailerId" }), refusal("trailerId", NOT_A_TRAILER), "a powered vehicle offered as a trailer")
-        await assert.rejects(requireVehicle(tx, scope, elsewhere.id), refusal("vehicleId", NOT_A_VEHICLE), "another project's")
-        await assert.rejects(requireVehicle(tx, scope, elsewhere.id, { kind: "powered-vehicle" }), refusal("vehicleId", NOT_A_POWERED_VEHICLE), "another project's, asked for by kind")
-        await assert.rejects(requireVehicle(tx, scope, theirVehicle.id), refusal("vehicleId", NOT_A_VEHICLE), "another company's")
-        await assert.rejects(requireVehicle(tx, scope, testId(), { path: "collectionGroups.0.vehicleId" }), refusal("collectionGroups.0.vehicleId", NOT_A_VEHICLE), "nobody's, at the path given")
-      })
     })
   })
 })

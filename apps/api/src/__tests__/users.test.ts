@@ -9,7 +9,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { projectAccess, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { company } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { encodeCursor } from "../pagination"
@@ -636,16 +636,16 @@ describe("the user endpoints", { skip: database.skip }, () => {
      * A transfer held still in the middle: the two locks the route takes, the
      * flag moved, the transaction kept open while `request` is sent in — so a
      * second request meets a transfer it cannot yet see, which is what two
-     * requests a moment apart look like from inside. The transfer commits a
-     * moment after the request has been sent, and the request's answer is
-     * what it made of that.
+     * requests a moment apart look like from inside. The transfer commits only
+     * once Postgres reports the request blocked behind it (`pg_blocking_pids`,
+     * the driver suite's precedent), and the request's answer is what it made
+     * of that.
      */
     const duringTransferTo = async (id: string, request: () => Promise<Response>): Promise<Response> => {
-      let written!: () => void
-      let release!: () => void
-      const hasWritten = new Promise<void>((resolve) => (written = resolve))
-      const held = new Promise<void>((resolve) => (release = resolve))
+      const released = Promise.withResolvers<void>()
+      const written = Promise.withResolvers<number>()
       const inFlight = withCompany(pool.db, a.companyId, async (tx) => {
+        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
         await tx.select({ id: company.id }).from(company).where(and(eq(company.companyId, a.companyId), eq(company.id, a.companyId))).for("update")
         await tx.select({ id: userAccount.id }).from(userAccount).where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.id, id))).for("update")
         await tx
@@ -653,15 +653,28 @@ describe("the user endpoints", { skip: database.skip }, () => {
           .set({ primaryAdministrator: false })
           .where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.primaryAdministrator, true)))
         await tx.update(userAccount).set({ primaryAdministrator: true }).where(and(eq(userAccount.companyId, a.companyId), eq(userAccount.id, id)))
-        written()
-        await held
+        written.resolve(pid)
+        await released.promise
       })
-      await hasWritten
-      const pending = request()
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      release()
-      await inFlight
-      return await pending
+      /** Rejects if the transfer ends before it is released, so a broken transfer fails the test instead of hanging it on the pid. */
+      const endedEarly = inFlight.then(() => Promise.reject(new Error("the transfer's transaction ended before it was released")))
+      void endedEarly.catch(() => undefined)
+      let pending: Promise<Response> | undefined
+      try {
+        const pid = await Promise.race([written.promise, endedEarly])
+        pending = request()
+        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
+        const deadline = Date.now() + 30_000
+        while (!(await blocked())) {
+          assert.ok(Date.now() < deadline, "the request never waited on the transfer: it took neither lock the transfer holds")
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      } finally {
+        released.resolve()
+        await inFlight
+        await pending?.catch(() => undefined)
+      }
+      return await (pending ?? assert.fail("no request was sent"))
     }
 
     test("makes a deactivation or a narrowing of the account a transfer is moving the flag to wait for the transfer, and then refuses it", async () => {
