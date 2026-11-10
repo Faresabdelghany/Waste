@@ -160,10 +160,8 @@ const defaultUserView = listView("name")
 const defaultRoleView = listView("default")
 const defaultTeamView = listView("default")
 
-/** A team's values the shared filter reads: its status. */
 const TEAM_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
 
-/** Whether the row a record among `records` stands for passes the filters; a row no record stands for passes. */
 const shownIn = (records: readonly BusinessRecord[], filters: BusinessFilters, readers: FilterValueReaders, id: string): boolean => {
   const record = records.find((candidate) => candidate.id === id)
   return record === undefined || matchesBusinessFilters(record, filters, readers)
@@ -408,9 +406,6 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const accessRecords = getRecords(
     "configure",
     "access")
-  // The pickers and the company's name: the organisation and the
-  // service-provider modules, as the store loaded them, and `/me` for the
-  // company until the organisation module is ready.
   const organisationRecords = getRecords("configure", "organization")
   const providerRecords = getRecords("service-providers", "service-providers")
   // The caller's company is `/me`'s; the organisation record lends only its web id.
@@ -431,7 +426,6 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const pilotReady = accessModuleState.status === "ready"
   const selfEmail = me?.user.email.toLowerCase()
 
-  // The lists' rows by the access records they are read from: what the shared filter reads each row's values off.
   const userById = useMemo(() => new Map(userRows.map((user) => [user.id, user])), [userRows])
   const roleById = useMemo(() => new Map(roleRows.map((roleDefinition) => [roleDefinition.id, roleDefinition])), [roleRows])
   const userRecords = useMemo(() => accessRecords.filter((record) => userById.has(record.id)), [accessRecords, userById])

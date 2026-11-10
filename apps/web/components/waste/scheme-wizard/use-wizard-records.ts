@@ -85,7 +85,6 @@ export function useWizardRecords(): WizardRecords {
   const schemes = useModuleRecords("route-studio", "schemes")
   const allocations = useModuleRecords("fleet", "vehicle-planning")
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)
-  // The master data's names, derived once per read of the module rather than on every render.
   const containerTypeNames = useMemo(() => master.filter((record) => masterDataKindOf(record) === "container-type").map((record) => record.name), [master])
   const wasteFractionNames = useMemo(() => master.filter((record) => masterDataKindOf(record) === "waste-fraction").map((record) => record.name), [master])
 

@@ -22,7 +22,6 @@ import { draftRefusal, messageLine, routeMessages, sendRouteMessage } from "@/li
 import { ROUTES_MODULE } from "@/lib/data/routes"
 import { useServerModuleState } from "@/components/platform/business-record-store"
 
-/** How often an open thread is read again. */
 const THREAD_POLL_MS = 30_000
 
 const readThread = (client: Parameters<typeof routeMessages>[0], serverId: string): Promise<RouteMessage[]> => routeMessages(client, serverId)

@@ -4,9 +4,9 @@
 // dates `GET /route-schemes/:id/occurrences` says the scheme plans over the
 // coming eight weeks, holidays applied by its policy. The read runs the one
 // `generateOccurrences` the generation job runs, so a row here and a route
-// the job writes for it agree by construction. It stands in the Routes tab
-// until the routes themselves are read from the API (slice 6); the wizard's
-// preview, before a scheme exists, stays the domain's own call.
+// the job writes for it agree by construction. It stands in the Routes tab,
+// above the routes; the wizard's preview, before a scheme exists, stays the
+// domain's own call.
 import { useEffect, useState } from "react"
 
 import type { Occurrence } from "@waste/contracts/route-schemes"

@@ -6,8 +6,7 @@
 // invariant made visible), the spoke edits one group at a time: name, days,
 // vehicle, default driver, optional service provider, and the stop source —
 // a matching rule (the normal path) or hand-picked containers (the explicit
-// exception). Shared by the Guided Setup wizard step and the scheme page's
-// "Edit collection groups" dialog so both surfaces edit the same shape.
+// exception). The scheme page's "Edit collection groups" dialog draws it.
 
 import { useEffect, useMemo, useState } from "react"
 import { Check, MagnifyingGlass, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
@@ -57,8 +56,6 @@ import { serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-
 
 /** The planning area picker's value for a rule group matching within the scheme's area. */
 const SCHEME_AREA = "__scheme-area__"
-
-/* ------------------------------ shared inputs ------------------------------ */
 
 export function RecordSelect({
   label,
@@ -472,8 +469,6 @@ export function SchemeContainerPicker({
   )
 }
 
-/* ------------------------------ group helpers ------------------------------ */
-
 /** The next free `group-N` id — stable within the scheme, never Date.now(). */
 export function nextCollectionGroupId(groups: readonly CollectionGroup[]): string {
   const max = groups.reduce((highest, group) => {
@@ -519,8 +514,6 @@ export function groupContainerCounts(
     .map((plan) => `${SERVICE_DAY_SHORT_LABELS[plan.day]} ${plan.containerIds.length}`)
     .join(" · ")
 }
-
-/* ---------------------------------- hub ----------------------------------- */
 
 export function CollectionGroupsEditor({
   groups,
@@ -598,7 +591,6 @@ export function CollectionGroupsEditor({
 
   return (
     <div className="space-y-4">
-      {/* Coverage strip — the "every service day has at least one group" invariant. */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Coverage</span>
         {coverage.map((entry) => (
@@ -624,7 +616,6 @@ export function CollectionGroupsEditor({
         ))}
       </div>
 
-      {/* Hub — one summary row per group. */}
       <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60">
         {groups.length === 0 && (
           <p className="px-4 py-6 text-center text-sm text-muted-foreground">
@@ -715,7 +706,6 @@ export function CollectionGroupsEditor({
         </div>
       </div>
 
-      {/* Spoke — the selected group's editor. */}
       {selected && (
         <CollectionGroupSpoke
           key={selected.id}
@@ -739,8 +729,6 @@ export function CollectionGroupsEditor({
   )
 }
 
-/* ---------------------------------- spoke --------------------------------- */
-
 function CollectionGroupSpoke({
   group,
   days,
@@ -760,7 +748,6 @@ function CollectionGroupSpoke({
   group: CollectionGroup
   days: readonly ServiceDay[]
   containers: BusinessRecord[]
-  /** The containers the manual picker may offer. */
   pickableContainers: BusinessRecord[]
   vehicles: BusinessRecord[]
   drivers: BusinessRecord[]
@@ -935,8 +922,6 @@ function CollectionGroupSpoke({
     </div>
   )
 }
-
-/* --------------------------------- dialog --------------------------------- */
 
 /**
  * "Edit collection groups" on the scheme page: the same editor over a stored

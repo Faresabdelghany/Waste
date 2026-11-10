@@ -25,7 +25,6 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { createTeamMemberRecord, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "@/lib/data/provider-workspace"
 import { waitingSentence } from "@/lib/api/read-state"
 
-/** Add user: a provider's account invites into its own team. */
 export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const team = useModuleRecords(TEAM_MODULE.workspaceId, TEAM_MODULE.moduleId)
@@ -65,7 +64,6 @@ export function InviteTeamMemberSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** A member's details: switched off while invited or active, on again once deactivated — never the viewer's own account. */
 export function TeamMemberCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(TEAM_MODULE)
   const { busy, run } = useCommandRunner(TEAM_MODULE, record.id)

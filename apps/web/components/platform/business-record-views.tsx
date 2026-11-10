@@ -143,7 +143,6 @@ export function RecordActionsMenu({
   onDelete?: (record: BusinessRecord) => void
   entityLabel: string
   className?: string
-  /** Module-specific record actions rendered above Edit/Delete. */
   extraActions?: RecordExtraAction[]
 }) {
   const hasExtraActions = Boolean(extraActions?.length)

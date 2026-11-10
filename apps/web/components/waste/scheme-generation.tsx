@@ -47,7 +47,6 @@ type Loaded = { key: string; runs: GenerationRun[] } | { key: string; problem: s
 export type SchemeGenerationRuns = {
   /** The scheme's newest runs once read, newest first; null while they are read or when they could not be. */
   runs: GenerationRun[] | null
-  /** Why the runs could not be read. */
   problem: string | null
   /** The last read of a watched run that failed, in the API's words; cleared by the next answer. */
   readProblem: string | null
@@ -167,7 +166,6 @@ export function useSchemeGenerationRuns(record: BusinessRecord, timezone?: strin
   }
 }
 
-/** The Generate dialog on the Pilot: the window to plan, one button, the API's sentence inline on a refusal. */
 export function SchemeGenerateDialog({
   record,
   open,
@@ -238,7 +236,6 @@ export function SchemeGenerateDialog({
   )
 }
 
-/** The scheme's newest runs, from the Generate button and the nightly plan-ahead, each as the worker has left it. */
 export function SchemeGenerationRunsSection({ generation }: { generation: SchemeGenerationRuns }) {
   const { runs, problem, readProblem, unreported, timezone } = generation
   return (

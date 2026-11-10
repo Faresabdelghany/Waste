@@ -53,7 +53,6 @@ export function ComplianceTab({ projectId, today, viewed }: { projectId?: string
   const warnings = shown?.warnings ?? []
   const unreviewed = warnings.reduce((sum, warning) => (warning.kind === "not-reviewed" ? { kg: sum.kg + warning.netKg, unloads: sum.unloads + warning.unloads } : sum), { kg: 0, unloads: 0 })
 
-  /** A day typed into the period: the period becomes the person's own from the days it held. */
   const spell = (end: keyof DayWindow, day: string) => {
     setCustom({ ...period, [end]: day })
     setPeriodId("custom")

@@ -71,7 +71,6 @@ export function SimpleSelect({
   )
 }
 
-/** A selected pill fills with the primary token; unselected pills stay outlined. */
 export const PILL_TOGGLE_ITEM_CLASS =
   "rounded-full border-border px-4 data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:hover:bg-primary/90 data-[state=on]:hover:text-primary-foreground"
 

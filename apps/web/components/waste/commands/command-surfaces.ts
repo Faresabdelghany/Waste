@@ -123,30 +123,25 @@ export function listShows(list: ModuleList | undefined, record: BusinessRecord):
   return list?.shows?.(record) ?? true
 }
 
-/** Whether a row's details offer the generic Edit by its surface: every row where the surface keeps it, the rows its rule holds for where it names one, and none where it keeps none. */
 export function genericEditOffered(surface: CommandSurface | undefined, record: BusinessRecord | null | undefined): boolean {
   if (surface?.genericEdit === true) return true
   return typeof surface?.genericEdit === "function" && record != null && surface.genericEdit(record)
 }
 
-/** Whether the account may take a module's primary action: any action its surface's own dialog names (`primaryActions`), else the module's create. */
 export function primaryGranted(surface: CommandSurface | undefined, module: ModuleLocation, grants: Grants | null): boolean {
   return (surface?.primaryActions ?? [{ module, action: "create" }]).some((action) => mayTake(grants, action))
 }
 
-/** Which primary action a module offers: its surface's own dialog with its grants alone (`primaryGranted`), its form where the fixture form offers one (`formOffered`), or none. */
 export function primaryOf(surface: CommandSurface | undefined, granted: boolean, formOffered: boolean): "surface" | "form" | null {
   if (!granted) return null
   if (surface !== undefined && surface.primary !== "form") return surface.primary === null ? null : "surface"
   return formOffered ? "form" : null
 }
 
-/** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */
 export function initialFiltersOf(surface: CommandSurface | undefined): BusinessFilters {
   return { ...emptyBusinessFilters, ...surface?.list?.initial }
 }
 
-/** A provider's team: its accounts alone, filtered by where they stand and the role they hold. */
 const TEAM_LIST: ModuleList = {
   shows: isTeamMember,
   readers: () => ({ statuses: (record) => [record.status], roles: (record) => singleFilterValue(record.facts.Roles) }),
@@ -158,7 +153,6 @@ function surfacesOf<Key extends SwitchedModuleKey>(surfaces: { readonly [K in Ke
   return surfaces
 }
 
-/** The surfaces, by the switched module's key. */
 export const COMMAND_SURFACES = surfacesOf({
   // Slice 5b (#181): the identity by its own form, the lifecycle by command.
   "resources.containers": { primary: AddContainerSurface, rowActions: ContainerCommandsSurface },
@@ -193,10 +187,6 @@ export const COMMAND_SURFACES = surfacesOf({
   "route-studio.routes": { primary: RoutesPrimarySurface, primaryActions: Object.values(ROUTES_PRIMARY_ACTIONS), rowActions: RouteCommandsSurface },
   "route-studio.pickups": { primary: null, rowActions: PickupCommandsSurface },
   "route-studio.live": { primary: null, rowActions: LiveRouteSurface, whileShown: LiveBoardRefresh },
-  // Slice 8 (#182, #147): a ticket opened by the office's own form and worked
-  // in its own details (LiveTicketDetailsDialog), the list opening on the open
-  // ones; an alert raised by hand and moved by its commands, the queue
-  // opening on what still needs attention.
   // O11 of #290: a bulky collection booked by its own dialog, its days read from the place's schedule; a booked one routed onto a route of its day or cancelled.
   "operate.bulky-bookings": { primary: BookBulkySurface, rowActions: BulkyBookingCommandsSurface },
   // #393: the attendant's check-in is its own page, with the likely trades beside it; a visit is voided with why, never edited.
@@ -207,6 +197,10 @@ export const COMMAND_SURFACES = surfacesOf({
   "operate.inspections": { primary: "form", rowActions: InspectionSurface, genericEdit: inspectionOpen },
   // M23b of #293: proposals the run makes, Propose now the primary; approved or dismissed in their details.
   "customers.right-sizing": { primary: ProposeRightSizingSurface, rowActions: RightSizingSurface },
+  // Slice 8 (#182, #147): a ticket opened by the office's own form and worked
+  // in its own details (LiveTicketDetailsDialog), the list opening on the open
+  // ones; an alert raised by hand and moved by its commands, the queue
+  // opening on what still needs attention.
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
   // Slice 10 (#185): a product is made in Settings, so both pricing modules'

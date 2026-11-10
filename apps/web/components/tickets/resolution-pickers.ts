@@ -42,13 +42,11 @@ const keyOf = (location: ModuleLocation) => moduleKeyOf(location.workspaceId, lo
 /** A route has ended once it is completed or cancelled: no re-collection rides on it. */
 const ENDED = new Set(["Completed", "Cancelled"])
 
-/** A row as a Resolution picker offers it: its name, what tells it apart, and its status where it is not Active. */
 const optionOf = (record: BusinessRecord, ...said: Array<string | undefined>): BusinessFormOption => ({
   value: record.id,
   label: [record.name, ...said, record.status === "Active" ? undefined : record.status].filter(Boolean).join(" · "),
 })
 
-/** A ticket as a picker offers it: its number, its subject, its status. */
 const ticketOption = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: [record.facts[TICKET_NUMBER_FACT], record.name, record.status].filter(Boolean).join(" · ") })
 
 /** The rows of the project the form names, every row where it names none; a row of no project serves every one. */
@@ -61,7 +59,6 @@ export function useTicketForm(): BusinessFormSchema {
   return ticketFormFor(types.records.filter((record) => isTicketTypeRecord(record) && record.status === "Active"))
 }
 
-/** The Resolution dialogs' pickers: the command surfaces' own, and the rows a ticket and an alert name beside them. */
 export function useResolutionPickers(): RelationPickers {
   const base = useRelationPickers()
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)

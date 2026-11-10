@@ -31,7 +31,6 @@ function decisionLine(decision: Decision, timezone: string | undefined): string 
   return `${shownOn(decision.decidedAt, timezone)} · ${outcomeLabel(decision.outcome)}${period}`
 }
 
-/** An Application's commands, its Decisions and its letter, in its details. */
 export function ApplicationCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(APPLICATIONS_MODULE)
   // The version is bumped after each command the API took: a decision appends to the history, whatever the row shows.

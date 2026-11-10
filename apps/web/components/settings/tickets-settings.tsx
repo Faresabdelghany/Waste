@@ -3,9 +3,9 @@
 // Settings › Tickets (#548 of #544): one page, a tab each for the ticket
 // types, the default teams, the deadlines, the charges and the counting
 // rules (the tabs are its Settings table entry's). Each tab is the pane it
-// was, drawing the page's tab strip in its own header, as Asset management's
-// tabs do; a type's own deadline, default team and charge are rows of the
-// Deadlines, Default teams and Charges tabs beside its kind's, and the three
+// was, drawing the page's tab strip in its own header; a type's own
+// deadline, default team and charge are rows of the Deadlines, Default teams
+// and Charges tabs beside its kind's, and the three
 // tabs share one project. The tab and a ticket type's own page are the
 // address's, so a reload or a shared link lands on them. The teams
 // themselves are Settings › Users & roles' Teams tab. Offered on the Pilot

@@ -6,7 +6,7 @@
 // `/projects/:id/ticket-sla` under `configure.templates`. A ticket opened
 // without a due date takes one from them; a ticket already open keeps its
 // own. The rows and the body they become are lib/data/ticket-sla.ts's. Offered
-// on the Pilot alone, in place of the fixtures' Tickets & communication.
+// on the Pilot alone.
 
 import { useRef, type ReactNode } from "react"
 import { FloppyDisk, Plus, Trash } from "@phosphor-icons/react/dist/ssr"

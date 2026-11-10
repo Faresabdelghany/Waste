@@ -200,9 +200,6 @@ export function MapPlanningView({
     [wasteFractions],
   )
 
-  /* ------------------------------ derived data ----------------------------- */
-
-  // The registry the map can place: in service, visible, and located.
   const inServiceContainers = useMemo(
     () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
     [containers],
@@ -330,7 +327,6 @@ export function MapPlanningView({
     if (playback && !playbackRoute) setPlayback(null)
   }, [playback, playbackRoute])
 
-  // The animation: advance by wall-clock time while playing, stop at the last stop.
   const stopCount = playbackRoute?.stops.length ?? 0
   useEffect(() => {
     if (!playback?.playing || stopCount === 0) return
@@ -376,7 +372,6 @@ export function MapPlanningView({
     [gaps.uncovered, selectedContainerIds],
   )
 
-  // Scheme comparison: every comparable scheme's stops, and the two picked ones side by side.
   const stopSets = useMemo(() => schemeStopSets(schemes, containers, today), [containers, schemes, today])
   const comparison = useMemo(() => {
     if (compareIds.length !== 2) return null
@@ -396,8 +391,6 @@ export function MapPlanningView({
       return enabled ? [...without, schemeId].slice(-2) : without
     })
 
-  /* -------------------------------- actions -------------------------------- */
-
   const resetAll = () => {
     setFilters(emptyBusinessFilters)
     setWindow(DEFAULT_COLLECTION_WINDOW)
@@ -411,8 +404,6 @@ export function MapPlanningView({
     setHighlight(null)
   }
 
-  // Restores the saved filters and window, then selects inside the saved
-  // shape against the containers that pair leaves on the map.
   const loadSavedSelection = (saved: SavedSelection) => {
     setFilters(saved.filters)
     setWindow(saved.window)
@@ -432,7 +423,6 @@ export function MapPlanningView({
     setHighlight(ids && ids.length > 0 ? { kind: "containers", ids } : null)
   const hoverRoute = (id: string | null) => setHighlight(id ? { kind: "route", id } : null)
 
-  /** The containers a shape holds — the selection a drawn or edited shape replaces. */
   const selectByPolygon = (polygon: LngLat[]) =>
     setSelectedContainerIds(
       new Set(points.filter((point) => pointInPolygon(point.lngLat, polygon)).map((point) => point.id)),
@@ -590,7 +580,6 @@ export function MapPlanningView({
         />
         <RoutingAttribution sources={planLegs.sources} />
 
-        {/* Draw tools */}
         <div
           role="toolbar"
           aria-label="Selection tools"
@@ -694,7 +683,6 @@ export function MapPlanningView({
                 current
                   ? {
                       ...current,
-                      // Play again from the start once the journey has ended.
                       progress: !current.playing && current.progress >= stopCount - 1 ? 0 : current.progress,
                       playing: !current.playing,
                     }

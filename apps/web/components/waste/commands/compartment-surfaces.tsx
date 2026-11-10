@@ -30,7 +30,6 @@ import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
 const blank = (): CompartmentDraft => ({ name: "", capacityKg: "", volumeLitres: "", wasteFractionIds: [] })
 
-/** A compartment as its line reads: "Body · 8000 kg · 16000 L · Residual, Mixed". */
 function compartmentLine(draft: CompartmentDraft, index: number, fractionName: (webId: string) => string): string {
   return [
     draft.name === "" ? `Compartment ${index + 1}` : draft.name,
@@ -42,7 +41,6 @@ function compartmentLine(draft: CompartmentDraft, index: number, fractionName: (
     .join(" · ")
 }
 
-/** A vehicle's compartments, in its details, and the editor of the whole list. */
 export function VehicleCompartmentsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(VEHICLES_MODULE)
   const { busy, run } = useCommandRunner(VEHICLES_MODULE, record.id)

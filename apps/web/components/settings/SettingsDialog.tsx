@@ -1,10 +1,5 @@
 "use client"
 
-// Settings: the nav, the search, the pane an address shows and the frame
-// around it, all read from the Settings table (lib/modules/settings-panes.ts);
-// each pane is drawn by its view (settings-pane-views.tsx), and where no API
-// is configured a pane the API holds says so in its place.
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { CaretLeft, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr"
@@ -26,7 +21,6 @@ type SettingsWorkspaceProps = {
   /** The pane the address names, and every param it carries; the table decides what is shown of them. */
   pane?: string
   params: Readonly<Record<string, string>>
-  /** Where Back to app returns. */
   returnTo: string
 }
 
@@ -130,7 +124,6 @@ export function SettingsWorkspace({ pane, params, returnTo }: SettingsWorkspaceP
   )
 }
 
-/** A pane the API holds, where none is configured: its frame, and the one sentence that says where its subject is kept. */
 function KeptOnApiPane({ paneId }: { paneId: SettingsPaneId }) {
   return (
     <AssetPanelShell>

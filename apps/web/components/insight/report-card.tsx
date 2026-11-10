@@ -26,7 +26,6 @@ export function ReportCard({ title, subtitle, actions, children, loading = false
   )
 }
 
-/** What a card says in place of its numbers. */
 export function ReportNotice({ notGranted, problem, empty }: { notGranted?: string; problem?: Problem | null; empty?: string }) {
   const sentence = notGranted !== undefined ? `The ${notGranted} are not shown to your role.` : problem ? problemSentence(problem) : (empty ?? "Reading…")
   return (

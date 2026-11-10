@@ -79,7 +79,6 @@ function MoveDialog({ record, onClose }: { record: BusinessRecord; onClose: () =
   const typedMove: MoveTyped = { on: day ?? today, outgoing, incoming, payer: payer === INCOMING_PAYS ? "" : payer, agreementNumber }
   const serverIdOf = (webId: string) => contacts?.serverIds.get(webId)
   const propertyServerId = properties?.serverIds.get(record.id)
-  // The review shown is of exactly this body; anything typed since asks again.
   const key = JSON.stringify(typedMove)
   const reviewed = review !== null && review.of === key ? review.outcome : null
   const told = reviewed === null || outgoing === "" ? null : moveReview(reviewed, nameOfServerId, serverIdOf(outgoing) ?? "")

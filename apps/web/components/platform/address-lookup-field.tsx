@@ -22,7 +22,6 @@ import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-
 import { get, withQuery } from "@/lib/api/client"
 import { ApiProblem } from "@/lib/api/problem"
 
-/** How long the typing rests before the register is asked. */
 const SEARCH_DELAY_MS = 250
 
 type Found = { kind: "idle" } | { kind: "searching" } | { kind: "found"; search: AddressSearch } | { kind: "failed"; sentence: string } | { kind: "off"; sentence: string }
@@ -41,7 +40,6 @@ export function AddressLookupField({
 }: {
   field: BusinessFormField
   values: BusinessFormValues
-  /** The values a pick sets. */
   onPick: (picked: BusinessFormValues) => void
   /** The pick let go: the address stays as it reads, now the office's own. */
   onLetGo: () => void

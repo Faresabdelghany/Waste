@@ -74,7 +74,6 @@ function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFo
 const optionsOf = (records: readonly BusinessRecord[] | undefined, keep: (record: BusinessRecord) => boolean, label: (record: BusinessRecord) => string = (record) => record.name): BusinessFormOption[] =>
   (records ?? []).filter(keep).map((record) => ({ value: record.id, label: label(record) }))
 
-/** The side the account signed in is on, and its provider's web id where it is a provider's. */
 function useSide(): { side: ActivitySide; providerWebId: string | undefined } {
   const { me } = useApiSession()
   const providerId = me?.serviceProvider?.id
@@ -82,7 +81,6 @@ function useSide(): { side: ActivitySide; providerWebId: string | undefined } {
   return { side: providerId === undefined ? "office" : "provider", providerWebId }
 }
 
-/** Log activity: the form its side is given, over the routes, the awards, and for the office the providers and the projects it reads. */
 export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   const { side, providerWebId } = useSide()
   const moduleReady = useModuleReady(PROVIDER_ACTIVITIES_MODULE)
@@ -132,7 +130,6 @@ export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** An Activity's commands and its correction, in its details. */
 export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
   const { side } = useSide()
   const moduleReady = useModuleReady(PROVIDER_ACTIVITIES_MODULE)

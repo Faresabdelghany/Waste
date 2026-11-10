@@ -7,7 +7,7 @@
 // words and links, answering it — and the link to a ticket that exists. A
 // ticket's details are its own dialog (ticket-details-live.tsx). Nothing is
 // offered until the module reads the API's rows: before that, and after its
-// load failed, a write would reach the browser's bucket and never the API.
+// load failed, the store refuses a write (`writeRouteOf`).
 import { useState, type ReactNode } from "react"
 import { ArrowSquareOut, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
@@ -84,7 +84,6 @@ export function ResolutionCreateDialog({
   return <BusinessRecordFormDialog schema={schema} open={open} onOpenChange={onOpenChange} onSubmit={submit} relationOptions={(field, values) => pickers.options(field, values, undefined, initial ?? {})} initialValueOverrides={initial} />
 }
 
-/** A primary action of Resolution's: the button, offered once the module reads the API's rows and every module its form picks from has answered. */
 function CreateButton({ label, module, schema, children }: { label: string; module: ModuleLocation; schema: BusinessFormSchema; children: (open: boolean, setOpen: (open: boolean) => void, pickers: RelationPickers) => ReactNode }) {
   const pickers = useResolutionPickers()
   const moduleReady = useModuleReady(module)
@@ -140,7 +139,6 @@ export function RaiseAlertSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** What each of the alert's commands is told once the API has taken it. */
 const ALERT_DONE: Readonly<Record<string, string>> = {
   [ACKNOWLEDGE_ALERT]: "Alert acknowledged",
   [RESOLVE_ALERT]: "Alert resolved",

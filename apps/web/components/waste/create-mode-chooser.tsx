@@ -2,7 +2,6 @@ import React from "react";
 import { Lightning, Compass, Check, CaretRight, X } from '@phosphor-icons/react';
 import { Button } from "@/components/ui/button";
 
-/** How a create flow starts: one quick form, or the guided setup. */
 export type CreateMode = 'quick' | 'guided';
 
 interface ModeCardProps extends React.PropsWithChildren {
@@ -51,11 +50,7 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
     <div className="bg-muted relative rounded-3xl size-full" data-name="Card">
       <div className="size-full">
         <div className="content-stretch flex flex-col gap-4 items-start overflow-clip pb-4 pt-6 px-4 relative size-full">
-
-          {/* Cards Container */}
           <div className="content-stretch flex gap-1 items-start px-0 py-2 relative shrink-0 w-full">
-            
-            {/* Quick Create Card */}
             <ModeCard onClick={() => onSelect('quick')}>
               <div className="content-stretch flex items-center p-3 relative rounded-xl shrink-0">
                 <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-xl" />
@@ -69,7 +64,6 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
                 </div>
               </div>
               
-              {/* Checkbox State */}
               {selected === 'quick' ? (
                  <div className="absolute bg-success right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
                    <div className="overflow-clip relative rounded-[inherit] size-full">
@@ -86,7 +80,6 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
               )}
             </ModeCard>
 
-            {/* Guided Setup Card */}
             <ModeCard onClick={() => onSelect('guided')}>
               <div className="content-stretch flex items-center p-3 relative rounded-[16px] shrink-0">
                 <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-[16px]" />
@@ -100,7 +93,6 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
                 </div>
               </div>
 
-               {/* Checkbox State */}
                {selected === 'guided' ? (
                  <div className="absolute bg-success right-6 rounded-3xl size-6 top-6" data-name="Checkbox">
                    <div className="overflow-clip relative rounded-[inherit] size-full">
@@ -118,7 +110,6 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
             </ModeCard>
           </div>
 
-          {/* Footer */}
           <div className="content-stretch flex items-start justify-between relative shrink-0 w-full mt-auto" data-name="Card / Footer">
             <Button
               type="button"
@@ -129,7 +120,6 @@ export function CreateModeChooser({ selected, onSelect, onCancel, onContinue, on
               Cancel
             </Button>
 
-            {/* Continue Button */}
             <Button
               type="button"
               onClick={onContinue}

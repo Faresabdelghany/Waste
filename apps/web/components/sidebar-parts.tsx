@@ -59,7 +59,6 @@ export function SidebarSearch() {
   )
 }
 
-/** A page the sidebar lists: where it goes, under what, whether it is the page shown, and its count where it has one. */
 export type SidebarPage = {
   href: string
   label: string
@@ -98,7 +97,6 @@ export function SidebarPages({ pages }: { pages: readonly SidebarPage[] }) {
   )
 }
 
-/** The route days pinned, each with its progress; `hint` says where a route is starred while none is. */
 export function SidebarActiveRoutes({ routes, hint }: { routes: readonly ActiveRouteSummary[]; hint: string }) {
   const { setOpenMobile } = useSidebar()
   return (

@@ -128,7 +128,6 @@ export function ServiceAreasRead() {
 function useRowWrite(module: ModuleLocation) {
   const { upsertRecord } = useBusinessRecordStore()
   const [busy, setBusy] = useState(false)
-  /** `done` is told the row and whether the write changed it: one that changed nothing says so here, in place of the caller's success. */
   const write = (record: BusinessRecord, done: (saved: BusinessRecord, changed: boolean) => void) => {
     if (busy) return
     setBusy(true)
@@ -145,11 +144,6 @@ function useRowWrite(module: ModuleLocation) {
   return { busy, write }
 }
 
-// ---------------------------------------------------------------------------
-// Service areas and assignments
-// ---------------------------------------------------------------------------
-
-/** Create service area: the award by its own form, the planning areas it covers. */
 export function CreateServiceAreaSurface() {
   const pickers = useCommercialPickers()
   const { refreshModule } = useBusinessRecordStore()
@@ -169,7 +163,6 @@ export function CreateServiceAreaSurface() {
 
 type AreaDialog = { kind: "edit"; values: BusinessFormValues } | { kind: "assign" } | { kind: "end"; assignment: BusinessRecord; values: BusinessFormValues }
 
-/** An award's details: its edit, its assignments the first holder first, Add assignment and each one's end; an assignment opened alone, its end. */
 export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(SERVICE_AREAS_MODULE)
@@ -263,11 +256,6 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Service provider prices
-// ---------------------------------------------------------------------------
-
-/** Add price: the first row of a chain, under an assignment. */
 export function AddProviderPriceSurface() {
   const pickers = useCommercialPickers()
   return (
@@ -282,7 +270,6 @@ export function AddProviderPriceSurface() {
   )
 }
 
-/** The scope an Apply index over many prices is asked over: every award of a provider, or one award, each by its web id. */
 type IndexScope = { kind: "provider" | "award"; webId: string }
 
 const scopeValue = (scope: IndexScope) => `${scope.kind}:${scope.webId}`
@@ -319,7 +306,6 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
   const providerPrefix = `${serviceProviderAdapter.prefix}-`
   const serverIdOf = (target: IndexScope) =>
     target.kind === "award" ? areas?.serverIds.get(target.webId) : (organisation?.serverIds.get(target.webId) ?? (target.webId.startsWith(providerPrefix) ? target.webId.slice(providerPrefix.length) : undefined))
-  // The scope's project: the award's, or the first of the provider's awards'.
   const scopeProject = projectOf((scope === undefined ? undefined : scope.kind === "award" ? assignments.find((assignment) => assignment.id === scope.webId) : assignments.find((assignment) => assignment.submittedValues?.serviceProviderId === scope.webId))?.projectIds?.[0])
   const awardLabel = (assignment: BusinessRecord) => `${assignment.name} · ${projectOf(assignment.projectIds?.[0])?.name ?? "its project"} (${assignment.value}, ${assignment.status})`
 
@@ -382,7 +368,6 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
   )
 }
 
-/** The prices' primary actions: Apply index over many prices, and Add price. */
 export function ProviderPricesPrimarySurface() {
   const moduleReady = useModuleReady(PROVIDER_PRICES_MODULE)
   const [open, setOpen] = useState(false)
@@ -397,7 +382,6 @@ export function ProviderPricesPrimarySurface() {
   )
 }
 
-/** A price's details: its edit, and Apply index while it has not ended. */
 export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(PROVIDER_PRICES_MODULE)
@@ -449,11 +433,6 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Settlements
-// ---------------------------------------------------------------------------
-
-/** Open settlement: a period of an assignment, to calculate then close. */
 export function OpenSettlementSurface() {
   const pickers = useCommercialPickers()
   return (
@@ -476,7 +455,6 @@ const COMMAND_DONE = { calculate: "Settlement calculated", close: "Settlement cl
 const readSettlement = (client: ApiClient, serverId: string) =>
   Promise.all([settlementDetail(client, serverId), settlementHistory(client, serverId)]).then(([detail, history]): { detail: SettlementDetail; history: SettlementEvent[] }[] => [{ detail, history }])
 
-/** A settlement's details: the commands its status moves by on the project's day, its lines by event, and its history. */
 export function SettlementSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SETTLEMENTS_MODULE)
   const { timezoneOf } = useCommercialPickers()
@@ -485,14 +463,12 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
   const events = useServerModuleState(EVENTS_MODULE.workspaceId, EVENTS_MODULE.moduleId)
   const priceName = useServerNames(PROVIDER_PRICES_MODULE, PROVIDER_PRICE_PREFIX)
   const userName = useServerNames(ACCESS_MODULE, "user")
-  // The two commands asked before they are sent: a reopening's reason, and whether to close at all.
   const [asking, setAsking] = useState<"close" | "reopen" | null>(null)
   const offered = settlementCommandsOffered(record)
   const heldBack = settlementHeldBack(record)
   const settlement = read.rows?.[0]
   const money = (minor: number | null) => (minor === null ? "—" : formatMinor(minor, settlement?.detail.currency ?? record.facts.Currency ?? "DKK"))
 
-  /** A line's event as the events module holds it: its name and its route, or its id chip. */
   const eventOf = (serverId: string): { name: string; route?: string } => {
     for (const [webId, id] of events?.serverIds ?? []) {
       if (id !== serverId) continue
@@ -596,16 +572,10 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Weight review
-// ---------------------------------------------------------------------------
-
-/** The routes an unload is recorded on: those that ran, active or completed, the latest first. */
 export function ranRoutes(routes: readonly BusinessRecord[]): BusinessRecord[] {
   return routes.filter((route) => ["active", "completed"].includes(typed(route, "status") ?? "")).toSorted((a, b) => (typed(b, "operatingDate") ?? "").localeCompare(typed(a, "operatingDate") ?? ""))
 }
 
-/** Record unload: the office's capture of a weighbridge ticket, on a route that ran (O9 of #290). */
 export function RecordUnloadSurface() {
   const base = useRelationPickers()
   const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
@@ -626,7 +596,6 @@ export function RecordUnloadSurface() {
   )
 }
 
-/** An unload's details: the reviews its status moves by; a corrected one names the row to review. */
 export function WeightReviewSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(WEIGHTS_MODULE)
   const { busy, run } = useCommandRunner(WEIGHTS_MODULE, record.id)

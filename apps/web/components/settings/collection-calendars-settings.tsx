@@ -80,8 +80,6 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   const schema = collectionCalendarSchema()
   const calendarsModule = collectionCalendarsModule()
 
-  // Live records of any module (fixtures merged with stored records) — the
-  // relation targets the form offers and the names the facts display.
   const relationRecords = (location: ModuleLocation): BusinessRecord[] => {
     const module = getModuleDefinition(location)
     return module
@@ -189,7 +187,6 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
     })
   }
 
-  // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = calendarRecords.length > 0
   const emptyMessage = moduleReadSentence(calendars, "collection calendars") ?? (narrowed ? "No collection calendars match this search." : "No collection calendars yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
@@ -312,12 +309,11 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   )
 }
 
-/** "Mon–Fri" for a Saturday–Sunday weekend, via the shared formatter. */
+/** "Mon–Fri" for a Saturday–Sunday weekend. */
 function workingDaysLabel(weekend: readonly string[]): string {
   const working = SERVICE_DAYS.filter((day) => !weekend.includes(day))
   const short = SERVICE_DAY_SHORT_LABELS
   if (working.length === 0) return "—"
-  // Consecutive runs read as ranges ("Mon–Fri"), gaps as lists.
   const first = working[0]
   const last = working[working.length - 1]
   const contiguous = SERVICE_DAYS.indexOf(last) - SERVICE_DAYS.indexOf(first) === working.length - 1

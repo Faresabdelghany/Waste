@@ -21,7 +21,6 @@ import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { APPROVE_SIZE_FORM, DISMISS_FORM, RIGHT_SIZING_MODULE } from "@/lib/data/right-sizing"
 import { waitingSentence } from "@/lib/api/read-state"
 
-/** Propose now: the run over the person's projects. */
 export function ProposeRightSizingSurface({ label }: PrimarySurfaceProps) {
   const client = useApiClient()
   const { refreshModule } = useBusinessRecordStore()
@@ -46,7 +45,6 @@ export function ProposeRightSizingSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** An open proposal's Approve and Dismiss; nothing once decided. */
 export function RightSizingSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(RIGHT_SIZING_MODULE)
   const { busy, run } = useCommandRunner(RIGHT_SIZING_MODULE, record.id)
@@ -57,7 +55,6 @@ export function RightSizingSurface({ record }: RowSurfaceProps) {
   const project = record.projectIds?.[0]
   const suggested = typeof record.submittedValues?.suggestedProductId === "string" ? record.submittedValues.suggestedProductId : ""
 
-  // The project's active products, the size the proposal suggests among them and picked.
   const productOptions: BusinessFormOption[] = products.records
     .filter((row) => (project === undefined || (row.projectIds ?? []).includes(project)) && (row.status === "Active" || row.id === suggested))
     .map((row) => ({ value: row.id, label: row.name }))

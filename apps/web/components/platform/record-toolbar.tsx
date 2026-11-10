@@ -75,13 +75,11 @@ export const detailsColumn = (label: string): readonly BusinessColumnChip[] => [
 /** A list's view: the shared options, in the list's order, its one optional column (`showDescription`) shown. */
 export const listView = (ordering: BusinessViewOptions["ordering"]): BusinessViewOptions => ({ ...defaultBusinessViewOptions, ordering, showDescription: true })
 
-/** The orders of a list whose rows read an update and a name. */
 export const RECENT_ORDERS: readonly BusinessOrderingOption[] = [
   { value: "updated", label: "Recently updated" },
   { value: "name", label: "Name" },
 ]
 
-/** A table's rows by the view's density: compact tightens every cell. */
 export const densityClass = (view: Pick<BusinessViewOptions, "density">): string => (view.density === "compact" ? "[&_td]:py-1.5" : "")
 
 /** A list's rows in the view's order: by name, else newest first by `updated` (the store's order where every row reads alike). */

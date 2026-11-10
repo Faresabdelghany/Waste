@@ -344,8 +344,6 @@ function toLocalIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 }
 
-// Live preview of the upcoming service dates a recurrence produces, updating
-// with every edit to the frequency, service days, rotation, or window fields.
 function RecurrenceDatesPreview({
   preview,
   values,

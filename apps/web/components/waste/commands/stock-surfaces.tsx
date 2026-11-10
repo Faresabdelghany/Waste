@@ -24,7 +24,6 @@ import { SET_STOCK_MINIMUMS, setStockMinimums, stockLine, warehouseStock, type M
 import { WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 
-/** A warehouse's stock by container type, against its minimums, and the editor of the minimums. */
 export function WarehouseStockSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
   const moduleReady = useModuleReady(WAREHOUSES_MODULE)

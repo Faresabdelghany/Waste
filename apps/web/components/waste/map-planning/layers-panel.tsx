@@ -5,7 +5,7 @@
 // planning-area outlines, each with a checkbox and a zoom-to button, and the
 // Routes layer: every drawable route in the collection window, counted by
 // status, and the service areas drawn on the map. Areas, routes and
-// service areas come from @waste/domain/map-planning/{areas,routes,service-areas};
+// service areas come from @/lib/prototype/map-planning/{areas,routes,service-areas};
 // the map draws the ones that are on.
 
 import { count } from "@waste/domain/text"

@@ -108,7 +108,6 @@ export function fixtureSettingsTerms(paneId: SettingsPaneId): readonly string[] 
   return (FIXTURE_SETTINGS_GROUPS[paneId] ?? []).flatMap((group) => [group.title, ...group.controls.flatMap((control) => [control.label, control.description])])
 }
 
-/** Every control's value as the fixtures set it, before this browser saved any. */
 export function fixtureSettingDefaults(): Record<string, string | boolean> {
   return Object.fromEntries(
     Object.values(FIXTURE_SETTINGS_GROUPS).flatMap((groups) =>

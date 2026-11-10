@@ -26,7 +26,6 @@ const MASTER_MODULE = moduleAt("configure.master")
 
 const FORMS = { [MATCH_TICKET]: MATCH_FORM, [DISMISS_TICKET]: DISMISS_FORM } as const
 
-/** An unmatched ticket's Match and Dismiss; nothing once it is matched or dismissed. */
 export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(WEIGHBRIDGE_MODULE)
   const { busy, run } = useCommandRunner(WEIGHBRIDGE_MODULE, record.id)
@@ -42,7 +41,6 @@ export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
     .map((route) => ({ value: route.id, label: `${route.name} · ${route.status}` }))
   const fractionOptions: BusinessFormOption[] = (master?.records ?? []).filter((row) => masterDataKindOf(row) === "waste-fraction").map((row) => ({ value: row.id, label: row.name }))
 
-  // The two pickers' options are this ticket's: the form is the schema with them filled in.
   const forms = {
     [MATCH_TICKET]: {
       ...MATCH_FORM,
