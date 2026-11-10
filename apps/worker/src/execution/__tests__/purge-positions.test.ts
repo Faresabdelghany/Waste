@@ -16,7 +16,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { PURGE_BATCH, purgePositions } from "../purge-positions"
 import { seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
 import { jobContext } from "../../__tests__/context"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 
 const roles = rolesUnderTest()
 
@@ -32,7 +32,7 @@ const codeOf = (error: unknown): string | undefined => {
 }
 
 describe("execution.purge-positions", { skip: roles.skip }, () => {
-  const name = `waste_worker_positions_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("positions")
   let admin: Database
   let owner: Database
   let api: Database
@@ -55,7 +55,7 @@ describe("execution.purge-positions", { skip: roles.skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     owner = createDb(withDatabaseName(roles.adminUrl, name), { max: 1 })
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 2 })

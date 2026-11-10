@@ -39,7 +39,7 @@ import { routingMeasure } from "../measure"
 import { routingOptimise } from "../optimise"
 import { FIXTURE_DAY, seedConsumerTenant, seedRoute, testId, type ConsumerTenant, type SeededRoute } from "../../__tests__/consumer-fixtures"
 import { jobContext } from "../../__tests__/context"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 import { until } from "../../__tests__/until"
 
 const roles = rolesUnderTest()
@@ -62,7 +62,7 @@ const INTERACTIVE_PRIORITY = 2_000_000
 type JobRow = { id: string; state: string; data: RoutingJobData; priority: number; retry_count: number; start_epoch: number }
 
 describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
-  const name = `waste_worker_routing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("routing")
   let admin: Database
   let owner: Database
   let api: Database
@@ -101,7 +101,7 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     owner = createDb(withDatabaseName(roles.adminUrl, name), { max: 2 })
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 3 })

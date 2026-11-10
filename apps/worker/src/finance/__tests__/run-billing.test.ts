@@ -41,7 +41,7 @@ import { invoiceColumns } from "@waste/db/shapes/invoices"
 import { runColumns } from "@waste/db/shapes/billing-runs"
 
 import { runScheduledBilling, type ProjectRun, type RunBillingData } from "../run-billing"
-import { rolesUnderTest, withDatabaseName } from "../../__tests__/database"
+import { createTestDatabase, rolesUnderTest, testDatabaseName, withDatabaseName } from "../../__tests__/database"
 import { seedFinanceTenant, testId, type FinanceTenant } from "../../__tests__/finance-tenant"
 import { jobContext } from "../../__tests__/context"
 
@@ -52,7 +52,7 @@ const skip = roles.skip
 const FIRST_OF_OCTOBER = new Date("2026-10-01T12:00:00Z")
 
 describe("finance.run-billing against Postgres", { skip }, () => {
-  const name = `waste_worker_billing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const name = testDatabaseName("billing")
   let api: Database
   let worker: Database
   let admin: Database
@@ -63,7 +63,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
 
   before(async () => {
     admin = createDb(roles.adminUrl, { max: 1 })
-    await admin.sql.unsafe(`create database "${name}"`)
+    await createTestDatabase(admin, name)
     await migrateDatabase(withDatabaseName(roles.adminUrl, name))
     api = createDb(withDatabaseName(roles.apiUrl, name), { max: 4 })
     worker = createDb(withDatabaseName(roles.workerUrl, name), { max: 2 })
