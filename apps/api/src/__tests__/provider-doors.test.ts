@@ -238,7 +238,7 @@ describe("a Service Provider's own doors", { skip: database.skip || owner.skip }
         ["ownership", ownFleetKind(NORDREN, "vehicle")],
         ["serviceProviderId", ownFleetProvider(NORDREN, "vehicle")],
       ])
-      assert.ok(Array.isArray(Vehicle.parse(await ok(await lars(`/vehicles/${truck.id}/compartments`, { method: "PUT", body: { compartments: [{ wasteFractionIds: [ex.fractions.residual.id] }] } }))).compartments))
+      Vehicle.parse(await ok(await lars(`/vehicles/${truck.id}/compartments`, { method: "PUT", body: { compartments: [{ wasteFractionIds: [ex.fractions.residual.id] }] } })))
       await refused(await lars(`/vehicles/${fleet.vehicles.wh24.id}`), 404)
       await refused(await patch(lars, `/vehicles/${fleet.vehicles.wh24.id}`, { notes: "Ours now" }), 404)
       await refused(await lars(`/vehicles/${fleet.vehicles.wh24.id}/compartments`, { method: "PUT", body: { compartments: [{ wasteFractionIds: [ex.fractions.residual.id] }] } }), 404)

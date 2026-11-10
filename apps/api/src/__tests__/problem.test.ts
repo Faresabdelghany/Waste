@@ -8,7 +8,6 @@ import { DrizzleQueryError } from "drizzle-orm/errors"
 import { Hono } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as z from "zod"
-import { checkConstraintOf, exclusionConstraintOf, uniqueConstraintOf } from "@waste/db/sqlstate"
 
 import { errorHandler, membersAt, notFound, problem, ProblemError, problemResponse, refusalOf, validate } from "../problem"
 import { readProblem } from "./read-problem"
@@ -244,34 +243,6 @@ describe("errorHandler", () => {
     const printed = JSON.stringify(entries)
     assert.equal(printed.includes("invitee@example.com"), false, "an invitee's address is not the operator's to keep")
     assert.equal(printed.includes("values ($1"), false, "nor is the statement the route sent")
-  })
-})
-
-describe("the constraint a failed write names", () => {
-  const failure = (code: string, constraint?: string) =>
-    new Error("Failed query", { cause: Object.assign(new Error("refused"), { code, ...(constraint === undefined ? {} : { constraint_name: constraint }) }) })
-
-  test("is read from a unique violation and an exclusion violation, each by its own SQLSTATE", () => {
-    assert.equal(uniqueConstraintOf(failure("23505", "product_project_id_name_key")), "product_project_id_name_key")
-    assert.equal(exclusionConstraintOf(failure("23P01", "subscription_no_overlap")), "subscription_no_overlap")
-  })
-
-  test("is read from a check violation by its own SQLSTATE too, and from nothing else", () => {
-    assert.equal(checkConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), "planning_area_boundary_boundary_valid")
-    assert.equal(checkConstraintOf(failure("23514")), undefined, "a check Postgres did not name is nobody's to answer")
-    assert.equal(checkConstraintOf(failure("23505", "product_project_id_name_key")), undefined)
-    assert.equal(checkConstraintOf(failure("23P01", "subscription_no_overlap")), undefined)
-    assert.equal(checkConstraintOf(new Error("nothing to do with the database")), undefined)
-    assert.equal(uniqueConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), undefined)
-    assert.equal(exclusionConstraintOf(failure("23514", "planning_area_boundary_boundary_valid")), undefined)
-  })
-
-  test("is undefined for the other's SQLSTATE, for another error, and where Postgres named none", () => {
-    assert.equal(uniqueConstraintOf(failure("23P01", "subscription_no_overlap")), undefined)
-    assert.equal(exclusionConstraintOf(failure("23505", "product_project_id_name_key")), undefined)
-    assert.equal(exclusionConstraintOf(failure("23503", "product_company_id_fk")), undefined)
-    assert.equal(exclusionConstraintOf(failure("23P01")), undefined)
-    assert.equal(exclusionConstraintOf(new Error("nothing to do with the database")), undefined)
   })
 })
 

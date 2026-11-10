@@ -28,7 +28,6 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { bookedAlready, heldBy } from "../routes/pickups"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -179,7 +178,7 @@ describe("the ledger's work orders", { skip: database.skip || owner.skip }, () =
       const bin = await inStock()
       const holding = await added(first.id, { service: "deliver", containerId: bin.id, subscriptionId })
       const problem = await refused(await add(second.id, { service: "deliver", containerId: bin.id, subscriptionId }), 409)
-      assert.equal(problem.detail, heldBy(bin.label, { service: "deliver", route: first.label, position: holding.position }))
+      assert.equal(problem.detail, `Container ${bin.label} is held for a delivery on route ${first.label}, stop ${holding.position}; take that stop off first`)
       assert.equal((await olivia(`/pickups/${holding.id}/remove`, { method: "POST", body: { reason: "Booked on the wrong route" } })).status, 200)
       await added(second.id, { service: "deliver", containerId: bin.id, subscriptionId })
     })
@@ -210,11 +209,9 @@ describe("the ledger's work orders", { skip: database.skip || owner.skip }, () =
       const placed = await inService()
       const holding = await added(first.id, { service: "remove", containerId: placed.id, warehouseId })
       const problem = await refused(await add(second.id, { service: "swap", containerId: placed.id, replacementContainerId: (await inStock()).id, warehouseId }), 409)
-      assert.equal(problem.detail, heldBy(placed.label, { service: "remove", route: first.label, position: holding.position }))
-      assert.match(problem.detail ?? "", /is held for a removal on route/)
+      assert.equal(problem.detail, `Container ${placed.label} is held for a removal on route ${first.label}, stop ${holding.position}; take that stop off first`)
       const twice = await refused(await add(first.id, { service: "remove", containerId: placed.id, warehouseId }), 409)
-      assert.equal(twice.detail, bookedAlready(placed.label, "remove", first.label))
-      assert.match(twice.detail ?? "", /has a planned removal the office added/)
+      assert.equal(twice.detail, `Container ${placed.label} has a planned removal the office added to route ${first.label} already`)
     })
 
     test("a removal of a container whose agreement has ended is booked where it stands, since the ledger has it in service until it is taken away", async () => {

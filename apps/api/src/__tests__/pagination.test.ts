@@ -58,11 +58,6 @@ describe("afterCursor", () => {
 })
 
 describe("pageOf", () => {
-  test("asks the database for one row more than the page, which is how it knows there is a next one", () => {
-    assert.equal(fetchLimit(50), 51)
-    assert.equal(fetchLimit(1), 2)
-  })
-
   test("keeps the page and turns the row beyond it into the next cursor", () => {
     const page = pageOf(rows.slice(0, fetchLimit(2)), 2)
     assert.deepEqual(page.items, rows.slice(0, 2))

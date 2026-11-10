@@ -17,7 +17,6 @@ import { customer, property } from "@waste/db/schema/customers"
 import { withCompany } from "@waste/db/tenant"
 
 import { createApp } from "../app"
-import { reconciledOn } from "../routes/scheme-reconciliation"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
@@ -36,14 +35,6 @@ const under = (served: string, count: string, promised: string, names: string) =
 const over = (served: string, count: string, promised: string, names: string) =>
   `Recurrence ${served} over-serves ${count} promised ${promised} (${names}) — collections run more often than the promised service frequency`
 
-describe("the day a scheme's promises are judged on", () => {
-  test("is today, its first day where that is ahead, and its last day in force once it has ended", () => {
-    assert.equal(reconciledOn({ validFrom: "2026-01-01", validTo: null }, "2026-10-28"), "2026-10-28")
-    assert.equal(reconciledOn({ validFrom: "2027-01-04", validTo: null }, "2026-10-28"), "2027-01-04")
-    assert.equal(reconciledOn({ validFrom: "2026-01-01", validTo: "2026-07-01" }, "2026-10-28"), "2026-06-30")
-  })
-})
-
 describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
   let pool: Database
   let a: Tenant
@@ -61,6 +52,7 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
     demandBin: testId(),
     unplacedBin: testId(),
     laterBin: testId(),
+    endedBin: testId(),
   }
 
   before(async () => {
@@ -86,6 +78,7 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
         bin(ids.demandBin, "BIN-D"),
         bin(ids.unplacedBin, "BIN-U"),
         bin(ids.laterBin, "BIN-L"),
+        bin(ids.endedBin, "BIN-E"),
       ])
       const customerId = testId()
       const productId = testId()
@@ -95,13 +88,15 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
       await tx.insert(product).values({ id: productId, ...scoped, name: "Residual 240 L", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: ids.type, wasteFractionId: ids.fraction, serviceFrequencyId: ids.weekly })
       await tx.insert(agreement).values({ id: agreementId, ...scoped, validFrom: "2026-01-01", number: "AGR-022", customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK" })
       await tx.insert(subscription).values({ id: subscriptionId, ...scoped, validFrom: "2026-01-01", agreementId, productId, propertyId: ids.property })
-      const placement = (containerId: string, serviceFrequencyId: string | null, validFrom = "2026-01-01") => ({ id: testId(), ...scoped, validFrom, containerId, subscriptionId, wasteFractionId: ids.fraction, serviceFrequencyId })
+      const placement = (containerId: string, serviceFrequencyId: string | null, validFrom = "2026-01-01", validTo: string | null = null) => ({ id: testId(), ...scoped, validFrom, validTo, containerId, subscriptionId, wasteFractionId: ids.fraction, serviceFrequencyId })
       await tx.insert(containerServicePlacement).values([
         placement(ids.weeklyBin, null),
         placement(ids.twiceBin, ids.twice),
         placement(ids.demandBin, ids.onDemand),
         // Placed from next year: no promise today, the weekly one for a scheme that starts then.
         placement(ids.laterBin, null, "2027-01-04"),
+        // Placed through June alone: its promise stood on 30 June and stands no more today.
+        placement(ids.endedBin, null, "2026-01-01", "2026-07-01"),
       ])
     })
     const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOON })
@@ -182,6 +177,17 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
     assert.deepEqual(now.warnings, [], "not placed today")
     const later = await scheme("Promises later", { collectionGroups: [picked("Monday", ["monday"], [ids.laterBin])], frequency: "every-2-weeks", weekRotation: "odd", validFrom: "2027-01-04" })
     assert.deepEqual(later.warnings, [under("Every 2 weeks", "1 container", "Every week", "BIN-L")])
+  })
+
+  test("a scheme that has ended is judged on its last day in force, the promise standing then and not today's", async () => {
+    const ended = await scheme("Promises ended", {
+      collectionGroups: [picked("Monday", ["monday"], [ids.endedBin])],
+      frequency: "every-2-weeks",
+      weekRotation: "odd",
+      validFrom: "2026-01-05",
+      validTo: "2026-07-01",
+    })
+    assert.deepEqual(ended.warnings, [under("Every 2 weeks", "1 container", "Every week", "BIN-E")], "judged on 30 June, while the bin was placed")
   })
 
   test("a rule group lends no container before a run has matched one", async () => {

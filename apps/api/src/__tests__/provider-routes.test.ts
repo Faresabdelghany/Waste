@@ -142,13 +142,14 @@ describe("a Service Provider's reach on the routes and the pickups", { skip: dat
     otherLars = callingAs(app, keys, b.users.lars, b.companyId)
 
     const adHoc = await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: "2026-10-06" } })
-    assert.equal(adHoc.status, 201, JSON.stringify(await adHoc.clone().json()))
+    const adHocBody = await adHoc.text()
+    assert.equal(adHoc.status, 201, adHocBody)
     routes = {
       later: await day("2026-11-02"),
       beforeAssignment: await day("2026-02-27"),
       harbor: await day("2026-10-05", { project: "harbor" }),
       cairo: await day("2026-10-05", { project: "cairo" }),
-      adHoc: RouteDetail.parse(await adHoc.json()),
+      adHoc: RouteDetail.parse(JSON.parse(adHocBody)),
     }
 
     // A manual Plan on the planned route, its stops in reverse: the sequence a stop carries is the Plan's, not its position.
@@ -169,12 +170,15 @@ describe("a Service Provider's reach on the routes and the pickups", { skip: dat
     await ownerPool?.close()
   })
 
+  // Each body is read once: undici (Node 22) cancels a cloned body's other branch when a garbage collection
+  // falls between the two reads, so a clone read for the message and the original read after fail under load.
   const ok = async (response: Response): Promise<unknown> => {
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return await response.json()
+    const body = await response.text()
+    assert.equal(response.status, 200, body)
+    return JSON.parse(body)
   }
   const refused = async (response: Response, status: number) => {
-    assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
+    if (response.status !== status) assert.fail(`${response.status}, not ${status}: ${await response.text()}`)
     return await readProblem(response)
   }
   const routePage = async (call: Call, query = "?limit=200") => RoutePage.parse(await ok(await call(`/routes${query}`)))

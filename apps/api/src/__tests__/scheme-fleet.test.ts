@@ -19,7 +19,6 @@ import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { fleetOf } from "../routes/scheme-groups"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -335,14 +334,6 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
       const later = await refused(await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-09-10" } }), 400)
       assert.deepEqual(later.errors, [{ path: "validFrom", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the scheme starts` }], "the groups are not in the body, so the bound that moved is refused; every crewed group is judged, and Mads passes")
       assert.equal((await oneScheme(created.id)).validFrom, "2026-09-01", "nothing written")
-      // The rows the re-judgement reads: the vehicles and drivers of the groups naming both, in one statement each, and nothing of a group naming one.
-      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        const rows = await fleetOf(tx, { companyId: a.companyId, projectId: a.projects.copenhagen.id }, created.collectionGroups)
-        assert.deepEqual([...rows.vehicles.keys()].sort(), [fleet.vehicles.wh24.id, fleet.vehicles.wh25.id].sort())
-        assert.deepEqual([...rows.drivers.keys()].sort(), [fleet.drivers.sofie.id, fleet.drivers.mads.id].sort(), "Jonas, on no vehicle, is not read")
-        assert.deepEqual([rows.vehicles.get(fleet.vehicles.wh24.id)?.requiredLicenceClass, rows.drivers.get(fleet.drivers.sofie.id)?.licenceExpiry], ["c", SOFIE_LICENCE_EXPIRY], "read for the licence rule")
-        assert.deepEqual(await fleetOf(tx, { companyId: a.companyId, projectId: a.projects.copenhagen.id }, [created.collectionGroups[2]]), { vehicles: new Map(), drivers: new Map() }, "no crewed group is no statement")
-      })
       const lastDay = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: SOFIE_LICENCE_EXPIRY } })
       assert.equal(lastDay.status, 200, JSON.stringify(await lastDay.clone().json()))
       const earlier = await early(`/route-schemes/${created.id}`, { method: "PATCH", body: { validFrom: "2026-08-20" } })

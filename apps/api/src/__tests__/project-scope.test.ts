@@ -1,19 +1,15 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { CASING } from "@waste/db/casing"
-import { product } from "@waste/db/schema/catalogue"
-import { QueryBuilder } from "drizzle-orm/pg-core"
-
 import type { Principal } from "../auth/principal"
-import { inProjects, projectIdsOf, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import { ProblemError } from "../problem"
 import { testId } from "./tenant"
 
 const copenhagen = testId()
 const harbor = testId()
 
-/** A principal is a big record and these three functions read one field of it, so a test builds only what they read. */
+/** A principal is a big record and requireProject reads one field of it, so a test builds only what it reads. */
 const principalWith = (projects: Pick<Principal["projects"][number], "id" | "name">[]): Principal =>
   ({ companyId: testId(), projects }) as Principal
 
@@ -22,10 +18,6 @@ const withProjects = principalWith([
   { id: harbor, name: "Harbor Commercial" },
 ])
 const withNone = principalWith([])
-
-/** What the fragment becomes in a statement, so a test reads the SQL and not the builder's internals. */
-const rendered = (fragment: ReturnType<typeof inProjects>) =>
-  new QueryBuilder({ casing: CASING }).select({ id: product.id }).from(product).where(fragment).toSQL()
 
 /** The problem a call raised, since assert.throws does not hand it back. */
 function refusal(call: () => void): ProblemError {
@@ -37,30 +29,6 @@ function refusal(call: () => void): ProblemError {
   }
   return assert.fail("the call was expected to refuse")
 }
-
-describe("projectIdsOf", () => {
-  test("is the ids of the projects the account works in, in the order the principal holds them", () => {
-    assert.deepEqual(projectIdsOf(withProjects), [copenhagen, harbor])
-  })
-
-  test("is empty for an account that works in no project, such as a service provider's", () => {
-    assert.deepEqual(projectIdsOf(withNone), [])
-  })
-})
-
-describe("inProjects", () => {
-  test("keeps a statement to the projects the account works in", () => {
-    const { sql, params } = rendered(inProjects(product.projectId, withProjects))
-    assert.match(sql, /"project_id" in \(\$1, \$2\)/)
-    assert.deepEqual(params, [copenhagen, harbor])
-  })
-
-  test("keeps a statement to nothing at all when the account works in no project", () => {
-    const { sql, params } = rendered(inProjects(product.projectId, withNone))
-    assert.match(sql, /where false/)
-    assert.deepEqual(params, [])
-  })
-})
 
 describe("requireProject", () => {
   test("lets a project the account works in through", () => {

@@ -10,6 +10,7 @@ import { A_WORKING_DAY } from "@waste/domain/access/projects"
 import { createApp } from "../app"
 import { encodeCursor } from "../pagination"
 import { callingAs, type Call } from "./calls"
+import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -291,6 +292,7 @@ describe("the project endpoints", { skip: database.skip }, () => {
   describe("PATCH /projects/:id", () => {
     test("changes what the body names and answers the row as it now stands", async () => {
       const created = await create(olivia, body("Frederiksberg Trial"))
+      await nextMillisecond()
       const response = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { name: "Frederiksberg", status: "active" } })
       assert.equal(response.status, 200)
       const patched = Project.parse(await response.json())
