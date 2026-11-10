@@ -1,5 +1,5 @@
 // What the command surfaces' pickers offer for place-bound rows (Issue #184):
-// the pure half of `useRelationPickers` (components/waste/commands/
+// the pure half of `useRelationPickers` (components/platform/
 // use-command-support.ts) for the fields slice 9b adds. A picker hides no row
 // by status — a status gates a new reference and never an existing one, and
 // the API's 409 says why one is refused (#79) — so a row not Active shows its
@@ -12,10 +12,8 @@ import type { BusinessFormField, BusinessFormOption, BusinessFormValues } from "
 import type { BusinessRecord } from "./business-modules"
 import { NO_ONE } from "./properties"
 
-/** A row as a picker offers it: its name, and its status beside it where it is not Active. */
 const optionOf = (record: BusinessRecord, label = record.name): BusinessFormOption => ({ value: record.id, label: record.status === "Active" ? label : `${label} · ${record.status}` })
 
-/** Every row, named, its status beside it where it is not Active. */
 export const rowOptions = (records: readonly BusinessRecord[]): BusinessFormOption[] => records.map((record) => optionOf(record))
 
 /** The rows of a single optional pick, None first: a select cannot be emptied, so taking a pick back is picking None (`NO_ONE`). */
@@ -31,7 +29,6 @@ export const optionalRowOptions = (records: readonly BusinessRecord[]): Business
 export const keptValue = (fieldId: string, values: BusinessFormValues, opened: BusinessFormValues | undefined): BusinessFormValues[string] | undefined =>
   opened === undefined ? values[fieldId] : opened[fieldId]
 
-/** The agreements module's subscriptions of the project (every one where the form names none), each named with its place. */
 export function subscriptionOptions(records: readonly BusinessRecord[], projectId: string | undefined): BusinessFormOption[] {
   return records
     .filter(isSubscriptionRecord)

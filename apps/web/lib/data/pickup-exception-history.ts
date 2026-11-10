@@ -21,7 +21,6 @@ export const historyReadable = (grants: Grants | null, place: ExceptionPlace): b
 const ORDINALS = ["1st", "2nd", "3rd"]
 const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`
 
-/** What happened at the stop: "Skipped: contamination", "Failed: not presented, coded Glass in residual", "Collected, tagged Glass in residual". */
 export function exceptionSentence(item: Pick<PickupException, "status" | "reason" | "contaminantCodeId">, codeName: (id: string) => string): string {
   const code = item.contaminantCodeId === null ? null : codeName(item.contaminantCodeId)
   if (item.status === "completed") return code === null ? "Collected" : `Collected, tagged ${code}`
@@ -29,7 +28,6 @@ export function exceptionSentence(item: Pick<PickupException, "status" | "reason
   return code === null ? said : `${said}, coded ${code}`
 }
 
-/** What the rules say of it now: free or charged, by its place among the window's matching exceptions; or why nothing is charged. */
 export function chargeSentence(item: Pick<PickupException, "judgement" | "origin" | "service">, productName: (id: string) => string): string {
   if (item.judgement === null) {
     if (item.origin === "office") return "Not chargeable: the office's stop"
@@ -40,7 +38,6 @@ export function chargeSentence(item: Pick<PickupException, "judgement" | "origin
   return item.judgement.productId === null ? `Free · ${place}` : `${productName(item.judgement.productId)} · ${place}`
 }
 
-/** The history's count: how many exceptions, how many a rule charges, and whether the latest alone were read. */
 export function historySummary(history: PickupExceptionHistory): string {
   const total = history.items.length
   if (total === 0) return "No exceptions in the year before today."

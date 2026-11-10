@@ -19,7 +19,6 @@ export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates" satisfies Modu
 export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email: "E-mail", sms: "Text message" }
 export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }
 
-/** What a role may do in the pane. */
 export const templatesAccessOf = (grants: Grants | null) => ({
   view: mayOn(grants, MESSAGE_TEMPLATES_MODULE_KEY, "view"),
   create: mayOn(grants, MESSAGE_TEMPLATES_MODULE_KEY, "create"),
@@ -73,7 +72,6 @@ export function templateFieldsOf(draft: TemplateDraft): TemplateFields | Templat
   return { name, purpose: draft.purpose, channel: draft.channel, subject, body, status: draft.status }
 }
 
-/** The create body: the project and the fields. */
 export function templateCreateBody(projectId: string, draft: TemplateDraft): (TemplateFields & { projectId: string }) | TemplateRefusal {
   const fields = templateFieldsOf(draft)
   return isTemplateRefusal(fields) ? fields : { projectId, ...fields }
@@ -90,6 +88,5 @@ export function templatePatchBody(stored: MessageTemplate, draft: TemplateDraft)
   return Object.keys(patch).length === 0 ? null : patch
 }
 
-/** A template's line in the pane: "E-mail · Service · Inactive". */
 export const templateLine = (template: Pick<MessageTemplate, "channel" | "purpose" | "status">): string =>
   [CHANNEL_LABELS[template.channel], PURPOSE_LABELS[template.purpose], ...(template.status === "inactive" ? ["Inactive"] : [])].join(" · ")

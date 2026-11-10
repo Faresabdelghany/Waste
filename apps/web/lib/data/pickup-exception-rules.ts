@@ -58,10 +58,8 @@ export type RuleRefusal = { field: RuleField; step?: number; message: string }
 
 export const isRuleRefusal = (value: object): value is RuleRefusal => "field" in value && "message" in value
 
-/** A new rule's form: a skip for any of the customer's reasons, one free over a year, starting on the project's day. */
 export const newRuleForm = (today: string): RuleForm => ({ outcome: "skipped", reason: ANY, contaminantCodeId: ANY, freeCount: "1", windowDays: "365", ladder: [""], validFrom: today, lastDay: "" })
 
-/** A rule's form as it stands, for its edit. */
 export const ruleFormOf = (rule: PickupExceptionRule): RuleForm => ({
   outcome: rule.outcome,
   reason: rule.reason ?? ANY,
@@ -73,10 +71,8 @@ export const ruleFormOf = (rule: PickupExceptionRule): RuleForm => ({
   lastDay: rule.validTo === null ? "" : lastDayIn(rule.validTo),
 })
 
-/** Whether a rule of the form's outcome and reason may narrow to a code: a tagged collection's, or a skip or a failure for contamination or any reason. */
 export const codeOffered = (form: Pick<RuleForm, "outcome" | "reason">): boolean => form.outcome === "completed" || form.reason === ANY || form.reason === "contamination"
 
-/** The form after a pick that moves what the others may say: a tagged collection names no reason, and a reason other than contamination no code. */
 export function withPick(form: RuleForm, values: Partial<RuleForm>): RuleForm {
   const next = { ...form, ...values }
   const reason = next.outcome === "completed" ? ANY : next.reason
@@ -91,7 +87,6 @@ const wholeIn = (typed: string, min: number, max: number): number | null => {
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
-/** The parts a create and an edit share: the free count, the window, the ladder and the end, or the first field the API would refuse. */
 function termsOf(form: RuleForm): { freeCount: number; windowDays: number; ladder: string[]; validTo: string | null } | RuleRefusal {
   const freeCount = wholeIn(form.freeCount, 0, PICKUP_EXCEPTION_FREE_COUNT_MAX)
   if (freeCount === null) return { field: "freeCount", message: FREE_COUNT_SENTENCE }
@@ -105,7 +100,6 @@ function termsOf(form: RuleForm): { freeCount: number; windowDays: number; ladde
   return { freeCount, windowDays, ladder: [...form.ladder], validTo: lastDay === "" ? null : firstDayOut(lastDay) }
 }
 
-/** The body a new rule's form becomes, or the first field the API would refuse. */
 export function ruleCreateBodyOf(projectId: string, form: RuleForm): PickupExceptionRuleCreate | RuleRefusal {
   const outcome = form.outcome as PickupOutcome
   const reason = form.reason === ANY ? null : (form.reason as PickupExceptionRuleCreate["reason"])
@@ -142,7 +136,6 @@ export const ruleCodeOptions = (codes: readonly ContaminantCode[], kept: string 
 const ORDINALS = ["1st", "2nd", "3rd"]
 const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`
 
-/** What a rule matches, in a sentence: "Skipped for contamination", "Failed for any of the customer's reasons", "Collected, tagged Glass in residual". */
 export function ruleMatchSentence(rule: Pick<PickupExceptionRule, "outcome" | "reason" | "contaminantCodeId">, codeName: (id: string) => string): string {
   const code = rule.contaminantCodeId === null ? null : codeName(rule.contaminantCodeId)
   if (rule.outcome === "completed") return code === null ? "Collected, tagged with any code" : `Collected, tagged ${code}`
@@ -151,21 +144,18 @@ export function ruleMatchSentence(rule: Pick<PickupExceptionRule, "outcome" | "r
   return code === null ? `${outcome} ${reason}` : `${outcome} ${reason}, coded ${code}`
 }
 
-/** What a ladder charges, in a sentence: "Contamination fee each time", or "1st Fee A · 2nd Fee B · then Fee B each time". */
 export function ladderSentence(ladder: readonly string[], productName: (id: string) => string): string {
   if (ladder.length === 1) return `${productName(ladder[0])} each time`
   const steps = ladder.slice(0, -1).map((id, index) => `${ordinal(index + 1)} ${productName(id)}`)
   return [...steps, `then ${productName(ladder[ladder.length - 1])} each time`].join(" · ")
 }
 
-/** What the free count and window say: "First one free in 365 days", "None free in 90 days". */
 export function allowanceSentence(rule: Pick<PickupExceptionRule, "freeCount" | "windowDays">): string {
   const days = rule.windowDays === 1 ? "1 day" : `${rule.windowDays} days`
   if (rule.freeCount === 0) return `None free · counted over ${days}`
   return `${rule.freeCount === 1 ? "First one" : `First ${rule.freeCount}`} free · counted over ${days}`
 }
 
-/** The rules in the order the pane lists them: by outcome as the picker offers them, then the latest start first. */
 export function rulesInOrder(rules: readonly PickupExceptionRule[]): PickupExceptionRule[] {
   const rank = (outcome: string) => RULE_OUTCOME_OPTIONS.findIndex((option) => option.value === outcome)
   return [...rules].sort((a, b) => rank(a.outcome) - rank(b.outcome) || (a.validFrom === b.validFrom ? a.id.localeCompare(b.id) : a.validFrom < b.validFrom ? 1 : -1))
