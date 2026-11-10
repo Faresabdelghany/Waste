@@ -65,7 +65,6 @@ const CHEVRON_SPACING_PX = 140
 /** Direction chevrons only once streets are legible — at city zoom they read as gaps in the line. */
 const CHEVRON_MIN_SCALE = 2 ** (14 - ROAD_REF_ZOOM)
 
-/** What the page can ask the map to do. */
 export type PlanningMapApi = {
   fitBounds: (bounds: LngLatBounds) => void
   flyTo: (lngLat: LngLat, zoom?: number) => void
@@ -78,7 +77,6 @@ export type PlanningMapProps = {
   drawTool: DrawTool
   colorFor: (fraction: string) => string
   baseMap: BaseMapId
-  /** The selection shape to keep on the map, if any. */
   shape: SelectionShape | null
   /** Whether the shape's handles can be dragged. */
   editingShape: boolean
@@ -159,7 +157,6 @@ const COMPARE_LABELS: Readonly<Record<CompareMembership, string>> = {
   both: "In both schemes",
 }
 
-/** How many of a cluster's containers sit on each side, sides present only, A then B then both. */
 function compareSides(
   containerIds: readonly string[],
   membership: ReadonlyMap<string, CompareMembership>,
@@ -210,7 +207,6 @@ export function PlanningMap({
     name: "planning-map",
     camera: { center: [COPENHAGEN_CENTER.lng, COPENHAGEN_CENTER.lat], zoom: INITIAL_ZOOM, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM, doubleClickZoom: false },
   })
-  // A new projection on every camera change, so every overlay re-projects.
   const project = useMapProjection(mapInstance)
   const [zoom, setZoom] = useState(INITIAL_ZOOM)
 
@@ -370,7 +366,6 @@ export function PlanningMap({
               const clusterIds = cluster.points.flatMap((point) => point.containerIds)
               const clusterSide = compare ? clusterMembership(clusterIds, compare.membership) : null
               const sides = compare ? compareSides(clusterIds, compare.membership) : []
-              // In compare mode the fraction trail gives way to the sides present.
               const trail = compare ? [] : cluster.fractions.slice(0, MAX_TRAIL_DOTS)
               const overflow = compare ? 0 : cluster.fractions.length - trail.length
               const highlightedCount = cluster.points.filter((point) => highlightedIds.has(point.id)).length
@@ -497,8 +492,6 @@ export function PlanningMap({
     </div>
   )
 }
-
-/* ----------------------------- shapes overlay ----------------------------- */
 
 const toPoints = (screen: readonly ScreenPoint[]) => screen.map((point) => `${point.x},${point.y}`).join(" ")
 
@@ -718,7 +711,6 @@ function ShapesOverlay({
           const faded = highlightedRouteId !== null && !highlighted
           const width = highlighted ? 5 : 3.5
           const roadData = road && roadTransform ? roadPaths.get(route.id) : undefined
-          // A replayed route shows the road ahead faint and the road driven in full colour.
           const replaying = playback?.routeId === route.id
           const travelledScreen = replaying && !roadData
             ? playback.travelled.map(project).filter((point): point is ScreenPoint => point !== null)
@@ -908,8 +900,6 @@ function ShapesOverlay({
     </svg>
   )
 }
-
-/* ------------------------------ draw overlay ------------------------------ */
 
 function DrawOverlay({
   tool,

@@ -111,8 +111,6 @@ type WorkspaceScope = {
   onApi: boolean
 }
 
-// The top bar's account menu in a restricted shell: its persona in fixture
-// mode, and no link to the office's Settings.
 const RESTRICTED_SHELLS: Record<RestrictedPersona, ShellIdentity> = {
   citizen: { fixture: CITIZEN_IDENTITY, offersSettings: false },
   "service-provider": { fixture: SERVICE_PROVIDER_IDENTITY, offersSettings: false },
@@ -129,12 +127,6 @@ function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; ch
   )
 }
 
-/**
- * The provider's workspace while `/me` is unread: its read asked for — one
- * in flight per person, shared with the session's own — and a read that
- * failed said in the API's words, with Retry, rather than a placeholder that
- * waits on the session's next change.
- */
 // The top bar over the account's own notices, so its menu (and Sign out)
 // stays at hand while `/me` is read or names no provider.
 function AccountTopBar() {
@@ -145,6 +137,12 @@ function AccountTopBar() {
   )
 }
 
+/**
+ * The provider's workspace while `/me` is unread: its read asked for — one
+ * in flight per person, shared with the session's own — and a read that
+ * failed said in the API's words, with Retry, rather than a placeholder that
+ * waits on the session's next change.
+ */
 function ReadingAccount() {
   const { loadMe } = useApiSession()
   const [attempt, setAttempt] = useState(0)

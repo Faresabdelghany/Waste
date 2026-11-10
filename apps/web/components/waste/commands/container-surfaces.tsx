@@ -39,7 +39,6 @@ import type { StockMovement } from "@waste/contracts/stock"
 
 const { workspaceId, moduleId } = CONTAINERS_MODULE
 
-/** Add container: the create form of the identity. */
 export function AddContainerSurface({ label }: PrimarySurfaceProps) {
   return (
     <CreateSurface
@@ -52,7 +51,6 @@ export function AddContainerSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** The movement a ledger row reads as: when on the project's clock, its kind, where from and where to, and why. */
 function movementLine(movement: StockMovement, warehouseName: (serverId: string) => string, timezone: string | undefined): string {
   const place = (kind: string, warehouseId: string | null) => (warehouseId === null ? kind : kind === "warehouse" ? warehouseName(warehouseId) : `${kind} at ${warehouseName(warehouseId)}`)
   return `${shownOn(movement.occurredAt, timezone)} · ${movement.kind} · ${place(movement.fromKind, movement.fromWarehouseId)} → ${place(movement.toKind, movement.toWarehouseId)}${movement.reason ? ` · ${movement.reason}` : ""}`
@@ -61,7 +59,6 @@ function movementLine(movement: StockMovement, warehouseName: (serverId: string)
 /** A dialog open on a snapshot of the row: the schema and values it opened with hold while the store's optimistic write and its rollback replace the row. */
 type Open = { kind: "edit"; schema: BusinessFormSchema; values: BusinessFormValues } | { kind: "command"; name: OfferedContainerCommand }
 
-/** A container's commands and its ledger, in its details. */
 export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()

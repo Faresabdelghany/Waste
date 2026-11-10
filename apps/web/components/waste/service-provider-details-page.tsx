@@ -276,7 +276,6 @@ export function ServiceProviderDetailsPage({
     target: "user" | "vehicle" | "driver" | "service-area" | "service-provider-price",
   ) => void
 }) {
-  // On the Pilot the door makes an award to this provider (#186), not an assignment of an existing one.
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header>

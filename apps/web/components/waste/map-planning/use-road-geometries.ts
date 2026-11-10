@@ -39,7 +39,6 @@ let client: ApiClient | null = null
 
 const position = ({ lng, lat }: LngLat): Position2D => [lng, lat]
 
-/** One preview, as the cache takes it: the road, or the estimate and why. */
 async function askPreview(stops: readonly LngLat[], signal: AbortSignal): Promise<RoadAnswer> {
   if (client === null) throw new Error("no API to ask for the road")
   const answer = await previewRoad(client, stops.map(position), signal)

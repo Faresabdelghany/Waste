@@ -27,7 +27,6 @@ import type { SchemeEndingCounts } from "@waste/contracts/route-schemes"
 
 import { useBusinessRecordStore, whenSaved } from "@/components/platform/business-record-store"
 
-/** What ending the scheme did to its routes, in one sentence for the toast. */
 export function endingSentence(routes: SchemeEndingCounts): string {
   const parts = [
     routes.cancelled === 0 ? "no planned route to cancel" : `${count(routes.cancelled, "planned route")} cancelled`,

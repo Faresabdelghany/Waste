@@ -89,7 +89,6 @@ export function ScanDialog({ open, onOpenChange, title, description, stopId, num
     checkLatest.current = check
   })
 
-  // The camera runs only while Scan with camera is on, and stops with the dialog.
   useEffect(() => {
     if (!scanning || detector === null) return
     let stream: MediaStream | null = null

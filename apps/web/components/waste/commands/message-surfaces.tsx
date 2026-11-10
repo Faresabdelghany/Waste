@@ -37,7 +37,6 @@ const STATUS_TONES: Readonly<Record<string, string>> = {
   withheld: "border-warning/30 bg-warning/10 text-warning-foreground",
 }
 
-/** A customer's newest messages, and the dialog that sends one. */
 export function MessagesSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
   const grants = useGrants()

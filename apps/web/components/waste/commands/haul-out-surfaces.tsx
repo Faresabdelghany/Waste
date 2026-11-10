@@ -38,7 +38,6 @@ const ACTION = { receive: RECEIVE_LOAD, reconcile: RECONCILE_LOAD, dispute: DISP
 type Draft = Record<string, string>
 type LoadDialog = { verb: keyof typeof VERB; draft: Draft; timezone: string | undefined }
 
-/** One labelled text field of a dialog. */
 function Field({ id, label, value, onChange, type = "text", placeholder }: { id: string; label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -48,7 +47,6 @@ function Field({ id, label, value, onChange, type = "text", placeholder }: { id:
   )
 }
 
-/** One labelled pick of a dialog. */
 function Pick({ id, label, value, options, onChange, placeholder }: { id: string; label: string; value: string; options: readonly BusinessFormOption[]; onChange: (value: string) => void; placeholder: string }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -69,7 +67,6 @@ function Pick({ id, label, value, options, onChange, placeholder }: { id: string
   )
 }
 
-/** A transfer station's stock and loads, and their commands. */
 export function TransferStationSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
   const moduleReady = useModuleReady(STATIONS_MODULE)

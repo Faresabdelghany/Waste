@@ -1,7 +1,3 @@
-// The small status pill Map Planning's panel and route card share
-// (2026-09-16): success for live statuses, warning for the ones that need an
-// eye, neutral for the rest.
-
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 

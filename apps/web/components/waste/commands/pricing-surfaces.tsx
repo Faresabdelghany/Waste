@@ -52,7 +52,6 @@ function useProductsReread(): () => void {
   return () => void refreshModule(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
 }
 
-/** Add price: a row of a price list, made from either module's header. */
 function AddPrice({ label }: PrimarySurfaceProps) {
   const pickers = useCommercialPickers()
   const rereadProducts = useProductsReread()
@@ -80,7 +79,6 @@ export const PRICE_ROWS_PRIMARY_ACTIONS = {
   addPrice: { module: PRICE_ROWS_MODULE, action: "create" },
 } as const satisfies Record<string, ModuleAction>
 
-/** Price rows' primary actions: Explain price, and Add price, each where its grant is held. */
 export function PriceRowsPrimarySurface({ label }: PrimarySurfaceProps) {
   const grants = useGrants()
   return (
@@ -91,7 +89,6 @@ export function PriceRowsPrimarySurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** The verdict a row was given, as a badge reads it. */
 const verdictLabel = (verdict: RowVerdict) => (verdict.winner ? "Won" : verdict.eligible ? "Eligible" : "Lost")
 
 /**
@@ -208,14 +205,12 @@ export function ExplainPrice({ initial = {}, label = "Explain price" }: { initia
   )
 }
 
-/** A row's question, as Explain price opens on it: its list, its product, its conditions, today. */
 function rowQuestion(record: BusinessRecord): BusinessFormValues {
   const values = record.submittedValues ?? {}
   const keys = ["priceListId", "productId", "planningAreaId", "customerKind", "containerType", "wasteFraction", "customerId"]
   return Object.fromEntries(keys.flatMap((key) => (typeof values[key] === "string" ? [[key, values[key]]] : [])))
 }
 
-/** A price row's details: its edit, and Explain price on its own conditions. */
 export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useCommercialPickers()
@@ -259,7 +254,6 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-/** A product's details: Explain price for it under its project's default list, and its form in Settings. */
 export function ProductCommandsSurface({ record }: RowSurfaceProps) {
   const rows = useServerModuleState(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
   const project = record.projectIds?.[0]

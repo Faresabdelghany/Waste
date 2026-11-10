@@ -61,9 +61,7 @@ type PersonaSidebarDefinition = {
   identityDetail: string
   initials: string
   navItems: PersonaNavItem[]
-  /** Workspace name + badge card under the header; omitted for lean personas. */
   scopeCard?: PersonaScopeCard
-  /** Access-scope explainer group; omitted for lean personas. */
   accessLabel?: string
 }
 

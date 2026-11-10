@@ -71,7 +71,6 @@ function MonthDayPicker({ id, label, value, onChange }: { id: string; label: str
   )
 }
 
-/** A new season's starting values, numbered after the others: May to September, weekly. */
 const blankSeason = (count: number): StoredSchemeSeason => ({ name: `Season ${count + 1}`, startsOn: "05-01", endsOn: "10-01", frequency: "weekly", weekRotation: null })
 
 function SeasonsDialog({ record, onClose }: { record: BusinessRecord; onClose: () => void }) {
@@ -178,12 +177,10 @@ function SeasonsDialog({ record, onClose }: { record: BusinessRecord; onClose: (
   )
 }
 
-/** The calendar year's days in order, `mm-dd`, for the day before and after a month-day. */
 const YEAR = MONTH_DAYS.flatMap((days, month) => Array.from({ length: days }, (_, day) => `${pad(month + 1)}-${pad(day + 1)}`))
 const lastDayOf = (endsOn: string) => YEAR[(YEAR.indexOf(endsOn) + YEAR.length - 1) % YEAR.length]
 const dayAfter = (last: string) => YEAR[(YEAR.indexOf(last) + 1) % YEAR.length]
 
-/** The Seasons card of the scheme's Details tab: the set as it stands, and its editor where the scheme may be edited. */
 export function SchemeSeasonsCard({ record, frequency, canEdit }: { record: BusinessRecord; frequency: string | undefined; canEdit: boolean }) {
   const [open, setOpen] = useState(false)
   const seasons = storedSeasonsFromValues(record.submittedValues)

@@ -1,8 +1,5 @@
 "use client"
 
-// Small pieces both Driver App screens draw: a rejected command's sentence,
-// dismissible, the display cache's notice, and the words for a day and a
-// route's progress.
 import Link from "next/link"
 import type { ComponentProps, MouseEvent } from "react"
 import { ClockCounterClockwise, X } from "@phosphor-icons/react/dist/ssr"
@@ -31,7 +28,6 @@ export function RejectionList({ rejections, onDismiss }: { rejections: readonly 
   )
 }
 
-/** `2027-01-15` as a phone shows it: "Fri 15 Jan". The date is a calendar day, so it is read and written in UTC and never shifts. */
 /**
  * A link between the Driver App's screens (O25 of #290): the app's own
  * navigation while the server answers, a whole page load while it does not —

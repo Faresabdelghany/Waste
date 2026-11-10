@@ -28,7 +28,6 @@ import { formatMinor } from "@/lib/commercial/money"
 /** What the office typed, sent as the body's index. */
 export type IndexTyped = { label: string; basisPoints: number; appliedFrom: string; base: "bid" | "current-fee" }
 
-/** The dialog's own question beside the index: a scope picker, ready or not, and why not. */
 export type ApplyIndexScope = { field: ReactNode; ready: boolean; waiting?: string }
 
 export function ApplyIndexDialog({
@@ -75,7 +74,6 @@ export function ApplyIndexDialog({
   const typed: IndexTyped = { label: label.trim(), basisPoints, appliedFrom, base }
   const held = waiting ?? (scope !== undefined && !scope.ready ? scope.waiting : undefined)
   const complete = typed.label !== "" && !Number.isNaN(basisPoints) && appliedFrom !== "" && (scope?.ready ?? true) && waiting === undefined
-  // The preview shown is of exactly this body and scope; anything typed since asks again.
   const key = JSON.stringify([typed, withBase, scopeKey])
   const previewed = preview !== null && preview.of === key ? preview.result : null
   const moves = previewed?.lines.some((line) => line.skipped === null) ?? false

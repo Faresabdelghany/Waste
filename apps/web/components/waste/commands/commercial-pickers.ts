@@ -32,7 +32,6 @@ import { useRelationPickers, type RelationPickers } from "@/components/platform/
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
 
-/** The pickers the Price Engine's dialogs read: the command surfaces' own, and the chain's rows by field. */
 export function useCommercialPickers(): RelationPickers {
   const base = useRelationPickers()
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
@@ -82,7 +81,6 @@ export function useCommercialPickers(): RelationPickers {
   return { readyFor, options, timezoneOf: base.timezoneOf }
 }
 
-/** The modules a Price Engine dialog's web ids may name, for `useCommercialResolver`. */
 const RESOLVED_MODULES: readonly ModuleLocation[] = [ORGANISATION_MODULE, MASTER_DATA_MODULE, CONTACTS_MODULE, PLANNING_AREAS_MODULE, AGREEMENTS_MODULE, PRODUCTS_MODULE, PRICE_ROWS_MODULE, INVOICES_MODULE]
 
 /** A resolver over the modules the chain's dialogs name rows of, as the store holds them now: for a read the surface asks itself (Explain price, Run billing's preview). */

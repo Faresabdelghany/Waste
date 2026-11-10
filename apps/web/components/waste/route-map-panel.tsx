@@ -49,7 +49,6 @@ const STATE_OF: Record<Pickup["status"], RouteMapStopState> = {
   failed: "missed",
 }
 
-/** A route's stops and bases where the map can place them, in the order the route visits them, and the stops it cannot. */
 function useRoutePlaces(record: BusinessRecord, pickups: readonly Pickup[] | undefined, stopName: (pickup: Pickup) => string) {
   const containerOf = useRecordsByServerId(CONTAINERS_MODULE)
   const propertyOf = useRecordsByServerId(PROPERTIES_MODULE)
@@ -83,7 +82,6 @@ function useRoutePlaces(record: BusinessRecord, pickups: readonly Pickup[] | und
   return { points, unplaced }
 }
 
-/** The active Plan's road once it is measured, fetched once per Plan, and what the line reads as. */
 function usePlanRoad(record: BusinessRecord): { road: RoadGeometry | null; reading: string } {
   const client = useApiClient()
   const active = activePlanOf(record)

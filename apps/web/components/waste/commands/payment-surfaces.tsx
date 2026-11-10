@@ -42,11 +42,6 @@ import { allocateForm, BANK_IMPORT_FORM, blankNone, createPaymentRecord, PAYMENT
 import { CONTACTS_MODULE } from "@/lib/data/properties"
 import { waitingSentence } from "@/lib/api/read-state"
 
-// ---------------------------------------------------------------------------
-// Register payment and Import bank statement
-// ---------------------------------------------------------------------------
-
-/** The module's two primaries: a payment by hand, and a bank statement's lines. */
 export function PaymentsPrimarySurface({ label }: PrimarySurfaceProps) {
   const pickers = useCommercialPickers()
   const { refreshModule } = useBusinessRecordStore()
@@ -59,7 +54,6 @@ export function PaymentsPrimarySurface({ label }: PrimarySurfaceProps) {
         pickers={pickers}
         make={createPaymentRecord}
         created={() => ({ title: "Payment registered", description: "The invoice it names is paid what it owes at most; the rest is a credit on the payer's balance." })}
-        // What it paid moves the invoice's standing.
         onCreated={() => void refreshModule(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)}
       />
       <ImportBankStatement />
@@ -82,7 +76,6 @@ async function sendLines(client: ApiClient, projectId: string, file: BankFile, d
   return outcomes
 }
 
-/** How a line's outcome reads. */
 function outcomeText(outcome: BankLineResult, invoiceName: (serverId: string) => string, currency: string): string {
   if (outcome.outcome === "duplicate") return "Imported already"
   if (outcome.outcome === "unmatched" || outcome.invoiceId === null) return "Unmatched: the office matches it"
@@ -230,10 +223,6 @@ function ImportBankStatement() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// A payment's details
-// ---------------------------------------------------------------------------
-
 const readPayment = (client: ApiClient, serverId: string) => paymentDetail(client, serverId).then((detail): PaymentDetail[] => [detail])
 
 /** The allocations still standing: neither a reversal nor one a reversal names. */
@@ -242,7 +231,6 @@ function standing(allocations: readonly PaymentAllocation[]): Set<string> {
   return new Set(allocations.filter((allocation) => allocation.reversesAllocationId === null && !reversed.has(allocation.id)).map((allocation) => allocation.id))
 }
 
-/** A payment's allocations, each undone by Undo match while it stands, and Match to invoice while anything remains. */
 export function PaymentCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(PAYMENTS_MODULE)
@@ -299,13 +287,8 @@ export function PaymentCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// A customer's statement
-// ---------------------------------------------------------------------------
-
 const KIND_LABELS: Readonly<Record<CustomerStatement["lines"][number]["kind"], string>> = { invoice: "Invoice", "credit-note": "Credit note", payment: "Payment" }
 
-/** Statement, in a customer's details: the window and the currency asked, then the lines read. */
 export function CustomerStatementSurface({ record }: RowSurfaceProps) {
   const client = useApiClient()
   const serverId = useServerModuleState(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId)?.serverIds.get(record.id)
