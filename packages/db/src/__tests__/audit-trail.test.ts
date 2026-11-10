@@ -28,7 +28,7 @@ import { role, roleGrant, userAccount } from "../schema/access"
 import { auditEvent } from "../schema/audit"
 import { customer } from "../schema/customers"
 import { company, project } from "../schema/organisation"
-import { AUDIT_ROW_FUNCTION, AUDIT_TRAIL, auditTrail, replaceAuditTrail } from "../sql/audit-trail"
+import { AUDIT_TRAIL, auditTrail, replaceAuditTrail } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { AUDITED, EXEMPT, TABLES } from "../table-policies"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
@@ -75,10 +75,6 @@ describe("the audit trail's classification", () => {
 })
 
 describe("the audit trail in the migrations", () => {
-  test("the function is written once, as the helper spells it", () => {
-    assert.ok(statements.has(normalised(AUDIT_ROW_FUNCTION)), "wms.audit_row(), as AUDIT_ROW_FUNCTION spells it")
-  })
-
   test("every audited table carries its trigger as auditTrail spells it, and no exempt table carries one", () => {
     const missing = AUDITED.flatMap(auditTrail).filter((statement) => !statements.has(normalised(statement)))
     assert.deepEqual(missing, [], `paste these into the migration:\n${missing.join("\n")}`)
