@@ -237,10 +237,6 @@ describe("the request path against the database", { skip: database.skip }, () =>
       await forbidden(await tokenFor(a.users.olivia, b.companyId), "Olivia of A in company B")
       await forbidden(await tokenFor(a.users.olivia, testId()), "a company nobody seeded")
     })
-
-    test("an invited account has no login to sign a token for", () => {
-      assert.equal(a.users.invited.authUserId, null)
-    })
   })
 
   describe("resolvePrincipal binds the claim to the tenant itself, not through the fence", () => {

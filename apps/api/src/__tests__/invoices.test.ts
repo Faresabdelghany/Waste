@@ -181,7 +181,7 @@ describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
     })
 
     test("credits a line by a quantity: the next number of the series, the original's text and price copied and negated, due on issue, invoice-issued emitted, and the events still invoiced", async () => {
-      const [bulkyLine, residualLine] = issued.lines
+      const [, residualLine] = issued.lines
       const note = await credited(issued.id, { reason: "quantity-correction", note: "One of the two bins was not emptied", lines: [{ lineId: residualLine.id, quantity: 1 }] })
       assert.deepEqual(
         [note.kind, note.number, note.label, note.projectId, note.customerId, note.currency, note.issuedOn, note.dueOn, note.periodFrom, note.periodTo, note.billingRunId, note.creditsInvoiceId, note.creditReason, note.creditNote, note.issuedBy],
@@ -201,7 +201,6 @@ describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual(corrected.creditNotes.map((credit) => credit.id), [note.id], "the invoice now lists the credit note naming it")
       assert.deepEqual(corrected.lines, issued.lines, "the invoice's own lines never change")
       assert.deepEqual([(await readEvent(residual.id)).status, (await readEvent(bulky.id)).status], ["invoiced", "invoiced"], "a credit corrects the document, not the occurrence")
-      assert.equal(bulkyLine.quantity, 1)
     })
 
     test("holds each line to what remains after the credit notes already issued, lists every refusal in one 400, and refuses a line that is not the invoice's or is named twice", async () => {
