@@ -28,7 +28,6 @@
 
 export type LifecycleStatus = "Active" | "Inactive"
 export type ContainerKind = "waste-collection" | "wastewater"
-/** Where a container type's weight for a fraction came from — see `ContainerType.wasteFractionWeightSources`. */
 export type ContainerWeightSource = "catalogue" | "derived"
 
 export type ContainerType = {
@@ -73,11 +72,6 @@ export const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 const fixtureCreatedAt = FIXTURE_CREATED_AT
 
-/**
- * A type's weight table with its sources: the fractions in `catalogue` are
- * the catalogue's own numbers, every other fraction in `derived` a planning
- * default derived from the residual weight (the module doc says how).
- */
 const weighed = (
   catalogue: Record<string, number>,
   derived: Record<string, number> = {},

@@ -54,7 +54,6 @@ export const ALERT_FORM: BusinessFormSchema = {
   ],
 }
 
-/** The alert's commands that say something. */
 export type AlertCommandWithForm = "resolve" | "link-ticket"
 
 /** Each command's dialog; acknowledge says nothing and is sent as it stands. */
@@ -88,7 +87,6 @@ export function createAlertRecord(values: BusinessFormValues, { now }: { now: nu
   return mintedRecord({ id: `operate-alert-${now}`, name, status: "New", recordKind: "Alert", values })
 }
 
-/** An alert's severity as the ticket it hands over is prioritised: the same four words. */
 const PRIORITY_OF_SEVERITY: Readonly<Record<string, TicketPriority>> = { critical: "critical", high: "high", medium: "medium", low: "low" }
 
 /**
@@ -122,5 +120,4 @@ export function alertListReaders(): FilterValueReaders {
   }
 }
 
-/** The queue opens on what still needs attention: new and acknowledged. */
 export const ALERT_LIST_INITIAL = { statuses: ["New", "Acknowledged"] }
