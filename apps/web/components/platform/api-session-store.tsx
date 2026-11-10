@@ -42,7 +42,6 @@ import { API_SESSION_STORAGE_KEY } from "@/lib/storage-keys"
 
 const ApiSessionContext = createContext<ApiSessionController | null>(null)
 
-/** How often the provider looks at the clock to see whether the token is about to expire. */
 const REFRESH_TICK_MS = 30_000
 
 export function ApiSessionProvider({ children, api = API_CONFIG, auth = AUTH_CONFIG }: { children: ReactNode; api?: ApiConfig | null; auth?: AuthConfig | null }) {
@@ -107,9 +106,7 @@ export function useApiConfigured(): boolean {
 }
 
 export type ApiSessionValue = SessionState & {
-  /** Whether the web is configured to call an API at all. */
   apiConfigured: boolean
-  /** Whether the web can sign a person in with a password. */
   passwordSignInAvailable: boolean
   /** Signs in and keeps the session; throws `SignInRefused` in Auth's words. */
   signIn: ApiSessionController["signIn"]

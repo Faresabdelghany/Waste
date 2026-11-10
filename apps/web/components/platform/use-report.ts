@@ -23,9 +23,7 @@ export type ReportRead<Report> = {
   report: Report | null
   /** What a card shows: the current key's answer, else the last one read, greyed by `loading`. */
   shown: Report | null
-  /** Whether the current key's answer has not arrived. */
   loading: boolean
-  /** The current key's refusal, or null. */
   problem: Problem | null
 }
 

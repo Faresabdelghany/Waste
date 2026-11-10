@@ -52,9 +52,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// The filter shape lives in the pure lib (lib/prototype/business-filters) so
-// non-workspace surfaces filter through the same model; re-exported for the
-// existing component importers.
 export type { BusinessFilters }
 
 type FilterDefinition = {
@@ -73,7 +70,6 @@ type FilterDefinition = {
 import { canonicalCalendarName } from "@/lib/prototype/route-schemes/calendar"
 export { canonicalCalendarName }
 
-/** One icon per category, whichever surface offers it. */
 const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   statuses: Spinner,
   sources: Database,
