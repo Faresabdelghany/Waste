@@ -58,7 +58,6 @@ describe("the register switch", () => {
 
 describe("the live register's client", () => {
   const ID = "0a3f50a0-75ba-32b8-e044-0003ba298018"
-  /** A scripted gateway: the answers by path, and the URLs it was asked. */
   const gateway = (answers: Record<string, { status: number; body?: unknown }>) => {
     const asked: URL[] = []
     const fetch = (async (input: URL | string | Request) => {
