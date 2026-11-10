@@ -194,10 +194,7 @@ export function unloadingStationRoutes(deps: RouteDeps) {
         const at = pageAt({ cursor, limit })
         const tx = c.get("tx")
         const principal = c.get("principal")
-        // The fraction asked about is one of this company's, like the containers list's warehouse: a filter that names a row is held to it.
         await requireWasteFraction(tx, principal.companyId, wasteFractionId, "wasteFractionId", "query")
-        // Paged first, so the row that only proves there is a next page is
-        // not one of the stations whose fractions are loaded.
         const { items, nextCursor } = await listStations(
           tx,
           principal,
@@ -242,7 +239,6 @@ export function unloadingStationRoutes(deps: RouteDeps) {
           ),
         )
         await writeIds(tx, fractions, { companyId: principal.companyId, id: row.id }, wasteFractionIds)
-        // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
         return created(c, "/unloading-stations", stationOf(row, asRead(wasteFractionIds)))
       },
     )

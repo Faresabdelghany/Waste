@@ -47,7 +47,6 @@ const RulePage = Page(VisitRule)
 export const SOLD_PER_VISIT = "A visit is charged at a product sold per visit"
 /** What an annual-access product not sold by the month is told. */
 export const ACCESS_SOLD_BY_THE_MONTH = "Annual access is a product sold by the month, subscribed under the business's agreement"
-/** What a free fraction that is not the company's is told. */
 
 const RUNNING = "visit_rule_no_overlap"
 const RUNNING_SENTENCE = "A visit rule is already in force over part of that period; end it first or schedule this one after it"
@@ -123,7 +122,6 @@ async function requireProducts(tx: Tx, scope: Scope, named: readonly Named[]): P
   }
 }
 
-/** The products a body names, each at its place, beside what the rule named there. */
 function productsNamed(body: { ladder?: readonly string[]; businessVisitProductId?: string | null; annualAccessProductId?: string | null }, before: { ladder: readonly string[]; businessVisitProductId: string | null; annualAccessProductId: string | null } | null): Named[] {
   return [
     ...(body.ladder ?? []).map((id, index): Named => ({ path: `ladder.${index}`, id, unit: "visit", message: SOLD_PER_VISIT, kept: before?.ladder[index] ?? null, step: index + 1 })),
@@ -132,7 +130,6 @@ function productsNamed(body: { ladder?: readonly string[]; businessVisitProductI
   ]
 }
 
-/** Holds each free fraction to the company's (400 at `freeFractionIds.N`). */
 async function requireFractions(tx: Tx, companyId: string, ids: readonly string[] | undefined): Promise<void> {
   if (ids === undefined || ids.length === 0) return
   const found = await tx
@@ -144,7 +141,6 @@ async function requireFractions(tx: Tx, companyId: string, ids: readonly string[
   if (wrong.length > 0) throw invalidRequest("body", wrong)
 }
 
-/** Writes a rule's ladder, position 1 first, and its free fractions, each replacing what the rule held where given. */
 async function writeSets(tx: Tx, rule: { companyId: string; projectId: string; id: string }, sets: Partial<Sets>, replace: boolean): Promise<void> {
   if (sets.ladder !== undefined) {
     if (replace) await tx.delete(visitRuleStep).where(and(eq(visitRuleStep.companyId, rule.companyId), eq(visitRuleStep.ruleId, rule.id)))

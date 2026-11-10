@@ -104,7 +104,6 @@ const columns = {
 
 type Row = Pick<typeof userAccount.$inferSelect, keyof typeof columns>
 
-/** The row on the wire, with the Project Access rows the page loaded for it. */
 function userOf(row: Row, projectIds: string[]): User {
   return {
     id: row.id,
@@ -121,10 +120,6 @@ function userOf(row: Row, projectIds: string[]): User {
   }
 }
 
-/**
- * The Project Access of a whole page in one query, grouped by account: a list
- * of fifty users is two statements, never fifty-one.
- */
 async function projectIdsOf(tx: Tx, companyId: string, userIds: readonly string[]): Promise<Map<string, string[]>> {
   const byUser = new Map<string, string[]>()
   if (userIds.length === 0) return byUser
@@ -225,7 +220,6 @@ const TARGET_NARROW = "The primary administrator reaches every project: give the
 /** A 400 in the shape the validator's would have, for what only the database could tell us. */
 const unknownReference = (errors: { path: string; message: string }[]) => problem(400, { detail: "The request body is invalid", errors })
 
-/** The role a body names, this company's, read for what the team door asks of it: its name and its scope. */
 async function requireRole(tx: Tx, companyId: string, roleId: string): Promise<{ id: string; name: string; scope: string }> {
   const [found] = await tx
     .select({ id: role.id, name: role.name, scope: role.scope })
@@ -236,7 +230,6 @@ async function requireRole(tx: Tx, companyId: string, roleId: string): Promise<{
   return found
 }
 
-/** Every project the body named must be this company's; the ones that are not are named by their place in the list. */
 async function requireProjects(tx: Tx, companyId: string, projectIds: readonly string[]): Promise<void> {
   const rows = await tx
     .select({ id: project.id })
@@ -260,7 +253,6 @@ async function requireProvider(tx: Tx, companyId: string, serviceProviderId: str
   }
 }
 
-/** What the access shape points at must be this company's, checked before anything is written. */
 async function requireAccess(tx: Tx, companyId: string, shape: AccessShape): Promise<void> {
   if (shape.kind === "projects") await requireProjects(tx, companyId, shape.projectIds)
   if (shape.kind === "provider") await requireProvider(tx, companyId, shape.serviceProviderId)
@@ -316,8 +308,6 @@ export function userRoutes(deps: RouteDeps) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { companyId } = principal
-        // Paged first, so the row that only proves there is a next page is not
-        // one of the accounts whose access is loaded.
         const { items, nextCursor } = await listUsers(tx, principal, at)
         const byUser = await projectIdsOf(tx, companyId, items.map((row) => row.id))
         return c.json({ items: items.map((row) => userOf(row, byUser.get(row.id) ?? [])), nextCursor })
@@ -437,7 +427,6 @@ export function userRoutes(deps: RouteDeps) {
           if (patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: PRIMARY_ROLE })
           if (shape !== undefined && shape.kind !== "all-projects") throw problem(409, { detail: PRIMARY_ACCESS })
         }
-        // A provider's manager keeps the role it was given: another manager or the office moves it.
         if (providerIdOf(principal) !== null && current.id === principal.user.id && patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: TEAM_SELF_ROLE })
         if (patch.roleId !== undefined) await requireTeamRole(tx, principal, await requireRole(tx, companyId, patch.roleId))
         requireTeamAccess(principal, shape)
