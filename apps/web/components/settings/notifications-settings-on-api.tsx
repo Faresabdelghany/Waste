@@ -26,7 +26,6 @@ import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { ALERT_THRESHOLD_OPTIONS, alertsWithheldBecause, alertThresholdOf, noticeRowOf, preferencesBodyOf, type NO_ALERTS } from "@/lib/data/notification-preferences"
 import { useGrants } from "@/components/platform/use-grants"
 
-/** How many of the newest notices the pane shows. */
 const NOTICES_SHOWN = 20
 
 type Threshold = AlertSeverity | typeof NO_ALERTS

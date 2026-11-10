@@ -209,7 +209,6 @@ function PickRow({ id, label, value, rows, every, invalid, disabled, onChange, n
   )
 }
 
-/** A rule's editor: its terms, the ticket it opens, whether it counts, and a simulation of the terms as they stand in the form. */
 function CountingRuleDialog({
   rule,
   choices,
@@ -223,7 +222,6 @@ function CountingRuleDialog({
 }: {
   rule: CountingRule | undefined
   choices: Choices
-  /** A rule's type as the table names it, a type the list does not hold among them. */
   typeNameOf: (id: string | null) => string | null
   noTeam: boolean
   onOpenTeams?: () => void

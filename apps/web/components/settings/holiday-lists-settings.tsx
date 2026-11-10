@@ -106,12 +106,8 @@ import { NARROWED_HINT } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-/** The year filter's value for every year. */
 const ALL_YEARS = "all"
 
-/* ------------------------------ The table's view ------------------------------ */
-
-/** The View popover's starting point, and what its Reset returns to: every column, by list name, ungrouped. */
 const HOLIDAY_LIST_VIEW_DEFAULTS: BusinessViewOptions = {
   ...defaultBusinessViewOptions,
   ordering: "name",
@@ -145,7 +141,6 @@ function HolidayListStatusBadge({ status }: { status: HolidayListStatus }) {
   )
 }
 
-/** "2 holiday lists", or "1 of 2 holiday lists" under a search or a filter. */
 function shownCount(shown: number, total: number, noun: string): string {
   return shown === total ? count(total, noun) : `${shown} of ${count(total, noun)}`
 }
@@ -213,7 +208,6 @@ export function HolidayListsSettings() {
     })
   }
 
-  // The module whose problem the pane says, the projects first.
   const blocked = organisation.problem !== null ? organisation : calendars
   const notReadyMessage = moduleReadSentence({ pending: organisation.pending || calendars.pending, notGranted: blocked.notGranted, problem: blocked.problem }, "holiday lists")
   const notReadyHint = blocked.notGranted ? blocked.problem?.detail : undefined
@@ -272,8 +266,6 @@ export function HolidayListsSettings() {
   )
 }
 
-/* ------------------------------ The lists, as the Routes page ------------------------------ */
-
 function HolidayListsIndex({
   ready,
   notReady,
@@ -302,7 +294,6 @@ function HolidayListsIndex({
 
   const rows = holidayListRows(lists, projectCount, todayIso())
   const rowsById = new Map(rows.map((row) => [row.record.id, row]))
-  // The Filter's options and the rows it keeps read the same functions.
   const readers: FilterValueReaders = {
     statuses: (record) => singleFilterValue(rowsById.get(record.id)?.status),
     collectionCalendars: (record) => singleFilterValue(rowsById.get(record.id)?.name),
@@ -494,8 +485,6 @@ function HolidayListsIndex({
   )
 }
 
-/* --------------------------- The add / edit dialog --------------------------- */
-
 function HolidayListDialog({
   state,
   companyCountry,
@@ -603,8 +592,6 @@ function HolidayListDialog({
   )
 }
 
-/* ------------------------------ One list's page, as a route's ------------------------------ */
-
 const EMPTY_ENTRY: HolidayEntry = { date: "", name: "" }
 
 function HolidayListPage({
@@ -670,7 +657,6 @@ function HolidayListPage({
     onSaveEntries([...entries, entry], `${entry.name || "Holiday"} added on ${formatShortDay(entry.date)}`)
     setAddDraft(EMPTY_ENTRY)
     setIssue(null)
-    // Show the year the holiday went into.
     if (year !== ALL_YEARS && !entry.date.startsWith(`${year}-`)) setYear(entry.date.slice(0, 4))
   }
   const remove = (entry: HolidayEntry) => {

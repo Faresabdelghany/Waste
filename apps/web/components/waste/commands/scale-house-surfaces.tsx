@@ -52,7 +52,6 @@ const MASTER_MODULE = moduleAt("configure.master")
 
 const optionOf = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: record.name })
 
-/** The pickers Weigh in reads: our own stations with a weighbridge for the site, the project's agreements of the customer picked, the rest the command surfaces' own. */
 function useWindowPickers(): RelationPickers {
   const pickers = useRelationPickers()
   const places = useModuleRecords(DEPOTS_MODULE.workspaceId, DEPOTS_MODULE.moduleId)
@@ -73,7 +72,6 @@ function useWindowPickers(): RelationPickers {
   return { ...pickers, options }
 }
 
-/** The window's two creates: Weigh in, the module's primary action, and Register tare beside it. */
 export function ScaleHousePrimarySurface({ label }: PrimarySurfaceProps) {
   const pickers = useWindowPickers()
   return (
@@ -116,7 +114,6 @@ const DONE: Readonly<Record<FormName, string>> = {
   [REACTIVATE_TARE]: "Tare taken back",
 }
 
-/** A ticket's Weigh out and Void, or a tare's Re-weigh, Retire and Take back; the fraction pickers of Weigh out from the master data's. */
 export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SCALE_HOUSE_MODULE)
   const { busy, run } = useCommandRunner(SCALE_HOUSE_MODULE, record.id)
@@ -132,7 +129,6 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
     .filter((row) => row.submittedValues?.priceUnit === "tonne" || row.submittedValues?.priceUnit === "m3")
     .map((row) => ({ value: row.id, label: `${row.name} · ${row.submittedValues?.priceUnit === "m3" ? "per m³" : "per tonne"}` }))
 
-  // Weigh out's fraction pickers are this window's: the form is the schema with them filled in.
   const forms: Partial<Record<FormName, BusinessFormSchema>> = {
     [COMPLETE_TICKET]: {
       ...WEIGH_OUT_FORM,

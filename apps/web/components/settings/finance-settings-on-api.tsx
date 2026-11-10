@@ -113,7 +113,6 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
       if (value === null) delete submittedValues[field.key]
       else submittedValues[field.key] = value
     }
-    // The address's lines as typed, each trimmed, the blank ones dropped; none at all clears it.
     const address = postalAddress
       .split(/\r?\n/)
       .map((line) => line.trim())

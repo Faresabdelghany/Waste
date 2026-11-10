@@ -170,7 +170,6 @@ function PublishDialog({ project, saving, onClose, onPublish }: { project: Busin
   )
 }
 
-/** A project's branding in its row: the colour's swatch and what is set, or none, and its edit where the role may brand. */
 function BrandingSummary({ project, onEdit, disabled }: { project: BusinessRecord; onEdit?: () => void; disabled: boolean }) {
   const branding = brandingOf(project)
   const parts = [branding.logoUrl === null ? null : "Logo", branding.accessibilityStatementUrl === null ? null : "Accessibility statement"].filter((part): part is string => part !== null)

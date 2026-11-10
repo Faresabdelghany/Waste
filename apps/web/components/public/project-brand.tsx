@@ -12,7 +12,6 @@ import type { ReactNode } from "react"
 import { PUBLIC_BRANDING_COPY as COPY } from "@/lib/public/branding-copy"
 import { cn } from "@/lib/utils"
 
-/** The project's name, branded; `children` follow it on the same line. */
 export function ProjectMark({ project, children }: { project: PublishedProject; children?: ReactNode }) {
   const { brandColor, logoUrl } = project.branding
   return (

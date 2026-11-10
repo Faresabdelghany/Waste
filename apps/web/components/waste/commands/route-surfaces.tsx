@@ -89,7 +89,6 @@ import { stopNumber } from "@waste/domain/execution/routes"
 /** The route's own read, as a one-row history the surface reads again after each command. */
 const readRoute = (client: ApiClient, serverId: string) => routeDetail(client, serverId).then((detail): RouteDetail[] => [detail])
 
-/** The command each of the route's dialogs sends. */
 const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assign: ASSIGN_ROUTE, reschedule: RESCHEDULE_ROUTE, cancel: CANCEL_ROUTE, "add-stop": ADD_STOP }
 
 /** The statuses a stop may be added in (#111): a route that has not started. */
@@ -255,7 +254,6 @@ function BalanceDaySurface() {
   )
 }
 
-/** One route's answer in Dispatch day, as the dialog lists it: its label, and what became of it. */
 const dispatchedLine = (result: RouteDispatchResult, label: string): string => (result.outcome === "dispatched" ? `${label} · Dispatched` : `${label} · Not dispatched: ${result.detail}`)
 
 /**
@@ -385,7 +383,6 @@ function DispatchDaySurface() {
   )
 }
 
-/** The set with `id` in it or out of it. */
 const toggled = (set: ReadonlySet<string>, id: string, inIt: boolean): ReadonlySet<string> => {
   const next = new Set(set)
   if (inIt) next.add(id)
@@ -393,7 +390,6 @@ const toggled = (set: ReadonlySet<string>, id: string, inIt: boolean): ReadonlyS
   return next
 }
 
-/** One route Dispatch day offers, ticked unless left out. */
 function DispatchDayRow({ checked, onToggle, children }: { checked: boolean; onToggle: (checked: boolean) => void; children: ReactNode }) {
   return (
     <li className="py-1.5">
@@ -418,7 +414,6 @@ export function NewRouteSurface() {
   )
 }
 
-/** "Mads Jensen · WH-31" for a session: who drove, with what. */
 function useSessionLine(): (session: Session, timezone: string | undefined) => string {
   const driverName = useServerNames(DRIVERS_MODULE, "driver")
   const vehicleName = useServerNames(VEHICLES_MODULE, "vehicle")
@@ -426,7 +421,6 @@ function useSessionLine(): (session: Session, timezone: string | undefined) => s
     `${shownOn(session.startedAt, timezone)} → ${session.endedAt === null ? (session.pausedAt === null ? "open" : "paused") : shownOn(session.endedAt, timezone)} · ${driverName(session.driverId)} · ${callsignOf(vehicleName(session.vehicleId))}`
 }
 
-/** What each of the route's commands is told once the API has taken it. */
 const DONE: Readonly<Record<string, (name: string) => string>> = {
   [ASSIGN_ROUTE]: (name) => `${name} assigned`,
   [DISPATCH_ROUTE]: (name) => `${name} dispatched`,
@@ -476,7 +470,6 @@ export function RouteSurfacePage({
 }: RowSurfaceProps & {
   /** The route's facts, grouped: the Route information panel beside the stops. */
   information: ReactNode
-  /** The tickets about the route, and how many there are. */
   tickets: { count: number; content: ReactNode }
   /** The route's History, under its Activity tab. */
   history?: ReactNode
@@ -550,13 +543,11 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
     if (pickup.propertyId !== null) return propertyName(pickup.propertyId)
     return pickup.sharedCollectionPointId === null ? "A stop with no place" : pointName(pickup.sharedCollectionPointId)
   }
-  // What the page's Note column says of a stop: why it was not collected, and where it came from.
   const stopNote = (pickup: Pickup) =>
     [pickup.reason === null ? null : pickupReasonLabel(pickup.reason), pickup.movedFromPickupId != null ? "Moved here" : pickup.origin === "office" ? "Added by the office" : null].filter(Boolean).join(" · ")
   const stopLine = (pickup: Pickup & { sequence?: number }) =>
     `${stopNumber(pickup)}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
 
-  // The page's own: the stops' search and filter, and which panel stands open beside them.
   const [stopSearch, setStopSearch] = useState("")
   const [attentionOnly, setAttentionOnly] = useState(false)
   const [rightPanel, setRightPanel] = useState<"map" | "information">("information")
@@ -642,7 +633,6 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   if (layout === "page" && page !== undefined) {
     const stops = detail?.pickups
     const dispatch = commands.find((command) => command.place === "primary")
-    // One Actions menu holds every command but Dispatch: the route's own, then the stops', Cancel route last.
     const menuGroups = [
       commands.filter((command) => command.place === "route" && command.name !== "Cancel route"),
       commands.filter((command) => command.place === "stops"),
@@ -910,7 +900,6 @@ function RouteSurface({ record, layout, page }: RowSurfaceProps & { layout: "she
   )
 }
 
-/** A tab of the route's page beyond Overview: its heading over the read it shows. */
 function RoutePageSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
@@ -925,10 +914,8 @@ function RoutePageSection({ title, children }: { title: string; children: ReactN
 /** The three ways stops change route (O23 of #290). */
 type StopsMode = "move" | "split" | "merge"
 
-/** The command each mode sends. */
 const STOPS_COMMAND_OF: Readonly<Record<StopsMode, string>> = { move: MOVE_STOPS, split: SPLIT_ROUTE, merge: MERGE_ROUTE }
 
-/** What each mode's dialog says: its title, its button, and what it ends, where it ends something. */
 const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; send: string; warning?: string }>> = {
   move: { title: "Move stops", send: "Move stops" },
   split: { title: "Split route", send: "Split route" },
@@ -1041,7 +1028,6 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
   )
 }
 
-/** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   // The contaminant codes a correction may tag the stop with (M5 of #293): the master data's rows of that kind.
@@ -1050,7 +1036,6 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
-  // The objects' read URLs are asked for only where a proof names an object.
   const withObjects = proofs.rows?.some((proof) => proof.objectKey !== null) ?? false
   const serverId = useServerModuleState(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId)?.serverIds.get(record.id)
   const objects = useProofObjectLinks(withObjects ? (serverId ?? null) : null, version)
@@ -1121,7 +1106,6 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-/** A live route's sessions, and the way to the route itself, in its details. */
 /**
  * Mounted beside the Live board while it is shown (the registry's
  * `whileShown`), rendering nothing: the board is read again every 30 s
@@ -1197,7 +1181,6 @@ function TrackDrawing({ track, timezone }: { track: RouteTrack; timezone: string
   )
 }
 
-/** One stop of the active Plan and when the vehicle is expected there, or that it has been passed. */
 function StopEtaLine({ stop, name, timezone }: { stop: RouteEta["stops"][number]; name: string; timezone: string | undefined }) {
   return (
     <span className="flex justify-between gap-3">
