@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { SERVICE_DAYS } from "../../days"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 13, ["DEFAULT_WEEKEND"])
+defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, ["DEFAULT_WEEKEND"])
 
 describe("the Planning vocabulary's own rules", () => {
   test("the seven days are Monday first, since days.ts indexes them against getUTCDay", () => {

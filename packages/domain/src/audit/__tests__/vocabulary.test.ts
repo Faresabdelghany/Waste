@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("audit", vocabulary, vocabulary.AUDIT_VOCABULARIES, 1)
+defineVocabularyTests("audit", vocabulary, vocabulary.AUDIT_VOCABULARIES)
 
 describe("the audit vocabulary's own rule", () => {
   test("an action is one of the trigger's three operations, lowercased", () => {

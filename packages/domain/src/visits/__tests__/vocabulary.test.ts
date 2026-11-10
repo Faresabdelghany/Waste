@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("visits", vocabulary, vocabulary.VISITS_VOCABULARIES, 6)
+defineVocabularyTests("visits", vocabulary, vocabulary.VISITS_VOCABULARIES)
 
 describe("the visits vocabulary's own rules", () => {
   test("the refusals in the identification order, and a credential is a way a visit is identified", () => {

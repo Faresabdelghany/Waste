@@ -4,4 +4,4 @@
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Service providers", vocabulary, vocabulary.SERVICE_PROVIDER_VOCABULARIES, 2)
+defineVocabularyTests("Service providers", vocabulary, vocabulary.SERVICE_PROVIDER_VOCABULARIES)

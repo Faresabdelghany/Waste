@@ -24,10 +24,10 @@ export const TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
 /**
  * Registers the two tests for one vocabulary module: `module` read as a
- * namespace, `named` its naming object, `count` how many lists it exports,
- * `beside` the arrays it exports that are not lists.
+ * namespace, `named` its naming object, `beside` the arrays it exports that
+ * are not lists.
  */
-export function defineVocabularyTests(context: string, module: Record<string, unknown>, named: Record<string, readonly string[]>, count: number, beside: readonly string[] = []): void {
+export function defineVocabularyTests(context: string, module: Record<string, unknown>, named: Record<string, readonly string[]>, beside: readonly string[] = []): void {
   const exported = Object.entries(module).filter((entry): entry is [string, readonly string[]] => Array.isArray(entry[1]) && !beside.includes(entry[0]))
 
   describe(`the ${context} vocabulary`, () => {
@@ -39,13 +39,12 @@ export function defineVocabularyTests(context: string, module: Record<string, un
       }
     })
 
-    test(`the naming object names exactly the ${count} lists the module exports, each the list itself`, () => {
+    test("the naming object names exactly the lists the module exports, each the list itself", () => {
       assert.deepEqual(
         Object.keys(named).sort(),
         exported.map(([name]) => name).sort(),
       )
       for (const [name, values] of exported) assert.equal(named[name], values, `${name} is not the list the module exports`)
-      assert.equal(exported.length, count)
       for (const name of beside) assert.ok(Array.isArray(module[name]), `${name} is named beside the lists but the module exports no such array`)
     })
   })

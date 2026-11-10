@@ -6,7 +6,7 @@ import * as vocabulary from "../vocabulary"
 
 const { OUTBOX_AGGREGATES, OUTBOX_EVENTS, OUTBOX_KINDS, aggregateOf, subjectOf } = vocabulary
 
-defineVocabularyTests("Outbox", vocabulary, vocabulary.OUTBOX_VOCABULARIES, 2)
+defineVocabularyTests("Outbox", vocabulary, vocabulary.OUTBOX_VOCABULARIES)
 
 describe("the outbox's kinds and what each is about", () => {
   test("the kinds and the aggregates are the database CHECKs' lists, in their order: a reordering is a migration", () => {

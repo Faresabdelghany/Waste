@@ -5,7 +5,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("scale-house", vocabulary, vocabulary.SCALE_HOUSE_VOCABULARIES, 5)
+defineVocabularyTests("scale-house", vocabulary, vocabulary.SCALE_HOUSE_VOCABULARIES)
 
 describe("the scale house vocabulary's own rules", () => {
   test("a ticket opens weighed in, and a void names another reason only through its note", () => {
