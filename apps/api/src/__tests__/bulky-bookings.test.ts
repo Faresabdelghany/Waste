@@ -147,6 +147,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     return BulkyAvailability.parse(await response.json())
   }
   let schedule: BulkySchedule
+  /** The outbox rows about one booking, oldest first, read as `wms_api` under the fence. */
   const eventsAbout = (aggregateId: string) =>
     withCompany(pool.db, a.companyId, (tx: Tx) =>
       tx
