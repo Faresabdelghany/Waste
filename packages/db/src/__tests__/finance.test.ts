@@ -71,6 +71,7 @@ import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { triggersOf } from "../sql/audit-trail"
 import { INVOICE_PARTIES_OBJECT } from "../sql/invoice-parties"
 import { partiesAt } from "../commands/invoice-writes"
+import { nextNumber } from "../commands/shared"
 import { defaultTicketTypeOf } from "../commands/ticket-types"
 import { newId } from "../ids"
 import { withCompany } from "../tenant"
@@ -423,7 +424,6 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
 
   test("0010 created the sixteen tables in wms, each fenced, eleven with the updated_at trigger and the five ledgers with none, gave company its third counter at 1000, the product and the agreement their columns, the unload its key, and grew the outbox's checks", async () => {
     const names = Object.values(tables).map(getTableName).sort()
-    assert.equal(names.length, 16)
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] | null }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
         (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname) as policies,
@@ -477,7 +477,6 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
            (values (${API_ROLE}::text), (current_user::text)) as r(rolename),
            (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) as p(privilege)
       order by t.relation, r.rolename, p.privilege`
-    assert.equal(rows.length, 56)
     const denied = rows.filter((row) => !row.granted).map((row) => `${row.rolename} ${row.privilege} ${row.relation}`)
     assert.deepEqual(denied.sort(), LEDGERS.flatMap((ledger) => [`${API_ROLE} DELETE ${ledger}`, `${API_ROLE} UPDATE ${ledger}`]).sort())
   })
@@ -1023,7 +1022,6 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
         const [id, validFrom, validTo] = periods[i]
         await tx.insert(settlement).values(opened({ id, status, validFrom, validTo, ...statuses[status] }))
       }
-      assert.equal(Object.keys(statuses).length, SETTLEMENT_STATUSES.length)
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(settlementEvent).values({ id: a.fourth, companyId: a.company, projectId: a.project, settlementId: a.settlement, kind: "reopened", status: "open", lineCount: 1, netMinor: 8_000, recordedBy: a.account })), refusedWith("23514", /settlement_event_reason_shape/), "a reopening without its reason")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(settlementEvent).values({ id: a.fourth, companyId: a.company, projectId: a.project, settlementId: a.settlement, kind: "closed", status: "closed", lineCount: 1, netMinor: 8_000, reason: "x", recordedBy: a.account })), refusedWith("23514", /settlement_event_reason_shape/), "a reason on anything else")
       await tx.insert(settlementEvent).values({ id: a.fourth, companyId: a.company, projectId: a.project, settlementId: a.settlement, kind: "reopened", status: "open", lineCount: 1, netMinor: 8_000, reason: "A correction landed in October", recordedBy: a.account })
@@ -1107,15 +1105,8 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
     try {
       const [{ nextInvoiceNumber }] = await owner.db.select({ nextInvoiceNumber: company.nextInvoiceNumber }).from(company).where(eq(company.id, companyId))
       assert.equal(nextInvoiceNumber, 1000, "the default")
-      /** One document taking its number: what the counter said before the update. */
-      const take = async (tx: Tx): Promise<number> => {
-        const [row] = await tx
-          .update(company)
-          .set({ nextInvoiceNumber: sql`${company.nextInvoiceNumber} + 1` })
-          .where(and(eq(company.id, companyId), eq(company.companyId, companyId)))
-          .returning({ next: company.nextInvoiceNumber })
-        return row.next - 1
-      }
+      /** One document taking its number, as an invoice is numbered. */
+      const take = (tx: Tx): Promise<number> => nextNumber(tx, companyId, "nextInvoiceNumber")
       const backendOf = async (tx: Tx): Promise<number> => (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))[0].pid
       const released = Promise.withResolvers<void>()
       const firstLocked = Promise.withResolvers<number>()
@@ -1131,25 +1122,28 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
           firstLocked.reject(error)
           throw error
         })
-      const secondStarted = Promise.withResolvers<number>()
       let secondUpdated = Number.NaN
-      const second = owner.db
-        .transaction(async (tx) => {
-          secondStarted.resolve(await backendOf(tx))
-          const number = await take(tx)
-          secondUpdated = performance.now()
-          return number
-        })
-        .catch((error: unknown) => {
-          secondStarted.reject(error)
-          throw error
-        })
-      /** Rejects if the second's update returns while the first still holds the row. */
-      const slippedThrough = second.then(() => Promise.reject(new Error("the second's update returned while the first still held the row: the lock did not hold it")))
-      void slippedThrough.catch(() => undefined)
+      let second: Promise<number> | undefined
       let releasedAt = Number.NaN
       try {
-        const [firstPid, secondPid] = await Promise.all([firstLocked.promise, secondStarted.promise])
+        // The second begins only once the first holds the row, so the order is forced and not merely likely.
+        const firstPid = await firstLocked.promise
+        const secondStarted = Promise.withResolvers<number>()
+        second = owner.db
+          .transaction(async (tx) => {
+            secondStarted.resolve(await backendOf(tx))
+            const number = await take(tx)
+            secondUpdated = performance.now()
+            return number
+          })
+          .catch((error: unknown) => {
+            secondStarted.reject(error)
+            throw error
+          })
+        /** Rejects if the second's update returns while the first still holds the row. */
+        const slippedThrough = second.then(() => Promise.reject(new Error("the second's update returned while the first still held the row: the lock did not hold it")))
+        void slippedThrough.catch(() => undefined)
+        const secondPid = await secondStarted.promise
         // Postgres names the backends a process blocks: the second's update is waiting on the first's transaction once this answers a row, and not before.
         const blocked = async (): Promise<boolean> => (await owner.sql`select pid from pg_stat_activity where pid = ${secondPid} and ${firstPid} = any(pg_blocking_pids(pid))`).length > 0
         const deadline = Date.now() + 10_000

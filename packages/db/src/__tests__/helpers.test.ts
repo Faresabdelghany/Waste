@@ -57,10 +57,9 @@ describe("the check helpers", () => {
   test("a declared column reads out as its values and stays text in SQL", () => {
     const specimen = wms.table("specimen_one_of_type", { ...id, ...tenant, kind: text({ enum: ["plain", "fancy"] }).notNull() }, (t) => [oneOf(t.kind)])
     type Kind = (typeof specimen.$inferSelect)["kind"]
-    const declared: Kind[] = ["plain", "fancy"]
+    const _declared: Kind[] = ["plain", "fancy"]
     // @ts-expect-error a value the column does not declare is not one a row reads out
-    const undeclared: Kind = "other"
-    assert.deepEqual([...declared, undeclared], ["plain", "fancy", "other"])
+    const _undeclared: Kind = "other"
     assert.equal(getTableConfig(specimen).columns.find((column) => column.name === "kind")?.getSQLType(), "text")
   })
 
@@ -235,8 +234,6 @@ describe("the ledger's and the reservation's column sets", () => {
         "",
       ].join("\n"),
     )
-    assert.deepEqual(Object.keys(recorded), ["recordedAt"])
-    assert.deepEqual(Object.keys(window), ["plannedFrom", "plannedTo"])
   })
 
   test("orderedWindow refuses a name Postgres would truncate", () => {

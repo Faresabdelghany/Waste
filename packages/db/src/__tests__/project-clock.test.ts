@@ -110,6 +110,7 @@ describe("the project's clock in SQL is the domain's", { skip: database.skip }, 
             )}) as t(at)
         `)
       })
+      assert.equal(rows.length, INSTANTS.length)
       for (const row of rows) {
         const expected = new Date(row.at).toISOString().replace(/Z$/, "000Z")
         if (row.text !== expected || Date.parse(row.text) !== Date.parse(row.at) || row.micro !== expected.replace(/000Z$/, "007Z")) mismatches.push(`${row.at} under ${zone}: ${row.text}, ${row.micro}`)

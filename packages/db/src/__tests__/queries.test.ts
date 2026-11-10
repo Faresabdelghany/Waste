@@ -1,32 +1,85 @@
 // What a ledger says about the present is a query (migrations/README.md):
 // the Container Asset State and an Unload's weight review, each the domain's
-// fold as SQL over one probe per row of the ledger's latest entry, by the
-// statement drizzle renders. A mock database renders and connects to nothing.
+// fold as SQL over one probe per row of the ledger's latest entry. The folds
+// are held to the domain's functions over every value they can meet, on the
+// database; the probe is the shape of the statement drizzle renders, which a
+// mock database renders and connects to nothing. What the probe finds, row by
+// row, is resources.test.ts's and finance.test.ts's.
 import assert from "node:assert/strict"
-import { describe, test } from "node:test"
+import { after, before, describe, test } from "node:test"
 
 import { weightReviewStatus } from "@waste/domain/finance/readings"
+import { WEIGHT_REVIEW_DECISIONS, type WeightReviewDecision } from "@waste/domain/finance/vocabulary"
+import { assetStateOf as stateAfter } from "@waste/domain/resources/asset-state"
+import { STOCK_PLACE_KINDS, type StockPlaceKind } from "@waste/domain/resources/vocabulary"
 import { eq, sql } from "drizzle-orm"
-import { PgDialect } from "drizzle-orm/pg-core"
 import { drizzle } from "drizzle-orm/postgres-js"
 
 import { CASING } from "../casing"
-import { ASSET_STATE, assetStateOf, assetStatus } from "../query/asset-state"
-import { reviewStatus, WEIGHT_REVIEW_STATE, weightReviewOf } from "../query/weight-review"
+import { createDb, type Database } from "../client"
+import { assetStateOf, assetStatus } from "../query/asset-state"
+import { reviewStatus, weightReviewOf } from "../query/weight-review"
 import { container } from "../schema/containers"
 import { unload } from "../schema/execution"
-import { weightReview } from "../schema/finance"
-import { stockMovement } from "../schema/stock"
+import { databaseUnderTest } from "./database"
 
-const dialect = new PgDialect({ casing: CASING })
+const database = databaseUnderTest()
 
-describe("the asset-state query", () => {
-  test("assetStatus is a CASE over the domain's fold, place by place, null otherwise", () => {
-    const query = dialect.sqlToQuery(assetStatus(stockMovement.toKind))
-    assert.equal(query.sql, `case "wms"."stock_movement"."to_kind" when 'warehouse' then 'in-warehouse' when 'maintenance' then 'in-maintenance' when 'service' then 'in-service' when 'scrap' then 'retired' else null end`)
-    assert.deepEqual(query.params, [])
+/** Every place a movement names, and none: a container with no movement. */
+const PLACES: (StockPlaceKind | null)[] = [...STOCK_PLACE_KINDS, null]
+/** Every decision a review records, and none: an unload nobody has reviewed. */
+const DECISIONS: (WeightReviewDecision | null)[] = [...WEIGHT_REVIEW_DECISIONS, null]
+
+describe("the ledgers' folds in SQL are the domain's", { skip: database.skip }, () => {
+  let pool: Database
+  before(() => {
+    pool = createDb(database.appUrl, { max: 1 })
+  })
+  after(() => pool.close())
+
+  test("assetStatus is a CASE over the domain's fold, place by place, null otherwise", async () => {
+    const rows = await pool.db.execute<{ n: number; status: string | null }>(sql`
+      select t.n, ${assetStatus(sql`t.to_kind`)} as status
+        from (values ${sql.join(
+          PLACES.map((place, n) => sql`(${n}::int, ${place}::text)`),
+          sql`, `,
+        )}) as t(n, to_kind)
+       order by t.n
+    `)
+    assert.deepEqual(
+      rows.map((row) => row.status),
+      PLACES.map((place) => (place === null ? null : stateAfter({ toKind: place }))),
+    )
   })
 
+  test("reviewStatus is the domain's fold as SQL: the decision, or captured", async () => {
+    const rows = await pool.db.execute<{ n: number; status: string }>(sql`
+      select t.n, ${reviewStatus(sql`t.decision`)} as status
+        from (values ${sql.join(
+          DECISIONS.map((decision, n) => sql`(${n}::int, ${decision}::text)`),
+          sql`, `,
+        )}) as t(n, decision)
+       order by t.n
+    `)
+    assert.deepEqual(
+      rows.map((row) => row.status),
+      DECISIONS.map(weightReviewStatus),
+    )
+  })
+})
+
+/**
+ * The lateral subquery a statement over `outer` joins for `ledger`: what it
+ * filters on, and the parameter its limit binds. Refuses a statement that
+ * joins none, or one not latest-first by id.
+ */
+function lateralProbe(text: string, params: unknown[], ledger: string): { where: string; limit: unknown } {
+  const probe = new RegExp(`left join lateral \\(select .+ from "wms"\\."${ledger}" where (.+) order by "wms"\\."${ledger}"\\."id" desc limit \\$(\\d+)\\) "[a-z_]+" on true`).exec(text)
+  assert.ok(probe, `no lateral probe of ${ledger}, latest id first: ${text}`)
+  return { where: probe[1]!, limit: params[Number(probe[2]) - 1] }
+}
+
+describe("the latest-entry lookups", () => {
   test("assetStateOf is a LATERAL lookup of one container's latest movement — one probe per row, never a fold of the whole ledger", () => {
     const db = drizzle.mock({ casing: CASING })
     const companyId = "018f7c31-a000-7000-8000-000000000001"
@@ -37,20 +90,9 @@ describe("the asset-state query", () => {
       .leftJoinLateral(state, sql`true`)
       .where(eq(container.companyId, companyId))
       .toSQL()
-    assert.equal(
-      text,
-      `select "wms"."container"."id", case "asset_state"."to_kind" when 'warehouse' then 'in-warehouse' when 'maintenance' then 'in-maintenance' when 'service' then 'in-service' when 'scrap' then 'retired' else null end, "asset_state"."to_warehouse_id" from "wms"."container" left join lateral (select "id", "to_kind", "to_warehouse_id", "placement_id", "occurred_at" from "wms"."stock_movement" where ("wms"."stock_movement"."company_id" = $1 and "wms"."stock_movement"."container_id" = "wms"."container"."id") order by "wms"."stock_movement"."id" desc limit $2) "${ASSET_STATE}" on true where "wms"."container"."company_id" = $3`,
-    )
-    assert.deepEqual(params, [companyId, 1, companyId])
-  })
-})
-
-describe("the weight-review query", () => {
-  test("reviewStatus is the domain's fold as SQL: the decision, or captured", () => {
-    const query = dialect.sqlToQuery(reviewStatus(weightReview.decision))
-    assert.equal(query.sql, `coalesce("wms"."weight_review"."decision", 'captured')`)
-    assert.deepEqual(query.params, [])
-    assert.equal(weightReviewStatus(null), "captured")
+    const probe = lateralProbe(text, params, "stock_movement")
+    assert.match(probe.where, /"wms"\."stock_movement"\."container_id" = "wms"\."container"\."id"/, "correlated on the outer row's container")
+    assert.equal(probe.limit, 1)
   })
 
   test("weightReviewOf is a LATERAL lookup of one unload's latest review — one probe per row, never a fold of the whole ledger", () => {
@@ -63,10 +105,8 @@ describe("the weight-review query", () => {
       .leftJoinLateral(review, sql`true`)
       .where(eq(unload.companyId, companyId))
       .toSQL()
-    assert.equal(
-      text,
-      `select "wms"."unload"."id", coalesce("${WEIGHT_REVIEW_STATE}"."decision", 'captured'), "${WEIGHT_REVIEW_STATE}"."correction_unload_id" from "wms"."unload" left join lateral (select "id", "decision", "correction_unload_id", "recorded_at" from "wms"."weight_review" where ("wms"."weight_review"."company_id" = $1 and "wms"."weight_review"."unload_id" = "wms"."unload"."id") order by "wms"."weight_review"."id" desc limit $2) "${WEIGHT_REVIEW_STATE}" on true where "wms"."unload"."company_id" = $3`,
-    )
-    assert.deepEqual(params, [companyId, 1, companyId])
+    const probe = lateralProbe(text, params, "weight_review")
+    assert.match(probe.where, /"wms"\."weight_review"\."unload_id" = "wms"\."unload"\."id"/, "correlated on the outer row's unload")
+    assert.equal(probe.limit, 1)
   })
 })

@@ -1,9 +1,14 @@
 // The release's and the reset's database phases (Issue #152), run as the
 // workflow runs them — one after another through a context, the artifact
-// store between them played by a copy — on a fresh database of this file's
-// own, the barrier closed on throwaway roles (roles are cluster-wide, and
-// every other suite logs in as wms_api). The restore's phases are the
-// rehearsal's (pilot-rehearsal.test.ts).
+// store between them played by a copy — on a fresh database per test, the
+// barrier closed on throwaway roles (roles are cluster-wide, and every other
+// suite logs in as wms_api). The restore's phases are the rehearsal's
+// (pilot-rehearsal.test.ts).
+//
+// The file migrates and seeds one database, once, and each test runs on a
+// copy of it (`freshDatabase`'s template): three migrations of every file and
+// three seeds, one after another, outran the runner's budget for the file
+// under a shared stack's load.
 //
 // It needs the PostgreSQL client of supabase/config.toml's major and age on
 // PATH, as the rehearsal does: without them it skips, unless REQUIRE_DATABASE
@@ -14,7 +19,7 @@ import { randomUUID } from "node:crypto"
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { describe, test } from "node:test"
+import { after, before, describe, test } from "node:test"
 
 import { isDatabaseRequired } from "@waste/tooling/database-under-test"
 
@@ -26,7 +31,7 @@ import { createContext, type Context, type Environment } from "../pilot/phase"
 import { releasePhases, resetToSeedPhases } from "../pilot/phases"
 import { LOCAL_RUN } from "../pilot/run"
 import { seedDemo } from "../seed/demo"
-import { databaseUnderTest, freshDatabase } from "./database"
+import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 
 const database = databaseUnderTest()
 const missing = database.skip === false ? backupTools() : undefined
@@ -37,17 +42,29 @@ const skip = database.skip || (missing ?? false)
 
 type Run = { context: Context; outputs: Map<string, string>; said: string[]; roles: string[] }
 
-/** A migrated and seeded database of its own, a throwaway age key, two throwaway roles that can log in, and a context over them: what one operation's phases run on. */
+/** The migrated and seeded database every test copies, made once for the file. */
+let seeded: FreshDatabase | undefined
+
+before(async () => {
+  if (skip) return
+  seeded = await freshDatabase(database.adminUrl, "waste_phases_seeded")
+  await migrateDatabase(seeded.url)
+  await seedDemo(seeded.url)
+})
+after(async () => {
+  await seeded?.drop()
+})
+
+/** A copy of the migrated and seeded database, a throwaway age key, two throwaway roles that can log in, and a context over them: what one operation's phases run on. */
 async function onFreshDatabase(prefix: string, env: Environment, body: (run: Run) => Promise<void>): Promise<void> {
-  const fresh = await freshDatabase(database.adminUrl, prefix)
+  assert.ok(seeded, "the file's seeded database")
+  const fresh = await freshDatabase(database.adminUrl, prefix, { template: seeded.name })
   const work = mkdtempSync(path.join(tmpdir(), `${prefix}-`))
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12)
   const roles = [`${prefix}_${suffix}_a`, `${prefix}_${suffix}_b`]
   const cluster = createDb(database.adminUrl, { max: 1 })
   try {
     for (const role of roles) await cluster.sql.unsafe(`create role ${role} login`)
-    await migrateDatabase(fresh.url)
-    await seedDemo(fresh.url)
     spawnSync("age-keygen", ["-o", path.join(work, "identity.txt")])
     writeFileSync(path.join(work, "recipient.txt"), spawnSync("age-keygen", ["-y", path.join(work, "identity.txt")], { encoding: "utf8" }).stdout)
     const outputs = new Map<string, string>()

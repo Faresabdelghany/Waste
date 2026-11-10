@@ -1,35 +1,10 @@
 // The proofs' bucket (O1 of #290): the private Storage bucket a driver's
-// photos and signatures live in, made by the migration that owns it, the one
-// spelling the file was copied from and `proof-storage.test.ts` holds to the
-// formats an object key may name. Private: no
-// object is read without a URL the API signs, and the API alone holds the key
-// that signs (`@waste/db/storage`). The size and the formats are the bucket's
-// own refusal of anything else, whatever an upload URL says.
-//
-// Guarded twice. A database with no Storage — `pnpm db:start`'s database
-// alone, a test's fresh database — has no `storage.buckets`, and the
-// statement does nothing there; a Storage older than the two limit columns
-// gets the private bucket without them. The owner runs it, as every file:
-// locally the superuser, on the Pilot `postgres`, which Supabase grants the
-// `storage` tables to.
-import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
+// photos and signatures live in, made by migration 0018 and held private with
+// its limits by the API's boot (`ensureBucket`, `@waste/db/storage`). Private:
+// no object is read without a URL the API signs, and the API alone holds the
+// key that signs. The size and the formats are the bucket's own refusal of
+// anything else, whatever an upload URL says; `proof-storage.test.ts` holds
+// the formats to the ones an object key may name.
 
 /** The formats the bucket takes: the image extensions an object key takes (`IMAGE_EXTENSIONS`), jpg and jpeg being one. */
 export const PROOF_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
-
-/** The one statement: the private bucket, made or kept private, its limits where Storage has the columns. */
-export function proofBucketStatement(): string {
-  const types = PROOF_MIME_TYPES.map((type) => `'${type}'`).join(", ")
-  return `DO $$
-BEGIN
-  IF to_regclass('storage.buckets') IS NULL THEN
-    RETURN;
-  END IF;
-  INSERT INTO storage.buckets (id, name, public) VALUES ('${PROOF_BUCKET}', '${PROOF_BUCKET}', false)
-    ON CONFLICT (id) DO UPDATE SET public = false;
-  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'storage' AND table_name = 'buckets' AND column_name IN ('file_size_limit', 'allowed_mime_types')) = 2 THEN
-    UPDATE storage.buckets SET file_size_limit = ${PROOF_OBJECT_MAX_BYTES}, allowed_mime_types = ARRAY[${types}] WHERE id = '${PROOF_BUCKET}';
-  END IF;
-END
-$$;`
-}
