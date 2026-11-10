@@ -91,7 +91,6 @@ type EditedScheme = { status: string; serviceDays: readonly string[]; planningAr
 /** What an added group sorts as among ids: after every stored one, as the id the server mints it will be (UUIDv7, time-ordered). */
 const ADDED = "~"
 
-/** Whether the entry moves its group's vehicle or driver: an entry that adds a group moves both. */
 const moves = ({ entry, group }: Restating, key: "vehicleId" | "driverId"): boolean => group === undefined || (entry[key] ?? null) !== group[key]
 
 /**
@@ -154,7 +153,6 @@ export async function requireGroupEdit(
   return { entries: edit, leftOut }
 }
 
-/** An entry's row as it writes it: the group whole, what it leaves unsaid null. */
 const rowOf = (entry: CollectionGroupEntry) => ({
   name: entry.name,
   days: entry.days,
@@ -180,7 +178,6 @@ export function groupsReleasing({ entries, leftOut }: GroupEdit): { groupId: str
 /** Two lists of ids alike, in the same order: a stop order, or a rule's set as it was written and is read. */
 const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id, n) => id === b[n])
 
-/** What writing the entry over its group would change: its row (the position the edit leaves it at included), its sets, or neither. */
 function changesOf(entry: CollectionGroupEntry, group: CollectionGroup, position: number): { row: boolean; sets: boolean } {
   const row = rowOf(entry)
   return {

@@ -200,7 +200,6 @@ export const groupColumns = {
 
 export type GroupRow = Pick<typeof collectionGroup.$inferSelect, keyof typeof groupColumns>
 
-/** What a scheme no run has generated reads: no instant and no stamps. */
 export const NEVER_GENERATED: SchemeGeneration = { lastGeneratedAt: null, groups: [] }
 
 /** The row on the wire, with the groups and the generation reading read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
@@ -234,7 +233,6 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
   }
 }
 
-/** The three sets of one group, as read: each an ordered list of ids. */
 type GroupSets = { wasteFractionIds: string[]; containerTypeIds: string[]; containerIds: string[] }
 
 /** The row on the wire: a rule group carries its rule and no containers, a manual group its containers and no rule. */
@@ -256,10 +254,8 @@ function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
   }
 }
 
-/** A membership table of a group: the tenant, the group it belongs to, and the id it names. */
 export type MembershipTable = PgTable & { companyId: PgColumn; collectionGroupId: PgColumn }
 
-/** The ids one group's set names, in the order read; none for a group the set has no entry of. */
 const idsOf = (grouped: ReadonlyMap<string, { id: string }[]>, groupId: string): string[] => grouped.get(groupId)?.map((entry) => entry.id) ?? []
 
 /**
@@ -333,7 +329,6 @@ export async function generationsOf(tx: Tx, companyId: string, groups: ReadonlyM
   return byScheme
 }
 
-/** The two latest stamps of each group asked for, latest first within a group: one statement, ranked by id. */
 async function latestStamps(tx: Tx, companyId: string, groupIds: readonly string[]): Promise<Array<GenerationMatchStamp & { groupId: string }>> {
   const ranked = tx
     .select({
@@ -349,7 +344,6 @@ async function latestStamps(tx: Tx, companyId: string, groupIds: readonly string
   return rows.map(({ groupId, ruleSignature, containerIds }) => ({ groupId, ruleSignature, containerIds }))
 }
 
-/** Schemes on the wire, their groups and their generation read the way a page reads them: the groups first, since the stamps are the groups'. */
 export async function schemesOf(tx: Tx, companyId: string, rows: readonly SchemeRow[], now: () => Date): Promise<RouteScheme[]> {
   const found = await groupsOf(tx, companyId, rows.map((row) => row.id))
   const groups = new Map(rows.map((row) => [row.id, found.get(row.id) ?? []]))
@@ -361,18 +355,15 @@ export async function schemesOf(tx: Tx, companyId: string, rows: readonly Scheme
   return read.map(({ row, groups, generation, seasons }) => schemeOf(row, groups, generation, warnings.get(row.id) ?? [], seasons))
 }
 
-/** One scheme on the wire, read the way a page reads it. */
 export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow, now: () => Date): Promise<RouteScheme> {
   const [scheme] = await schemesOf(tx, companyId, [row], now)
   return scheme
 }
 
-/** The same for a group, which carries the project its scheme is in. */
 export const { scope: groupScope, noSuch: noSuchGroup, list: listGroups } = scoped(collectionGroup, { noun: "collection group", reach: "projects", columns: groupColumns })
 
 export const { scope: schemeScope, noSuch: noSuchScheme, find: findScheme, get: getScheme, list: listSchemes } = scoped(routeScheme, { noun: "route scheme", reach: "projects", columns: schemeColumns })
 
-/** Every id a body names across its groups, by what it names: the rule's fractions, container types, vehicle type and planning area, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {
   fractions: Named[]
   containerTypes: Named[]
@@ -415,7 +406,6 @@ export function referencesOf(
   }
 }
 
-/** The references of several groups, concatenated. */
 export function mergeReferences(all: readonly GroupReferences[]): GroupReferences {
   return {
     fractions: all.flatMap((refs) => refs.fractions),
@@ -435,10 +425,8 @@ export type FleetRows = { vehicles: ReadonlyMap<string, VehicleRow>; drivers: Re
 /** No fleet read: what a caller hands in when the body named none, and the rule reads the stored rows itself. */
 export const NO_FLEET: FleetRows = { vehicles: new Map(), drivers: new Map() }
 
-/** What a group's vehicle is: a powered vehicle of the scheme's project — the `also` of its presence statement, whether a body named it or a group stores it. */
 const poweredVehicleOf = (scope: Scope): SQL | undefined => and(eq(vehicle.projectId, scope.projectId), eq(vehicle.kind, "powered-vehicle"))
 
-/** What a group's driver is: a driver of the scheme's project. */
 const driverOf = (scope: Scope): SQL => eq(driver.projectId, scope.projectId)
 
 /**
@@ -450,11 +438,9 @@ const driverOf = (scope: Scope): SQL => eq(driver.projectId, scope.projectId)
  */
 async function readVehicles(tx: Tx, where: SQL | undefined): Promise<VehicleRow[]> {
   const rows = await tx.select(vehicleColumns).from(vehicle).where(where)
-  // The coded columns are text with a CHECK in the database and a vocabulary here.
   return rows
 }
 
-/** The same for the drivers `where` names. */
 async function readDrivers(tx: Tx, where: SQL | undefined): Promise<DriverRow[]> {
   const rows = await tx.select(driverColumns).from(driver).where(where)
   return rows
@@ -483,7 +469,6 @@ async function vehiclesNamed(tx: Tx, scope: Scope, named: readonly Named[]): Pro
   )
 }
 
-/** The same for the drivers a body names: the project's. */
 async function driversNamed(tx: Tx, scope: Scope, named: readonly Named[]): Promise<ReadonlyMap<string, DriverRow>> {
   return await rowsPresent(
     driver,
@@ -653,15 +638,8 @@ export function groupsInForceNaming(tx: Tx, column: typeof collectionGroup.vehic
   return and(eq(collectionGroup.companyId, companyId), eq(column, id), runs, exists(inForce))
 }
 
-/** What a group's sets are written from: the group's id, the rule it matches by or null, and the containers it picks in stop order. */
 export type GroupSetsToWrite = { id: string; rule: StopMatchingRule | null | undefined; containerIds: readonly string[] | null | undefined }
 
-/**
- * Writes the sets of one or more groups, one insert per table however many
- * groups there are: the rule's fractions and container types, and the picked
- * containers with positions 1..n in the body's order. Nothing to write is no
- * statement.
- */
 export async function writeGroupSets(tx: Tx, scope: Scope, groups: readonly GroupSetsToWrite[]): Promise<void> {
   const tenant = { companyId: scope.companyId, projectId: scope.projectId }
   const fractions = groups.flatMap((group) => (group.rule?.wasteFractionIds ?? []).map((wasteFractionId) => ({ id: newId(), ...tenant, collectionGroupId: group.id, wasteFractionId })))
@@ -674,7 +652,6 @@ export async function writeGroupSets(tx: Tx, scope: Scope, groups: readonly Grou
   if (containers.length > 0) await tx.insert(collectionGroupContainer).values(containers)
 }
 
-/** A group's own rows of one membership table, gone: the first half of replacing a set whole. */
 async function clearSet(tx: Tx, table: MembershipTable, group: { companyId: string; id: string }): Promise<void> {
   await tx.delete(table).where(and(eq(table.companyId, group.companyId), eq(table.collectionGroupId, group.id)))
 }
@@ -687,7 +664,6 @@ export async function clearGroupSets(tx: Tx, companyId: string, ids: readonly st
   }
 }
 
-/** What a group's set replacement carries: the whole rule, or the whole picked list in stop order. */
 export type GroupSet = { rule: StopMatchingRule } | { containerIds: readonly string[] }
 
 /**
@@ -739,7 +715,6 @@ function named<Row>(id: string | null | undefined, rows: ReadonlyMap<string, Row
   return { id, label: row === undefined ? id : label(row) }
 }
 
-/** A vehicle type as a sentence names it: its name where read, its id where not. */
 const typeNamed = (id: string | null | undefined, names: ReadonlyMap<string, string>): NamedResource | null => (id == null ? null : { id, label: names.get(id) ?? id })
 
 const structureOf = (group: GroupShape, fleet: FleetRows, types: ReadonlyMap<string, string>): GroupStructure => ({
@@ -755,7 +730,6 @@ const structureOf = (group: GroupShape, fleet: FleetRows, types: ReadonlyMap<str
   hasOwnPlanningArea: group.rule?.planningAreaId != null,
 })
 
-/** The names of the vehicle types a sentence spells, by id: one statement, read only once an issue exists. */
 async function typeNamesOf(tx: Tx, companyId: string, ids: readonly (string | null | undefined)[]): Promise<Map<string, string>> {
   const asked = [...new Set(ids.filter((id): id is string => id != null))]
   if (asked.length === 0) return new Map()
@@ -766,7 +740,6 @@ async function typeNamesOf(tx: Tx, companyId: string, ids: readonly (string | nu
   return new Map(rows.map((row) => [row.id, row.name] as const))
 }
 
-/** A group's picks as the two-groups-one-day rule reads them. */
 export const pickOf = (group: GroupShape): ContainerPick => ({ group: group.name, days: group.days, containerIds: group.containerIds ?? [] })
 
 /**
@@ -797,7 +770,6 @@ export async function requireStructure(
   const read = typed ? await fleetOf(tx, scope, groups, "either") : NO_FLEET
   const issues = schemeStructureIssues(structure(read))
   if (issues.length === 0) return
-  // The labels only spell the sentences: a scheme naming no fleet has nothing to label, and the id-first result is the answer as it stands.
   const fleetNamed = groups.some((group) => group.vehicleId != null || group.driverId != null)
   if (!fleetNamed) throw problem(409, { detail: issues.join(". ") })
   const fleet = typed ? read : await fleetOf(tx, scope, groups, "either")

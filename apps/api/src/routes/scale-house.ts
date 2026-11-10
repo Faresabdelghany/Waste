@@ -1,4 +1,3 @@
-
 import { NOT_A_STATION } from "@waste/domain/execution/commands"
 import { routeLabel, scaleTicketLabel } from "@waste/domain/numbering"
 import { Page } from "@waste/contracts/pagination"
@@ -56,8 +55,6 @@ const MODULE = "operate.scale-house"
 const TarePage = Page(VehicleTare)
 const TicketPage = Page(ScaleTicket)
 
-// --- The tare register -------------------------------------------------------
-
 const tareColumns = {
   id: vehicleTare.id,
   projectId: vehicleTare.projectId,
@@ -95,7 +92,6 @@ export const TARE_TAKEN = "An active tare is registered for this plate, trailer 
 /** What a plate, a trailer's plate or a container's reference with nothing to key it by is told. */
 export const NOTHING_TO_KEY = "Give letters or digits: the register keys a plate by them alone"
 
-/** The keys a body's plate, trailer and container are stored by, refused at the field where a given one keys to nothing. */
 function tareKeys(body: { plate: string; trailerPlate?: string | null; containerRef?: string | null }, paths = { plate: "plate", trailerPlate: "trailerPlate", containerRef: "containerRef" }) {
   const errors: ProblemFieldError[] = []
   const keyed = (value: string | null | undefined, path: string): string | null => {
@@ -110,8 +106,6 @@ function tareKeys(body: { plate: string; trailerPlate?: string | null; container
 }
 
 const { get: getTare, list: listTares } = scoped(vehicleTare, { noun: "registered tare", reach: "projects", columns: tareColumns })
-
-// --- The tickets -------------------------------------------------------------
 
 const { get: getTicket, locked: lockedTicket, list: listTickets } = scoped(scaleTicket, { noun: "scale ticket", reach: "projects", columns: scaleTicketColumns })
 
@@ -158,7 +152,6 @@ export const OUT_BEFORE_IN = "The second pass comes after the first"
 export const writtenAsUnload = (number: number, routeNumber: number) =>
   `Ticket ${scaleTicketLabel(number)} was written as route ${routeLabel(routeNumber)}'s Unload; weight control settles that Unload, so the ticket stands`
 
-/** The station a ticket names: the company's, ours, weighing and in use, else a 400 at the field. */
 async function requireSite(tx: Tx, companyId: string, id: string): Promise<void> {
   const [row] = await tx
     .select({ ownership: unloadingStation.ownership, weighbridge: unloadingStation.weighbridge, status: unloadingStation.status })
@@ -185,7 +178,6 @@ export function scaleHouseRoutes(deps: RouteDeps) {
   const { now } = deps
   return (
     routes(deps)
-      // --- The tare register ---
       .get(
         "/vehicle-tares",
         {
@@ -308,7 +300,6 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           return c.json(tareOf(row!))
         },
       )
-      // --- The tickets ---
       .get(
         "/scale-tickets",
         {
@@ -478,7 +469,6 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           const ticket = await lockedTicket(tx, principal, id)
           if (ticket.status !== "open") throw problem(409, { detail: notOpen(ticket.number, ticket.status, "completed") })
 
-          // The body's fields, each at its own.
           const at = now()
           const weighedOutAt = body.weighedOutAt === undefined ? at : new Date(body.weighedOutAt)
           requireNotAhead(weighedOutAt, at, "weighedOutAt")
@@ -510,7 +500,6 @@ export function scaleHouseRoutes(deps: RouteDeps) {
             if (unit !== CUBIC_METRE_UNIT && line.volumeLitres != null) throw invalidRequest("body", [{ path: at("volumeLitres"), message: VOLUME_ONLY_BY_THE_CUBIC_METRE }])
           }
 
-          // The tare the body asks for, then the net it makes.
           let tareKg: number
           let vehicleTareId: string | null = null
           if (body.tare.source === "weighed") {
@@ -536,7 +525,6 @@ export function scaleHouseRoutes(deps: RouteDeps) {
           // Every 400 above, every 409 below (@waste/domain/status-gates): a product no longer offered is a new reference refused.
           for (const status of offered) refuseUnofferedProduct(status)
 
-          // One of our own vehicles' load: matched to its route and written as its Unload, or kept with why not.
           let match: { routeId: string | null; unloadId: string | null; unmatchedReason: WeighbridgeUnmatchedReason | null } = { routeId: null, unloadId: null, unmatchedReason: null }
           if (ticket.vehicleId !== null) {
             const truck = { id: ticket.vehicleId, projectId: ticket.projectId, timezone: await projectTimezone(tx, principal.companyId, ticket.projectId) }

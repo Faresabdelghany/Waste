@@ -125,10 +125,8 @@ const columns = {
 
 type Row = Pick<typeof serviceArea.$inferSelect, keyof typeof columns>
 
-/** The two sets an area carries, each by id. */
 type Sets = { planningAreaIds: readonly string[]; wasteFractionIds: readonly string[] }
 
-/** The area on the wire, with the two sets the page loaded for it. */
 function areaOf(row: Row, sets: Sets): ServiceArea {
   return {
     id: row.id,
@@ -159,7 +157,6 @@ const assignmentColumns = {
 
 type AssignmentRow = Pick<typeof serviceAreaAssignment.$inferSelect, keyof typeof assignmentColumns>
 
-/** The assignment on the wire. */
 function assignmentOf(row: AssignmentRow): ServiceAreaAssignment {
   return {
     id: row.id,
@@ -199,7 +196,6 @@ export const awardedElsewhere = (planningAreaCode: string, serviceAreaCode: stri
 /** The assignments the caller reaches: its provider's, or its projects' (auth/provider.ts). */
 const assignmentReach = (principal: Principal) => and(eq(serviceAreaAssignment.companyId, principal.companyId), reachesAssignments(principal))
 
-/** The assignments of one area the caller reaches: a subquery for the area's read and for a provider's area scope. */
 const reachableAssignmentsOf = (tx: Tx, principal: Principal, where: SQL | undefined) =>
   tx
     .select({ one: sql`1` })
@@ -233,10 +229,8 @@ const {
   list: listAssignments,
 } = scoped(serviceAreaAssignment, { noun: "service area assignment", reach: "projects", reads: (_tx, principal) => assignmentReach(principal), place: "this account reaches", columns: assignmentColumns })
 
-/** The planning-area set's columns, what reading it needs. */
 const PLANNING_AREAS: IdSetColumns = { table: serviceAreaPlanningArea, parentId: serviceAreaPlanningArea.serviceAreaId, entryId: serviceAreaPlanningArea.planningAreaId }
 
-/** The fraction set's columns. */
 const WASTE_FRACTIONS: IdSetColumns = { table: serviceAreaWasteFraction, parentId: serviceAreaWasteFraction.serviceAreaId, entryId: serviceAreaWasteFraction.wasteFractionId }
 
 /** The planning areas an award covers, rows of one project: the plural check is project-scoped and the membership row carries the project, so the descriptor is built for the project the area is in; `at` is the field the body carried the ids in (`planningAreaIds` on the create, `ids` on the PUT). */
@@ -264,18 +258,15 @@ const wasteFractionsOf = (projectId: string, at = "wasteFractionIds"): IdSet<typ
   require: requireEachOf(wasteFraction, at, requireWasteFraction),
 })
 
-/** The two sets of a whole page, each in one query, grouped by area. */
 async function setsOf(tx: Tx, companyId: string, areaIds: readonly string[]): Promise<Map<string, Sets>> {
   const [areas, fractions] = await Promise.all([idsOf(tx, PLANNING_AREAS, companyId, areaIds), idsOf(tx, WASTE_FRACTIONS, companyId, areaIds)])
   return new Map(areaIds.map((id) => [id, { planningAreaIds: areas.get(id) ?? [], wasteFractionIds: fractions.get(id) ?? [] }]))
 }
 
-/** One area's sets, read the way a page reads them. */
 async function setsFor(tx: Tx, companyId: string, areaId: string): Promise<Sets> {
   return (await setsOf(tx, companyId, [areaId])).get(areaId) ?? { planningAreaIds: [], wasteFractionIds: [] }
 }
 
-/** One area's assignments the caller reaches, earliest first — by start, then by id for two that start together. */
 async function assignmentsFor(tx: Tx, principal: Principal, areaId: string): Promise<ServiceAreaAssignment[]> {
   const rows = await tx
     .select(assignmentColumns)
@@ -316,7 +307,6 @@ async function requireAwardedOnce(tx: Tx, area: { companyId: string; projectId: 
       ),
     )
     .orderBy(asc(serviceArea.id))
-  // The first entry of the body that is in the way, so the path names what the caller wrote.
   for (const [index, id] of planningAreaIds.entries()) {
     const conflict = conflicts.find((found) => found.planningAreaId === id)
     if (conflict === undefined) continue
@@ -328,11 +318,9 @@ async function requireAwardedOnce(tx: Tx, area: { companyId: string; projectId: 
 /** Whether a period moved reaches days the old one did not — a bound of it outside the old one — the rule the one-award check is re-run for on a patch. */
 const widened = (before: Period, after: Period): boolean => boundsOutside(before, after).length > 0
 
-/** The `where` of the assignments an area's move would strand, for `refuseStranded`. */
 const strandedAssignmentsOf = (area: { companyId: string; id: string }, period: Period) =>
   and(eq(serviceAreaAssignment.companyId, area.companyId), eq(serviceAreaAssignment.serviceAreaId, area.id), notWithin(serviceAreaAssignment, period))
 
-/** The `where` of the prices an assignment's move would strand. */
 const strandedPricesOf = (assignment: { companyId: string; id: string }, period: Period) =>
   and(eq(serviceProviderPrice.companyId, assignment.companyId), eq(serviceProviderPrice.serviceAreaAssignmentId, assignment.id), notWithin(serviceProviderPrice, period))
 
@@ -346,7 +334,6 @@ const heldBy = (tx: Tx, principal: Principal, serviceProviderId: string, day: st
     ),
   )
 
-/** The areas naming a planning area: one `exists` over the set. */
 const covering = (companyId: string, planningAreaId: string) =>
   exists(
     sql`(select 1 from ${serviceAreaPlanningArea} where ${serviceAreaPlanningArea.companyId} = ${companyId} and ${serviceAreaPlanningArea.serviceAreaId} = ${serviceArea.id} and ${serviceAreaPlanningArea.planningAreaId} = ${planningAreaId})`,

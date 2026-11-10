@@ -45,8 +45,6 @@ import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import type { TenantTable } from "@waste/db/commands/shared"
 
-
-/** One entry of a body as the plural check sees it: the id it names and the path it named it at. */
 export type Named = { id: string; path: string }
 
 /** The singular check a missing entry is handed to: routes/references.ts's, refusing at the entry's path with the family's sentence. */
