@@ -57,7 +57,7 @@
 // `sequencesOfRoutes` — for a page, over the page's routes at once — so a
 // stop a command answers keeps the number the list gave it. Every command
 // carries the tenant and `inProjects`; the reads — the list and a stop's
-// read — carry the tenant and the reach (`pickupReach`, auth/provider.ts):
+// read — carry the tenant and the reach (`pickupReach`, execution-shapes.ts):
 // the office's projects, or, for a Service Provider's account, the stops of
 // the routes its provider serves (#291 slice 23), which it reads and never
 // commands. The grant is `route-studio.pickups`, `view` to read and `edit`

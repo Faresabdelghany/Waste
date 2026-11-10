@@ -26,7 +26,8 @@
 // so the singular and the plural refusal say the same thing.
 //
 // Some answer the row's status with the proof that it is there —
-// a Customer, a Product, a Property, a Shared Collection Point — because a new
+// a Customer, a Product, a Property, a Shared Collection Point, a Vehicle, a
+// Driver — because a new
 // reference is gated on it (@waste/domain/status-gates, Issue #79) and one statement
 // that says both is better than two that say one each. The refusal for a row
 // that is not there is unchanged, and comes first: the state of a row is only
