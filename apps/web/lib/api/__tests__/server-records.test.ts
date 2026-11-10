@@ -1,9 +1,9 @@
 // The server-backed half of the record store (Issue #81), without React or a
-// browser: a module's states, what a pane is told in each (`paneAnswerOf`), a load
-// through scripted adapters with the resolver seeing what loaded before, an
-// optimistic write reconciled or rolled back, the resolver over several
-// modules, and a module read into the store — the load's read, and the read
-// again after a command that changed its rows (Issue #198).
+// browser: a module's states, what a pane is told in each (`paneAnswerOf`),
+// a load through scripted adapters with the resolver seeing what loaded
+// before, an optimistic write reconciled or rolled back, the resolver over
+// several modules, and a module read into the store — the load's read, and
+// the read again after a command that changed its rows (Issue #198).
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

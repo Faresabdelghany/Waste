@@ -1,7 +1,7 @@
 // Ticket types on the adapter (#545 of #544): a type as Settings › Tickets'
-// Types tab and the tickets' Type picker read it, its create, its edit — its own
-// fields patched, its fields and its permissions each replaced through their
-// own route — and a ticket's type and values on the record, in the create and
+// Types tab and the tickets' Type picker read it, its create, its edit — its
+// own fields patched, its fields and its permissions each replaced through
+// their own route — and a ticket's type and values on the record, in the create and
 // in the patch; and a type's automation (#546 of #544), carried by web id
 // and replaced through its own route where it changed, and what the
 // Automation tab offers each trigger. Every body is held against the

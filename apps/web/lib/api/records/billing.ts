@@ -212,9 +212,9 @@ export function eventQuestion(event: BusinessRecord, resolve: Resolver): Busines
  * The commands an event's details offer (#281): those the API moves it by
  * from its status, never a stay or a refusal — a reprice prices a blocked
  * event again, and a cancellation takes a blocked, a ready or a held one off
- * the next run, never a reversal, which is the correction itself. An invoiced event is
- * corrected by a credit note and a cancelled or reversed one has nothing left
- * to do, so neither is offered either. The API's rules
+ * the next run, never a reversal, which is the correction itself. An invoiced
+ * event is corrected by a credit note and a cancelled or reversed one has
+ * nothing left to do, so neither is offered either. The API's rules
  * (apps/api/src/routes/billable-events.ts), read off the wire's status.
  */
 export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValues">): ("reprice" | "cancel" | "hold" | "release")[] {

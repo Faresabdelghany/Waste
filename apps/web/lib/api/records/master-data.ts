@@ -1,11 +1,12 @@
 // Master data on the prototype's records (Issue #176, slice 2 of #81): the
 // six catalogue resources — waste fractions, container types, service
 // frequencies, vehicle types, since M5 of #293 contaminant codes and, since
-// O30 of #290, decommission reasons — as the rows of one module, `configure.master`,
-// which Settings › Operations › Master data reads and writes and the fixture
-// pickers point at. The wire shapes are the contracts'
-// (`@waste/contracts/catalogue`, `vehicle-types`, `pickup-exceptions`, `stock`),
-// imported as types so no zod reaches the bundle; the routes are
+// O30 of #290, decommission reasons — as the rows of one module,
+// `configure.master`, which Settings › Operations › Master data reads and
+// writes and the fixture pickers point at. The wire shapes are the
+// contracts' (`@waste/contracts/catalogue`, `vehicle-types`,
+// `pickup-exceptions`, `stock`), imported as types so no zod reaches the
+// bundle; the routes are
 // apps/api/src/routes/catalogue.ts, vehicle-types.ts, contaminant-codes.ts and
 // decommission-reasons.ts.
 //

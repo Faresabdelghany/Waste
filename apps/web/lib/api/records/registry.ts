@@ -22,8 +22,9 @@
 // relationship role, a connected property and company, effective dates, a
 // project scope. Those describe a `property_party` row (Issue #78), which the
 // Properties module writes; here they stay on the record's typed values, and
-// only the Customer's own fields travel. The status is the wire's two (`active`, `inactive`), listed as the
-// adapter's `statuses`; the module's lifecycle also lists Merged and
+// only the Customer's own fields travel. The status is the wire's two
+// (`active`, `inactive`), listed as the adapter's `statuses`; the module's
+// lifecycle also lists Merged and
 // Archived, which the API has no column for, so the store refuses a move
 // there before the API sees it and the workspace offers neither.
 import type { Customer } from "@waste/contracts/customers"

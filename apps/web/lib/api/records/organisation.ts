@@ -256,9 +256,9 @@ const consecutive = (a: string, b: string) => (dayIndex(a) + 1) % SERVICE_DAYS.l
 
 /**
  * The `weekend` and `holidayList` a project record says, as the wire spells
- * them. On a record that carries a
- * weekend an absent list is "no list", which the wire spells null; a record
- * that carries neither says nothing about either.
+ * them. On a record that carries a weekend an absent list is "no list",
+ * which the wire spells null; a record that carries neither says nothing
+ * about either.
  */
 function projectCalendarBody(record: BusinessRecord): { weekend?: string[]; holidayList?: string | null } {
   const weekend = typed(record, "weekend")

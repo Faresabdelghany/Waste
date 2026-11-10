@@ -8,8 +8,8 @@
 // (`@waste/contracts/availability`), imported as types.
 //
 // A form spells a period by its last day away, the wire by its first day back
-// (`firstDayOut`, `@waste/domain/periods`), a blank last day being a return not known
-// yet. What refuses a period over the work already planned is never this: the
+// (`firstDayOut`, `@waste/domain/periods`), a blank last day being a return
+// not known yet. What refuses a period over the work already planned is never this: the
 // API records it whatever is planned on its days, and refuses instead the
 // commands that name the driver or the vehicle afresh.
 import type { DriverAbsence, VehicleUnavailability } from "@waste/contracts/availability"

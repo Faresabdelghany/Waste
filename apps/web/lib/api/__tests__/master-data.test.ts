@@ -1,9 +1,8 @@
 // Master data on the adapter (#176, slice 2 of #81): the six catalogue
 // resources — waste fractions, container types, service frequencies, vehicle
 // types, contaminant codes and decommission reasons — become the records of
-// one module, `configure.master`, which the
-// Settings › Master data pane reads and writes and the fixture pickers point
-// at; the records the pane writes become the bodies the API's contracts
+// one module, `configure.master`, which the Settings › Master data pane reads
+// and writes and the fixture pickers point at; the records the pane writes become the bodies the API's contracts
 // accept, held here against the contracts' own zod schemas; and the writes
 // go out through the store's seam over a scripted `fetch`, the API's
 // refusals coming back as its sentences.

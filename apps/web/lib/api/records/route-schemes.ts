@@ -20,9 +20,9 @@
 // Relations. A project, an area and a provider are named by the web ids
 // their modules lend; the fleet, the depot, the unloading station and a
 // manual group's containers are the API's ids as chips — `vehicle-<uuid>` —
-// until their module is read and the resolver names the row; a write reads a chip
-// back to its uuid and refuses a fixture's id, which names nothing the API
-// holds. A rule names its waste fractions, container types and vehicle type
+// until their module is read and the resolver names the row; a write reads a
+// chip back to its uuid and refuses a fixture's id, which names nothing the
+// API holds. A rule names its waste fractions, container types and vehicle type
 // by NAME, the words the domain matches containers by, so a write finds the
 // master data row of that name (`Resolver.find`) and refuses a name no row
 // has.
