@@ -66,9 +66,9 @@ export function withUser(url: string, user: string): string {
 /**
  * A test database's name: the file's prefix, the millisecond it was made
  * (`Date.now()` in base 36, eight characters until 2059) and six random hex
- * digits — the shape apps/worker's test databases take too, so either
- * package's sweep reads the other's stamp the same way — fitting Postgres's
- * 63 bytes beside any prefix of up to 47 and saying its own age.
+ * digits, fitting Postgres's 63 bytes beside any prefix of up to 47 and
+ * saying its own age. Each package sweeps its own: apps/worker's names end
+ * in base-36 characters, which this sweep's pattern does not read.
  */
 export function testDatabaseName(prefix: string, now: number = Date.now()): string {
   return `${prefix}_${now.toString(36)}_${randomUUID().replaceAll("-", "").slice(0, 6)}`

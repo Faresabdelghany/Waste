@@ -356,8 +356,8 @@ describe("the migrations carry every table's hand-written statements", () => {
   test("each table of the schema is created by exactly one migration, and that file or a later one carries its statements", async () => {
     const files = await migrations()
     for (const table of await tables()) {
-      // A statement about a table names the table, however it is spelled — quoted or not, in any case, inside a DO block
-      // or a string — so a file that never names it holds none, and only the files that do are read for the table, not
+      // A statement about a table names the table — quoted or not, in any case, inside a DO block or a string — so a
+      // file that never names it holds none, and only the files that do are read for the table, not
       // every file for every table. The test is the bare name: it can only read more files than it needs, never fewer,
       // and which statements count is the parse's to say.
       const named = getTableName(table).toLowerCase()
