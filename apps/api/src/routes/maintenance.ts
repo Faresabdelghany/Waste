@@ -54,22 +54,15 @@ const VEHICLES = "fleet.vehicles"
 const PlanPage = Page(MaintenancePlan)
 const OrderPage = Page(MaintenanceOrder)
 
-/** What a body naming a vehicle of no project the caller works in is told. */
 export const NOT_A_VEHICLE_HERE = "Not a vehicle of a project this account works in"
-/** What an order naming a plan of another vehicle, or a retired one, is told. */
 export const NOT_A_PLAN_OF_THE_VEHICLE = "Not an active maintenance plan of this vehicle"
-/** What a completion after the project's today is told. */
 export const NOT_AHEAD = "A service is completed on a day that has come, not ahead of it"
-/** What a closed order is told by a second close. */
 export const alreadyClosed = (title: string, status: string): string => `The order ${title} is already ${status}`
-/** What a plan's service is told without the reading its next limit counts from. */
 export const NEEDS_THE_ODOMETER = "The plan counts kilometres: give the odometer at the service"
 export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the service"
 
 /** What a list refuses beside the page rule. */
 const LIST_INVALID = ["a filter is malformed", "`projectId` is not a project this account works in"]
-
-// The plans.
 
 const planColumns = {
   id: vehicleMaintenancePlan.id,
@@ -91,7 +84,6 @@ type PlanRow = Pick<typeof vehicleMaintenancePlan.$inferSelect, keyof typeof pla
 /** The readings a plan is judged on between services: none, since nothing reads a vehicle's odometer or engine hours, so the last service's own stand. */
 const NO_READINGS: VehicleReadings = { odometerKm: null, engineHours: null }
 
-/** The plans on the wire, each with where it stands on its project's day against its last service's readings. */
 async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now: Date): Promise<MaintenancePlan[]> {
   const todays = await projectTodays(
     tx,
@@ -118,7 +110,6 @@ async function plansOf(tx: Tx, companyId: string, rows: readonly PlanRow[], now:
 
 const { find: findPlan, get: getPlan, locked: lockedPlan, list: listPlans } = scoped(vehicleMaintenancePlan, { noun: "maintenance plan", reach: "projects", columns: planColumns })
 
-/** The vehicle a body names, of a project the caller works in, or the 400 at `vehicleId`. */
 async function vehicleHere(tx: Tx, principal: Principal, id: string): Promise<{ id: string; projectId: string; label: string }> {
   const [row] = await tx
     .select({ id: vehicle.id, projectId: vehicle.projectId, registration: vehicle.registration, callsign: vehicle.callsign })
@@ -128,8 +119,6 @@ async function vehicleHere(tx: Tx, principal: Principal, id: string): Promise<{ 
   if (row === undefined) throw invalidRequest("json", [{ path: "vehicleId", message: NOT_A_VEHICLE_HERE }])
   return { id: row.id, projectId: row.projectId, label: vehicleLabel(row) }
 }
-
-// The orders.
 
 const orderColumns = {
   id: maintenanceOrder.id,
@@ -169,7 +158,6 @@ const orderOf = (row: OrderRow): MaintenanceOrder => ({
 
 const { get: getOrder, locked: lockedOrder, list: listOrders } = scoped(maintenanceOrder, { noun: "maintenance order", reach: "projects", columns: orderColumns })
 
-/** An open order of the caller's projects, locked, or the 404, or the 409 of one already closed. */
 async function openOrder(tx: Tx, principal: Principal, id: string): Promise<OrderRow> {
   const row = await lockedOrder(tx, principal, id)
   if (row.status !== "open") throw problem(409, { detail: alreadyClosed(row.title, row.status) })

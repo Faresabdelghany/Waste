@@ -101,7 +101,6 @@ export const sessionColumns = {
 
 export type SessionRow = Pick<typeof session.$inferSelect, keyof typeof sessionColumns>
 
-/** The session on the wire. */
 export function sessionOf(row: SessionRow): Session {
   return {
     id: row.id,
@@ -120,10 +119,8 @@ export function sessionOf(row: SessionRow): Session {
   }
 }
 
-/** The sessions of this company, in the projects the caller works in. */
 export const { get: getSession, list: listSessions } = scoped(session, { noun: "session", reach: "projects", columns: sessionColumns })
 
-/** One route's sessions, oldest first. */
 export async function sessionsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<SessionRow[]> {
   return await tx
     .select(sessionColumns)
@@ -187,7 +184,6 @@ export const driverRouteScope = (principal: Principal, profile: DriverProfile): 
 /** A route that is not assigned to this driver, or not there: the domain's one sentence. */
 export const noSuchAssignedRoute = (id: string) => problem(404, { detail: noRouteAssigned(id) })
 
-/** One route of this company by id, assigned to this driver; undefined when it is neither. */
 export async function findAssignedRoute(tx: Tx, principal: Principal, profile: DriverProfile, id: string): Promise<RouteRow | undefined> {
   const [row] = await tx
     .select(routeColumns)

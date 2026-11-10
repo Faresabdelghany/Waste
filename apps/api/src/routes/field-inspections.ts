@@ -55,14 +55,10 @@ const MODULE = "operate.inspections"
 
 const InspectionPage = Page(FieldInspection)
 
-/** What a subject outside the caller's projects is told, at its field. */
 export const NOT_A_CONTAINER = "Not a container of a project this account works in"
 export const NOT_A_PROPERTY = "Not a property of a project this account works in"
-/** What a change to a closed inspection is told. */
 export const INSPECTION_CLOSED = "The inspection is closed; it changes no more"
-/** What a photo's key outside the inspection's prefix is told, at `objectKey`. */
 export const KEY_NAMES_ANOTHER = "The photo key names another company or another inspection"
-/** What a photo appended twice is told. */
 export const PHOTO_ALREADY_APPENDED = "That photo is already the inspection's"
 /** What an upload of a key the bucket holds already is told: a fresh id never meets one, so asking again signs another. */
 export const PHOTO_ALREADY_UPLOADED = "Storage holds that photo already; ask again for another"
@@ -119,12 +115,10 @@ async function photosOf(tx: Tx, companyId: string, ids: readonly string[]): Prom
 
 const { scope: inspectionScope, get: getInspection, locked: lockedInspection, list: listInspections } = scoped(fieldInspection, { noun: "field inspection", reach: "projects", columns })
 
-/** One inspection on the wire, with its photos. */
 async function answered(tx: Tx, principal: Principal, row: Row): Promise<FieldInspection> {
   return inspectionOf(row, (await photosOf(tx, principal.companyId, [row.id])).get(row.id) ?? [])
 }
 
-/** The project of the subject the body names, read under the caller's projects: a container's or a property's (400 at its field otherwise). */
 async function subjectProject(tx: Tx, principal: Principal, subject: { containerId?: string | null; propertyId?: string | null }): Promise<string> {
   if (subject.containerId != null) {
     const [found] = await tx
@@ -144,7 +138,6 @@ async function subjectProject(tx: Tx, principal: Principal, subject: { container
   return found.projectId
 }
 
-/** An open inspection, locked: the path's row (404), then its state (409). */
 async function openInspection(tx: Tx, principal: Principal, id: string): Promise<Row> {
   const current = await lockedInspection(tx, principal, id)
   if (current.status !== "open") throw problem(409, { detail: INSPECTION_CLOSED })
@@ -153,12 +146,10 @@ async function openInspection(tx: Tx, principal: Principal, id: string): Promise
 
 export function fieldInspectionRoutes(deps: RouteDeps) {
   const { now, storage, log } = deps
-  /** Storage, or the deployment's 503. */
   const required = (): ProofStorage => {
     if (storage === null) throw problem(503, { kind: NO_PROOF_STORAGE, detail: NO_PROOF_STORAGE_DETAIL })
     return storage
   }
-  /** A call to Storage: its silence a 502, its refusal the deployment's 503, and the cause of either in the log. */
   const asking = async <T>(ask: () => Promise<T>): Promise<T> => {
     try {
       return await ask()

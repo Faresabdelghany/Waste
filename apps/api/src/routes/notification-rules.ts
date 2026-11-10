@@ -42,14 +42,11 @@ import { describeProblem, invalidRequest } from "../problem"
 
 const MODULE = "configure.templates"
 
-/** What a rule naming a template that is not the project's is told. */
 export const PICK_A_PROJECT_TEMPLATE = "Pick a message template of this project"
-/** What a rule naming a billing template is told. */
 export const A_SERVICE_TEMPLATE = "A notice is a service message: pick a template for service"
 /** What a rule naming a template with a value its notice does not fill is told (C18 of #291). */
 export const notFilledByNotice = (template: string, names: readonly string[]) =>
   `The template ${template} names ${names.map((name) => `{{${name}}}`).join(", ")}, which this notice does not fill`
-/** What a broadcast naming an area that is not one of the project's notification areas is told. */
 export const A_NOTIFICATION_AREA = "Pick a notification area of this project"
 
 type Rules = NotificationRulesPut["rules"]
@@ -79,7 +76,6 @@ async function areasIn(tx: Tx, companyId: string, projectId: string): Promise<Ar
     .where(and(eq(notificationRuleArea.companyId, companyId), eq(notificationRuleArea.projectId, projectId)))
 }
 
-/** Each broadcast's areas held to the project's `notification` areas (400 at their field). */
 async function requireAreas(tx: Tx, companyId: string, projectId: string, rules: Rules): Promise<void> {
   const ids = [...new Set(rules.flatMap((rule) => rule.planningAreaIds ?? []))]
   if (ids.length === 0) return
@@ -102,7 +98,6 @@ async function rulesIn(tx: Tx, companyId: string, projectId: string): Promise<Ro
     .where(and(eq(notificationRule.companyId, companyId), eq(notificationRule.projectId, projectId)))
 }
 
-/** Each rule's template held to the project and to service (400 at its field), then to active (409). */
 async function requireTemplates(tx: Tx, companyId: string, projectId: string, rules: Rules): Promise<void> {
   const ids = [...new Set(rules.map((rule) => rule.templateId))]
   if (ids.length === 0) return
@@ -184,7 +179,6 @@ export function notificationRuleRoutes(deps: RouteDeps) {
         const kept = new Set<string>(rules.map((rule) => rule.event))
         const gone = [...current.values()].filter((row) => !kept.has(row.event)).map((row) => row.id)
         if (gone.length > 0) {
-          // A rule's areas go with it.
           await tx.delete(notificationRuleArea).where(and(eq(notificationRuleArea.companyId, principal.companyId), inArray(notificationRuleArea.ruleId, gone)))
           await tx.delete(notificationRule).where(and(eq(notificationRule.companyId, principal.companyId), inArray(notificationRule.id, gone)))
         }
@@ -207,7 +201,6 @@ export function notificationRuleRoutes(deps: RouteDeps) {
             .returning(columns)
           rows.push(row)
         }
-        // Each rule's areas replaced with it: an area the body keeps keeps its row, one it leaves out is deleted, the new ones go in one insert.
         const byEvent = new Map(rows.map((row) => [row.event, row.id]))
         const held = await areasIn(tx, principal.companyId, id)
         const wanted = rules.flatMap((rule) => (rule.planningAreaIds ?? []).map((planningAreaId) => ({ ruleId: byEvent.get(rule.event) as string, planningAreaId })))

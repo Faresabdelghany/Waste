@@ -15,7 +15,6 @@ import type { RouteDeps } from "../deps"
 import { routes } from "../operation"
 import { describeProblem } from "../problem"
 
-/** The Principal on the wire. */
 export function meOf(principal: Principal): Me {
   return {
     user: { ...principal.user, status: "active" },

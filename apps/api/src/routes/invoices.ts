@@ -73,22 +73,16 @@ const MODULE = "commercial.invoices"
 
 const InvoicePage = Page(Invoice)
 
-/** What a credit note against a credit note is told. */
 export const CREDIT_NOTE_NOT_CREDITED = "A credit note is not credited; issue a new one against the invoice"
 
-/** What a credit note against an invoice with nothing left to credit is told. */
 export const fullyCredited = (label: string): string => `Invoice ${label} is fully credited`
 
-/** What a body naming a line that is not this invoice's is told, at `lines.N.lineId`. */
 export const NOT_A_LINE = "Not a line of this invoice"
 
-/** What a body naming a reversal's line is told, at `lines.N.lineId`: a negative line gives the charge back already. */
 export const REVERSAL_LINE_NOT_CREDITED = "A reversal's line is not credited; it already gives the charge back"
 
-/** What a body crediting more of a line than remains is told, at `lines.N.quantity`. */
 export const onlyRemain = (remaining: number, quantity: number, position: number): string => `Only ${remaining} of ${quantity} remain to credit on line ${position}`
 
-/** A line of the invoice with what remains of it to credit. */
 type Creditable = { line: LineRow; remaining: number }
 
 /**
@@ -114,7 +108,6 @@ async function creditedOf(tx: Tx, companyId: string, lines: readonly LineRow[]):
   return new Map(rows.map((row) => [row.creditsLineId ?? "", Number(row.credited ?? 0)]))
 }
 
-/** The credit line of one original by a quantity: the original's text, product, day, unit price and rate, the amounts negative. */
 function creditLine(original: LineRow, quantity: number): LineDraft {
   const netMinor = -(original.unitPriceMinor * quantity)
   return {

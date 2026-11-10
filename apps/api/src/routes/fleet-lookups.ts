@@ -50,7 +50,6 @@ export type VehicleRow = {
   vehicleTypeId: string
 }
 
-/** The columns a `VehicleRow` is read from. */
 export const vehicleColumns = {
   id: vehicle.id,
   registration: vehicle.registration,
@@ -82,7 +81,6 @@ export async function findVehicle(tx: Tx, scope: Scope, id: string, kind: Vehicl
     )
     .limit(1)
   if (row === undefined) throw invalidRequest("body", [{ path, message: ownedBy === undefined ? notAVehicleOf(kind) : notOwnFleet(kind === "trailer" ? "trailer" : "vehicle", ownedBy.provider) }])
-  // The coded columns are text with a CHECK in the database and a vocabulary here.
   return row
 }
 
@@ -96,10 +94,8 @@ export type DriverRow = {
   licenceExpiry: string | null
 }
 
-/** The columns a `DriverRow` is read from. */
 export const driverColumns = { id: driver.id, name: driver.name, status: driver.status, licenceClass: driver.licenceClass, licenceExpiry: driver.licenceExpiry }
 
-/** One driver of the project, read for the licence rule, or a 400 at `path`. */
 export async function findDriver(tx: Tx, scope: Scope, id: string, path = "driverId", ownedBy?: OwnedBy): Promise<DriverRow> {
   const [row] = await tx
     .select(driverColumns)

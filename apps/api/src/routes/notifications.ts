@@ -32,7 +32,6 @@ import { messageColumns, messageOf } from "./messages"
 
 const NoticePage = Page(Message)
 
-/** The caller's preferences as their rows stand. */
 async function preferencesOf(tx: Tx, principal: Principal): Promise<NotificationPreferences> {
   const rows = await tx
     .select({ event: notificationPreference.event, minSeverity: notificationPreference.minSeverity })
@@ -46,7 +45,6 @@ async function preferencesOf(tx: Tx, principal: Principal): Promise<Notification
   return answered
 }
 
-/** One event asked for with its severity, or not asked for: the row written over, or removed. */
 async function putPreference(tx: Tx, principal: Principal, event: NotificationEvent, asked: { minSeverity: AlertSeverity | null } | null): Promise<void> {
   const mine = and(eq(notificationPreference.companyId, principal.companyId), eq(notificationPreference.userAccountId, principal.user.id), eq(notificationPreference.event, event))
   if (asked === null) {
@@ -59,7 +57,6 @@ async function putPreference(tx: Tx, principal: Principal, event: NotificationEv
     .onConflictDoUpdate({ target: [notificationPreference.companyId, notificationPreference.userAccountId, notificationPreference.event], set: { minSeverity: asked.minSeverity } })
 }
 
-/** The staff notices of this company in the projects the caller works in, newest first: the messages the worker queued for its accounts. */
 const { list: listNotices } = scoped(message, { noun: "notice", reach: "projects", columns: messageColumns, order: "desc" })
 
 export function notificationRoutes(deps: RouteDeps) {
