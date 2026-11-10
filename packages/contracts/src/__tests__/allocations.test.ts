@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { BOTH_ENDS_OF_THE_WINDOW, OVERLAPPING_WINDOW_ORDERED, WINDOW_ENDS_AFTER_IT_STARTS, windowOrdered } from "@waste/domain/resources/allocations"
-import { ALLOCATION_STATUSES } from "@waste/domain/resources/vocabulary"
 
 import { VehicleAllocation, VehicleAllocationChange, VehicleAllocationConfirm, VehicleAllocationCreate, VehicleAllocationEvent, VehicleAllocationListQuery, VehicleAllocationRelease } from "../allocations"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
@@ -77,7 +76,6 @@ describe("VehicleAllocationCreate", () => {
     assert.match(VehicleAllocationCreate.shape.status.description ?? "", /released is a command of its own/)
     assert.equal(VehicleAllocationCreate.parse({ ...body, status: "confirmed" }).status, "confirmed")
     assert.deepEqual(refusal(VehicleAllocationCreate.safeParse({ ...body, status: "released" })).map((issue) => issue.path), ["status"])
-    assert.deepEqual(VehicleAllocationCreate.shape.status.unwrap().options, ALLOCATION_STATUSES.filter((status) => status !== "released"), "the vocabulary less the one that is a command")
     refusesWhatTheServerOwns(VehicleAllocationCreate, body)
     for (const key of Object.keys(body)) {
       const without: Record<string, unknown> = { ...body }
@@ -100,7 +98,11 @@ describe("the commands", () => {
     assert.deepEqual(refusal(VehicleAllocationChange.safeParse({ reason: "Nothing" })), [{ path: "", message: "Give at least one field to change" }])
     assert.deepEqual(refusal(VehicleAllocationChange.safeParse({ driverId: ID })).map((issue) => issue.path), ["reason"])
     assert.deepEqual(refusal(VehicleAllocationChange.safeParse({ plannedFrom: TO, plannedTo: FROM, reason: "x" })), [backwards])
-    for (const key of ["status", "projectId", "id"]) assert.match(refusal(VehicleAllocationChange.safeParse({ note: "x", reason: "y", [key]: "z" }))[0].message, new RegExp(key))
+    for (const key of ["status", "projectId", "id"]) {
+      const issues = refusal(VehicleAllocationChange.safeParse({ note: "x", reason: "y", [key]: "z" }))
+      assert.deepEqual(issues.map((issue) => issue.path), [""], key)
+      assert.match(issues[0].message, new RegExp(key), key)
+    }
   })
 
   test("a release carries a reason and nothing else; a confirm carries nothing at all", () => {

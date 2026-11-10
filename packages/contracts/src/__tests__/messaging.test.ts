@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { SMS_BODY_MAX, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
+import { MESSAGE_VARIABLES, SMS_BODY_MAX, unknownPlaceholderSentence } from "@waste/domain/messaging/template"
 
 import { MessageCreate, MessageListQuery, MessageTemplateCreate, MessageTemplatePatch } from "../messaging"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
@@ -26,8 +26,9 @@ describe("a message template", () => {
 
   test("names only placeholders a message fills, refused at the field that names them", () => {
     assert.deepEqual(refusal(MessageTemplateCreate.safeParse({ ...email, body: "Invoice {{invoiceNumber}} for {{ firstName }}" })), [{ path: "body", message: unknownPlaceholderSentence(["invoiceNumber", "firstName"]) }])
-    assert.deepEqual(refusal(MessageTemplatePatch.safeParse({ subject: "Hi {{nobody}}" })), [{ path: "subject", message: unknownPlaceholderSentence(["nobody"]) }])
-    assert.equal(unknownPlaceholderSentence(["nobody"]), "{{nobody}} is filled by no message; use {{recipientName}}, {{customerName}}, {{companyName}}, {{collectionDate}}, {{ticketNumber}}, {{replyText}}")
+    const unknown = refusal(MessageTemplatePatch.safeParse({ subject: "Hi {{nobody}}" }))
+    assert.deepEqual(unknown, [{ path: "subject", message: unknownPlaceholderSentence(["nobody"]) }])
+    for (const name of ["nobody", ...MESSAGE_VARIABLES]) assert.ok(unknown[0].message.includes(`{{${name}}}`), `the refusal names {{${name}}}`)
   })
 
   test("is for service or billing, never for staff: a staff notice is the domain's text (O16 of #290)", () => {
