@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
+import { existsSync, readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
 import { databaseUnderTest, isDatabaseRequired, LOCAL_STACK_HINT } from "../database-under-test"
+
+/** A file at the repository's root: this one is packages/tooling/src/__tests__/database-under-test.test.ts. */
+const atRoot = (file: string) => new URL(`../../../../${file}`, import.meta.url)
 
 const ADMIN = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 const APP = "postgresql://wms_api:wms_api@127.0.0.1:54322/postgres"
@@ -44,8 +48,15 @@ describe("databaseUnderTest", () => {
   })
 
   test("the hint names the commands that bring the local stack up", () => {
-    for (const command of ["pnpm db:start", "pnpm db:migrate", "pnpm db:bootstrap", ".env.example"]) {
-      assert.ok(LOCAL_STACK_HINT.includes(command), command)
-    }
+    const { scripts } = JSON.parse(readFileSync(atRoot("package.json"), "utf8")) as { scripts: Record<string, string> }
+    const named = [...LOCAL_STACK_HINT.matchAll(/`pnpm ([\w:-]+)`/g)].map(([, script]) => script)
+    assert.ok(named.length > 0, LOCAL_STACK_HINT)
+    assert.deepEqual(
+      named.filter((script) => !(script in scripts)),
+      [],
+      "a command the root manifest does not run",
+    )
+    const [, copied] = /copy (\S+) to \.env/.exec(LOCAL_STACK_HINT) ?? assert.fail(LOCAL_STACK_HINT)
+    assert.ok(existsSync(atRoot(copied)), `${copied} is not at the repository's root`)
   })
 })
