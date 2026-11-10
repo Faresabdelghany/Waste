@@ -288,7 +288,7 @@ export function BusinessFilterPopover({
   variant = "default",
   readers,
 }: {
-  records: BusinessRecord[]
+  records: readonly BusinessRecord[]
   value: BusinessFilters
   onChange: (filters: BusinessFilters) => void
   variant?: BusinessFilterVariant

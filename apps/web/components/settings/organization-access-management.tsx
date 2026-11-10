@@ -169,7 +169,6 @@ const shownIn = (records: readonly BusinessRecord[], filters: BusinessFilters, r
   return record === undefined || matchesBusinessFilters(record, filters, readers)
 }
 
-
 const USER_ORDERS: readonly BusinessOrderingOption[] = [
   { value: "name", label: "Name" },
   { value: "role", label: "Role" },

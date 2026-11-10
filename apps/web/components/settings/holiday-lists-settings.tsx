@@ -59,7 +59,6 @@ import {
   type BusinessOrderingOption,
   type BusinessViewOptions,
 } from "@/components/platform/business-view-options-popover"
-import { RecordSearchInput } from "@/components/platform/record-search-input"
 import { useActorName } from "@/components/platform/shell-identity"
 import { RecordToolbar } from "@/components/platform/record-toolbar"
 import { removeHolidayList } from "@/lib/api/records/holiday-lists"
@@ -733,8 +732,7 @@ function HolidayListPage({
         />
       }
       toolbar={
-        <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
-          <RecordSearchInput value={query} onChange={setQuery} placeholder="Search holidays" />
+        <RecordToolbar placeholder="Search holidays" query={query} onQueryChange={setQuery}>
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="h-8 w-36 rounded-lg border-border/60 text-sm" aria-label="Year">
               <SelectValue />
@@ -748,7 +746,7 @@ function HolidayListPage({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </RecordToolbar>
       }
     >
       <TableCard
