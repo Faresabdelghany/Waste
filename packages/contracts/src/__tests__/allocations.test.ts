@@ -75,6 +75,7 @@ describe("VehicleAllocationCreate", () => {
     assert.deepEqual(VehicleAllocationCreate.parse(body), { ...body, status: "planned" })
     assert.match(VehicleAllocationCreate.shape.status.description ?? "", /released is a command of its own/)
     assert.equal(VehicleAllocationCreate.parse({ ...body, status: "confirmed" }).status, "confirmed")
+    assert.deepEqual(VehicleAllocationCreate.shape.status.unwrap().options, ["planned", "confirmed"], "the vocabulary less what only a command reaches: a status added to it is not creatable unasked")
     assert.deepEqual(refusal(VehicleAllocationCreate.safeParse({ ...body, status: "released" })).map((issue) => issue.path), ["status"])
     refusesWhatTheServerOwns(VehicleAllocationCreate, body)
     for (const key of Object.keys(body)) {

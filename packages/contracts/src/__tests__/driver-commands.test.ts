@@ -9,7 +9,7 @@ import { DRIVER_COMMAND_KINDS, type DriverCommandKind } from "@waste/domain/exec
 import { INT4_MAX } from "@waste/domain/requests"
 import { PROOF_KEY_SHAPE } from "@waste/domain/storage-objects"
 
-import { COMMAND_BODIES, CommandOutcomeRow, DriverCommand, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandEnvelope, DriverCommandReceipt, DriverIdentification, DriverIdentifyQuery, DriverMe, DriverPickup, DriverRouteDetail, POSITIONS_MAX } from "../driver-commands"
+import { COMMAND_BODIES, CommandOutcomeRow, WireOutcome, DriverCommand, DriverCommandBatch, DriverCommandBatchOutcome, DriverCommandEnvelope, DriverCommandReceipt, DriverIdentification, DriverIdentifyQuery, DriverMe, DriverPickup, DriverRouteDetail, POSITIONS_MAX } from "../driver-commands"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -207,6 +207,7 @@ describe("what the door answers and stores", () => {
   const problem = { type: "about:blank", title: "Conflict", status: 409, detail: "Pickup 12 is already completed" }
 
   test("an outcome row is applied with its result, replayed with the first result, or rejected with its problem", () => {
+    assert.deepEqual(WireOutcome.options, ["applied", "rejected", "replayed"], "the stored outcomes and the wire's replayed: a device reads exactly these")
     const session = { id: ID, projectId: OTHER, routeId: THIRD, driverId: ID, vehicleId: OTHER, trailerId: null, deviceId: "device-7", appVersion: null, startedAt: WHEN, endedAt: null, pausedAt: null, lastSeenAt: WHEN, ...STAMPS }
     const result = { resource: "session", value: session }
     assert.deepEqual(CommandOutcomeRow.parse({ commandId: ID, outcome: "applied", result }), { commandId: ID, outcome: "applied", result })
