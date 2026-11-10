@@ -47,10 +47,10 @@ describe("databaseUnderTest", () => {
     assert.equal(typeof databaseUnderTest(both, { hint: LOCAL_STACK_HINT, env: { REQUIRE_DATABASE: "0" } }).skip, "string")
   })
 
-  test("the hint names the commands that bring the local stack up", () => {
+  test("the hint names the commands that bring the local stack up, in order, each one the root manifest runs", () => {
     const { scripts } = JSON.parse(readFileSync(atRoot("package.json"), "utf8")) as { scripts: Record<string, string> }
     const named = [...LOCAL_STACK_HINT.matchAll(/`pnpm ([\w:-]+)`/g)].map(([, script]) => script)
-    assert.ok(named.length > 0, LOCAL_STACK_HINT)
+    assert.deepEqual(named, ["db:start", "db:migrate", "db:bootstrap"], "the stack started, then migrated, then given its logins, in that order")
     assert.deepEqual(
       named.filter((script) => !(script in scripts)),
       [],

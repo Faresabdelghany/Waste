@@ -23,8 +23,10 @@ import type { Job } from "pg-boss"
 import { isCronExpression } from "../runtime/boss"
 import { CONSUMERS, JOBS, relay } from "../jobs"
 import { applyPauseGrants } from "../registry/apply-pause-grants"
+import { alertRulesJob } from "../resolution/alert-rules"
 import { countEmptyings } from "../resolution/count-emptyings"
 import { updatableOptions } from "../runtime/definition"
+import { heartbeat } from "../runtime/heartbeat"
 import { generateRoutes } from "../planning/generate-routes"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets } from "../resolution/open-tickets"
 import { planAheadJob } from "../planning/plan-ahead"
@@ -121,6 +123,7 @@ describe("the job registry", () => {
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...OPEN_TICKETS_QUEUE_OPTIONS })
       assert.equal(job.schedule, undefined, "sent by the relay, never by a clock")
     }
+    assert.deepEqual(OPEN_TICKETS_QUEUE_OPTIONS, { retryLimit: 3, retryDelay: 5, retryBackoff: true }, "three retries, backing off from five seconds")
     assert.ok(!openTickets.some((job) => job.inherits === outboxQueue("route-cancelled")), "§7.10: a cancellation makes no ticket of its own")
   })
 
@@ -158,6 +161,10 @@ describe("the job registry", () => {
       "messaging.collection-reminders",
       "customers.propose-right-sizing",
     ].sort())
+  })
+
+  test("never retries a scheduled run whose next one covers what it missed — the heartbeat, the alert rules, the two purges — nor the horizon sweep, whose retry would re-ask the routes that failed and pay the provider twice", () => {
+    for (const job of [heartbeat, alertRulesJob, purgePositionsJob, purgeProofObjectsJob, sweepHorizonJob]) assert.equal(job.queueOptions?.retryLimit, 0, job.queue)
   })
 
   test("schedules on UTC's clock, catches a missed night or month up once and lets a missed tick go, and runs the nightly jobs in their order: Plan Ahead, then the horizon sweep over what it generated, then the positions' purge, then the proofs'", () => {
