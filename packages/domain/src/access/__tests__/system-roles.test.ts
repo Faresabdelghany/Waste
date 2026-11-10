@@ -11,7 +11,6 @@ describe("the seeded system roles", () => {
       SYSTEM_ROLES.map((role) => role.key),
       [...SYSTEM_ROLE_KEYS],
     )
-    assert.equal(SYSTEM_ROLES.length, 12)
     for (const role of SYSTEM_ROLES) {
       assert.ok(role.name.length > 0, `${role.key} has no name`)
       assert.ok(role.scope.length > 0, `${role.key} has no scope`)

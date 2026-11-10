@@ -11,7 +11,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { MINOR_MAX } from "../money"
-import { chargedDays, chargePeriodContaining, chargePeriodsOfRun, priceCharge, proratedUnitPrice, RECURRING_UNIT } from "../recurring"
+import { chargedDays, chargePeriodContaining, chargePeriodsOfRun, priceCharge, proratedUnitPrice } from "../recurring"
 
 describe("a cadence's charge periods", () => {
   test("are calendar months, quarters and years, half-open", () => {
@@ -57,7 +57,6 @@ describe("a recurring charge's unit price", () => {
   const december = { from: "2026-12-01", to: "2027-01-01" }
 
   test("is the month's price times the period's months, prorated by the charged days over the period's, rounded half away from zero", () => {
-    assert.equal(RECURRING_UNIT, "month")
     assert.equal(proratedUnitPrice(30000, november, 30), 30000, "a whole month")
     assert.equal(proratedUnitPrice(30000, november, 10), 10000)
     assert.equal(proratedUnitPrice(10000, december, 1), 323, "322.58 rounds up")

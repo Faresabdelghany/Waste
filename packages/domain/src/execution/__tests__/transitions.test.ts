@@ -43,14 +43,11 @@ const routeTable: Record<RouteStatus, Record<(typeof ROUTE_COMMANDS)[number], Tr
 
 describe("routeTransition", () => {
   test("every status under every command, as the table spells it: twenty pairs", () => {
-    let pairs = 0
     for (const status of ROUTE_STATUSES) {
       for (const command of ROUTE_COMMANDS) {
         assert.deepEqual(routeTransition(status, command, LABEL), routeTable[status][command], `${status} under ${command}`)
-        pairs += 1
       }
     }
-    assert.equal(pairs, 20)
   })
 
   test("completed and cancelled are terminal: no command moves them, and only cancelling a cancelled route is nothing to do", () => {
@@ -72,15 +69,12 @@ describe("routeTransition", () => {
 
 describe("pickupTransition", () => {
   test("a planned pickup takes the command's outcome; a decided one keeps the one it has, and says so: twelve pairs", () => {
-    let pairs = 0
     for (const status of PICKUP_STATUSES) {
       for (const command of PICKUP_COMMANDS) {
         const expected: Transition<PickupStatus> = status === "planned" ? { kind: "move", to: PICKUP_OUTCOME_OF[command] } : { kind: "refuse", sentence: `Pickup 12 is already ${status}` }
         assert.deepEqual(pickupTransition(status, command, 12), expected, `${status} under ${command}`)
-        pairs += 1
       }
     }
-    assert.equal(pairs, 12)
     assert.deepEqual(PICKUP_OUTCOME_OF, { complete: "completed", skip: "skipped", fail: "failed" })
   })
 

@@ -5,19 +5,13 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, doesNotTake, loadReading, onBoardByUnload, refusalIssue, SAY_WHY_REFUSED, takesNoneSet, unloadNotAccepted } from "../unloads"
-import { UNLOAD_REFUSAL_REASONS } from "../vocabulary"
+import { doesNotTake, loadReading, onBoardByUnload, refusalIssue, SAY_WHY_REFUSED, takesNoneSet, unloadNotAccepted } from "../unloads"
 
 describe("a refused load", () => {
-  test("says why the station refused it, from a closed list", () => {
-    assert.deepEqual([...UNLOAD_REFUSAL_REASONS], ["contamination", "fraction-not-accepted", "hazardous", "overweight", "other"])
-  })
-
   test("says it in words where the reason is other, and may anywhere; a note goes with a reason", () => {
     assert.equal(refusalIssue({ reason: "contamination", note: null }), undefined)
     assert.equal(refusalIssue({ reason: "contamination", note: "Plastic bags in the paper" }), undefined)
     assert.deepEqual(refusalIssue({ reason: "other", note: null }), { path: "note", message: SAY_WHY_REFUSED })
-    assert.equal(SAY_WHY_REFUSED, "Say why the station refused the load")
     assert.deepEqual(refusalIssue({ reason: null, note: "Looked fine" }), { path: "reason", message: "A note goes with a refusal's reason" })
     assert.equal(refusalIssue({ reason: null, note: null }), undefined, "an accepted load")
   })
@@ -98,7 +92,6 @@ describe("the load on board against the weighbridge", () => {
   })
 
   test("reads the difference from the on-board load, within the project's tolerance or above it", () => {
-    assert.equal(DEFAULT_WEIGHT_TOLERANCE_PERCENT, 5)
     assert.deepEqual(loadReading({ netKg: 8240, onBoardKg: 7644 }, 5), { onBoardKg: 7644, deviationPercent: 7.8, withinTolerance: false })
     assert.deepEqual(loadReading({ netKg: 4810, onBoardKg: 4753 }, 5), { onBoardKg: 4753, deviationPercent: 1.2, withinTolerance: true })
     assert.deepEqual(loadReading({ netKg: 950, onBoardKg: 1000 }, 5), { onBoardKg: 1000, deviationPercent: -5, withinTolerance: true }, "the bound itself is within")

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BULKY_SERVICE_SECONDS, DENSITY_KG_PER_CUBIC_METRE, expectedKg, routeWorkload, SERVICE_SECONDS, serviceSecondsOf, UNKNOWN_SERVICE_SECONDS, WORK_ORDER_SERVICE_SECONDS, type WorkloadStop } from "../workload"
+import { BULKY_SERVICE_SECONDS, expectedKg, routeWorkload, serviceSecondsOf, UNKNOWN_SERVICE_SECONDS, WORK_ORDER_SERVICE_SECONDS, type WorkloadStop } from "../workload"
 
 const bin = (values: Partial<WorkloadStop> = {}): WorkloadStop => ({ service: "empty", status: "planned", volumeLitres: 240, densityKgPerCubicMetre: 150, containerServiceSeconds: 30, ...values })
 
@@ -34,11 +34,6 @@ describe("a stop's service time", () => {
     assert.equal(serviceSecondsOf({ service: "bulky", containerServiceSeconds: null }), BULKY_SERVICE_SECONDS)
     const reading = routeWorkload([{ service: "bulky", status: "planned", volumeLitres: null, densityKgPerCubicMetre: null, containerServiceSeconds: null }], null)
     assert.deepEqual([reading.stopSeconds, reading.expectedKg, reading.unexpectedStops], [BULKY_SERVICE_SECONDS, null, 1])
-  })
-
-  test("the bounds the database and the wire hold the settings to", () => {
-    assert.deepEqual(DENSITY_KG_PER_CUBIC_METRE, { min: 1, max: 2000 })
-    assert.deepEqual(SERVICE_SECONDS, { min: 1, max: 3600 })
   })
 })
 

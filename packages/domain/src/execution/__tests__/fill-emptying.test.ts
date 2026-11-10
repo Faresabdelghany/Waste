@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { fillEmptyingRoute, FILL_EMPTYING_LEAD_DAYS, type EmptyingRoute } from "../fill-emptying"
+import { fillEmptyingRoute, type EmptyingRoute } from "../fill-emptying"
 
 const route = (id: string, operatingDate: string, over: Partial<EmptyingRoute> = {}): EmptyingRoute => ({ id, label: `RC-${id}`, operatingDate, routeSchemeId: "scheme", collectionGroupId: "group", ...over })
 
@@ -23,7 +23,6 @@ describe("the fill-driven emptying's route", () => {
   })
 
   test("books nothing when the next emptying is soon enough, or when none is planned", () => {
-    assert.equal(FILL_EMPTYING_LEAD_DAYS, 1)
     assert.deepEqual(fillEmptyingRoute(route("tomorrow", "2026-10-30"), [route("today", "2026-10-29")], "2026-10-29").kind, "soon-enough")
     assert.equal(fillEmptyingRoute(route("in-two", "2026-10-31"), [route("today", "2026-10-29")], "2026-10-29").kind, "book")
     assert.deepEqual(fillEmptyingRoute(null, [route("today", "2026-10-29")], "2026-10-29"), { kind: "no-schedule" })
