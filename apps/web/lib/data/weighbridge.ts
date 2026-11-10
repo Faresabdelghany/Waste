@@ -14,10 +14,8 @@ export const WEIGHBRIDGE_MODULE = moduleAt("route-studio.weighbridge")
 export const WEIGHBRIDGE_PREFIX = "weighbridge-ticket"
 export const WEIGHBRIDGE_RECORD_KIND = "Weighbridge ticket"
 
-/** A ticket's status as the queue reads it. */
 export const TICKET_STATUS_LABELS: Readonly<Record<WeighbridgeTicketStatus, string>> = { unmatched: "Unmatched", matched: "Matched", dismissed: "Dismissed" }
 
-/** Why a ticket found no route, in the office's words. */
 export const UNMATCHED_LABELS: Readonly<Record<WeighbridgeUnmatchedReason, string>> = {
   "unknown-vehicle": "No vehicle has this plate",
   "no-route": "The vehicle ran no route then",
@@ -47,7 +45,6 @@ export const MATCH_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Ticket matched." },
 }
 
-/** Dismiss: why no route of ours carried the load. */
 export const DISMISS_FORM: BusinessFormSchema = {
   key: "route-studio.weighbridge",
   mode: "action",
