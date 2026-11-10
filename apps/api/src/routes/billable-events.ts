@@ -108,8 +108,10 @@ export function notHeld(id: string, status: "blocked" | "invoiced" | "cancelled"
   return status === "blocked" ? `Billable event ${id} is blocked; it goes to no run until it is priced, so there is nothing to hold` : notRepriced(id, status)
 }
 
+/** What a release of an event that is not held is told. */
 export const notReleased = (id: string): string => `Billable event ${id} is not held`
 
+/** What a cancellation of a `reversal` is told. */
 export const REVERSAL_NOT_CANCELLED = "A reversal is not cancelled; it is the correction"
 
 /** What a hold of a `reversal` is told (M14 of #293): the correction goes to the next run as it stands. */
@@ -124,6 +126,7 @@ export const A_JOB_IS_SOLD_BY_THE_JOB = "A job is charged at a product sold by t
 /** What a hand-priced manual event under a draft agreement is told: the row's state, after every 400. */
 export const DRAFT_AGREEMENT_BY_HAND = "The agreement is a draft; an event priced by hand needs a signed agreement"
 
+/** What a hand-priced manual event under a product with no VAT rate is told. */
 export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced by hand needs the product's rate — set it first"
 
 /** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */

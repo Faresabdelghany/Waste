@@ -47,6 +47,7 @@ const MODULE = "route-studio.weights"
 const LoadPage = Page(OutboundLoad)
 const AdjustmentPage = Page(MaterialAdjustment)
 
+/** What a receipt from before the load left is told, at the receipt's instant. */
 export const RECEIVED_BEFORE_IT_LEFT = "The load is received on or after it departed"
 
 const loadColumns = {

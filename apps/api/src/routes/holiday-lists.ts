@@ -55,6 +55,7 @@ const nameTaken = (name: string) => `This company already has a holiday list cal
 
 const { noSuch: noSuchList, get: getList, list: listLists } = scoped(holidayList, { noun: "holiday list", reach: "company", columns })
 
+/** What a project naming a list the company does not hold is told, at `holidayList`. */
 export const NO_SUCH_HOLIDAY_LIST = "Not a holiday list of this company: add it in Settings › Holiday lists first"
 
 /**

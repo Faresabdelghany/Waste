@@ -63,6 +63,7 @@ import { getProperty, noSuchProperty, propertyWithParties } from "./property-wri
 import { requireCustomer } from "./references"
 import { stamp } from "./shared"
 
+/** What a move with subscriptions to carry and no number for the incoming agreement is told. */
 export const NUMBER_OWED = "The outgoing customer subscribes at this property, so the incoming customer's agreement needs a number"
 const noParty = (on: string) => `The outgoing customer is no party of this property on ${on}; a move ends roles held on its day`
 const roleBeginsLater = (on: string) => `A role the outgoing customer holds at this property begins on or after ${on}; correct it through the property's parties instead`

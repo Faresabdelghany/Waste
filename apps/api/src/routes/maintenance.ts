@@ -54,10 +54,15 @@ const VEHICLES = "fleet.vehicles"
 const PlanPage = Page(MaintenancePlan)
 const OrderPage = Page(MaintenanceOrder)
 
+/** What a body naming a vehicle of no project the caller works in is told. */
 export const NOT_A_VEHICLE_HERE = "Not a vehicle of a project this account works in"
+/** What an order naming a plan of another vehicle, or a retired one, is told. */
 export const NOT_A_PLAN_OF_THE_VEHICLE = "Not an active maintenance plan of this vehicle"
+/** What a completion after the project's today is told. */
 export const NOT_AHEAD = "A service is completed on a day that has come, not ahead of it"
+/** What a closed order is told by a second close. */
 export const alreadyClosed = (title: string, status: string): string => `The order ${title} is already ${status}`
+/** What a plan's service is told without the reading its next limit counts from. */
 export const NEEDS_THE_ODOMETER = "The plan counts kilometres: give the odometer at the service"
 export const NEEDS_THE_HOURS = "The plan counts engine hours: give them at the service"
 

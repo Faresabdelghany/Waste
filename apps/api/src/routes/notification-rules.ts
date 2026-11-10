@@ -42,11 +42,14 @@ import { describeProblem, invalidRequest } from "../problem"
 
 const MODULE = "configure.templates"
 
+/** What a rule naming a template that is not the project's is told. */
 export const PICK_A_PROJECT_TEMPLATE = "Pick a message template of this project"
+/** What a rule naming a billing template is told. */
 export const A_SERVICE_TEMPLATE = "A notice is a service message: pick a template for service"
 /** What a rule naming a template with a value its notice does not fill is told (C18 of #291). */
 export const notFilledByNotice = (template: string, names: readonly string[]) =>
   `The template ${template} names ${names.map((name) => `{{${name}}}`).join(", ")}, which this notice does not fill`
+/** What a broadcast naming an area that is not one of the project's notification areas is told. */
 export const A_NOTIFICATION_AREA = "Pick a notification area of this project"
 
 type Rules = NotificationRulesPut["rules"]

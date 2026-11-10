@@ -438,6 +438,7 @@ export async function subscriptionStarting(
 export const INSIDE_SUBSCRIPTION = "After the subscription's first day and before its end"
 export const INSIDE_AGREEMENT = "After the agreement's first day and before its end"
 
+/** What a change that leaves the product and the quantity as they are is told. */
 export const CHANGES_NOTHING = "The subscription already has that product and that quantity"
 
 /** The day of a change or a termination: after the period's first day and before its end, so both halves it leaves are periods (400 at `on`). */

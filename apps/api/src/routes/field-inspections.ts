@@ -55,10 +55,14 @@ const MODULE = "operate.inspections"
 
 const InspectionPage = Page(FieldInspection)
 
+/** What a subject outside the caller's projects is told, at its field. */
 export const NOT_A_CONTAINER = "Not a container of a project this account works in"
 export const NOT_A_PROPERTY = "Not a property of a project this account works in"
+/** What a change to a closed inspection is told. */
 export const INSPECTION_CLOSED = "The inspection is closed; it changes no more"
+/** What a photo's key outside the inspection's prefix is told, at `objectKey`. */
 export const KEY_NAMES_ANOTHER = "The photo key names another company or another inspection"
+/** What a photo appended twice is told. */
 export const PHOTO_ALREADY_APPENDED = "That photo is already the inspection's"
 /** What an upload of a key the bucket holds already is told: a fresh id never meets one, so asking again signs another. */
 export const PHOTO_ALREADY_UPLOADED = "Storage holds that photo already; ask again for another"

@@ -32,6 +32,7 @@ import { invalidRequest, problem } from "../problem"
 /** What an index that takes a price below zero is told, at `basisPoints`: a deflator past -100 % would make a price negative. */
 export const INDEX_BELOW_ZERO = "The index would take a price below zero"
 
+/** What an index whose price is past the column is told, at `basisPoints`. */
 export const INDEX_TOO_LARGE = `An indexed price would be more than ${INT4_MAX} minor units, the most a price holds`
 
 /**

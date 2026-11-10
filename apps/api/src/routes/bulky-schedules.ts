@@ -76,8 +76,10 @@ function scheduleOf(row: Row): BulkySchedule {
 const SCHEDULE_RUNNING = "bulky_schedule_no_overlap"
 const SCHEDULE_RUNNING_SENTENCE = "The planning area has a bulky schedule in force over part of that period already; end it first or start this one after it"
 
+/** What a product a schedule names that is not offered is told. */
 export const unofferedBulkyProduct = (status: UnofferedStatus): string => `The product is ${status}; a bulky schedule charges an active one`
 
+/** What an end that leaves bookings outside it is told. */
 export const bookingsOutside = (rows: number): string =>
   `${rows} ${rows === 1 ? "booking is" : "bookings are"} for a day on or after the new end; cancel ${rows === 1 ? "it" : "them"} or end the schedule later`
 
