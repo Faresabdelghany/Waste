@@ -74,7 +74,6 @@ test("Payments: a payment registered against an invoice, a bank statement previe
   expect(invoice.paymentStatus).toBe("open")
   const day = today()
 
-  // Register payment: part of the invoice, paid at the counter.
   const loaded = answerOf(page, "GET", /^\/payments$/)
   await page.goto("/commercial?module=payments")
   expect((await loaded).status()).toBe(200)
@@ -95,7 +94,6 @@ test("Payments: a payment registered against an invoice, a bank statement previe
   await page.keyboard.press("Escape")
   await expect(page.getByTestId("payment-commands")).toBeHidden()
 
-  // Import bank statement: the rest by the invoice's label, and a line nobody's.
   const rest = invoice.grossMinor - 2000
   const unique = uniqueName("E2E bank")
   const csv = ["booked_on;amount;currency;reference;text", `${day};${filed(rest)};DKK;;Betaling ${invoice.label} ${unique}`, `${day};12,34;DKK;;${unique} unknown payer`].join("\n")
@@ -119,7 +117,6 @@ test("Payments: a payment registered against an invoice, a bank statement previe
   await expect(page.getByText("1 matched, 1 unmatched, 0 imported already.")).toBeVisible()
   expect(await invoiceRead(api, invoice.id)).toMatchObject({ paymentStatus: "paid", outstandingMinor: 0 })
 
-  // The bank's match undone in its payment's details: the invoice owes the rest again.
   const bankPaymentId = outcome.lines[0].paymentId!
   const looseId = outcome.lines[1].paymentId!
   const bankRead = answerOf(page, "GET", new RegExp(`^/payments/${bankPaymentId}$`))
@@ -132,7 +129,6 @@ test("Payments: a payment registered against an invoice, a bank statement previe
   await expect(bankDetails.getByText(/· undoes a match$/)).toBeVisible()
   expect(await invoiceRead(api, invoice.id)).toMatchObject({ paymentStatus: "partially-paid", outstandingMinor: rest })
 
-  // The unmatched payment matched to the invoice instead, all that remains of it.
   const looseRead = answerOf(page, "GET", new RegExp(`^/payments/${looseId}$`))
   await page.goto(`/commercial?module=payments&record=payment-${looseId}`)
   expect((await looseRead).status()).toBe(200)
@@ -146,14 +142,12 @@ test("Payments: a payment registered against an invoice, a bank statement previe
   expect(matched.request().postDataJSON()).toEqual({ invoiceId: invoice.id, amountMinor: 1234 })
   expect(await invoiceRead(api, invoice.id)).toMatchObject({ paidMinor: 2000 + 1234 })
 
-  // The invoice's details say where it stands and list its payments.
   const invoiceLoaded = answerOf(page, "GET", /^\/invoices$/)
   await page.goto(`/commercial?module=invoices&record=invoice-${invoice.id}`)
   expect((await invoiceLoaded).status()).toBe(200)
   await expect(page.getByTestId("invoice-payment-standing")).toContainText("Partially paid")
   await expect(page.getByTestId("invoice-payments").getByRole("button")).toHaveCount(3)
 
-  // Østerbro Housing's statement for the day: the invoice raises the balance and the payments lower it.
   const customers = answerOf(page, "GET", /^\/customers$/)
   await page.goto("/customers?module=contacts")
   expect((await customers).status()).toBe(200)

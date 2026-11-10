@@ -34,7 +34,6 @@ const kept = "An inspection is of what it was recorded of: record another for an
 
 const isOutcome = (value: string | undefined): value is FieldInspectionOutcome => FIELD_INSPECTION_OUTCOMES.includes(value as FieldInspectionOutcome)
 
-/** The findings the form's multiselect holds, each one of the list; a value off the list is a refusal. */
 function findingsOf(record: Parameters<typeof typed>[0]): InspectionFinding[] | LocalRefusal {
   const picked = splitList(typed(record, "findings") ?? "")
   const off = picked.find((value) => !INSPECTION_FINDINGS.includes(value as InspectionFinding))

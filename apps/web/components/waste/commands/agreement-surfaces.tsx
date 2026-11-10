@@ -31,17 +31,14 @@ import { CHANGE_SERVICE_FORM, PAUSE_FORM, pauseLine, pauseOffers, stopsToRemoveS
 import { waitingSentence } from "@/lib/api/read-state"
 import type { SubscriptionPause } from "@waste/contracts/agreements"
 
-/** The project a row is in, as its form typed it. */
 const projectOf = (record: BusinessRecord): string | undefined => (typeof record.submittedValues?.projectId === "string" ? record.submittedValues.projectId : undefined)
 
-/** A row's lifecycle, by its kind: an agreement's termination, a subscription's change and pauses. */
 export function AgreementCommandsSurface({ record }: RowSurfaceProps) {
   if (isAgreementRecord(record)) return <TerminateSurface record={record} />
   if (isSubscriptionRecord(record)) return <SubscriptionLifecycleSurface record={record} />
   return null
 }
 
-/** What both kinds' surfaces share: the store's action and re-read, the module's readiness, the project's day, and one write out at a time. */
 function useLifecycle(record: BusinessRecord) {
   const { sendAction, refreshModule } = useBusinessRecordStore()
   const moduleReady = useModuleReady(AGREEMENTS_MODULE)
@@ -59,7 +56,6 @@ function useLifecycle(record: BusinessRecord) {
   return { sendAction, moduleReady, today, busy, setBusy, reread, options }
 }
 
-/** The stops a command left standing, as the toast's second sentence. */
 const andStops = (sentence: string | null) => (sentence === null ? "" : ` ${sentence}.`)
 
 function TerminateSurface({ record }: RowSurfaceProps) {
@@ -93,14 +89,12 @@ function TerminateSurface({ record }: RowSurfaceProps) {
 function SubscriptionLifecycleSurface({ record }: RowSurfaceProps) {
   const { sendAction, moduleReady, today, busy, setBusy, reread, options } = useLifecycle(record)
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
-  // Bumped after each write the API took, so the pauses are read again.
   const [version, setVersion] = useState(0)
   const pauses = useRowHistory(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, record, version, subscriptionPauses)
   const [open, setOpen] = useState<"change" | "pause" | null>(null)
 
   const changeForm = CHANGE_SERVICE_FORM(subscriptionProductOptions(products.records, { projectId: projectOf(record) ?? "" }))
 
-  /** Sends one action, then — where the API took it — closes the dialog, reads again what moved and says so. */
   const send = <Answer,>(outcome: Promise<{ kind: "done"; answer: Answer } | { kind: "refused" }>, done: (answer: Answer) => void) => {
     if (busy) return
     setBusy(true)

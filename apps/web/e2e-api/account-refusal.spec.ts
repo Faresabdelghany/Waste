@@ -29,7 +29,6 @@ import { ensureTester, TESTER_LANDING, TESTER_PROJECT, TESTER_ROLE, type User } 
 // whatever the reactivation answered.
 
 type Deactivated = {
-  /** The tester's page, signed in through the form and landed, its account then deactivated by the administrator. */
   page: Page
   context: BrowserContext
   user: User

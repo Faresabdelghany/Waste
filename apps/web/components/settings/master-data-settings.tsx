@@ -1,13 +1,14 @@
 "use client"
 // Settings › Operations › Master data (Issue #176, slice 2 of #81): the
 // company's own catalogue vocabulary — waste fractions, container types,
-// service frequencies, vehicle types — as the `configure.master` module's
+// service frequencies, vehicle types, contaminant codes and decommission
+// reasons — as the `configure.master` module's
 // records, one kind per tab, created and edited from the pane's own forms
 // (lib/data/master-data.ts) and written through the record store, which on
 // the Pilot reaches the API through lib/api/records/master-data.ts. The pane
 // exists for the Pilot: the prototype never had a surface for the module,
-// whose fixture records are coarse master-data sets, so the Settings nav
-// offers it only with the adapter configured.
+// whose fixture records are coarse master-data sets, so where no API is
+// configured the pane says its subject is kept on the API (`keptOnApi`).
 import { useMemo, useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
@@ -68,10 +69,8 @@ import {
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-/** A row's status, the one value the list filters by. */
 const STATUS_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
 
-/** What the table's detail column says of a row: the fact its kind is known by. */
 function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
   switch (kind) {
     case "waste-fraction":
@@ -99,7 +98,6 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   const [view, setView] = useState<BusinessViewOptions>(() => listView("updated"))
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editing, setEditing] = useState<BusinessRecord | null>(null)
-  // A write in flight: the form holds against a second submit until the API has answered.
   const [saving, setSaving] = useState(false)
 
   // The module and the projects its frequencies name: on the Pilot, the API's
@@ -139,7 +137,6 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
     if (isMasterDataKind(params.kind)) setKind(params.kind)
   }
 
-  // A link to a row opens it for editing on its own tab.
   useLinkedRecord(params.record, rows, hydrated && master.ready, (record) => {
     const recordKind = masterDataKindOf(record)
     if (recordKind !== null) setKind(recordKind)

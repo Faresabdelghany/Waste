@@ -52,7 +52,6 @@ test("a driver confirms a stop's container by its code, after the code of anothe
     await dialog.getByRole("button", { name: "Check code" }).click()
     await expect(dialog.getByRole("status")).toHaveText(`${neighbour.label} is stop 2's container, not this one`)
 
-    // The bin's own barcode: the arrival goes with it, and the stop reads back confirmed and arrived.
     await dialog.getByLabel("Barcode, tag or label").fill(barcode.toLowerCase())
     await dialog.getByRole("button", { name: "Check code" }).click()
     await expect(dialog).toBeHidden()

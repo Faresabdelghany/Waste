@@ -73,14 +73,12 @@ export function periodRefusal(period: DayWindow): string | null {
   return windowDays(period) > REPORT_WINDOW_MAX_DAYS ? PERIOD_TOO_LONG : null
 }
 
-/** A period as a heading reads it: `Jan 1 – Dec 31 2025`, each day with its year where the two years differ. */
 export function periodLabel(period: DayWindow): string {
   const [fromYear, toYear] = [period.from.slice(0, 4), period.to.slice(0, 4)]
   if (fromYear !== toYear) return `${dayLabel(period.from)} ${fromYear} – ${dayLabel(period.to)} ${toYear}`
   return period.from === period.to ? `${dayLabel(period.from)} ${toYear}` : `${dayLabel(period.from)} – ${dayLabel(period.to)} ${toYear}`
 }
 
-/** The file's separators as the tab offers them. */
 export const SEPARATORS = [
   { id: "comma", label: "Commas" },
   { id: "semicolon", label: "Semicolons" },

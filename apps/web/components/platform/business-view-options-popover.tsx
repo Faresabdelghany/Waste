@@ -247,7 +247,6 @@ export function BusinessViewOptionsPopover({
       staticColumns: value.staticColumns.filter(
         (candidate) => candidate !== column,
       ),
-      // An unpinned column stays visible as a regular column.
       factColumns: value.factColumns.includes(column)
         ? value.factColumns
         : [...value.factColumns, column],

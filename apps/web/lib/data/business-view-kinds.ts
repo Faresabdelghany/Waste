@@ -16,7 +16,6 @@ import type { BusinessRecord } from "./business-modules"
 
 export type BusinessModuleViewKind = "queue" | "rich" | "standard"
 
-/** What these rules read of a module: its view. */
 type Viewed = Pick<ModuleSpec, "view">
 
 /** Governance facts are shown in record details, never offered as table columns. */
@@ -34,7 +33,6 @@ const GOVERNANCE_COLUMN_FACTS: ReadonlySet<string> = new Set([
   "Deleted by",
 ])
 
-/** A rich module's table; none for a queue or a standard list. */
 function richTable({ view }: Viewed): RichModuleTable | undefined {
   return view === undefined || view === "queue" ? undefined : view
 }
@@ -53,12 +51,6 @@ export function defaultFactColumns(module: Viewed, fallback: readonly string[]):
   return [...(richTable(module)?.seededFactColumns ?? fallback)]
 }
 
-/**
- * The fact labels a rich module offers as optional table columns, collected
- * from the visible records in first-seen order with governance and
- * module-specific exclusions applied. Non-rich and fixed-column modules
- * offer none.
- */
 export function collectFactColumnOptions(
   module: Viewed,
   records: readonly Pick<BusinessRecord, "facts">[],

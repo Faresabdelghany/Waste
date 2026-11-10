@@ -19,7 +19,6 @@ import type { BusinessRecord } from "./business-modules"
 /** Where the Applications live: the customers' workspace, the module the API's grant names. */
 export const APPLICATIONS_MODULE = moduleAt("customers.applications")
 
-/** What a person calls each kind. */
 export const KIND_LABELS: Readonly<Record<ApplicationKind, string>> = {
   exemption: "Exemption",
   pause: "Pause",
@@ -41,7 +40,6 @@ export const channelLabel = (channel: string): string => CHANNEL_LABELS[channel 
 export const outcomeLabel = (outcome: string): string => OUTCOME_LABELS[outcome as DecisionOutcome] ?? outcome
 export const kindLabel = (kind: string): string => KIND_LABELS[kind as ApplicationKind] ?? kind
 
-/** The decide dialog: the outcome, what it holds the customer to, the grant's first and last day in force, and how to appeal anything less than a grant in full. */
 export const DECIDE_FORM: BusinessFormSchema = {
   key: "customers.applications.decide",
   mode: "create",
@@ -70,9 +68,7 @@ export const DECIDE_FORM: BusinessFormSchema = {
 export const LAST_DAY_SENTENCE = "The last day in force comes on or after the first"
 export const NOT_A_DAY = "Pick a day from the calendar"
 
-/** A field's text, undefined where it is blank. */
 const textOf = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined)
-/** A day as a date field holds it, `YYYY-MM-DD`; undefined for anything else. */
 export const dayOf = (value: unknown): string | undefined => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined)
 
 /** A grant's period as the office reads it, by its last day in force where the wire's `validTo` is the first day out (ADR-0005): "From 2026-11-09", "2026-11-09 to 2026-12-31". */
@@ -165,7 +161,6 @@ export function applicationCommandsOffered(record: Pick<BusinessRecord, "submitt
 /** Where a decided Application's letter prints, by its server id. */
 export const decisionLetterHref = (applicationId: string): string => `/applications/${encodeURIComponent(applicationId)}/letter`
 
-/** A decision letter, as the page prints it: from the company to the customer, about one Application and its latest Decision. */
 export type DecisionLetter = {
   sender: string
   recipient: string

@@ -21,7 +21,6 @@ const TONE: Record<Change["tone"], string> = {
   neutral: "text-muted-foreground",
 }
 
-/** Where the period before stands: read, on its way, or not read. */
 export type Comparison = "read" | "reading" | "unread"
 
 /** The change against the period before, `against` being that period (`Oct 11 – Oct 17`). */
@@ -81,7 +80,6 @@ export function StatTile({
   )
 }
 
-/** Where a pair of reads stands for a tile: the period before read, on its way, or not read. */
 export const comparisonOf = (previous: { loading: boolean; problem: unknown }): Comparison => (previous.problem ? "unread" : previous.loading ? "reading" : "read")
 
 /** A row of tiles, two across on a phone and four on a wide screen, hairlines between. */

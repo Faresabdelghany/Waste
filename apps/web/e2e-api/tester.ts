@@ -2,10 +2,8 @@
 // refusal with (Issue #151, decision Q5 of #131): a User Account invited
 // through the API on the Route Planner role with Project Access to Copenhagen
 // Central alone, whose Login the stack already holds from
-// `LOCAL_EXTRA_LOGINS`. Until #163 lands no surface of the product sends
-// `POST /users`, so the Invitation is made here, under the administrator's
-// own browser session; when Users & Roles writes to the API, this moves into
-// the browser like the other round trips.
+// `LOCAL_EXTRA_LOGINS`. The Invitation is made here, under the administrator's
+// own browser session.
 //
 // Idempotent, since a developer's stack outlives a run: an account the
 // address already has is brought to this role and this access with a patch,
@@ -26,7 +24,6 @@ export const TESTER_PROJECT = "Copenhagen Central"
 /** Where the Route Planner lands (`landingOf`): it views nothing of operations, so on the sidebar's first page it views, the Dashboard, for its Analytics. */
 export const TESTER_LANDING = /\/performance/
 
-/** Every item of a list, page after page, as the web's `listAll` walks it, narrowed by `query`. */
 export async function listAll<Item>(api: APIRequestContext, path: string, query: Readonly<Record<string, string>> = {}): Promise<Item[]> {
   const items: Item[] = []
   let cursor: string | undefined
@@ -52,7 +49,6 @@ export async function roleNamed(api: APIRequestContext, name: string): Promise<R
   return role
 }
 
-/** The tester's account as it should be, made or brought to that shape. */
 export async function ensureTester(api: APIRequestContext, email: string): Promise<{ user: User; project: Project; role: Role }> {
   const [project, role] = await Promise.all([projectNamed(api, TESTER_PROJECT), roleNamed(api, TESTER_ROLE)])
   const wanted = { roleId: role.id, projectIds: [project.id] }

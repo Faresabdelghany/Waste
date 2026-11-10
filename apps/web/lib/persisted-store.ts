@@ -18,7 +18,6 @@ export type PersistedStore<T> = {
 type PersistedStoreOptions<T> = {
   /** The owner's reading of the kept text, a migration of an older shape included; null, or a throw, for what is not a value. */
   parse: (raw: string) => T | null
-  /** The text kept for a value; JSON unless said otherwise. */
   serialize?: (value: T) => string
   /** The storage, asked for at each use; the browser's localStorage unless said otherwise. */
   storage?: () => Storage | undefined

@@ -108,7 +108,6 @@ export function RouteMapCanvas({ points, road, baseMap, label }: RouteMapCanvasP
             </g>
           ) : (
             anchors.length >= 2 && (
-              /* No measured road: the places joined straight, dashed to say so. */
               <polyline
                 points={anchors.map((at) => `${at.x},${at.y}`).join(" ")}
                 fill="none"

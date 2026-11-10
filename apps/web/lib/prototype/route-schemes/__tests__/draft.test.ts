@@ -73,7 +73,6 @@ describe("scheme-level waste fraction", () => {
       effectiveFrom: "2026-09-14",
     })
     assert.deepEqual(stray.groups[0].fractions, ["Organic"])
-    // Nothing picked: no fraction on the scheme or the group, no service type.
     const blank = quickSchemeDraftFromValues({
       schemeName: "Quick",
       stopSelection: "rule",
@@ -84,7 +83,6 @@ describe("scheme-level waste fraction", () => {
     assert.equal(blank.wasteFraction, "")
     assert.equal(blank.serviceType, "")
     assert.deepEqual(blank.groups[0].fractions, [])
-    // A manual pick carries the scheme's fraction; the group's own list stays empty.
     const manual = quickSchemeDraftFromValues({
       schemeName: "Quick",
       stopSelection: "manual",

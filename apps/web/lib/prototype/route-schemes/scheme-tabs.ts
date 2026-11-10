@@ -25,13 +25,11 @@ const ROUTE_FRACTIONS_FACT = "Waste fractions"
 /** Fact the Stops tab exposes the route's operating date under (ISO date). */
 const STOP_SERVICE_DATE_FACT = "Service date"
 
-/** A record's submitted value as a non-empty string, else undefined. */
 export const stringValueOf = (
   record: BusinessRecord,
   key: string,
 ): string | undefined => stringValue(record.submittedValues ?? {}, key)
 
-/** "v6 draft" → "v6"; absent → "v1". */
 export function schemeVersionOf(scheme: BusinessRecord): string {
   const version = scheme.facts?.Version?.trim().split(/\s+/)[0]
   return version || "v1"
@@ -63,7 +61,6 @@ export function routeDeviationNote(route: BusinessRecord): string | null {
   return stamped && stamped !== "None" ? stamped : null
 }
 
-/** The routes one scheme generated, sorted by service date. */
 export function schemeGeneratedRoutes(
   schemeId: string,
   routes: readonly BusinessRecord[],
@@ -77,7 +74,6 @@ export function schemeGeneratedRoutes(
     )
 }
 
-/** The Stops in a dated route's plan: linked by structured routeId. */
 function plannedRouteStops(
   route: BusinessRecord,
   pickups: readonly BusinessRecord[],
@@ -85,7 +81,6 @@ function plannedRouteStops(
   return pickups.filter((pickup) => stringValueOf(pickup, "routeId") === route.id)
 }
 
-/** The waste fractions a route serves: the sorted union over its planned Stops. */
 export function routeWasteFractions(
   route: BusinessRecord,
   pickups: readonly BusinessRecord[],
@@ -98,7 +93,6 @@ export function routeWasteFractions(
   )
 }
 
-/** Render-time projection: the route with its derived fractions as a fact. */
 export function withRouteWasteFractions(
   route: BusinessRecord,
   pickups: readonly BusinessRecord[],
@@ -116,7 +110,6 @@ export function routeWasteFractionsLabel(route: BusinessRecord): string | undefi
   return route.facts[ROUTE_FRACTIONS_FACT]
 }
 
-/** Render-time projection: the Stop with its route's operating date as a fact. */
 export function withStopServiceDate(
   pickup: BusinessRecord,
   isoDate: string | undefined,
@@ -140,7 +133,6 @@ export function schemeStopContainerType(pickup: BusinessRecord): string | undefi
   return pickup.facts["Container Type"] ?? pickup.facts["Container type"]
 }
 
-/** Routes tab: Waste fraction · Vehicle · Driver. */
 export const SCHEME_ROUTE_FILTER_READERS: FilterValueReaders = {
   wasteFractions: (record) => splitFilterValues(routeWasteFractionsLabel(record)),
   vehicles: (record) => singleFilterValue(record.facts.Vehicle),

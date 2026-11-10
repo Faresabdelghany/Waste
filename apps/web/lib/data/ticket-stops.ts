@@ -12,10 +12,8 @@ import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, Busines
 import type { BusinessRecord } from "./business-modules"
 import { ROUTE_COMMAND_FORMS, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "./routes"
 
-/** Whether a ticket of this kind and status offers Book a stop: an open one a stop answers. */
 export const offersBookAStop = (kind: string, status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status) && isStopTicketKind(kind as TicketKind)
 
-/** The route the stop goes on, picked from the ticket's project's routes that have not started. */
 const routeField = (options: readonly BusinessFormOption[]): BusinessFormField => ({
   id: "routeId",
   label: "Route",
@@ -25,7 +23,6 @@ const routeField = (options: readonly BusinessFormOption[]): BusinessFormField =
   description: options.length === 0 ? NO_ROUTE_TO_BOOK_ON : "A planned or ready route of the ticket's project; the stop goes after its last one.",
 })
 
-/** What Book a stop says where the ticket's project has no route a stop may still be added to. */
 export const NO_ROUTE_TO_BOOK_ON = "No route of the ticket's project is planned or ready: make one in Route Studio, then book the stop."
 
 /** Why Book a stop is not offered yet: the routes are being read, or the person's role reads none; undefined once they are read. */
@@ -78,7 +75,6 @@ export function bookStopInput(values: BusinessFormValues, ticketWebId: string): 
   return { routeId: typeof routeId === "string" && routeId !== "" ? routeId : undefined, input: { ...input, ticketId: ticketWebId } }
 }
 
-/** The ticket's project's routes a stop may still be added to — planned or ready — by label and day, the soonest first. */
 export function bookableRoutes(routes: readonly BusinessRecord[], projectWebId: string | undefined): BusinessFormOption[] {
   const day = (route: BusinessRecord) => valueOf(route, "operatingDate") ?? ""
   return routes

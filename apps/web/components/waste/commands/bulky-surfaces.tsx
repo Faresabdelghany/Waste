@@ -36,19 +36,16 @@ import { waitingSentence } from "@/lib/api/read-state"
 
 const ROUTES = moduleAt("route-studio.routes") satisfies ModuleLocation
 
-/** A place as the dialog's one picker holds it: which of the two, and its web id. */
 const placeValue = (kind: "property" | "point", id: string) => `${kind}:${id}`
 const placeOf = (value: string): { propertyId: string; sharedCollectionPointId: string } => {
   const [kind, id = ""] = value.split(":")
   return kind === "property" ? { propertyId: id, sharedCollectionPointId: "" } : kind === "point" ? { propertyId: "", sharedCollectionPointId: id } : { propertyId: "", sharedCollectionPointId: "" }
 }
 
-/** The days read for a place, or why they could not be. */
 type DaysRead = { status: "idle" } | { status: "reading" } | { status: "read"; days: BulkyAvailableDay[] } | { status: "refused"; sentence: string }
 
 const field = (id: string, label: string, relation?: ModuleLocation) => ({ id, label, type: "select" as const, required: true, ...(relation === undefined ? {} : { relation }) })
 
-/** Book bulky collection: the module's primary action. */
 export function BookBulkySurface({ label }: PrimarySurfaceProps) {
   const client = useApiClient()
   const resolver = useServerResolver()
@@ -299,7 +296,6 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** A booking's details: Route and Cancel while it stands booked. */
 export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(BULKY_BOOKINGS_MODULE)
   const { busy, run, save } = useCommandRunner(BULKY_BOOKINGS_MODULE, record.id)

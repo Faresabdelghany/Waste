@@ -1,5 +1,5 @@
 // Option vocabularies the guided setup shows, and the draft defaults it
-// opens with. The frequency options are the product's four cadences mapped
+// opens with. The frequency options are the product's cadences mapped
 // onto the engine's (frequency, weekRotation) pair.
 
 import { HOLIDAY_POLICIES, SCHEME_EDIT_POLICIES } from "@waste/domain/planning/vocabulary"
@@ -34,7 +34,6 @@ export const WIZARD_STEP_TITLES: Record<WizardStepId, string> = {
   5: "Ready to create this scheme?",
 }
 
-/** Daily · Every week · Every 2 weeks · Every 3 weeks · Once a month. */
 export const WIZARD_FREQUENCIES: readonly SelectOption[] = OFFERED_RECURRENCE_FREQUENCIES.map(
   (value) => ({ value, label: RECURRENCE_FREQUENCY_LABELS[value] }),
 )
@@ -87,7 +86,6 @@ export const EDIT_POLICY_OPTIONS: readonly SelectOption[] = SCHEME_EDIT_POLICIES
   label: SCHEME_EDIT_POLICY_LABELS[value],
 }))
 
-/** A blank draft: today as effective-from, weekly, 06:30, holidays skipped, edits asked about. */
 export function initialSchemeDraft(): GuidedSchemeData {
   return {
     schemeName: "",

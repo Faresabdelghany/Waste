@@ -1,15 +1,9 @@
-// The edit policy — "Changes to a running scheme" (issue #38): the stored
-// choice, what an edit shapes, the routes "ask" counts, and the scheme a
-// one-off leaves behind.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { BusinessRecord, SubmittedValues } from "../../prototype-record"
 import { editChangesGeneration, futureRefreshableRoutes, schemeAfterOneOff, schemeEditPolicy } from "../edit"
 
-/* --------------------------------- fixtures -------------------------------- */
-
-/** The values as a record that never stored `key`. */
 const without = (values: SubmittedValues | undefined, key: string): SubmittedValues =>
   Object.fromEntries(Object.entries(values ?? {}).filter(([name]) => name !== key))
 
@@ -17,7 +11,6 @@ const AREA = "area-indreby"
 const TODAY = "2026-09-25" // a Friday
 const GENERATED_AT = "2026-09-20T06:00:00.000Z"
 
-/** A Scheduled weekly Mon/Wed manual scheme that has generated before; the stored record an edit starts from. */
 function scheme(values: Record<string, string | boolean> = {}, facts: Record<string, string> = {}): BusinessRecord {
   return {
     id: "scheme-38",
@@ -63,7 +56,6 @@ const edited = (stored: BusinessRecord, values: Record<string, string | boolean>
 /** An edit of the planned start time — a value generation reads (the routes' Time window). */
 const startAt = (stored: BusinessRecord, time: string) => edited(stored, { plannedStartTime: time })
 
-/** A route of a scheme on a service date, in a status. */
 const route = (id: string, schemeId: string, serviceDate: string, status = "Planned"): BusinessRecord => ({
   id,
   name: id,
@@ -81,8 +73,6 @@ const route = (id: string, schemeId: string, serviceDate: string, status = "Plan
   submittedValues: { schemeId, serviceDate },
 })
 
-/* ------------------------------ the stored policy ------------------------------ */
-
 describe("schemeEditPolicy", () => {
   test("reads the stored choice and asks for a record that predates the field or carries a stray value", () => {
     assert.equal(schemeEditPolicy({ editPolicy: "future" }), "future")
@@ -94,8 +84,6 @@ describe("schemeEditPolicy", () => {
     assert.equal(schemeEditPolicy({ editPolicy: true }), "ask")
   })
 })
-
-/* ------------------------------ what an edit shapes ------------------------------ */
 
 describe("editChangesGeneration", () => {
   const stored = scheme()
@@ -141,13 +129,10 @@ describe("editChangesGeneration", () => {
     const never = { ...stored, submittedValues: rest }
     assert.equal(editChangesGeneration(never, { ...stored, submittedValues: { ...rest, sameAllDays: true } }), false)
     assert.equal(editChangesGeneration({ ...stored, submittedValues: { ...rest, sameAllDays: true } }, never), false)
-    // Only an explicit false is the other value.
     assert.equal(editChangesGeneration(never, { ...stored, submittedValues: { ...rest, sameAllDays: false } }), true)
     assert.equal(editChangesGeneration(stored, edited(stored, { sameAllDays: false })), true)
   })
 })
-
-/* ------------------------------ what ask counts ------------------------------ */
 
 test("futureRefreshableRoutes counts the scheme's Draft and Planned routes from tomorrow and nothing else", () => {
   const stored = scheme()
@@ -163,8 +148,6 @@ test("futureRefreshableRoutes counts the scheme's Draft and Planned routes from 
     ["route-draft", "route-planned"],
   )
 })
-
-/* --------------------------------- one-offs --------------------------------- */
 
 test("schemeAfterOneOff keeps the stored configuration and takes the name and the non-shaping values", () => {
   const stored = scheme()

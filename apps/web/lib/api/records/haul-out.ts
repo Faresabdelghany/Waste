@@ -43,14 +43,12 @@ const refusal = (path: string, message: string): LocalRefusal => ({ path, messag
 const text = (input: CommandInput, key: string): string => (typeof input[key] === "string" ? (input[key] as string).trim() : "")
 const optional = (value: string): string | undefined => (value === "" ? undefined : value)
 
-/** A web id typed into a dialog as the server id the API holds, or the refusal at the field. */
 function serverId(input: CommandInput, key: string, context: MappingContext, message: string): string | LocalRefusal {
   const webId = text(input, key)
   const id = webId === "" ? undefined : context.resolve.serverIdOf(webId)
   return id ?? refusal(key, message)
 }
 
-/** Whole kilograms typed, at least one; `signed` takes a minus and refuses zero. */
 function kilograms(input: CommandInput, key: string, message: string, { signed = false, optional: absent = false } = {}): number | undefined | LocalRefusal {
   const typed = text(input, key)
   if (typed === "" && absent) return undefined
@@ -59,7 +57,6 @@ function kilograms(input: CommandInput, key: string, message: string, { signed =
   return (signed ? kg !== 0 : kg >= 1) && Number.isSafeInteger(kg) ? kg : refusal(key, message)
 }
 
-/** An amount typed in the project's currency as its minor units, blank for none. */
 function cost(input: CommandInput, key: string, currency: string): number | undefined | LocalRefusal {
   const typed = text(input, key)
   if (typed === "") return undefined
@@ -67,7 +64,6 @@ function cost(input: CommandInput, key: string, currency: string): number | unde
   return Number.isNaN(minor) ? refusal(key, `Give the cost as an amount in ${currency}, such as 1850.00, or leave it blank`) : minor
 }
 
-/** A wall-clock time typed on the project's clock as an instant. */
 function instant(input: CommandInput, key: string, message: string): string | LocalRefusal {
   const at = instantOn(text(input, key), text(input, "timezone") || undefined)
   return at ?? refusal(key, message)
@@ -162,7 +158,6 @@ export function receiveLoadBody(input: CommandInput) {
   return { loadId, body: { receivingTicket, receivedNetKg: receivedNetKg!, receivedAt } }
 }
 
-/** A load command's body: the load, by its server id, and what the command says of it. */
 type LoadBody = { loadId: string; body: object }
 
 export function reasonBody(required: boolean) {
@@ -220,7 +215,7 @@ export function stockLine(row: Pick<MaterialStockRow, "inKg" | "outKg" | "adjust
   return [`${kg(row.onHandKg)} on hand`, `in ${kg(row.inKg)}`, `out ${kg(row.outKg)}`, ...(row.adjustedKg === 0 ? [] : [`adjusted ${kg(row.adjustedKg)}`]), ...(row.rejectedKg === 0 ? [] : [`${kg(row.rejectedKg)} under a rejected weight`])].join(" · ")
 }
 
-/** A load as its line reads: "AB 12 345 · 20,000 kg · received 19,200 kg (-4%)". */
+/** A load as its line reads: "AB 12 345 · 20,000 kg · received · ARC-88123: 19,200 kg (-4%)". */
 export function loadLine(load: Pick<OutboundLoad, "vehicleRegistration" | "netKg" | "status" | "receipt">): string {
   const receipt = load.receipt === null ? [] : [`${load.receipt.ticket}: ${kg(load.receipt.netKg)} (${load.receipt.deviationPercent > 0 ? "+" : ""}${load.receipt.deviationPercent}%${load.receipt.withinTolerance ? "" : ", beyond the tolerance"})`]
   return [load.vehicleRegistration, kg(load.netKg), load.status, ...receipt].join(" · ")

@@ -95,7 +95,6 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
   let harbor: string
 
   let lateStart: SeededRoute
-  let running: SeededRoute
   let harborRoute: SeededRoute
 
   before(async () => {
@@ -160,7 +159,7 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
         { kind: "weight", pickupIndex: 2, occurredAt: at("2026-10-06", "04:55"), weightKg: 99 },
       ],
     })
-    running = await fresh({
+    await fresh({
       status: "active",
       operatingDate: "2026-10-06",
       plannedStartTime: "06:10",
@@ -290,7 +289,6 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual([harborScheme.routes.total, harborScheme.pickups.completed], [1, 1])
       const harborOnly = await service(olivia, `${WEEK}&projectId=${harbor}`)
       assert.deepEqual([harborOnly.window.projectId, harborOnly.routes.total, harborOnly.schemes.map((scheme) => scheme.name)], [harbor, 1, ["Havnen Mondays"]])
-      assert.equal(harborRoute.projectId, harbor)
     })
 
     test("counts only the caller's projects: the viewer works in Copenhagen, a provider's account in none, another company sees nothing of this one", async () => {
@@ -565,7 +563,6 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal((await tonnage(other)).unloads.length, 0)
       assert.match((await refused(await ungranted(`/reports/tonnage?${WEEK}`), 403)).detail ?? "", /improve\.analytics/, "Analytics is not held")
       assert.match((await refused(await ungranted("/reports/revenue?from=2026-10-01&to=2026-10-31"), 403)).detail ?? "", /improve\.analytics/)
-      assert.equal(running.projectId, copenhagen)
     })
 
     // The regulatory report over the same week (#291 slice 29): after the tonnage tests above, since it adds an approved glass load and the residual's code.

@@ -1,6 +1,3 @@
-// A value kept in the browser: read through its legacy keys, parsed by its
-// owner, written back under its key, and never a failure of the page when
-// the storage refuses or holds something else.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

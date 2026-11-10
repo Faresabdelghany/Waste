@@ -34,7 +34,6 @@ function spot(): { centre: [number, number]; square: { type: "Polygon"; coordina
   return { centre: [lon, lat], square: { type: "Polygon", coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]] } }
 }
 
-/** Reads the customer's messages until one with this subject has been settled by the worker, and answers it. */
 async function settledMessage(api: APIRequestContext, customerId: string, subject: string): Promise<Message> {
   let found: Message | undefined
   await expect
@@ -63,7 +62,6 @@ test("a project sends its bulky collections' customers the notices it chose in S
     body: "Dear {{recipientName}},\nwe collect your items on {{collectionDate}}.\n{{companyName}}",
   })
 
-  // Settings › Message templates: the booked and the cancelled notice from the template.
   const read = answerOf(page, "GET", "/message-templates")
   await page.goto("/settings?pane=message-templates")
   expect((await read).status()).toBe(200)
@@ -82,7 +80,6 @@ test("a project sends its bulky collections' customers the notices it chose in S
   await expect(toasts(page)).toContainText("Customer notices saved")
 
   try {
-    // A customer of its own with an e-mail, at a property inside an area drawn for the run, under a signed agreement.
     const fraction = (await listAll<Named>(api, "/waste-fractions")).find((row) => row.name === "Residual")
     expect(fraction, "the seed holds a Residual fraction").toBeTruthy()
     const today = dayIn("Europe/Copenhagen")
@@ -99,14 +96,12 @@ test("a project sends its bulky collections' customers the notices it chose in S
     const [first] = ((await (await api.get(`/bulky-bookings/availability?propertyId=${property.id}&from=${today}&to=${fortnight}`)).json()) as { days: { day: string }[] }).days
     expect(first, "a bookable day within a fortnight").toBeTruthy()
 
-    // Booked: the worker sends the template to the customer, the day filled in.
     const booking = await made<{ id: string }>(api, "/bulky-bookings", { customerId: customer.id, agreementId: agreement.id, propertyId: property.id, wasteFractionId: fraction?.id, day: first.day, items: [{ description: "Sofa", quantity: 1 }] })
     const subject = `Your bulky collection on ${first.day}`
     const notice = await settledMessage(api, customer.id, subject)
     expect(notice).toMatchObject({ templateId: template.id, recipient: "bulky-notices@waste-e2e.example", purpose: "service", provider: "log" })
     expect(notice.body).toContain(`we collect your items on ${first.day}.`)
 
-    // Cancelled: the second notice, from the same template.
     const cancelled = await api.post(`/bulky-bookings/${booking.id}/cancel`, { data: { reason: "Customer called" } })
     expect(cancelled.status(), await cancelled.text()).toBe(200)
     await expect

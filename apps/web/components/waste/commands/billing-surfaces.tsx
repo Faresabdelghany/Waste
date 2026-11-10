@@ -77,10 +77,6 @@ import { dayIn } from "@/lib/format/clock"
 import { ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
 import { waitingSentence } from "@/lib/api/read-state"
 
-// ---------------------------------------------------------------------------
-// Billable events
-// ---------------------------------------------------------------------------
-
 /** Add manual event: the office's entry, priced by the agreement's list or at a price of the person's own. */
 export function AddManualEventSurface({ label }: PrimarySurfaceProps) {
   const pickers = useCommercialPickers()
@@ -96,10 +92,8 @@ export function AddManualEventSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** What each command is told once the API has taken it. */
 const EVENT_DONE: Readonly<Record<EventCommand, string>> = { reprice: "Event repriced", cancel: "Event cancelled", hold: "Event held for review", release: "Event released to billing" }
 
-/** What a command the API took is told: a reprice that leaves the event blocked says what still blocks it. */
 function eventDone(name: EventCommand, record: { name: string; status: string; value: string }): void {
   if (name === "reprice" && record.status === "Blocked") {
     toast.info("Still blocked", { description: `${record.name}: ${record.value}. Put it right, then reprice it again.` })
@@ -108,7 +102,6 @@ function eventDone(name: EventCommand, record: { name: string; status: string; v
   toast.success(EVENT_DONE[name], { description: `${record.name} is now ${record.status.toLowerCase()}${record.value === "" ? "" : `: ${record.value}`}.` })
 }
 
-/** The modules an event's price question is read through (`eventQuestion`): its agreement and customer, the price rows, its route, scheme, pickup and container. */
 const QUESTION_MODULES = [AGREEMENTS_MODULE, CONTACTS_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION, ROUTE_SCHEMES_MODULE, PICKUPS_MODULE, CONTAINERS_MODULE] as const
 
 /** An event's price question, asked of the store as it holds those modules when Explain price opens. */
@@ -131,7 +124,6 @@ function useEventQuestion(record: BusinessRecord): () => BusinessFormValues {
   }
 }
 
-/** The commands an event's status moves it by and, where its price is a list's, Explain price on its own question, in its details. */
 export function EventCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(EVENTS_MODULE)
@@ -166,16 +158,10 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Billing runs
-// ---------------------------------------------------------------------------
-
-/** A payer the store holds, by server id: its name, or its id chip. */
 function useCustomerName(): (serverId: string) => string {
   return useServerNames(CONTACTS_MODULE, "customer")
 }
 
-/** Run billing: the period, the preview, then the run. */
 export function RunBillingSurface({ label }: PrimarySurfaceProps) {
   const client = useApiClient()
   const { upsertRecord, refreshModule, getRecords } = useBusinessRecordStore()
@@ -333,7 +319,6 @@ function totalsByCurrency(invoices: readonly Invoice[]): { currency: string; net
   return [...totals].map(([currency, total]) => ({ currency, ...total }))
 }
 
-/** A run's details: its exclusions, the invoices it issued, each opening its invoice, and their totals per currency. */
 export function BillingRunSurface({ record }: RowSurfaceProps) {
   const read = useRowHistory(BILLING_MODULE.workspaceId, BILLING_MODULE.moduleId, record, 0, readRun)
   const customerName = useCustomerName()
@@ -368,10 +353,6 @@ export function BillingRunSurface({ record }: RowSurfaceProps) {
     </section>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Invoices and credit notes
-// ---------------------------------------------------------------------------
 
 /** The document's own read, as a one-row history its surface reads again after a credit note. */
 const readInvoice = (client: ApiClient, serverId: string) => invoiceDetail(client, serverId).then((detail): InvoiceDetail[] => [detail])

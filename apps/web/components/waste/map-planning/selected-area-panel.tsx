@@ -8,7 +8,7 @@
 // switch that draws them on the map — and what can happen to it: edit the
 // shape, hand it to the Guided Setup wizard, or clear it. shadcn Accordion
 // sections so each block folds away; every number comes from
-// @waste/domain/map-planning/{statistics,coverage,routes} at render time.
+// @/lib/prototype/map-planning/{statistics,coverage,routes} at render time.
 
 import { CaretDown, Handshake, MapTrifold, PencilSimple, Plus, X, Play } from "@phosphor-icons/react/dist/ssr"
 
@@ -40,7 +40,6 @@ export type SelectedAreaPanelProps = {
   stats: SelectionStatistics
   serviceAreas: readonly ServiceAreaCoverage[]
   routes: AreaRoutes
-  /** Whether the routes are drawn on the map right now. */
   routesOnMap: boolean
   onToggleRoutesOnMap: () => void
   /** Replay a route stop by stop on the map. */
@@ -494,7 +493,6 @@ const COUNT_TONES: Readonly<Record<RouteBucket, { dot: string; value: string }>>
   completed: { dot: "bg-success", value: "text-success" },
 }
 
-/** A label/value row with the status colour on the dot and the number. */
 function CountRow({
   label,
   value,

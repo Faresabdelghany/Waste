@@ -356,7 +356,6 @@ function InspectionDialog({ tank, today, onClose, onSaved }: { tank: TankInstall
   )
 }
 
-/** A tank's inspections, read again whenever `version` moves. */
 function useInspections(tankId: string, version: number): { rows: TankInspection[] | null; problem: string | null } {
   const client = useApiClient()
   const key = `${tankId}|${version}`

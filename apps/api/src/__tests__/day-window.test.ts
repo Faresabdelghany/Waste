@@ -1,52 +1,81 @@
-// The window a `from`/`to` pair of days makes over an instant column, as the
-// tickets' list filters by it (Issue #109). No database.
+// The window a `from`/`to` pair of days makes over an instant column, read
+// through the tickets' list (Issue #109): both days whole on the UTC
+// calendar, each end optional.
 import assert from "node:assert/strict"
-import { describe, test } from "node:test"
+import { after, before, describe, test } from "node:test"
 
-import { CASING } from "@waste/db/casing"
-import { ticket } from "@waste/db/schema/resolution"
-import type { SQL } from "drizzle-orm"
-import { PgDialect } from "drizzle-orm/pg-core"
+import { Page } from "@waste/contracts/pagination"
+import { Ticket } from "@waste/contracts/tickets"
+import { createDb, type Database } from "@waste/db/client"
 
-import { dayWindow, endOfDayExclusive } from "../routes/tickets"
+import { createApp } from "../app"
+import { callingAs, type Call } from "./calls"
+import { created } from "./created"
+import { databaseUnderTest, ownerUnderTest } from "./database"
+import { dropTenant, seedTenant, type Tenant } from "./tenant"
+import { signingKeys } from "./tokens"
 
-describe("endOfDayExclusive", () => {
-  test("is the midnight after the day on the UTC calendar: the last millisecond of the day is inside it, the first of the next day is not", () => {
-    const end = endOfDayExclusive("2026-10-05")
-    assert.equal(end.toISOString(), "2026-10-06T00:00:00.000Z")
-    assert.ok(new Date("2026-10-05T23:59:59.999Z") < end, "23:59:59.999 on the day is in")
-    assert.ok(!(new Date("2026-10-06T00:00:00.000Z") < end), "midnight after it is out")
-    assert.equal(endOfDayExclusive("2026-12-31").toISOString(), "2027-01-01T00:00:00.000Z", "across the year")
-    assert.equal(endOfDayExclusive("2028-02-29").toISOString(), "2028-03-01T00:00:00.000Z", "a leap day is a day")
+const database = databaseUnderTest()
+/** The owner sweeps the ticket history the creates append, which `wms_api` may not delete. */
+const owner = ownerUnderTest()
+const TicketPage = Page(Ticket)
+
+/** The request's clock, after every instant below, so none of them runs ahead of it. */
+const NOW = new Date("2028-03-01T12:00:00.000Z")
+
+describe("a from/to window of days over GET /tickets", { skip: database.skip || owner.skip }, () => {
+  let pool: Database
+  let ownerPool: Database
+  let a: Tenant
+  let olivia: Call
+  /** One ticket at each edge, by the instant it happened. */
+  const at: Record<string, string> = {}
+
+  before(async () => {
+    pool = createDb(database.url, { max: 4 })
+    ownerPool = createDb(owner.url, { max: 1 })
+    const keys = await signingKeys()
+    a = await seedTenant(pool)
+    const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW })
+    olivia = callingAs(app, keys, a.users.olivia, a.companyId)
+    for (const occurredAt of [
+      "2026-12-30T23:59:59.999Z",
+      "2026-12-31T00:00:00.000Z",
+      "2026-12-31T23:59:59.999Z",
+      "2027-01-01T00:00:00.000Z",
+      "2028-02-29T23:59:59.999Z",
+      "2028-03-01T00:00:00.000Z",
+    ]) {
+      const body = { projectId: a.projects.copenhagen.id, subject: `Happened ${occurredAt}`, description: "A bin was not emptied.", kind: "missed-collection", occurredAt }
+      at[occurredAt] = (await created(olivia, "/tickets", await olivia("/tickets", { method: "POST", body }), Ticket)).id
+    }
   })
-})
+  after(async () => {
+    if (a) await dropTenant(pool, a.companyId, ownerPool)
+    await pool?.close()
+    await ownerPool?.close()
+  })
 
-describe("dayWindow", () => {
-  const dialect = new PgDialect({ casing: CASING })
-  const rendered = (window: SQL | undefined) => {
-    if (window === undefined) return undefined
-    const query = dialect.sqlToQuery(window)
-    return { sql: query.sql, params: query.params.map((param) => (param instanceof Date ? param.toISOString() : param)) }
+  /** The instants of the tickets the window lists, in the order made. */
+  const listed = async (query: string): Promise<string[]> => {
+    const response = await olivia(`/tickets?limit=200${query}`)
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    const ids = TicketPage.parse(await response.json()).items.map((row) => row.id)
+    return Object.keys(at).filter((instant) => ids.includes(at[instant]))
   }
 
-  test("is nothing when neither end was given, as `and` of nothing is", () => {
-    assert.equal(rendered(dayWindow(ticket.occurredAt, undefined, undefined)), undefined)
+  test("takes the whole of both days: from the first instant of `from` to the last millisecond of `to`, the midnight after it out, across a year's end", async () => {
+    assert.deepEqual(await listed("&from=2026-12-31&to=2026-12-31"), ["2026-12-31T00:00:00.000Z", "2026-12-31T23:59:59.999Z"])
+    assert.deepEqual(await listed("&from=2026-12-31&to=2027-01-01"), ["2026-12-31T00:00:00.000Z", "2026-12-31T23:59:59.999Z", "2027-01-01T00:00:00.000Z"])
   })
 
-  test("takes the whole of both days: `>=` the first instant of `from`, `<` the midnight after `to`", () => {
-    const both = rendered(dayWindow(ticket.occurredAt, "2026-10-01", "2026-10-05"))
-    assert.match(both?.sql ?? "", /"occurred_at" >= \$1 and .*"occurred_at" < \$2/)
-    assert.deepEqual(both?.params, ["2026-10-01T00:00:00.000Z", "2026-10-06T00:00:00.000Z"], "a row at 23:59:59.999Z on the 5th is inside the window and one at 00:00:00Z on the 6th is not")
-    const oneDay = rendered(dayWindow(ticket.occurredAt, "2026-10-05", "2026-10-05"))
-    assert.deepEqual(oneDay?.params, ["2026-10-05T00:00:00.000Z", "2026-10-06T00:00:00.000Z"], "from and to on one day is that day")
+  test("a leap day is a day", async () => {
+    assert.deepEqual(await listed("&from=2028-02-29&to=2028-02-29"), ["2028-02-29T23:59:59.999Z"])
   })
 
-  test("takes one end alone: a lower bound with no upper, an upper with no lower", () => {
-    const from = rendered(dayWindow(ticket.occurredAt, "2026-10-01", undefined))
-    assert.match(from?.sql ?? "", /"occurred_at" >= \$1$/)
-    assert.deepEqual(from?.params, ["2026-10-01T00:00:00.000Z"])
-    const to = rendered(dayWindow(ticket.occurredAt, undefined, "2026-10-05"))
-    assert.match(to?.sql ?? "", /"occurred_at" < \$1$/)
-    assert.deepEqual(to?.params, ["2026-10-06T00:00:00.000Z"])
+  test("takes one end alone: a lower bound with no upper, an upper with no lower, and neither is every ticket", async () => {
+    assert.deepEqual(await listed("&from=2027-01-01"), ["2027-01-01T00:00:00.000Z", "2028-02-29T23:59:59.999Z", "2028-03-01T00:00:00.000Z"])
+    assert.deepEqual(await listed("&to=2026-12-31"), ["2026-12-30T23:59:59.999Z", "2026-12-31T00:00:00.000Z", "2026-12-31T23:59:59.999Z"])
+    assert.deepEqual(await listed(""), Object.keys(at))
   })
 })

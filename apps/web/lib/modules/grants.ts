@@ -10,11 +10,9 @@ import { moduleKeyOf, type ModuleLocation } from "./keys"
 /** A role's grants as /me answers them. */
 export type Grants = readonly Grant[]
 
-/** Whether the grants allow the action on the module; nothing is allowed without grants. */
 export const allows = (grants: Grants | undefined, moduleKey: ModuleKey, action: Action): boolean =>
   (grants ?? []).some((grant) => grant.moduleKey === moduleKey && grant.actions.includes(action))
 
-/** The modules an account may view (`mayOn`'s rule): every one while nothing holds it back, else those its grants let it view. */
 export const modulesMayView = (grants: Grants | null): ReadonlySet<ModuleKey> => (grants === null ? new Set(MODULE_KEYS) : viewedModules(grants))
 
 /** The modules the grants let a role view: the API grants `view` wherever it grants anything, so it is the one action to look for. */
@@ -42,13 +40,11 @@ export function accountGrants(account: SignedInAccount): Grants | null {
   return account.fixtureRole === undefined ? null : charterOf(account.fixtureRole)
 }
 
-/** Whether the account may take the action on the module: its grants allow it, or nothing holds it back. */
 export const mayOn = (grants: Grants | null, moduleKey: ModuleKey, action: Action): boolean =>
   grants === null || allows(grants, moduleKey, action)
 
 /** An action on a workspace module: the grant an API route checks before it answers. */
 export type ModuleAction = { module: ModuleLocation; action: Action }
 
-/** `mayOn`, for an action on a workspace module. */
 export const mayTake = (grants: Grants | null, { module, action }: ModuleAction): boolean =>
   mayOn(grants, moduleKeyOf(module.workspaceId, module.moduleId), action)

@@ -39,7 +39,6 @@ test("a missed collection against a stop recorded not-presented is answered by t
   expect(stops.length, `${route.label} needs two stops`).toBeGreaterThanOrEqual(2)
   const [collected, missed] = stops
 
-  // The driver runs the route: collects the first stop, fails the second because the bin was not out, ends the day.
   const context = await freshContext(browser)
   try {
     const driverPage = await context.newPage()
@@ -71,7 +70,6 @@ test("a missed collection against a stop recorded not-presented is answered by t
   expect((await listed).status()).toBe(200)
   await chainLanded(page)
 
-  // The office records the resident's call against the failed stop, named under its route.
   const subject = uniqueName("E2E bin not emptied")
   await page.getByRole("button", { name: "New ticket" }).click()
   const form = page.getByRole("dialog", { name: "New ticket" })
@@ -90,7 +88,6 @@ test("a missed collection against a stop recorded not-presented is answered by t
   expect([answered.status, answered.resolution]).toEqual(["completed", "answered"])
   await expect(toasts(page)).toContainText(`${answered.label} was answered with the stop's record`)
 
-  // Its details show the record and the reply the customer was sent, on the thread.
   const evidence = (await (await api.get(`/tickets/${answered.id}/evidence`)).json()) as Evidence
   expect([evidence.stop?.outcome, evidence.stop?.reason, evidence.stop?.answeredByRecord]).toEqual(["failed", "not-presented", true])
   const reply = evidence.stop?.reply ?? ""
@@ -116,7 +113,6 @@ test("a missed collection against a stop recorded not-presented is answered by t
   await expect(second.getByTestId("ticket-evidence-reply")).toContainText("Our driver collected the bin at")
   const collectedReply = (await second.getByTestId("ticket-evidence-reply").textContent()) ?? ""
 
-  // One step: the reply with the office's note, and the case completed as answered.
   const replyButton = record.getByRole("button", { name: "Reply with the record" })
   await expect(replyButton).toBeEnabled({ timeout: 30_000 })
   await replyButton.click()

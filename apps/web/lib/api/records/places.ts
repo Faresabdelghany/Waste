@@ -26,10 +26,9 @@
 // equal by the test — a status or an ownership the wire lacks, a reference
 // the store does not hold. Nothing lends a fixture's id: no module still on
 // fixtures names a place by id, so a server row is `<prefix>-<uuid>` from
-// the start (the plan on #81, rule (b)). The helpers under "What the
-// resources share" are the fleet's too (records/fleet.ts): a vehicle and a
-// driver name their project, their provider and their home depot the same
-// way.
+// the start (the plan on #81, rule (b)). The helpers at the head of this file
+// are the fleet's too (records/fleet.ts): a vehicle and a driver name their
+// project, their provider and their home depot the same way.
 import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Depot, UnloadingStation, Warehouse } from "@waste/contracts/places"
 import { moduleAt } from "@/lib/modules/keys"
@@ -45,10 +44,6 @@ import { patchOf, type Client, type MappingContext, type ResourceAdapter, type S
 import { hasPrefix, isLocalRefusal, ofKind, statusLabel, statusToken, typed, typedFlag, webIdOf, type LocalRefusal } from "@/lib/records/fields"
 import { HAUL_OUT_ACTIONS } from "./haul-out"
 import { SET_STOCK_MINIMUMS, SET_STOCK_MINIMUMS_ACTION } from "./stock"
-
-// ---------------------------------------------------------------------------
-// What the resources share
-// ---------------------------------------------------------------------------
 
 export const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -129,7 +124,6 @@ export const coordinatesFact = (point: FlatPoint) => `${point.coordinates[1]}, $
 
 const TIME = /\b(\d{1,2}):(\d{2})\b/g
 
-/** What an "Operating hours" text that says something other than two times is told. */
 export const TWO_TIMES_OR_NOTHING = "Give the opening and the closing time as HH:MM, such as 05:00–22:00, or leave the hours out"
 
 /**
@@ -193,18 +187,15 @@ export function patchStatusOf(before: BusinessRecord, after: BusinessRecord, sta
   return lifecycleStatusOf(after, statuses)
 }
 
-/** The patch with the status added where it moved: the lifecycle's token before against the one the edit says. */
 export function withStatus<Body extends object>(body: Body | null, before: BusinessRecord, status: string | undefined, statuses: readonly string[]): (Body & { status?: string }) | null {
   if (status === undefined || status === lifecycleStatusOf(before, statuses)) return body
   return { ...(body ?? ({} as Body)), status }
 }
 
-/** A required text the form typed under `key`, or a refusal in the noun's words. */
 export function requiredText(record: BusinessRecord, key: string, noun: string, what: string): string | LocalRefusal {
   return typed(record, key) ?? refusal(key, `${noun} needs ${what}`)
 }
 
-/** The kind of location a record of the mixed module is: the form's `locationType`, a depot unless it says `unloading`. */
 const isStationRecord = (record: Pick<BusinessRecord, "id" | "submittedValues">) => typed(record, "locationType") === "unloading"
 
 const LOCATION_KIND = "Operational Location"
@@ -219,10 +210,6 @@ const bothOrNeither = "Give both the latitude and the longitude, or neither"
 const VEHICLE_CAPACITY_IS_A_COUNT = "Vehicle capacity is a whole number, 1 or more"
 
 const codeSetOnce = (noun: string) => `The code is set once: ${noun} that needs another code is another ${noun.replace(/^an? /, "")}`
-
-// ---------------------------------------------------------------------------
-// Depots
-// ---------------------------------------------------------------------------
 
 export const depotAdapter: ResourceAdapter<Depot> = {
   prefix: "depot",
@@ -344,11 +331,6 @@ export const depotAdapter: ResourceAdapter<Depot> = {
   update: (client, serverId, body) => patch<Depot>(client, `/depots/${serverId}`, body),
 }
 
-// ---------------------------------------------------------------------------
-// Unloading stations
-// ---------------------------------------------------------------------------
-
-/** What a station's update carries: a patch of the station, the whole set of fractions, or both, each to its own route. */
 type StationWrite = {
   station?: object
   wasteFractionIds?: string[]
@@ -498,10 +480,6 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation, unknown,
   actions: HAUL_OUT_ACTIONS,
 }
 
-// ---------------------------------------------------------------------------
-// Warehouses
-// ---------------------------------------------------------------------------
-
 export const warehouseAdapter: ResourceAdapter<Warehouse> = {
   prefix: "warehouse",
   auditTable: "warehouse",
@@ -585,10 +563,6 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
   // Its Stock Minimums (O30 of #290), replaced whole: the answer is the set, so an action (records/stock.ts).
   actions: { [SET_STOCK_MINIMUMS]: SET_STOCK_MINIMUMS_ACTION },
 }
-
-// ---------------------------------------------------------------------------
-// The modules
-// ---------------------------------------------------------------------------
 
 /** Resources → Depots & Unloading: the depots, then the stations. */
 export const placesModule = {

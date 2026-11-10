@@ -98,7 +98,6 @@ export function canonicalServiceFrequencyName(value: string | undefined) {
   return resolveServiceFrequencyValue(value)?.name ?? value
 }
 
-/** A catalog definition's nominal collections per week: its interval's (`intervalCollectionsPerWeek`). */
 export function promisedCollectionsPerWeek(
   definition: ServiceFrequencyDefinition,
 ): number | null {

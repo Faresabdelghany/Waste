@@ -20,11 +20,11 @@
 //
 // The form (`customers.contacts`) says more than the wire carries: a
 // relationship role, a connected property and company, effective dates, a
-// project scope. Those describe a `property_party` row (Issue #78) and land
-// with the Properties module; here they stay on the record's typed values
-// for the day that module is switched, and only the Customer's own fields
-// travel. The status is the wire's two (`active`, `inactive`), listed as the
-// adapter's `statuses`; the module's lifecycle also lists Merged and
+// project scope. Those describe a `property_party` row (Issue #78), which the
+// Properties module writes; here they stay on the record's typed values, and
+// only the Customer's own fields travel. The status is the wire's two
+// (`active`, `inactive`), listed as the adapter's `statuses`; the module's
+// lifecycle also lists Merged and
 // Archived, which the API has no column for, so the store refuses a move
 // there before the API sees it and the workspace offers neither.
 import type { Customer } from "@waste/contracts/customers"
@@ -43,14 +43,11 @@ import { daysOrNoneOf, typedPaymentTerms } from "./organisation"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
-/** The web id prefix of each kind. */
 export const CUSTOMER_PREFIXES = { person: "contact", organisation: "company" } as const
 
-/** The form's `partyType` option for each wire kind, and back. */
 const PARTY_TYPE_OF_KIND = { person: "person", organisation: "company" } as const
 const KIND_OF_PARTY_TYPE: Readonly<Record<string, Customer["kind"]>> = { person: "person", company: "organisation", organisation: "organisation" }
 
-/** The kind a customer record is, read off its typed party type first and its id prefix otherwise. */
 export function customerKindOf(record: Pick<BusinessRecord, "id" | "submittedValues">): Customer["kind"] | undefined {
   // The form's party type first: a record the workspace just made carries the module's minted id and says its kind there.
   const partyType = typed(record, "partyType")

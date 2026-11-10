@@ -10,7 +10,6 @@
 // running server.
 const EMBED = "p/[^/]+/calendar/embed(?:/[^/]+)?/?"
 
-/** The headers every page but the widget answers, and the widget's. */
 export const FRAME_HEADERS = {
   refused: [
     { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },

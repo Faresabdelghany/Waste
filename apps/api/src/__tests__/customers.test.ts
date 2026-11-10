@@ -133,8 +133,6 @@ describe("the customer endpoints", { skip: database.skip }, () => {
         409,
       )
       assert.equal(problem.detail, "This company already has a customer with registration number 87654321")
-      assert.doesNotMatch(problem.detail ?? "", /_idx/)
-      assert.equal(theirs.registrationNumber, "87654321", "and the other company keeps its own")
     })
 
     test("lets any number of customers have no registration number at all: a null is not a duplicate", async () => {

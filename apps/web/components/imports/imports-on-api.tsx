@@ -57,7 +57,6 @@ import { useGrants } from "@/components/platform/use-grants"
 
 type Chosen = { name: string; reading: FileReading }
 
-/** Where the screen is: choosing, a preview asked or read, a commit under way or done, or stopped by a refusal. */
 type Phase =
   | { step: "choosing" }
   | { step: "previewing"; done: number }
@@ -79,9 +78,7 @@ export function ImportsOnApi() {
   const [runsVersion, setRunsVersion] = useState(0)
   const [reasonTyped, setReasonTyped] = useState("")
   const fileInput = useRef<HTMLInputElement>(null)
-  /** The latest file read asked for; an earlier one that lands later is dropped. */
   const reads = useRef(0)
-  /** Whether a preview or a commit is on its way. */
   const working = useRef(false)
   // The client of the latest render, asked for at each request: a file of many batches outlives a token, and the session refreshes it under a new client.
   const latestClient = useRef(client)
@@ -166,14 +163,12 @@ export function ImportsOnApi() {
     }
   }
 
-  /** Sends the batches from `next` on to the run, starting the run first when there is none yet. */
   const commit = async (from: { run: ImportRun | null; results: ImportRowResult[]; next: number }) => {
     if (client === null || kind === undefined || chosen === null || !claim()) return
     const batches = batchesOf(rows)
     let run = from.run
     const results = [...from.results]
     let next = from.next
-    // The audit log's reason for every row the run writes: the office's, else the file's.
     const reason = importReason(chosen.name, reasonTyped)
     // Busy from the click, before the run is made, so nothing on the screen moves under it.
     setPhase({ step: "committing", run, results, next })
@@ -403,14 +398,12 @@ function resultSubtitle(counts: ReturnType<typeof countsOf>, total: number): str
   return `${recorded} of ${total} rows · ${counts.created} new · ${counts.updated} changed · ${counts.unchanged} unchanged · ${counts.refused} refused`
 }
 
-/** The master data's kinds an import makes, each opened at its own tab of the pane. */
 const MASTER_DATA_IMPORTS: Partial<Readonly<Record<ImportKind, MasterDataKind>>> = {
   "waste-fractions": "waste-fraction",
   "container-types": "container-type",
   "vehicle-types": "vehicle-type",
 }
 
-/** Where a kind's records are worked on: its module, a master data kind at its tab. */
 function recordsHref(kind: ImportKind): string {
   const masterDataKind = MASTER_DATA_IMPORTS[kind]
   if (masterDataKind !== undefined) return settingsHref("master-data", { kind: masterDataKind })

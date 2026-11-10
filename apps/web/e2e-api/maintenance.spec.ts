@@ -20,7 +20,6 @@ type Order = { id: string; planId: string | null; title: string; status: string;
 
 const PLAN_NAME = "Annual service (e2e)"
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
@@ -56,7 +55,6 @@ test("Fleet: a maintenance plan added in a vehicle's details reads due soon, its
     const plans = details.getByTestId("vehicle-maintenance-plans")
     const orders = details.getByTestId("vehicle-maintenance-orders")
 
-    // The plan: every 365 days from 360 days ago.
     await details.getByRole("button", { name: "Add plan" }).click()
     const planForm = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add maintenance plan" }) })
     await planForm.getByLabel("Service").fill(PLAN_NAME)
@@ -71,7 +69,6 @@ test("Fleet: a maintenance plan added in a vehicle's details reads due soon, its
     const planLine = plans.getByRole("listitem").filter({ hasText: `${PLAN_NAME} · every 365 days · next ${nextDue}` })
     await expect(planLine.getByText("Due soon")).toBeVisible()
 
-    // Its order, planned for today, under the plan's name.
     await details.getByRole("button", { name: "Open order" }).click()
     const orderForm = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Open maintenance order" }) })
     await orderForm.getByRole("combobox", { name: /^Plan/ }).click()
@@ -82,7 +79,6 @@ test("Fleet: a maintenance plan added in a vehicle's details reads due soon, its
     const order = (await opened.json()) as Order
     expect(order).toMatchObject({ planId: plan.id, title: PLAN_NAME, status: "open", dueOn: day })
 
-    // Completed today: the plan's service done, back on track.
     await orders.getByRole("listitem").filter({ hasText: `${PLAN_NAME} · due ${day}` }).getByRole("button", { name: "Complete" }).click()
     const completeForm = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: `Complete ${PLAN_NAME}` }) })
     await completeForm.getByLabel("Done on").fill(day)
@@ -96,7 +92,6 @@ test("Fleet: a maintenance plan added in a vehicle's details reads due soon, its
     expect(serviced).toMatchObject({ lastDoneOn: day, due: { state: "ok", nextDueOn: addDays(day, 365) } })
     await expect(plans.getByRole("listitem").filter({ hasText: `next ${addDays(day, 365)}` }).getByText("On track")).toBeVisible()
 
-    // Retired: kept, and offered no more.
     const [retired] = await Promise.all([answerOf(page, "PATCH", new RegExp(`^/maintenance-plans/${plan.id}$`)), plans.getByRole("listitem").filter({ hasText: PLAN_NAME }).getByRole("button", { name: "Retire" }).click()])
     expect(retired.status(), await retired.text()).toBe(200)
     expect(((await retired.json()) as Plan).status).toBe("retired")

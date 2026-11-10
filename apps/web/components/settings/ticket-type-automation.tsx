@@ -46,7 +46,6 @@ function Pick({ id, label, value, options, onChange }: { id: string; label: stri
   )
 }
 
-/** The parameters an action's kind takes, as the inputs that set them. */
 function ActionParameters({ action, id, choices, onChange }: { action: TicketTypeAction; id: string; choices: AutomationChoices; onChange: (change: Partial<TicketTypeAction>) => void }) {
   switch (action.kind) {
     case "assign-team":
@@ -101,7 +100,6 @@ function ActionParameters({ action, id, choices, onChange }: { action: TicketTyp
  */
 export function TicketTypeAutomation({ kind, actions, choices, onChange }: { kind: TicketKind; actions: readonly TicketTypeAction[]; choices: AutomationChoices; onChange: (actions: TicketTypeAction[]) => void }) {
   const replace = (index: number, action: TicketTypeAction) => onChange(actions.map((current, at) => (at === index ? action : current)))
-  /** Swaps an action with its trigger's neighbour before or after it. */
   const move = (index: number, by: -1 | 1) => {
     const trigger = actions[index].trigger
     const places = actions.flatMap((action, at) => (action.trigger === trigger ? [at] : []))

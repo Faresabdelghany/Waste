@@ -324,7 +324,6 @@ describe("the container's commands", () => {
   const movement = { id: "01a0d2a4-a280-7022-8000-000000000002", recordedAt: "2026-09-30T11:59:00.000Z", projectId: copenhagen.id, containerId: bin91007.id, kind: "receipt", fromKind: "supplier", fromWarehouseId: null, toKind: "warehouse", toWarehouseId: warehouseId, placementId: null, occurredAt: "2026-09-30T11:59:00.000Z", recordedBy: "01a0d2a4-a280-7005-8000-000000000001", reason: null, reference: null, correctsMovementId: null }
   const received: Container = { ...bin91007, assetState: { status: "in-warehouse", warehouseId, placementId: null, since: movement.occurredAt, movementId: movement.id } }
 
-  /** The body a command's dialog input becomes, or its refusal, for a row. */
   const bodyFor = (name: string, input: Record<string, unknown>, row: BusinessRecord = record) => containerAdapter.commands?.[name]?.toBody?.(input, row, context())
 
   test("the container has the ledger's five commands and the one door into service", () => {

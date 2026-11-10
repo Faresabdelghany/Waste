@@ -93,14 +93,10 @@ import { customerKindOf } from "./registry"
 import { kilograms } from "@/lib/format/measures"
 
 export const QUANTITY_REFUSAL = "A quantity is a whole number, 1 or more"
-/** What an edit of an event is told: it moves by its commands. */
 export const EVENT_MOVES_BY_COMMAND = "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced"
-/** What an edit of a run is told. */
 export const RUN_NEVER_CHANGES = "A billing run is a record of what it did: nothing on it changes"
-/** What an edit of an invoice or a credit note is told. */
 export const DOCUMENT_NEVER_CHANGES = "An issued document never changes: correct an invoice with a credit note"
 
-/** A form's count: the number for a whole one of 1 or more, NaN for anything else. */
 function countOf(value: string | undefined): number {
   const number = Number(value)
   return value !== undefined && Number.isInteger(number) && number > 0 ? number : Number.NaN
@@ -108,25 +104,18 @@ function countOf(value: string | undefined): number {
 
 export const amountRefusal = (path: string, currency: string) => refusal(path, `An amount in ${currency}, such as ${majorOf(1850, currency)}`)
 
-/** A loaded record a server id names, its web id and name; the chip where nothing loaded carries it. */
 export const named = (context: MappingContext, prefix: string, serverId: string | null) => {
   if (serverId === null) return undefined
   const row = referenced(context, prefix, serverId)
   return { id: row.webId, name: row.name ?? row.webId }
 }
 
-/** The project's currency and timezone, from the organisation the store loaded. */
 export function projectOf(context: MappingContext, projectServerId: string) {
   const project = referenced(context, "project", projectServerId)
   const record = context.resolve.byServerId(projectServerId)
   return { webId: project.webId, name: project.name ?? project.webId, currency: record === undefined ? undefined : typed(record, "currency"), timezone: record === undefined ? undefined : typed(record, "timezone") }
 }
 
-// ---------------------------------------------------------------------------
-// Billable events
-// ---------------------------------------------------------------------------
-
-/** Where an event came from, as a person reads it. */
 function originOf(event: BillableEvent, context: MappingContext): string {
   switch (event.kind) {
     case "pickup":
@@ -222,10 +211,10 @@ export function eventQuestion(event: BusinessRecord, resolve: Resolver): Busines
 /**
  * The commands an event's details offer (#281): those the API moves it by
  * from its status, never a stay or a refusal — a reprice prices a blocked
- * event again, and a cancellation takes a blocked or a ready one off the next
- * run, never a reversal, which is the correction itself. An invoiced event is
- * corrected by a credit note and a cancelled or reversed one has nothing left
- * to do, so neither is offered either. The API's rules
+ * event again, and a cancellation takes a blocked, a ready or a held one off
+ * the next run, never a reversal, which is the correction itself. An invoiced
+ * event is corrected by a credit note and a cancelled or reversed one has
+ * nothing left to do, so neither is offered either. The API's rules
  * (apps/api/src/routes/billable-events.ts), read off the wire's status.
  */
 export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValues">): ("reprice" | "cancel" | "hold" | "release")[] {
@@ -405,10 +394,6 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent, BillableEventC
 /** Price Engine › Billable Events. */
 export const eventsModule = { ...EVENTS_MODULE, resources: [billableEventAdapter] } satisfies ServerModule
 
-// ---------------------------------------------------------------------------
-// Billing runs
-// ---------------------------------------------------------------------------
-
 /** Why a run passed over every event of a payer, as a person reads it: blocked, or held for review (M14 of #293), or each one or the other, or more than one batch of a run takes (#329). */
 const EXCLUSION_WORDS: Readonly<Record<ExclusionReason, string>> = { "all-events-blocked": "all blocked", "all-events-held": "all held for review", "all-events-blocked-or-held": "each blocked or held for review", "too-many-events": "too many for one invoice in a run" }
 
@@ -495,10 +480,6 @@ export const billingRunAdapter: ResourceAdapter<BillingRun, BillingRunCreate> = 
 /** Price Engine › Billing Runs. */
 export const billingModule = { ...BILLING_MODULE, resources: [billingRunAdapter] } satisfies ServerModule
 
-// ---------------------------------------------------------------------------
-// Invoices and credit notes
-// ---------------------------------------------------------------------------
-
 /**
  * A document as the module reads it: a ledger row, stamped with its
  * `recordedAt` as both of a resource's stamps (containers.ts' `ledgerRow`),
@@ -510,10 +491,8 @@ export type InvoiceResource = (Invoice | InvoiceDetail) & { createdAt: string; u
 /** A document with a resource's stamps: issued once, so created and updated when it was recorded. */
 const stamped = <Document extends Invoice | InvoiceDetail>(document: Document): Document & { createdAt: string; updatedAt: string } => ({ ...document, createdAt: document.recordedAt, updatedAt: document.recordedAt })
 
-/** What a credit note's create carries: the invoice it is posted under, and the body the contract accepts. */
 type CreditNoteWrite = { invoiceId: string; body: unknown }
 
-/** Where an invoice stands against the credit notes naming it: none, some of it, or all of it given back. */
 function creditStandingOf(document: InvoiceResource): { status: "Issued" | "Partially credited" | "Credited"; count: number } {
   const notes = "creditNotes" in document ? document.creditNotes : undefined
   const credited = notes === undefined ? (document.creditedGrossMinor ?? 0) : notes.reduce((sum, note) => sum + note.grossMinor, 0)

@@ -1,5 +1,3 @@
-// How a Route Scheme record carries its recurrence and its seasons in its
-// submitted values, read back for Planning's date math.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

@@ -21,7 +21,6 @@ import { inspectionOpen, INSPECTIONS_MODULE } from "@/lib/data/inspections"
 import { photoOf } from "@/lib/driver/proof-images"
 import { waitingSentence } from "@/lib/api/read-state"
 
-/** An inspection's photos, its Add photo and its Close. */
 export function InspectionSurface({ record }: RowSurfaceProps) {
   const client = useApiClient()
   const resolver = useServerResolver()

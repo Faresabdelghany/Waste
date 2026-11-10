@@ -52,11 +52,10 @@ import { useApiClient, useApiConfigured, useApiSession, useApiSessionIdentity } 
  * lib/data/legacy-ids.ts. Defensive only: no shipped form schema ever had a
  * bare `contractor` field (the access form's field is `serviceProviderId`,
  * which the shared map already covers), so no browser is known to hold this
- * key. It is kept because `organizationForRecord` in
- * lib/api/users-roles.ts (the Users & roles pane's fixture rows) reads
- * `submittedValues.serviceProvider`, and without an explicit entry a bare
- * `contractor` key would fall through to the token rewrite and become
- * `"service-provider"`, which nothing reads.
+ * key. It names the provider as a user's record does
+ * (`submittedValues.serviceProvider`, lib/api/records/organisation.ts);
+ * without an explicit entry a bare `contractor` key would fall through to
+ * the token rewrite and become `"service-provider"`, which nothing reads.
  */
 const LEGACY_RECORD_KEY_RENAMES: Readonly<Record<string, string>> = {
   contractor: "serviceProvider",
@@ -195,7 +194,6 @@ const storedRecords = persistedStore<StoredRecords>(BUSINESS_RECORDS_STORAGE_KEY
   },
 })
 
-/** What the store tells a person, as toasts. */
 const TOASTS: RecordStoreNotices = {
   // A refusal is told to the person in the API's words: the toast for a write or a read the API refused.
   refused: (what, problem) => {
@@ -300,7 +298,6 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
     stores.api.server.getServerSnapshot,
   )
   const apiConfigured = useApiConfigured()
-  /** The switched module's state, or null for a module still on the browser's own path. */
   const serverModuleState = useCallback(
     (workspaceId: WorkspaceId, moduleId: string): ModuleState | null => switchedModuleState(serverModules, apiConfigured, workspaceId, moduleId),
     [serverModules, apiConfigured],
@@ -487,7 +484,6 @@ export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: (sav
   )
 }
 
-/** A write's outcome other than a refusal: what `whenSaved` hands `done`. */
 export type SavedOutcome = Exclude<WriteOutcome, { kind: "refused" }>
 
 /**

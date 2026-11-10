@@ -1,5 +1,5 @@
-// Planning-area outlines for the Layers control (2026-09-16). Planning areas
-// carry no geometry in the prototype, so an outline is DERIVED: the convex
+// Planning-area outlines for the Layers control (2026-09-16). A fixture's
+// planning areas carry no geometry, so its outline is DERIVED: the convex
 // hull of the area's located containers, pushed out a little so the markers
 // sit inside the line. Every visible area gets a row — one without located
 // containers has no geometry and cannot be shown or zoomed to. Pure data
@@ -35,7 +35,6 @@ export const AREA_LAYER_PALETTE = [
   "#ca8a04",
 ] as const
 
-/** Whether a container, by its areas today (`containerAreaRefs`), lies in the area: by id, else by name. */
 function belongsTo(refs: { ids: readonly string[]; names: readonly string[] }, area: BusinessRecord): boolean {
   if (refs.ids.length > 0) return refs.ids.includes(area.id)
   const name = area.name.trim().toLowerCase()
@@ -103,7 +102,6 @@ export function storedOutline(area: BusinessRecord): LngLat[] | null {
   return open.length >= 3 ? open : null
 }
 
-/** One layer per visible area, in the order the areas come: the outline the server holds where the record carries one, else the outline around its containers. */
 export function planningAreaLayers(
   areas: readonly BusinessRecord[],
   containers: readonly BusinessRecord[],

@@ -88,7 +88,6 @@ export function useCommandRunner(module: ModuleLocation, recordId: string): {
 
 const keyOf = (location: ModuleLocation) => `${location.workspaceId}.${location.moduleId}`
 
-/** Which master-data kind a field picks, by its id. */
 const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
   containerType: "container-type",
   wasteFraction: "waste-fraction",
@@ -99,7 +98,6 @@ const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
   decommissionReasonId: "decommission-reason",
 }
 
-/** A row as a picker offers it: its name, and its status beside it where the status says something. */
 const optionOf = (record: BusinessRecord, withStatus: boolean): BusinessFormOption => ({ value: record.id, label: withStatus ? `${record.name} · ${record.status}` : record.name })
 
 export type RelationPickers = {
@@ -116,7 +114,6 @@ export type RelationPickers = {
   timezoneOf: (projectId: string | undefined) => string | undefined
 }
 
-/** The pickers the containers', the allocations', the places' and the routes' dialogs read. */
 export function useRelationPickers(): RelationPickers {
   const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId)

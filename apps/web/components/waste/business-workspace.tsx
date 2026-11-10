@@ -282,7 +282,6 @@ type BusinessWorkspaceProps = {
   serviceProviderScopeId?: string
 }
 
-// The modules the workspace reads besides the one shown, by key.
 const ORGANISATION = moduleAt("configure.organization")
 const CONTAINERS = moduleAt("resources.containers")
 const DEPOTS = moduleAt("resources.depots")
@@ -829,13 +828,11 @@ export function BusinessWorkspace({
     },
     [getRecords],
   )
-  // The records of a module the workspace names by key.
   const recordsAt = useCallback((location: ModuleLocation) => getRecords(location.workspaceId, location.moduleId), [getRecords])
   const { isRouteStarred, toggleRouteStarred } = useActiveRoutes(
     serviceProviderScopeId ? "service-provider" : "operator",
   )
   const router = useRouter()
-  // What the account signed in may do, office and provider alike (`useGrants`).
   const grants = useGrants()
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
@@ -863,7 +860,6 @@ export function BusinessWorkspace({
     mayOn(grants, moduleKeyOf(workspace.id, module.id), "view"),
   )
   const tabsScrollRef = useRef<HTMLDivElement>(null)
-  // The module a bare address opens on: the page's own, else the workspace's first.
   const landingModuleId = workspace.modules.some((module) => module.id === initialModuleId)
     ? initialModuleId!
     : workspace.modules[0].id
@@ -1074,7 +1070,6 @@ export function BusinessWorkspace({
     activeModule.details === "ticket-dialog" &&
     Boolean(selectedRecord)
   const selectedServiceProviderId = isServiceProviderDetails ? selectedRecord?.id ?? "" : ""
-  // A provider's details list its own rows of the modules it operates in.
   const providerRowsOf = useCallback(
     (location: ModuleLocation) =>
       selectedServiceProviderId
@@ -1419,7 +1414,6 @@ export function BusinessWorkspace({
     },
     [canAddSubscriptions, canEditAgreements, productsViewed],
   )
-  /** The module-specific actions a row and its sheet offer: the schemes' or the agreements', never both. */
   const recordExtraActions = useCallback(
     (record: BusinessRecord): RecordExtraAction[] | undefined => schemeExtraActions(record) ?? agreementExtraActions(record),
     [agreementExtraActions, schemeExtraActions],
@@ -1567,8 +1561,6 @@ export function BusinessWorkspace({
     activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
   }, [activeModuleId])
 
-  // Layout, grouping, and fact columns are module-specific choices; reseed them
-  // with the module's defaults whenever the active module changes.
   useEffect(() => {
     setViewOptions((current) => ({
       ...current,
@@ -1908,7 +1900,6 @@ export function BusinessWorkspace({
         // reference — while shared registries without attribution remain.
         .filter((record) => {
           if (!serviceProviderScopeId || fencedByApi(resolved.workspaceId, resolved.module.id)) return true
-          // A party's own rows are offered a provider's scope only where they are its own; a shared registry's unattributed ones stay.
           if (resolved.module.providerOperated === true) {
             return record.serviceProviderId === serviceProviderScopeId
           }
@@ -2033,7 +2024,7 @@ export function BusinessWorkspace({
             }
           : { ...formInitialValues, ...editingRecord.submittedValues }
       // Scheme-generated routes store generation stamps (schemeId/serviceDate/
-      // actualDate/appliedVehicle/appliedDriver — generation.ts), not the
+      // actualDate/appliedVehicle/appliedDriver), not the
       // quick form's field ids, so every field but Route Scheme would open
       // empty — and Project would show the workspace scope default instead of
       // the route's own project (issue #23). Map the stamps and the current
@@ -2348,7 +2339,7 @@ export function BusinessWorkspace({
   )
 
   const handleFormSubmit = (values: BusinessFormValues) => {
-    // One clock read per submission, shared by the audit event id and the
+    // One clock read per submission, shared by the record id and the
     // generated record names below.
     // eslint-disable-next-line react-hooks/purity -- submit handler, not render; the rule cannot tell through the dialogs' onSubmit prop
     const now = Date.now()
@@ -2620,8 +2611,8 @@ export function BusinessWorkspace({
     }
 
     // Route facts use the generation keys ("Operating date", "Route scheme" —
-    // generation.ts); the quick form writes its own field labels ("Date",
-    // "Route Scheme") beside them, so an edited generated route would carry
+    // lib/api/records/routes.ts); the quick form writes its own field labels
+    // ("Date", "Route Scheme") beside them, so an edited generated route would carry
     // both spellings with diverging values (issue #23). Fold the label-keyed
     // facts onto the canonical keys and keep the generated "Project · Area"
     // context line instead of the form's full field dump.
@@ -4271,7 +4262,7 @@ function ActionDecisionDialog({
   pendingAction: PendingAction | null
   /** The action's write is out to the API: confirm waits, and the form keeps what was typed for a refusal (#210). */
   saving?: boolean
-  /** The module is one the API holds: the status alone goes out, so no reason or date is asked (#251). */
+  /** The module is one the API holds: the status goes out with an optional reason, and no date is asked (#251, #291). */
   onApi?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (decision: { reason: string; effectiveDate: string }) => void

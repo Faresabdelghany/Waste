@@ -30,12 +30,10 @@ import { ThroughputChart } from "./throughput-chart"
 import { useReport } from "@/components/platform/use-report"
 
 export type TabProps = {
-  /** The window asked for, and the period before it. */
   current: ReportWindowQuery
   previous: ReportWindowQuery
   /** The period before, "Oct 11 – Oct 17": what a change is told against. */
   against: string
-  /** The modules the role views. */
   viewed: ReadonlySet<ModuleKey>
   projectName: (id: string) => string
   /** The file names' stem: the project and the window. */

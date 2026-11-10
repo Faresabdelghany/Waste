@@ -16,7 +16,6 @@ const row = { id: "customer-1", name: "Østerbro Housing" } as BusinessRecord
 const refused: WriteOutcome = { kind: "refused", recordId: row.id, problem: { type: "about:blank", title: "Forbidden", status: 403, detail: "This account's role does not allow edit on customers.contacts" } }
 const updated: WriteOutcome = { kind: "updated", record: row, serverId: "01a0d2a4-a280-700b-8000-000000000002" }
 
-/** What ran, in order, once the outcome has settled. */
 async function said(outcome: Promise<WriteOutcome> | undefined): Promise<string[]> {
   const ran: string[] = []
   whenSaved(outcome, () => ran.push("done"), () => ran.push("settled"))

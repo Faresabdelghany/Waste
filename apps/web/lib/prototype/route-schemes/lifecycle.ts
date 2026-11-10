@@ -50,7 +50,6 @@ export const SCHEME_LIFECYCLE_STATUSES = [
 
 export type SchemeLifecycleStatus = (typeof SCHEME_LIFECYCLE_STATUSES)[number]
 
-/** The minimal record shape the status derivation reads. */
 type SchemeStatusSource = Pick<BusinessRecord, "status" | "submittedValues">
 
 /**
@@ -154,7 +153,6 @@ export function schemesInPlanning(
   return records.filter((record) => !isSoftDeleted(record))
 }
 
-/** The related record sets live validation resolves against. */
 export type SchemeRelatedRecords = {
   /** Every scheme record (this one included; it is excluded internally). */
   schemes: readonly BusinessRecord[]
@@ -166,7 +164,6 @@ export type SchemeRelatedRecords = {
   vehicles?: readonly BusinessRecord[]
 }
 
-/** What the live look at a scheme yields: its validation and its last run's container drift. */
 export type SchemeLiveAssessment = {
   validation: SchemeValidationResult
   /**

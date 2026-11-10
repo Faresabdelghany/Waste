@@ -103,8 +103,6 @@ const compact = <T extends object>(object: T): T => {
   return result as T
 }
 
-/* --------------------------------- parsing -------------------------------- */
-
 /**
  * Lenient JSON parse of the explicit groups: entries without an id are
  * dropped, unknown days and non-string fractions are filtered, an unknown
@@ -173,8 +171,6 @@ function explicitCollectionGroups(values: StoredValues | undefined): CollectionG
 export function hasExplicitCollectionGroups(values: StoredValues | undefined): boolean {
   return explicitCollectionGroups(values) !== null
 }
-
-/* ------------------------------- resolution ------------------------------- */
 
 /**
  * The groups a scheme's stored values resolve to: the explicit list when
@@ -275,15 +271,12 @@ export function collectionGroupsOf(
   )
 }
 
-/** Record-level convenience: values plus the record's display facts. */
 export function collectionGroupsOfRecord(
   record: Pick<BusinessRecord, "submittedValues" | "facts">,
   serviceDays?: readonly ServiceDay[],
 ): ResolvedCollectionGroup[] {
   return collectionGroupsOf(record.submittedValues, { serviceDays, facts: record.facts })
 }
-
-/* ------------------------------ serialization ----------------------------- */
 
 const sameDaySet = (a: readonly ServiceDay[], b: readonly ServiceDay[]): boolean => {
   const left = new Set(a)
@@ -357,9 +350,6 @@ export function collectionGroupsToValues(
   }
 }
 
-/* --------------------------------- coverage -------------------------------- */
-
-/** Which groups run on each of the scheme's service days, in canonical day order. */
 export function collectionGroupCoverage(
   serviceDays: readonly ServiceDay[],
   groups: readonly CollectionGroup[],
@@ -369,8 +359,6 @@ export function collectionGroupCoverage(
     groupIds: groups.filter((group) => group.days.includes(day)).map((group) => group.id),
   }))
 }
-
-/* ------------------------- per-day stop resolution ------------------------- */
 
 type ContainerRecordLike = Parameters<typeof resolveStopMatches>[0]["containers"][number]
 
@@ -451,7 +439,7 @@ export function resolveCollectionGroupPlans(input: {
   }
 
   for (const day of sortServiceDays(input.serviceDays)) {
-    const claimed = new Map<string, string>() // containerId → groupId
+    const claimed = new Map<string, string>()
     const dayGroups = input.groups.filter((group) => group.days.includes(day))
     const dayPlans = new Map<string, CollectionGroupDayPlan>()
 
@@ -518,9 +506,6 @@ export function resolveCollectionGroupPlans(input: {
   return { plans, manualDuplicates, ruleOverlaps }
 }
 
-/* ---------------------------------- display -------------------------------- */
-
-/** "Organic run · Wed, Sun · NR-08 · Lars Møller" — one line per group for facts and lists. */
 export function collectionGroupSummary(group: CollectionGroup): string {
   const days = group.days.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join(", ") || "No days"
   const parts = [group.name, days]
@@ -529,8 +514,6 @@ export function collectionGroupSummary(group: CollectionGroup): string {
   if (group.driverName) parts.push(group.driverName)
   return parts.join(" · ")
 }
-
-/* ------------------------- record-level resolution ------------------------- */
 
 type SchemeRecordLike = Pick<BusinessRecord, "submittedValues" | "projectIds"> & {
   facts?: Record<string, string>
@@ -581,7 +564,6 @@ export function flattenGroupPlans(
   }))
 }
 
-/** Record-level day-flattened stops (see flattenGroupPlans). */
 export function effectiveStopPlans(
   scheme: SchemeRecordLike,
   serviceDays: readonly ServiceDay[],
@@ -602,8 +584,6 @@ export function sharedServiceProvider(
   const [id] = ids
   return { id, name: groups.find((group) => group.serviceProviderId === id)?.serviceProviderName }
 }
-
-/* ------------------------- issue → group attribution ------------------------ */
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
@@ -634,8 +614,6 @@ export function issuesByGroup(
   }
   return byGroup
 }
-
-/* ---------------------------- validation input ---------------------------- */
 
 /**
  * The validation view of resolved groups: per group, its days and assignment
@@ -676,8 +654,6 @@ export function schemeValidationGroups(
     ruleOverlaps: resolution.ruleOverlaps,
   }
 }
-
-/* ------------------------ sources for sibling schemes ---------------------- */
 
 /**
  * What FR-5(d) needs from an existing scheme: one planned-assignment source

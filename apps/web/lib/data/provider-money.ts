@@ -2,10 +2,10 @@
 // slice 11 of #81, for #148): Service Areas and their Assignments, Service
 // Provider Prices with their indexation, Settlements, and weight review —
 // each the module the API grants it under, read and written through
-// lib/api/records/service-areas.ts, provider-prices.ts and weights.ts. This
+// lib/api/records/service-areas.ts, provider-money.ts and weights.ts. This
 // file is what every side of them shares: where each module lives, the prefix
 // and the kind a record of it carries, and which adapter owns a record (the
-// id's prefix first, then the kind a form stamped: adapter.ts, `ofKind`).
+// id's prefix first, then the kind a form stamped: `ofKind`).
 //
 // The assignments are the second kind of `service-providers.service-areas`,
 // the module the API grants `/service-area-assignments` under; which kind a
@@ -29,10 +29,8 @@ export const SETTLEMENTS_MODULE = moduleAt("commercial.settlements")
 export const WEIGHTS_MODULE = moduleAt("route-studio.weights")
 /** A review status as the desk reads it: `captured` is the queue. */
 export const REVIEW_LABELS: Readonly<Record<WeightReviewStatus, string>> = { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" }
-/** The reviews, by the command each is sent as. */
 export const WEIGHT_REVIEW_COMMANDS = ["approve", "reject", "correct"] as const
 export type WeightReviewCommand = (typeof WEIGHT_REVIEW_COMMANDS)[number]
-/** The service providers an area is awarded to. */
 export const SERVICE_PROVIDERS_MODULE = moduleAt("service-providers.service-providers")
 
 export const SERVICE_AREA_PREFIX = "service-area"
@@ -49,7 +47,6 @@ export const INDEXED_PRICE_RECORD_KIND = "Indexed service provider price"
 export const SETTLEMENT_RECORD_KIND = "Settlement"
 export const UNLOAD_RECORD_KIND = "Weight record"
 
-/** The two kinds of `service-providers.service-areas`. */
 export type ServiceAreaKind = "service-area" | "assignment"
 
 /** Which kind a record of the service areas module is: its id's prefix, then the kind its form stamped; null for neither. */
@@ -74,7 +71,6 @@ export const isProviderPriceRecord = (record: Pick<BusinessRecord, "id" | "recor
 export const isSettlementRecord = ofKind(SETTLEMENT_PREFIX, [SETTLEMENT_RECORD_KIND])
 export const isUnloadRecord = ofKind(UNLOAD_PREFIX, [UNLOAD_RECORD_KIND])
 
-/** An award's assignments among the module's records, the first holder first: its details list them. */
 export function assignmentsOf(records: readonly BusinessRecord[], areaWebId: string): BusinessRecord[] {
   const startOf = (record: BusinessRecord) => String(record.submittedValues?.validFrom ?? "")
   return records.filter((record) => isAssignmentRecord(record) && record.submittedValues?.serviceAreaId === areaWebId).sort((a, b) => startOf(a).localeCompare(startOf(b)))
@@ -82,5 +78,4 @@ export function assignmentsOf(records: readonly BusinessRecord[], areaWebId: str
 
 const PERIOD_READING: Record<PeriodStanding, "Upcoming" | "Active" | "Expired"> = { upcoming: "Upcoming", "in-force": "Active", ended: "Expired" }
 
-/** A period's standing on a day, as a provider's price, award or assignment names it. */
 export const periodReading = (validFrom: string, validTo: string | null, day: string) => PERIOD_READING[periodOn({ validFrom, validTo }, day)]

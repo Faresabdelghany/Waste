@@ -73,10 +73,11 @@ describe("the ledgers' folds in SQL are the domain's", { skip: database.skip }, 
  * filters on, and the parameter its limit binds. Refuses a statement that
  * joins none, or one not latest-first by id.
  */
-function lateralProbe(text: string, params: unknown[], ledger: string): { where: string; limit: unknown } {
+function lateralProbe(text: string, params: unknown[], ledger: string): { where: string; limit: unknown; company: unknown } {
   const probe = new RegExp(`left join lateral \\(select .+ from "wms"\\."${ledger}" where (.+) order by "wms"\\."${ledger}"\\."id" desc limit \\$(\\d+)\\) "[a-z_]+" on true`).exec(text)
   assert.ok(probe, `no lateral probe of ${ledger}, latest id first: ${text}`)
-  return { where: probe[1]!, limit: params[Number(probe[2]) - 1] }
+  const company = new RegExp(`"wms"\\."${ledger}"\\."company_id" = \\$(\\d+)`).exec(probe[1]!)
+  return { where: probe[1]!, limit: params[Number(probe[2]) - 1], company: company === null ? undefined : params[Number(company[1]) - 1] }
 }
 
 describe("the latest-entry lookups", () => {
@@ -92,6 +93,7 @@ describe("the latest-entry lookups", () => {
       .toSQL()
     const probe = lateralProbe(text, params, "stock_movement")
     assert.match(probe.where, /"wms"\."stock_movement"\."container_id" = "wms"\."container"\."id"/, "correlated on the outer row's container")
+    assert.equal(probe.company, companyId, "the probe filters the ledger to the company: the tenant fence, and the leading column of its index")
     assert.equal(probe.limit, 1)
   })
 
@@ -107,6 +109,7 @@ describe("the latest-entry lookups", () => {
       .toSQL()
     const probe = lateralProbe(text, params, "weight_review")
     assert.match(probe.where, /"wms"\."weight_review"\."unload_id" = "wms"\."unload"\."id"/, "correlated on the outer row's unload")
+    assert.equal(probe.company, companyId, "the probe filters the ledger to the company: the tenant fence, and the leading column of its index")
     assert.equal(probe.limit, 1)
   })
 })

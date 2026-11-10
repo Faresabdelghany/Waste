@@ -17,7 +17,6 @@ import { useApiClient } from "@/components/platform/api-session-store"
 import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { authorLine, mintMessageId, readDriverRouteMessages, sendable, sendDriverRouteMessage } from "@/lib/driver/route-messages"
 
-/** How often an open thread is read again. */
 const THREAD_POLL_MS = 30_000
 
 export function DriverRouteMessages({ routeId }: { routeId: string }) {

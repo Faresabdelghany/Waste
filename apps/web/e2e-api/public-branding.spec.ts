@@ -27,7 +27,6 @@ const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><re
 /** What axe holds each page to: WCAG 2.0 and 2.1, A and AA. */
 const WCAG_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
 
-/** Every violation axe finds on the page, by rule and the elements it names; none is the page passing. */
 async function violationsOf(page: BrowserPage): Promise<string[]> {
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_AA).analyze()
   return violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`)

@@ -21,11 +21,9 @@ const fail = (why: string): never => {
   throw new Error(why)
 }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
-/** Picks an option of a select field in a dialog by its label and the start of the option's. */
 async function pick(dialog: Locator, page: Page, field: RegExp, option: RegExp) {
   await dialog.getByRole("combobox", { name: field }).click()
   await page.getByRole("option", { name: option }).first().click()
@@ -85,7 +83,6 @@ test("a weighbridge's batch: one ticket matches its truck's route, one waits and
     expect(matched.outcome).toBe("matched")
     expect([waiting.outcome, waiting.reason]).toEqual(["unmatched", "unknown-vehicle"])
 
-    // The waiting ticket is matched by hand in Route Studio › Weighbridge.
     const loaded = answerOf(page, "GET", /^\/weighbridge-tickets$/)
     await page.goto("/route-studio?module=weighbridge")
     expect((await loaded).status()).toBe(200)
@@ -102,7 +99,6 @@ test("a weighbridge's batch: one ticket matches its truck's route, one waits and
     expect(answered.request().postDataJSON()).toEqual({ routeId: route.id, wasteFractionId: residual.id })
     await expect(details.getByTestId("weighbridge-ticket-commands").getByRole("button")).toHaveCount(0)
 
-    // The weighbridge's unload and the office's of the same load are told as possible duplicates.
     const weights = answerOf(page, "GET", /^\/unloads$/)
     await page.goto("/route-studio?module=weights")
     expect((await weights).status()).toBe(200)

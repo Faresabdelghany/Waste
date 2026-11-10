@@ -60,7 +60,6 @@ export type AreaRoute = {
   timeWindow: string | null
   /** The record's own stop count ("42 stops") first, its pickups second. */
   stopCount: number
-  /** Where "Open route" goes. */
 }
 
 export type AreaRoutes = {
@@ -100,7 +99,6 @@ function routeDate(route: BusinessRecord): string | null {
   return parseDisplayDate(route.facts.Date)
 }
 
-/** "42 stops" → 42; anything else → null. */
 function statedStopCount(route: BusinessRecord): number | null {
   const match = /^(\d+)\s+stops?\b/i.exec(route.value.trim())
   return match ? Number.parseInt(match[1], 10) : null
@@ -111,14 +109,12 @@ const stopNumber = (pickup: BusinessRecord): number => {
   return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER
 }
 
-/** Every key a pickup may use to name its container. */
 function pickupContainerKeys(pickup: BusinessRecord): string[] {
   return [typedString(pickup.submittedValues, "containerId"), cleanFact(pickup.facts["Container ID"])?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
   )
 }
 
-/** Every key a pickup may use to name its route. */
 function pickupRouteKeys(pickup: BusinessRecord): string[] {
   return [typedString(pickup.submittedValues, "routeId"), cleanFact(pickup.facts.Route)?.toLowerCase()].filter(
     (key): key is string => Boolean(key),
@@ -137,7 +133,6 @@ type LinkedRoute = {
   stopContainers: BusinessRecord[]
 }
 
-/** Every countable route with its pickups and the containers they resolve to. */
 function linkRoutes(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
@@ -183,7 +178,6 @@ function linkRoutes(
 
 const CLOCK = /(\d{1,2}:\d{2})/
 
-/** The first "hh:mm" in a display value, zero-padded, or null. */
 function clockOf(value: string | undefined): string | null {
   const match = CLOCK.exec(value ?? "")
   return match ? match[1].padStart(5, "0") : null

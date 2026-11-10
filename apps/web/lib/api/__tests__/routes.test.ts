@@ -1,12 +1,11 @@
 // Routes on the adapter (#179, slice 6 of #81): the dated Route generation
 // wrote as the records of `route-studio.routes`, the table, the map and the
-// route's details read; the dispatcher's five commands — assign, dispatch,
-// reschedule, cancel and the stop order — whose bodies are held here
-// against the contracts' own zod schemas, sent through the store's seam over
-// a scripted `fetch`, the API's refusals coming back as its sentences. Since
-// #111 the office makes an ad-hoc route here (New route) and adds a stop to
-// a route (Add stop); a route is never edited, and its status moves by
-// command alone.
+// route's details read; the dispatcher's commands, whose bodies are held
+// here against the contracts' own zod schemas, sent through the store's seam
+// over a scripted `fetch`, the API's refusals coming back as its sentences.
+// Since #111 the office makes an ad-hoc route here (New route) and adds a
+// stop to a route (Add stop); a route is never edited, and its status moves
+// by command alone.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 

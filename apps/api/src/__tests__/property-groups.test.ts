@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -317,6 +318,7 @@ describe("the property group endpoints", { skip: database.skip }, () => {
         },
         PropertyGroup,
       )
+      await nextMillisecond()
       const changed = await patch(olivia, created.id, { status: "active", purpose: "reporting" })
       assert.equal(changed.status, "active")
       assert.equal(changed.purpose, "reporting")
@@ -384,6 +386,7 @@ describe("the property group endpoints", { skip: database.skip }, () => {
         },
         PropertyGroup,
       )
+      await nextMillisecond()
       const replaced = await putMembers(olivia, created.id, [{ propertyId: strandvej.id, role: "payer" }])
       assert.deepEqual(replaced.members, [{ propertyId: strandvej.id, role: "payer" }])
       assert.ok(replaced.updatedAt > created.updatedAt, "the record the set belongs to moved")

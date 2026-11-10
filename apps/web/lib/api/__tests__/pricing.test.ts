@@ -94,7 +94,6 @@ function withProducts(products: readonly Product[], base: ServerRecordsState = s
 }
 const productsState = withProducts([res240, bulky, xmas])
 
-/** The state once the price rows module has loaded its lists and rows. */
 function withPriceRows(lists: readonly PriceList[], rows: readonly PriceListRow[], base: ServerRecordsState = productsState): ServerRecordsState {
   const listRecords = lists.map((list) => recordFrom(priceListAdapter, list, context(base)))
   const listed = new Map([...base, ["commercial.price-rows", moduleOf(listRecords, lists.map((list) => list.id))]])

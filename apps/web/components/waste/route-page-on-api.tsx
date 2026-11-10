@@ -83,7 +83,6 @@ const ASSIGNMENT: ReadonlyArray<readonly [fact: string, label: string, named: bo
   ["Origin", "Origin", false],
 ]
 
-/** The facts of when it runs and how long it takes, under Schedule. */
 const SCHEDULE: ReadonlyArray<readonly [fact: string, label: string]> = [
   ["Service date", "Service date"],
   ["Planned start", "Planned start"],
@@ -156,7 +155,6 @@ function routeStatusTone(status: string): StatusTone {
   return "neutral"
 }
 
-/** The tickets about a route, as its page's Tickets tab lists them. */
 function TicketsTab({
   tickets,
 }: {

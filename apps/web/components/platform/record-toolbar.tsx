@@ -33,34 +33,38 @@ export function RecordToolbar({
   view,
   actions,
   className,
+  children,
 }: {
   placeholder: string
   query: string
   onQueryChange: (value: string) => void
-  /** The rows the filters' values are read off. */
-  records: readonly BusinessRecord[]
+  /** The rows the filters' values are read off; a list with no filter (the holidays of a list) hands none. */
+  records?: readonly BusinessRecord[]
   /** The list's own readers; without them, the variant's categories. */
   readers?: FilterValueReaders
   filterVariant?: BusinessFilterVariant
-  filters: BusinessFilters
-  onFiltersChange: (filters: BusinessFilters) => void
+  filters?: BusinessFilters
+  onFiltersChange?: (filters: BusinessFilters) => void
   /** The view popover, `records` unless it says otherwise; a list without one shows none. */
   view?: ComponentProps<typeof BusinessViewOptionsPopover>
   /** What the list offers beside its toolbar (the workspace's Open full view). */
   actions?: ReactNode
   className?: string
+  /** A list's own controls beside its search and filters (the holidays' Year). */
+  children?: ReactNode
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-2">
           <RecordSearchInput value={query} onChange={onQueryChange} placeholder={placeholder} />
-          <BusinessFilterPopover records={[...records]} value={filters} onChange={onFiltersChange} variant={filterVariant} readers={readers} />
+          {records && filters && onFiltersChange && <BusinessFilterPopover records={records} value={filters} onChange={onFiltersChange} variant={filterVariant} readers={readers} />}
           {view && <BusinessViewOptionsPopover variant="records" {...view} />}
+          {children}
         </div>
         {actions}
       </div>
-      <ChipOverflow chips={businessFilterChips(filters)} onRemove={(key, value) => onFiltersChange(removeBusinessFilterValue(filters, key, value))} maxVisible={4} />
+      {filters && onFiltersChange && <ChipOverflow chips={businessFilterChips(filters)} onRemove={(key, value) => onFiltersChange(removeBusinessFilterValue(filters, key, value))} maxVisible={4} />}
     </div>
   )
 }
@@ -71,13 +75,11 @@ export const detailsColumn = (label: string): readonly BusinessColumnChip[] => [
 /** A list's view: the shared options, in the list's order, its one optional column (`showDescription`) shown. */
 export const listView = (ordering: BusinessViewOptions["ordering"]): BusinessViewOptions => ({ ...defaultBusinessViewOptions, ordering, showDescription: true })
 
-/** The orders of a list whose rows read an update and a name. */
 export const RECENT_ORDERS: readonly BusinessOrderingOption[] = [
   { value: "updated", label: "Recently updated" },
   { value: "name", label: "Name" },
 ]
 
-/** A table's rows by the view's density: compact tightens every cell. */
 export const densityClass = (view: Pick<BusinessViewOptions, "density">): string => (view.density === "compact" ? "[&_td]:py-1.5" : "")
 
 /** A list's rows in the view's order: by name, else newest first by `updated` (the store's order where every row reads alike). */

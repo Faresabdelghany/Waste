@@ -34,7 +34,6 @@ type Settlement = { id: string; status: string; validFrom: string; validTo: stri
 type SettlementEvent = { kind: string; status: string; reason: string | null }
 type Unload = { id: string; netKg: number; weightReview: { status: string; correctionUnloadId: string | null } }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
@@ -84,7 +83,6 @@ async function providerNamed(api: APIRequestContext, prefix: string): Promise<Se
   return provider
 }
 
-/** `day` moved by `days`. */
 const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
 /** Eight days of this run's own, centuries ahead: a planning area is awarded once at a time, and the tenant keeps every earlier run's awards. */
@@ -100,7 +98,6 @@ async function newAward(api: APIRequestContext, project: Project, provider: Serv
   return (await response.json()) as ServiceAreaCreated
 }
 
-/** The award's first assignment, which every test makes it with. */
 function assignmentOf(award: ServiceAreaCreated): ServiceAreaAssignment {
   if (award.assignment === null) throw new Error(`${award.code} was made without its assignment`)
   return award.assignment
@@ -135,7 +132,6 @@ test("Service areas: an award's details edit it and move it to another provider,
   expect(patched.request().postDataJSON()).toEqual({ name: renamed })
   await expect(edit).toBeHidden()
 
-  // A transfer: the current assignment ended on its first day, the next provider from the day after.
   await assignments.getByRole("button", { name: "End or note" }).click()
   const end = dialogTitled(page, "End or note the assignment")
   await expect(end.getByRole("combobox", { name: /^Service provider/ })).toBeDisabled()
@@ -245,7 +241,6 @@ test("Service provider prices: Add price under an assignment, then Apply index â
   expect(price).toMatchObject({ bidMinor: 1120, unitPriceMinor: 1120, validTo: "2028-01-01" })
   await expect(dialog).toBeHidden()
 
-  // The new row's details: Apply index on the bid from the first of March.
   const details = page.getByRole("dialog").filter({ has: page.getByTestId("provider-price-commands") })
   await details.getByRole("button", { name: "Apply index" }).click()
   const index = dialogTitled(page, "Apply index")
@@ -263,7 +258,6 @@ test("Service provider prices: Add price under an assignment, then Apply index â
   expect(first.validTo).toBe("2027-03-01")
   // The price was read back, its details still open on it: it ends the day before the next row starts.
   await expect(details).toContainText("2027-02-28")
-  // The chain's next row is listed beside the first.
   await page.keyboard.press("Escape")
   await page.getByPlaceholder("Search service provider prices").fill(productName)
   await expect(page.getByRole("table").locator("tr", { hasText: productName }).filter({ hasText: "11.76" })).toHaveCount(1)
@@ -362,7 +356,6 @@ test("Settlements: one opened over an assignment's ended period is calculated, c
   expect(reopened.request().postDataJSON()).toEqual({ reason: "A late event of February" })
   await expect.poll(offered).toEqual(["Calculate"])
 
-  // The history keeps every move and why it was reopened.
   const history = details.getByTestId("settlement-history")
   await expect(history.getByRole("listitem")).toHaveCount(3)
   await expect(history.getByRole("listitem").nth(2)).toContainText("Reopened")
@@ -511,7 +504,6 @@ test("Record unload: the office records a load the station turned away, of a fra
     await expect(page.getByText(`Station ${station.name} does not take ${untaken.name}`).first()).toBeVisible()
     await expect(dialog).toBeVisible()
 
-    // Turned away, it is recorded with why.
     await pick(dialog, page, /^Why it was refused/, /^Fraction not accepted/)
     await dialog.getByLabel(/^In the station's words/).fill("Glass in the residual bay")
     const [created] = await Promise.all([answerOf(page, "POST", new RegExp(`^/routes/${route.id}/unloads$`)), dialog.getByRole("button", { name: "Record unload" }).click()])

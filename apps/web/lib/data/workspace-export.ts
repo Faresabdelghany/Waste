@@ -21,10 +21,8 @@
 import type { BusinessRecord } from "./business-modules"
 import { csvFileName, csvOf, downloadCsv } from "./csv"
 
-/** What a column exports: the header the table draws, and the text of its cell for a record. */
 export type ExportColumn = { header: string; cell: (record: BusinessRecord) => string }
 
-/** The view options that switch a column on, as the workspace's table reads them. */
 export type ShownOptions = {
   showDescription: boolean
   showContext: boolean
@@ -38,9 +36,7 @@ export type ShownOptions = {
   showProject: boolean
 }
 
-/** Which table the module draws, and what its cells read beyond the record. */
 export type ShownTable = {
-  /** The containers' asset view, or one of the record views. */
   view: "containers" | "routes" | "provider-users" | "calendars" | "schemes" | "records"
   /** The rich view adds its pinned and its fact columns. */
   rich: boolean
@@ -59,7 +55,6 @@ export type ShownTable = {
   schemeRowOf?: (record: BusinessRecord) => { recurrence: string; wasteFraction: string } | undefined
 }
 
-/** A fact as the table shows it: its trimmed value, else the fallback, the dash unless said. */
 export function factOf(record: BusinessRecord, label: string, fallback = "—"): string {
   const value = record.facts[label]?.trim()
   return value || fallback
@@ -74,7 +69,6 @@ function sensorCell(record: BusinessRecord): string {
 
 const fact = (header: string, label = header): ExportColumn => ({ header, cell: (record) => factOf(record, label) })
 
-/** The columns the table draws for this module and these options, in its order. */
 export function shownColumns(table: ShownTable): ExportColumn[] {
   const { options } = table
   if (table.view === "containers") {
@@ -139,7 +133,6 @@ export function shownColumns(table: ShownTable): ExportColumn[] {
   return columns
 }
 
-/** The rows as a CSV text under the columns' headers. */
 export function tableCsv(records: readonly BusinessRecord[], columns: readonly ExportColumn[]): string {
   return csvOf(
     columns.map((column) => column.header),
@@ -147,7 +140,6 @@ export function tableCsv(records: readonly BusinessRecord[], columns: readonly E
   )
 }
 
-/** The Export button's work: the rows as the table shows them, saved as `<workspace>-<module>-<day>.csv`; answers how many rows went out. */
 export function exportShownRows(records: readonly BusinessRecord[], table: ShownTable, names: { workspace: string; module: string; day: string }): number {
   downloadCsv(csvFileName(names.workspace, names.module, names.day), tableCsv(records, shownColumns(table)))
   return records.length

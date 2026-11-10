@@ -24,7 +24,6 @@ const fail = (why: string): never => {
 }
 const commandId = () => mintId(Date.now(), crypto.getRandomValues(new Uint8Array(ID_RANDOM_BYTES)))
 
-/** Ticks the options of a multiselect in `dialog`, then closes its picker. */
 async function pickMany(page: Page, dialog: Locator, field: string, options: readonly string[]) {
   await dialog.getByRole("combobox", { name: new RegExp(`^${field}`) }).click()
   for (const option of options) await page.getByRole("option", { name: option, exact: true }).click()

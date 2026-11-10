@@ -38,7 +38,6 @@ test("a driver reads their route with no signal, marked as the server's last ans
     await expect(offlineCopy).toContainText("Offline copy: the server's answer at")
     await expect(page.getByRole("status").filter({ hasText: "Can't reach the server" })).toBeVisible()
 
-    // Back to the start screen with no signal: the kept page, the kept answer.
     await page.getByRole("link", { name: "Your routes", exact: true }).click()
     await expect(page).toHaveURL(/\/driver$/)
     await expect(page.getByRole("article", { name: `Route ${route.label}` })).toBeVisible()

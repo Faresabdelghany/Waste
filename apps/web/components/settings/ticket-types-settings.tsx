@@ -1,6 +1,6 @@
 "use client"
 
-// Settings › Operations › Ticket types (#545 of #544): the company's own types
+// Settings › Tickets › Types (#545 of #544): the company's own types
 // of case, each inside one kind — added, renamed, described, retired and made
 // their kind's default, given their custom fields and the roles that may give
 // each status command, and given their automation (#546), the actions the
@@ -11,7 +11,7 @@
 // alone; a ticket's form offers a type's fields once the type is picked.
 // A row opens the type's own page in the tab's place, its four tabs edited
 // and saved there, under an address of its own (`?pane=tickets&type=<id>`).
-// Offered on the Pilot alone, beside the Ticket teams.
+// Offered on the Pilot alone.
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
@@ -84,7 +84,6 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   const vehicles = useModuleRecords(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
   // The kinds' defaults first, then the company's own, each in the order they were made.
   const rows = types.records.filter((record) => isTicketTypeRecord(record) && !isSoftDeleted(record)).sort((a, b) => Number(b.submittedValues?.isDefault === true) - Number(a.submittedValues?.isDefault === true))
-  // What the Automation tab's pickers offer: the active teams, people, types and the vehicles, each by its web id.
   const named = (records: readonly BusinessRecord[]) => records.map((record) => ({ value: record.id, label: record.name }))
   const choices: AutomationChoices = {
     teams: named(types.records.filter((record) => isTicketTeamRecord(record) && !isSoftDeleted(record) && record.status === "Active")),
@@ -308,7 +307,6 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
             ) : undefined
           }
         />
-        {/* What the API refused of the last save, under the header rather than among its buttons. */}
         {refusal !== null && <p className="border-b border-border px-4 py-2 text-sm text-destructive">{refusal}</p>}
         <div className="overflow-x-auto px-4 py-3">
           <PillTabsList aria-label="Ticket type">

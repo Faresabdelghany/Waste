@@ -20,7 +20,6 @@ export const ALL_PROJECTS = "all"
  */
 export type ProjectRecordId = `project-${string}`
 
-/** One project record's id, or every permitted project. */
 export type ProjectScope = typeof ALL_PROJECTS | ProjectRecordId
 
 export function isProjectRecordId(value: unknown): value is ProjectRecordId {
@@ -73,11 +72,6 @@ export function recordsForProject<T extends Pick<BusinessRecord, "projectIds">>(
   return records.filter((record) => isInProjectScope(record, scope))
 }
 
-/**
- * The project ids a record made under a scope carries: the project the form
- * chose, whichever scope the workspace runs in; else the pinned project; else
- * every project record.
- */
 export function selectedProjectIds(
   scope: ProjectScope,
   values: BusinessFormValues,

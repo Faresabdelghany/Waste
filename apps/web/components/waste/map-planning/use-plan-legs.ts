@@ -71,17 +71,12 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
   const [retried, setRetried] = useState<ReadonlyMap<string, Plan>>(() => new Map())
   const [wake, setWake] = useState(0)
   const inFlight = useRef(new Map<string, AbortController>())
-  /** The Plans the map draws now: what a landing fetch keeps beside itself, so the details held stay the drawn routes'. */
   const drawn = useRef(new Set<string>())
-  /** The Plans due to be asked for, nearest first, as the last pass found them; a landing takes the next. */
   const due = useRef<RoutePlan[]>([])
-  /** The Plans landed and the requests failed since the last redraw, and the redraw that will draw them. */
   const landed = useRef(new Map<string, Fetched>())
   const failed = useRef(new Map<string, number>())
   const redraw = useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** Asks for the next due Plans while fewer than MAX_PLANS_IN_FLIGHT are on their way: the latest pass's. */
   const ask = useRef<() => void>(() => {})
-  /** Abandons every request and everything settled but not drawn, so the next pass asks for it all again. */
   const stopAsking = useCallback(() => {
     for (const controller of inFlight.current.values()) controller.abort()
     inFlight.current.clear()
@@ -96,7 +91,6 @@ export function usePlanLegs(routes: readonly AreaRoute[], records: readonly Busi
   const recordById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records])
 
   const ordered = useMemo(() => planFetchOrder(routes, today), [routes, today])
-  // The Plan each drawn route reads, at its freshest, in the order they are asked for.
   const plans = useMemo(() => {
     const byRoute = new Map<string, RoutePlan>()
     if (client === null) return byRoute

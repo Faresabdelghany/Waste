@@ -27,7 +27,6 @@ const made = async <T>(api: APIRequestContext, path: string, data: unknown): Pro
   return (await response.json()) as T
 }
 
-/** A day `days` after `day`, both `YYYY-MM-DD`. */
 const daysAfter = (day: string, days: number): string => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
 test("Move occupant reviews the move through the API's dry run, makes it, and the property's details name it as booked ahead", async ({ api, page }) => {
@@ -81,14 +80,12 @@ test("Move occupant reviews the move through the API's dry run, makes it, and th
   await expect(review).toContainText(`${number} begins on ${on} for ${arriving.name}, with 1 subscription.`)
   expect(((await (await api.get(`/properties/${property.id}`)).json()) as PropertyRead).parties.map((party) => party.customerId)).toEqual([leaving.id])
 
-  // Move makes it, and the details say it is booked ahead while today's tenant stays.
   const moving = answerOf(page, "POST", `/properties/${property.id}/moves`)
   await dialog.getByRole("button", { name: "Move", exact: true }).click()
   expect((await moving).status()).toBe(200)
   await expect(dialog).toBeHidden()
   await expect(sheet).toContainText(`${leaving.name} leaves as tenant on ${on} · ${arriving.name} joins as tenant on ${on}`, { timeout: 30_000 })
 
-  // The API agrees: the roles change hands on the day, and the incoming agreement begins then.
   const after = (await (await api.get(`/properties/${property.id}`)).json()) as PropertyRead
   expect(after.parties.map((party) => [party.customerId, party.role, party.validFrom, party.validTo]).sort()).toEqual(
     [

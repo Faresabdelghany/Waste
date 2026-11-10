@@ -64,7 +64,6 @@ test("the office registers a tank on the container at a house, reads when it is 
   const tanks = sheet.getByTestId("property-tanks")
   await expect(tanks).toContainText("No septic tank, holding tank or separator is registered here.", { timeout: 30_000 })
 
-  // Register tank: the container serving the house, what it holds, every two years, last emptied before the platform.
   await tanks.getByRole("button", { name: "Register tank…" }).click()
   const register = page.getByRole("dialog", { name: `Register a tank at ${house.name}` })
   await register.getByLabel("Container").click()
@@ -83,7 +82,6 @@ test("the office registers a tank on the container at a house, reads when it is 
   await expect(item.getByTestId("tank-due")).toHaveText(`Next emptying due ${tank!.dueOn}`)
   await expect(item.getByTestId("tank-last-emptying")).toHaveText(`Last emptied ${lastEmptied}, before the platform`)
 
-  // An inspection with remarks, listed under the tank.
   await item.getByRole("button", { name: "Record inspection…" }).click()
   const inspection = page.getByRole("dialog", { name: "Record an inspection" })
   await inspection.getByLabel("Outcome").click()

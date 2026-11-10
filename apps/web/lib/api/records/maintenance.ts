@@ -31,7 +31,6 @@ export const OPEN_ORDER = "open-maintenance-order"
 export const COMPLETE_ORDER = "complete-maintenance-order"
 export const CANCEL_ORDER = "cancel-maintenance-order"
 
-/** The worst first: overdue, due soon, then the rest, each by name; retired plans last. */
 const DUE_ORDER: Readonly<Record<MaintenanceDueState, number>> = { overdue: 0, "due-soon": 1, ok: 2 }
 
 /** A vehicle's plans, the active ones by how due they are, then the retired ones. */
@@ -156,14 +155,10 @@ const send = <T>(sendAction: SendAction, recordId: string, name: string, input: 
 export const addMaintenancePlan = (sendAction: SendAction, recordId: string, input: PlanInput) => send<MaintenancePlan>(sendAction, recordId, ADD_PLAN, input)
 /** Retires one of a vehicle's plans, by its server id. */
 export const retireMaintenancePlan = (sendAction: SendAction, recordId: string, planId: string) => send<MaintenancePlan>(sendAction, recordId, RETIRE_PLAN, { planId })
-/** Opens an order on a vehicle. */
 export const openMaintenanceOrder = (sendAction: SendAction, recordId: string, input: OrderInput) => send<MaintenanceOrder>(sendAction, recordId, OPEN_ORDER, input)
-/** Completes one of a vehicle's open orders. */
 export const completeMaintenanceOrder = (sendAction: SendAction, recordId: string, input: CompleteInput) => send<MaintenanceOrder>(sendAction, recordId, COMPLETE_ORDER, input)
-/** Cancels one of a vehicle's open orders, with why where the office says. */
 export const cancelMaintenanceOrder = (sendAction: SendAction, recordId: string, orderId: string, note: string) => send<MaintenanceOrder>(sendAction, recordId, CANCEL_ORDER, { orderId, note })
 
-/** How a plan's state reads. */
 export const DUE_LABELS: Readonly<Record<MaintenanceDueState, string>> = { ok: "On track", "due-soon": "Due soon", overdue: "Overdue" }
 
 const grouped = (value: number) => value.toLocaleString("en-GB")

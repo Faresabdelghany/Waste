@@ -78,14 +78,11 @@ async function askDoor<T>(path: string, { origin, forwardedFor, fetch: fetching 
   }
 }
 
-/** The published project under the slug. */
 export const readPublishedProject = (slug: string, options: DoorOptions) => readDoor<PublishedProject>(encodeURIComponent(slug), options)
 
-/** The published project's addresses that hold `query`. */
 export const searchAddresses = (slug: string, query: string, options: DoorOptions) =>
   readDoor<AddressMatches>(`${encodeURIComponent(slug)}/addresses?q=${encodeURIComponent(query)}`, options)
 
-/** An address's collection days, `weeks` weeks from today. */
 export const readCollectionDays = (slug: string, addressId: string, weeks: number, options: DoorOptions) =>
   readDoor<PublicCollectionDays>(`${encodeURIComponent(slug)}/addresses/${encodeURIComponent(addressId)}/collection-days?weeks=${weeks}`, options)
 

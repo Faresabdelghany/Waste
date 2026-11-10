@@ -14,7 +14,6 @@ import type { AddressLookupFields, BusinessFormField, BusinessFormValues } from 
 
 const blank = (value: BusinessFormValues[string] | undefined) => value === undefined || value === ""
 
-/** The values a pick sets: the register's id under the lookup's own field, its designation as the address, and its BFE number and point where the form holds none. */
 export function addressPicked(lookupFieldId: string, fields: AddressLookupFields, address: Address, values: BusinessFormValues): BusinessFormValues {
   const placed = !blank(values[fields.latitude]) || !blank(values[fields.longitude])
   return {
@@ -27,7 +26,6 @@ export function addressPicked(lookupFieldId: string, fields: AddressLookupFields
   }
 }
 
-/** The lookup fields a change to `fieldId` lets go: those whose typed address it is. */
 export function picksLetGoBy(fields: readonly BusinessFormField[], fieldId: string): string[] {
   return fields.filter((field) => field.type === "address-lookup" && field.addressLookup?.address === fieldId).map((field) => field.id)
 }

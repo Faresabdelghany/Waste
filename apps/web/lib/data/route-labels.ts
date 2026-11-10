@@ -20,7 +20,6 @@ export const PICKUP_STATUS_LABELS: Readonly<Record<PickupStatus, string>> = {
   failed: "Failed",
 }
 
-/** The six reasons a driver gives, in the words the screen offers them. */
 export const DRIVER_REASON_LABELS: Readonly<Record<DriverPickupReason, string>> = {
   inaccessible: "Inaccessible",
   contamination: "Contamination",

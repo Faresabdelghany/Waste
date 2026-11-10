@@ -33,7 +33,6 @@ const RESERVATION_FIELDS: readonly BusinessFormField[] = [
 ]
 const NOTE: BusinessFormField = { id: "note", label: "Note", type: "textarea", description: "What it is for: an allocation names no route." }
 
-/** Allocate: the reservation, planned or confirmed straight away. */
 export const ALLOCATE_FORM: BusinessFormSchema = {
   key: "fleet.vehicle-planning",
   mode: "create",
@@ -66,7 +65,6 @@ export const ALLOCATE_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", completionMessage: "The vehicle was allocated." },
 }
 
-/** Change: what the allocation reserves, its project held, and the reason, which is the event's. */
 export function allocationChangeForm(record: BusinessRecord): BusinessFormSchema {
   return {
     ...ALLOCATE_FORM,
@@ -90,7 +88,6 @@ export function allocationChangeForm(record: BusinessRecord): BusinessFormSchema
   }
 }
 
-/** Release: the reason the window is freed. */
 export const RELEASE_FORM: BusinessFormSchema = {
   key: "fleet.vehicle-planning",
   mode: "action",
@@ -102,7 +99,6 @@ export const RELEASE_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "The allocation was released." },
 }
 
-/** The values the change form opens with: the record's typed values for its fields, the reason blank. */
 export function allocationFormValues(record: BusinessRecord): BusinessFormValues {
   const fieldIds = new Set(allocationChangeForm(record).sections.flatMap((section) => section.fields.map((field) => field.id)))
   return { ...Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && typeof value === "string")), changeReason: "" }
@@ -113,7 +109,6 @@ export function createAllocationRecord(values: BusinessFormValues, { now }: { no
   return mintedRecord({ id: `vehicle-planning-vehicle-allocation-${now}`, name: "New allocation", status: values.allocationStatus === "confirmed" ? "Confirmed" : "Planned", recordKind: "Vehicle allocation", values })
 }
 
-/** A changed allocation: its identity and status kept, the form's values over its typed ones. */
 export function changedAllocationRecord(record: BusinessRecord, values: BusinessFormValues): BusinessRecord {
   return { ...record, submittedValues: { ...record.submittedValues, ...values } }
 }

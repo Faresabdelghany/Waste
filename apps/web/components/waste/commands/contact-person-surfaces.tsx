@@ -29,7 +29,6 @@ import { useGrants } from "@/components/platform/use-grants"
 
 const ROLES = Object.entries(CONTACT_ROLE_LABELS) as Array<[ContactDraft["role"], string]>
 
-/** An organisation's contact persons, and the dialog that adds or changes one. */
 export function ContactPersonsSurface({ record }: RowSurfaceProps) {
   const { sendAction } = useBusinessRecordStore()
   const grants = useGrants()

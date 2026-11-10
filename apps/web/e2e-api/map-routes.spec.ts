@@ -237,7 +237,6 @@ test("a route row in the Selected area panel plays without the Routes layer, and
   await expect(row).toHaveAttribute("data-highlighted", "true")
   await page.locator(`[data-route-hit="${routeId}"]`).dispatchEvent("mouseout")
 
-  // Hidden again, then played from its row: playing draws it.
   await panel.getByRole("button", { name: "Hide from map" }).click()
   await expect(line).toHaveCount(0)
   await row.getByRole("button", { name: `Play route ${label}` }).click()

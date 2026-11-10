@@ -1,5 +1,5 @@
-// How Settings › Asset management reads itself back from the browser (Issue
-// #39): the fixture container types a stored catalogue was never seeded with
+// How the asset management store (components/platform/asset-management-store.tsx)
+// reads itself back from the browser (Issue #39): the fixture container types a stored catalogue was never seeded with
 // are appended — a browser holding the four-type catalogue from before the
 // issue gets the 140 L bin, the igloo and the underground unit on its next
 // load, so its guided setup stops flagging "Fallback weight" — and nothing
@@ -119,7 +119,6 @@ describe("seedMissingContainerTypes", () => {
     const first = seedMissingContainerTypes({ containerTypes: [...FIXTURE_CONTAINER_TYPES], seededContainerTypeIds: fixtureIds }, fixtures)
     assert.deepEqual(first.containerTypes.at(-1), later)
     assert.ok(first.seededContainerTypeIds.includes("igloo-3000"))
-    // Deleted after the seed: the next load leaves it deleted.
     const deleted = { ...first, containerTypes: first.containerTypes.filter((type) => type.id !== "igloo-3000") }
     assert.equal(seedMissingContainerTypes(deleted, fixtures), deleted)
   })

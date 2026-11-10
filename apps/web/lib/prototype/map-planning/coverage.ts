@@ -29,7 +29,6 @@ export type ServiceAreaCoverage = {
 
 const lower = (value: string) => value.trim().toLowerCase()
 
-/** The planning-area ids a service area covers, plus the names its refs and facts carry. */
 function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<string> } {
   const ids = new Set(serviceAreaZoneIds(area))
   const names = new Set<string>()

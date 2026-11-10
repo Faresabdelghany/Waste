@@ -37,7 +37,6 @@ import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business
 import type { ModuleLocation } from "@/lib/data/business-modules"
 import { waitingSentence } from "@/lib/api/read-state"
 
-/** What differs between a driver's surface and a vehicle's. */
 type AwayKind = {
   module: ModuleLocation
   heading: string
@@ -138,12 +137,10 @@ function AwaySurface({ record, kind }: RowSurfaceProps & { kind: AwayKind }) {
   )
 }
 
-/** A driver's absences, in the driver's details. */
 export function DriverAbsenceSurface({ record }: RowSurfaceProps) {
   return <AwaySurface record={record} kind={DRIVER_AWAY} />
 }
 
-/** A vehicle's or a trailer's periods out of use, in its details. */
 export function VehicleUnavailabilitySurface({ record }: RowSurfaceProps) {
   return <AwaySurface record={record} kind={VEHICLE_AWAY} />
 }

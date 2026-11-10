@@ -28,7 +28,6 @@ import { parseServiceDays } from "./recurrence-values"
 export const NO_HOLIDAY_LIST_LABEL = "None on this project"
 
 export type ProjectHolidayList = {
-  /** "Danish public holidays". */
   name: string
   dates: HolidayList
   /** The company's Holiday List record the dates are read from; absent where no record carries the name. */
@@ -46,13 +45,11 @@ export type ProjectCalendarRecords = {
   calendars: readonly BusinessRecord[]
 }
 
-/** The project's weekend: its typed `weekend` days, else the default. */
 export function projectWeekend(project: BusinessRecord | undefined): ServiceDay[] {
   const days = parseServiceDays(typedString(project?.submittedValues, "weekend") ?? "")
   return days.length > 0 ? days : [...DEFAULT_WEEKEND]
 }
 
-/** The name of the project's holiday list, or null when it has none. */
 export function projectHolidayListName(project: BusinessRecord | undefined): string | null {
   return typedString(project?.submittedValues, "holidayList") ?? null
 }
@@ -82,17 +79,14 @@ export function resolveProjectCalendar(
   }
 }
 
-/** The generator's input for a project calendar: dates (none without a list) plus the weekend. */
 export function schemeCalendarOf(calendar: ProjectCalendar): SchemeCalendar {
   return { holidays: calendar.list?.dates ?? NO_HOLIDAYS, weekend: calendar.weekend }
 }
 
-/** "Sat–Sun" / "Fri–Sat". */
 export function weekendLabel(weekend: readonly ServiceDay[]): string {
   return formatWorkingDays([...weekend])
 }
 
-/** "Danish public holidays · Sat–Sun weekend" — the step 2 field and the review row; the no-list name when there is none. */
 export function projectCalendarLabel(calendar: ProjectCalendar): string {
   return `${calendar.list?.name ?? NO_HOLIDAY_LIST_LABEL} · ${weekendLabel(calendar.weekend)} weekend`
 }

@@ -483,8 +483,6 @@ export function SchemeDetailsPage({
   )
 }
 
-/* ------------------------------- Details tab ------------------------------ */
-
 function SchemeDetailsTab({
   record,
   values,
@@ -513,7 +511,6 @@ function SchemeDetailsTab({
   /** The record as the store holds it, which a write starts from: the display record carries render-time readings. */
   storedRecord: BusinessRecord
   blockingIssues: readonly string[]
-  /** Persisted Draft whose live validation is now clean — needs a re-save. */
   draftPendingResave: boolean
   onEdit?: () => void
   onEditGroups?: () => void
@@ -780,8 +777,6 @@ function SchemeDetailsTab({
   )
 }
 
-/* ------------------------------- Tab toolbar ------------------------------ */
-
 /**
  * The workspace record toolbar — search, the shared Filter popover, removable
  * chips — so the Routes and Stops tabs filter exactly like every other table.
@@ -819,7 +814,6 @@ function SchemeTabToolbar({
   )
 }
 
-/** The workspace's clickable-row contract: button role, keyboard activation, hover. */
 function recordRowProps(label: string, onOpen: () => void) {
   return {
     role: "button" as const,
@@ -837,8 +831,6 @@ function recordRowProps(label: string, onOpen: () => void) {
   }
 }
 
-/* -------------------------------- Routes tab ------------------------------ */
-
 function SchemeRoutesTab({
   routes,
   pickups,
@@ -851,15 +843,13 @@ function SchemeRoutesTab({
   routes: readonly BusinessRecord[]
   /** The scheme's generated Stops — a route's waste fractions derive from them. */
   pickups: readonly BusinessRecord[]
-  /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
   /** Rule groups whose matched containers shifted at their most recent change (issue #41) — derived, never persisted. */
   containerDrift: readonly CollectionGroupContainerDrift[]
   /** The scheme whose next collections the API plans, above its routes. */
   nextCollectionsOf: BusinessRecord
-  /** The scheme's generation runs, read and watched by the page. */
   generation: SchemeGenerationRuns
-  /** Whether the routes are read: once the routes module holds the API's rows (#179); the table shows nothing before. A row opens the workspace's route, the generic details there. */
+  /** Whether the routes are read: once the routes module holds the API's rows (#179); the table shows nothing before. A row opens the route's own page in the workspace. */
   routesRead: boolean
 }) {
   const router = useRouter()
@@ -1045,8 +1035,6 @@ function SchemeRoutesTab({
   )
 }
 
-/* -------------------------------- Stops tab ------------------------------- */
-
 type SchemeStopRow = {
   pickup: BusinessRecord
   route: BusinessRecord | undefined
@@ -1059,7 +1047,6 @@ function SchemeStopsTab({
   generationBlocked,
 }: {
   stops: readonly SchemeStopRow[]
-  /** Generation cannot run right now — blocking issues or unsaved Draft. */
   generationBlocked: boolean
 }) {
   const router = useRouter()
@@ -1216,8 +1203,6 @@ function SchemeStopsTab({
     </div>
   )
 }
-
-/* ------------------------------ Holidays tab ------------------------------ */
 
 function SchemeHolidaysTab({
   calendar,

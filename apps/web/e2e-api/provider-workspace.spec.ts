@@ -46,7 +46,6 @@ async function awardToNordRen(api: APIRequestContext, provider: ServiceProvider,
   ).toBe(true)
 }
 
-/** The office's setup: a scheme of the run's in Indre By Operations, its first route's day awarded to NordRen. */
 async function nordrenRunsARoute(api: APIRequestContext): Promise<{ route: ApiRoute; provider: ServiceProvider }> {
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Provider"))
   const [route] = routes
@@ -75,13 +74,11 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
     const routesRead = answerOf(page, "GET", "/routes")
     await signIn(page, LARS.email, E2E.loginPassword)
 
-    // The landing is the provider's workspace, its routes on the Pilot, under NordRen's name and Lars's: no fixture dashboard.
     await expect(page).toHaveURL(/\/service-provider-workspace$/)
     expect((await routesRead).status()).toBe(200)
     await expect(page.getByRole("link", { name: "Dashboard" })).toHaveCount(0)
     await expect(page.getByText(provider.legalName).first()).toBeVisible()
 
-    // The route NordRen runs that day is among the API's, and its details offer the provider's crew commands alone.
     await page.goto(`/service-provider-workspace/routes?module=routes&record=route-${route.id}`)
     const details = routePage(page, route)
     const commands = details.getByTestId("route-commands")
@@ -137,7 +134,6 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
     await expect(ticket.getByRole("button", { name: "Edit case" })).toHaveCount(0)
     await page.keyboard.press("Escape")
 
-    // The team: NordRen's accounts alone, a foreman invited on a provider's role under NordRen, then switched off.
     const teamRead = answerOf(page, "GET", "/users")
     await page.goto("/service-provider-workspace/team")
     expect((await teamRead).status()).toBe(200)

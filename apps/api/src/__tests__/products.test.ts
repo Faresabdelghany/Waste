@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -289,6 +290,7 @@ describe("the product endpoints", { skip: database.skip }, () => {
         { ...body(a.projects.copenhagen.id, "Food collection"), containerTypeId: bin.id, serviceFrequencyId: weekly.id },
         Product,
       )
+      await nextMillisecond()
       const changed = await patch(olivia, created.id, { status: "active", unit: "month" })
       assert.equal(changed.status, "active")
       assert.equal(changed.unit, "month")

@@ -35,8 +35,7 @@
 //
 // Ids, rule (b) of #81's plan closing with this slice: every row here is
 // `<prefix>-<uuid>`, and no fixture lends its id — no still-fixture reader
-// names a product, a list or a row by a fixture's id (slice 11's provider
-// prices show a product as its id chip until #186 switches them).
+// names a product, a list or a row by a fixture's id.
 //
 // Explain price is a read, not a write: `explainQuery` turns the dialog's
 // pick into the list's server id and `PriceResolveQuery`, and `explainPrice`
@@ -84,13 +83,10 @@ import { customerAdapter } from "./registry"
 const AREA_PREFIX = "area"
 const CUSTOMER_PREFIX = "customer"
 
-/** What a VAT rate that is not a whole percent is told. */
 export const VAT_REFUSAL = "A VAT rate is a whole percent from 0 to 100"
 /** What a code the wire cannot take as a slug is told: the form may say it in capitals, as the fixtures' `PL-Copenhagen-2026`. */
 export const CODE_REFUSAL = "A code is letters, digits and single hyphens, such as PL-CPH-2027"
-/** What an edit moving a list's code or currency is told. */
 export const LIST_KEY_REFUSAL = "A list keeps its code and its currency: its rows are quoted in them"
-/** What an edit moving a row's key or start is told. */
 export const ROW_KEY_REFUSAL = "A row keeps its list, its product, its conditions and its start: end it and add another"
 
 /** The transitions a product offers, by its wire status: a draft is put on sale, an active one withdrawn, an inactive one offered again. */
@@ -100,14 +96,12 @@ const SLUG = new RegExp(SLUG_PATTERN)
 
 const oneOf = <Token extends string>(tokens: readonly Token[], value: string | undefined): Token | undefined => tokens.find((token) => token === value)
 
-/** The record's project's day: what a period is read on. */
 /** The project's own day, on its clock: what a period is read against. */
 export function projectDay(projectServerId: string, context: MappingContext): string {
   const project = context.resolve.byServerId(projectServerId)
   return todayIn(context, project === undefined ? undefined : typed(project, "timezone"))
 }
 
-/** A period's standing on the day, as a price list or a row names it. */
 const PERIOD_STATUS: Record<PeriodStanding, "Scheduled" | "Active" | "Expired"> = { upcoming: "Scheduled", "in-force": "Active", ended: "Expired" }
 const periodStatus = (validFrom: string, validTo: string | null, day: string) => PERIOD_STATUS[periodOn({ validFrom, validTo }, day)]
 
@@ -120,12 +114,7 @@ function masterReference(record: BusinessRecord, key: string, kind: MasterDataKi
   return typedReference(record, key, details.prefix, context, `Pick a ${details.label.toLowerCase()} the API holds`, { owns: (named) => masterDataKindOf(named) === kind })
 }
 
-/** The first refusal among a set of read values, or undefined. */
 const firstRefusalOf = (values: readonly unknown[]): LocalRefusal | undefined => values.find(isLocalRefusal) as LocalRefusal | undefined
-
-// ---------------------------------------------------------------------------
-// Products
-// ---------------------------------------------------------------------------
 
 type ProductWire = {
   name: string
@@ -337,11 +326,6 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
 /** Price Engine › Products: the catalogue, one adapter. */
 export const productsModule = { ...PRODUCTS_MODULE, resources: [productAdapter] } satisfies ServerModule
 
-// ---------------------------------------------------------------------------
-// Price lists
-// ---------------------------------------------------------------------------
-
-/** What the record says the list's patchable fields are, as the wire spells them. */
 function listFields(record: BusinessRecord) {
   const lastDay = typed(record, "validTo")
   return {
@@ -424,10 +408,6 @@ export const priceListAdapter: ResourceAdapter<PriceList, PriceListCreate, Price
   create: (client, body) => create<PriceList>(client, "/price-lists", body).then((created) => created.body),
   update: (client, serverId, body) => patch<PriceList>(client, `/price-lists/${serverId}`, body),
 }
-
-// ---------------------------------------------------------------------------
-// Price rows
-// ---------------------------------------------------------------------------
 
 /** What a row's create carries: the list it is posted under, and the body the contract accepts. */
 type RowWrite = { priceListId: string; body: unknown }
@@ -607,11 +587,6 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow, RowWrite> = {
 /** Price Engine › Price rows: the lists, then every list's rows, which name their list through the rows loaded just before them. */
 export const priceRowsModule = { ...PRICE_ROWS_MODULE, resources: [priceListAdapter, priceRowAdapter] } satisfies ServerModule
 
-// ---------------------------------------------------------------------------
-// Explain price
-// ---------------------------------------------------------------------------
-
-/** What the Explain price dialog asks: the list's server id and the resolve read's query. */
 export type ExplainQuery = { priceListId: string; query: PriceResolveQuery }
 
 /**

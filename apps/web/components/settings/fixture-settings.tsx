@@ -65,7 +65,6 @@ function mergeStored(defaults: Record<string, SettingValue>, raw: string): Recor
   return { ...defaults, ...Object.fromEntries(kept) }
 }
 
-/** The values this browser saved, over the defaults. */
 const keptValues = persistedStore<Record<string, SettingValue>>(SETTINGS_STORAGE_KEY, { parse: (raw) => mergeStored(INITIAL.values, raw) })
 
 function useFormState(): FormState {
@@ -94,7 +93,6 @@ function save() {
   toast.success("Settings saved", { description: `${controls.length} change${controls.length === 1 ? "" : "s"} saved on this device.` })
 }
 
-/** The account's groups of controls, under the pane's frame, with `before` above them and a bar saving them on this device where one can be set. */
 function FixtureSettingsForm({ groups, action, before }: { groups: readonly SettingsGroup[]; action?: ReactNode; before?: ReactNode }) {
   const { values, dirty, saved } = useFormState()
   // A pane of read lines alone — the Pilot's account profile — has nothing to save on this device.

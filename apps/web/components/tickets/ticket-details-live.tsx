@@ -82,10 +82,8 @@ const readTicket = (client: ApiClient, serverId: string) => ticketDetail(client,
 
 /** The ticket's evidence read as one row, null for a ticket whose stop this account does not reach. */
 const readEvidence = (client: ApiClient, serverId: string) => ticketEvidence(client, serverId).then((stop): Array<StopEvidence | null> => [stop])
-/** No read, for a ticket about no stop. */
 const NO_EVIDENCE = async (): Promise<Array<StopEvidence | null>> => []
 
-/** Where each link's rows live, by the link's key: the way to a linked row. */
 const LINK_MODULES: Readonly<Record<string, ModuleLocation>> = {
   routeId: ROUTES_MODULE,
   pickupId: PICKUPS_MODULE,
@@ -98,7 +96,6 @@ const LINK_MODULES: Readonly<Record<string, ModuleLocation>> = {
   parentTicketId: TICKETS_MODULE,
 }
 
-/** The machine's commands as the dialog's buttons read; `start` is sent as it stands, the others open their dialog. */
 const COMMAND_LABELS: Readonly<Record<TicketCommandName, string>> = {
   assign: "Assign",
   start: "Start",
@@ -109,7 +106,6 @@ const COMMAND_LABELS: Readonly<Record<TicketCommandName, string>> = {
   reopen: "Reopen",
 }
 
-/** What each command is told once the API has taken it. */
 const COMMAND_DONE: Readonly<Record<TicketCommandName, string>> = {
   assign: "Ticket assigned",
   start: "Ticket started",
@@ -127,7 +123,6 @@ const COMPOSER = {
   "service-provider": { label: "Comment to the office", hint: "The office and your team read it", placeholder: "Write a comment to the office…", action: "Add comment", done: "Comment added" },
 } as const
 type Visibility = keyof typeof COMPOSER
-/** The threads an account writes in: the office's two, or a provider's own. */
 const OFFICE_THREADS: readonly Visibility[] = ["internal", "customer"]
 const PROVIDER_THREADS: readonly Visibility[] = ["service-provider"]
 
@@ -222,7 +217,6 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     setOpen({ kind: "command", name, values })
   }
 
-  /** The case's patch: one field's change, or the edit's, saved through the store and re-read once the API has it. */
   const save = (values: BusinessFormValues, said: string) => {
     if (saving) return
     setSaving(true)
@@ -670,7 +664,6 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   )
 }
 
-/** One row of the history: what it is, who and when, and what it said. A comment shows who may read it. */
 /** How the history shows a comment of each thread: the office's internal note, the customer's, and the one the office and the route's provider share (#291 C24). */
 const COMMENT_THREADS = {
   internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-warning-foreground", badgeClass: "border-warning/30 bg-warning/10 text-warning-foreground" },
@@ -746,7 +739,6 @@ function teamOptions(records: readonly BusinessRecord[], current: string): { val
   return [{ value: NO_ONE, label: "No team" }, ...offered.map((record) => ({ value: record.id, label: record.name }))]
 }
 
-/** A row whose value is one of a list of named options, picked in place: the team. */
 function OptionRow({ label, value, shown, options, disabled, onPick }: { label: string; value: string; shown: string; options: readonly { value: string; label: string }[]; disabled: boolean; onPick: (value: string) => void }) {
   const [open, setOpen] = useState(false)
   return (

@@ -15,6 +15,10 @@ shadow_port = 54320
 # Must match the hosted project (waste-pilot, Postgres 17).
 major_version = 17
 
+[db.settings]
+# A whole-migration transaction locks every object it creates; several test runs migrating at once filled the default 64 × 100 lock table ("out of shared memory"). Local stacks and CI only.
+max_locks_per_transaction = 256
+
 [db.migrations]
 # Migrations are Drizzle SQL files in packages/db/migrations (Issue #64); the CLI only runs the local stack.
 enabled = false

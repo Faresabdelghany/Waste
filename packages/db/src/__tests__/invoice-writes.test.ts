@@ -4,16 +4,16 @@
 // the lines as inserted — so the suite can say that the counter comes before
 // the row, the row before its lines, and the outbox event last, with the
 // detail the read would answer as its payload; the `ticket-writes.test.ts`
-// precedent. The statements themselves run against Postgres in
+// precedent. The statements themselves run against Postgres in the API's
 // billing-runs.test.ts and invoices.test.ts.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { Tx } from "@waste/db/client"
+import type { Tx } from "../client"
 import { getTableName, type Table } from "drizzle-orm"
 
-import { createIdMinter } from "@waste/db/ids"
-import { invoiceLineShapeIssue, issueInvoice, type InvoiceDraft, type LineDraft } from "@waste/db/commands/invoice-writes"
+import { createIdMinter } from "../ids"
+import { invoiceLineShapeIssue, issueInvoice, type InvoiceDraft, type LineDraft } from "../commands/invoice-writes"
 
 const COMPANY = "01a0d3a5-e5e0-7000-8000-000000000000"
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"

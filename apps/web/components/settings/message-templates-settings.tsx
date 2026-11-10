@@ -6,11 +6,9 @@
 // from and written to the API's `/message-templates` under
 // `configure.templates`. A template is retired by its status, never deleted,
 // since the delivery log names it. The rules and the bodies are
-// lib/data/message-templates.ts's. Offered on the Pilot alone, in place of
-// the fixtures' Tickets & communication's templates. Below the table, the
-// project's customer notices (O16 of #290, part b,
-// customer-notices-section.tsx): which template each notice of a bulky
-// collection is sent from.
+// lib/data/message-templates.ts's. Offered on the Pilot alone. Below the
+// table, the project's customer notices (O16 of #290, part b,
+// customer-notices-section.tsx): which template each notice is sent from.
 
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 

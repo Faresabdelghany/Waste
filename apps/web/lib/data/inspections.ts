@@ -14,10 +14,8 @@ export const INSPECTIONS_MODULE = moduleAt("operate.inspections")
 export const INSPECTION_PREFIX = "field-inspection"
 export const INSPECTION_RECORD_KIND = "Field inspection"
 
-/** A verdict in the office's words. */
 export const OUTCOME_LABELS: Readonly<Record<FieldInspectionOutcome, string>> = { compliant: "Compliant", minor: "Minor finding", major: "Major finding" }
 
-/** A finding in the office's words. */
 export const FINDING_LABELS: Readonly<Record<InspectionFinding, string>> = {
   contamination: "Contamination",
   "wrong-fraction": "Wrong fraction",
@@ -28,10 +26,8 @@ export const FINDING_LABELS: Readonly<Record<InspectionFinding, string>> = {
   other: "Other",
 }
 
-/** An inspection's status as the list reads it. */
 export const STATUS_LABELS: Readonly<Record<FieldInspectionStatus, string>> = { open: "Open", closed: "Closed" }
 
-/** Record an inspection: the subject, one of the two, what it came to, what was found. */
 export const INSPECTION_FORM: BusinessFormSchema = {
   key: "operate.inspections",
   mode: "create",

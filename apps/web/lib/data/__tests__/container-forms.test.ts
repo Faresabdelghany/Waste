@@ -81,7 +81,6 @@ describe("the container form on the Pilot", () => {
 describe("the container's command dialogs", () => {
   const record = recordFrom(containerAdapter, { ...bin91007, placements: [] }, context)
   const warehouse = `warehouse-${warehouseId}`
-  /** What a person fills in, by the dialog's field ids. */
   const filled: Record<ContainerCommand, BusinessFormValues> = {
     receive: { warehouseId: warehouse, occurredAt: "", reference: "DN-4471" },
     issue: { servedBy: "subscription", subscriptionId, sharedPointId: "", wasteFractionId: organicRecord.id, serviceFrequencyId: "", validFrom: "2026-10-01", occurredAt: "", reference: "" },

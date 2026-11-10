@@ -5,13 +5,10 @@
 // contracts are imported as types only, so no zod reaches the bundle.
 import type { Me } from "@waste/contracts/me"
 
-/** What the account pane's profile reads, each a line a person reads. */
 export type AccountProfile = { name: string; email: string; role: string; projects: string; initials: string }
 
-/** What a line `/me` has not answered yet reads. */
 const READING = "Reading your account…"
 
-/** The first letters of the first and last names; one letter for a single word. */
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean)
   const first = words[0]?.[0] ?? ""
@@ -27,12 +24,6 @@ function projectsOf(me: Me): string {
   return me.serviceProvider === null ? "No project" : `Through ${me.serviceProvider.legalName}'s service areas`
 }
 
-/**
- * Who acts in a shell: the name a record made, changed or deleted there
- * names, and the account menu shows. On the Pilot the account `/me` names
- * (`profileOf`'s, Auth's e-mail until `/me` answers); in fixture mode the
- * shell's persona.
- */
 export function actorNameOf(apiConfigured: boolean, me: Me | null, signedInEmail: string | null | undefined, persona: { name: string }): string {
   return apiConfigured ? profileOf(me, signedInEmail).name : persona.name
 }

@@ -90,7 +90,6 @@ import { createPositionRecorder, sessionRecords, type PositionBatch, type Positi
 import { identifyOnRoute, outOfReach, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "../timers"
 
-/** How long the queue waits before trying again while anything waits. */
 export const DRAIN_RETRY_MS = 30_000
 
 /** How long a request may go unanswered before it counts as the server out of reach: a weak signal can hold a fetch open for minutes, and one batch in flight at a time would hold the queue with it. A batch the server did apply is replayed when it is sent again. */
@@ -138,7 +137,6 @@ const INITIAL: DriverAppState = { status: "loading", refusal: null, me: null, ro
 /** What the server owns on a start, the key the API names for an object, and a position, which the controller adds: never part of a tap. */
 type Added<Kind extends PilotCommandKind> = "location" | "accuracyM" | (Kind extends "start-route" ? "appVersion" : never) | (Kind extends ObjectKind ? "objectKey" : never)
 
-/** The record without one key. */
 const without = <Value>(record: Readonly<Record<string, Value>>, key: string): Record<string, Value> => Object.fromEntries(Object.entries(record).filter(([candidate]) => candidate !== key))
 
 /** One tap: the kind, the route, the body as the screen fills it, and a photo's or a signature's bytes. */
@@ -338,7 +336,6 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
       publishWaiting()
     })())
 
-  /** The signed-in login's kept answers, read from the phone once per person. */
   const keptOf = async (owner: string): Promise<ReadSnapshot> => {
     if (snapshot?.owner === owner) return snapshot.kept
     let read = EMPTY_SNAPSHOT
@@ -372,7 +369,6 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
     return keeping
   }
 
-  /** Forgets the signed-in login's kept answers. */
   const forgetKept = (): Promise<void> => {
     const owner = session?.who
     if (owner === undefined) return keeping

@@ -17,13 +17,11 @@ export function scanOffered(stop: Pick<DriverPickup, "containerId">, actions: Pi
   return actions.report && stop.containerId !== null
 }
 
-/** What the door's answer says of a code at a stop. */
 export type ScanVerdict =
   /** The code names this stop's container: the arrival goes with it. */
   | { kind: "this-stop"; containerLabel: string }
   /** The code names another stop's container, or the replacement a swap brings. */
   | { kind: "elsewhere"; sentence: string }
-  /** The code names no container on this route. */
   | { kind: "not-on-route"; sentence: string }
 
 /**
@@ -70,7 +68,6 @@ export async function binDetector(Detector: BarcodeDetectorClass): Promise<Barco
   return formats.length > 0 ? new Detector({ formats }) : new Detector()
 }
 
-/** The first code a frame holds that says something, trimmed; null when it holds none. */
 export function firstCode(found: ReadonlyArray<{ rawValue: string }>): string | null {
   for (const { rawValue } of found) {
     const code = rawValue.trim()

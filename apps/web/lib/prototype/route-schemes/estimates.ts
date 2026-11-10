@@ -5,29 +5,29 @@
 //
 // Every number says what it is. Generation produces stop lists only — no
 // distance, duration, or weight. Distance and duration are the road's once a
-// routing engine has answered for the road through the stops (Issue #39,
-// 2026-09-25: the web asks the OSRM demo server through
-// lib/map-planning/road-geometry, the target system self-hosted Valhalla,
-// ADR-0002): the distance as routed, and the drive time plus the time at the
-// stops — each container type's emptying time from the asset catalogue (the
-// caller passes that resolver), the prototype's allowance where the catalogue
-// has none — plus the closeout a route is allowed past its last stop
-// (`CLOSEOUT_MINUTES`, the drive back and the turnaround at the depot), since
-// the routed leg runs through the stops only and a route read without it
-// would look forty-five minutes shorter than it runs. Until the road is known they are heuristics (the
-// prototype's coefficients, their own flat allowance among them). `basis` on
-// the estimate says which, and the adapter's `labels` spell it for the route
-// map. Container weights come from the asset
-// catalogue where it weighs the type for the fraction — every fixture
-// container type since Issue #39 — and from the fallback table below
-// otherwise; each weight says which it was, so a group whose containers use
-// any fallback weight is flagged per row ("Fallback weight") instead of
-// qualifying the whole column. The stop order is generation's — the matched
-// containers as generation writes them — never an optimised sequence:
-// optimisation is a separate job over a generated Route (ADR-0002) and plugs
-// in through routeEstimateAdapter the way the road did. The UI reads all of
-// it through that adapter — the single place a real optimiser response plugs
-// in (see the adapter's doc). The verdicts never gate Next or Create.
+// routing engine has answered for the road through the stops (Issue #39;
+// since #173 the web asks the API's `POST /routing/preview`, the target
+// system self-hosted Valhalla, ADR-0002): the distance as routed, and the
+// drive time plus the time at the stops — each container type's emptying time
+// from the asset catalogue (the caller passes that resolver), the prototype's
+// allowance where the catalogue has none — plus the closeout a route is
+// allowed past its last stop (`CLOSEOUT_MINUTES`, the drive back and the
+// turnaround at the depot), since the routed leg runs through the stops only
+// and a route read without it would look forty-five minutes shorter than it
+// runs. Until the road is known they are heuristics (the prototype's
+// coefficients, their own flat allowance among them). `basis` on the estimate
+// says which, and the adapter's `labels` spell it for the route map.
+// Container weights come from the asset catalogue where it weighs the type
+// for the fraction — every fixture container type since Issue #39 — and from
+// the fallback table below otherwise; each weight says which it was, so a
+// group whose containers use any fallback weight is flagged per row
+// ("Fallback weight") instead of qualifying the whole column. The stop order
+// is generation's — the matched containers as generation writes them — never
+// an optimised sequence: optimisation is a separate job over a generated
+// Route (ADR-0002) and plugs in through routeEstimateAdapter the way the road
+// did. The UI reads all of it through that adapter — the single place a real
+// optimiser response plugs in (see the adapter's doc). The verdicts never
+// gate Next or Create.
 
 import type { FixtureContainerType } from "@waste/fixtures/taxonomy"
 import type { ContainerMatchProfile } from "./matching"
@@ -63,7 +63,6 @@ export const FALLBACK_FRACTION_FACTOR: Readonly<Record<string, number>> = {
 
 const DEFAULT_CONTAINER_KG = 20
 
-/** kg for one emptied container of the type carrying the fraction, from the fallback tables. */
 export function fallbackContainerWeightKg(
   containerType: string | undefined,
   fraction: string | undefined,
@@ -73,14 +72,12 @@ export function fallbackContainerWeightKg(
   return base * factor
 }
 
-/** A resolved container weight and where it came from. */
 export type ContainerWeight = {
   kg: number
   /** True when the fallback table supplied the weight, not the asset catalogue. */
   fallback: boolean
 }
 
-/** The fallback tables' weight, flagged as such. */
 export function fallbackContainerWeight(
   containerType: string | undefined,
   fraction: string | undefined,
@@ -101,7 +98,6 @@ export type LoadEstimate = {
   fallbackWeight: boolean
 }
 
-/** The load for emptying every container once, and whether any weight was a fallback. */
 export function estimateLoad(
   containers: readonly Pick<ContainerMatchProfile, "containerType" | "fractions">[],
   weight: ContainerWeightResolver = fallbackContainerWeight,
@@ -258,7 +254,6 @@ export const routeEstimateAdapter: RouteEstimateAdapter = {
   route: estimateRoute,
 }
 
-/** "7 h 41 min" / "45 min". */
 export function formatMinutes(mins: number): string {
   const hours = Math.floor(mins / 60)
   const rest = mins % 60

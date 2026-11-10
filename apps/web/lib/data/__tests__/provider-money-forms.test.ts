@@ -87,12 +87,9 @@ const state: ServerRecordsState = new Map([
 ])
 const context: MappingContext = { ...bare, resolve: resolverOver(state) }
 
-/** Every field id a form offers. */
 const fieldsOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.map((field) => field.id))
-/** The fields a form leaves open to change. */
 const editableOf = (schema: BusinessFormSchema) => schema.sections.flatMap((section) => section.fields.filter((field) => !field.readOnly).map((field) => field.id)).sort()
 
-/** Asserts a form offers exactly these fields: what the adapter reads, nothing it does not. */
 const offersExactly = (schema: BusinessFormSchema, ids: readonly string[]) => assert.deepEqual([...fieldsOf(schema)].sort(), [...ids].sort(), schema.title)
 
 const body = (made: unknown) => {

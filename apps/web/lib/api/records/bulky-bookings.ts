@@ -147,7 +147,6 @@ export function toBulkyBookingPatchBody(before: BusinessRecord, after: BusinessR
 export const ROUTE_BOOKING = "route"
 export const CANCEL_BOOKING = "cancel"
 
-/** The route a Route command names, by the server's id; a refusal where the store holds no such route. */
 function routeBodyOf(input: CommandInput, _record: BusinessRecord, context: MappingContext): { routeId: string } | LocalRefusal {
   const webId = typeof input.routeId === "string" ? input.routeId : ""
   const routeId = webId === "" ? undefined : context.resolve.serverIdOf(webId)

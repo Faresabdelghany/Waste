@@ -42,7 +42,6 @@ export function MapSearch({
 
   useEffect(() => setActive(0), [query])
 
-  // Click outside closes the list.
   useEffect(() => {
     if (!showList) return
     const onPointerDown = (event: PointerEvent) => {

@@ -39,7 +39,6 @@ const alertId = "01a0d2a4-a280-7041-8000-000000000001"
 const propertyId = "01a0d2a4-a280-7006-8000-000000000001"
 const driverId = "01a0d2a4-a280-7014-8000-000000000001"
 
-/** A loaded row of another module, as its adapter would have made it: its web id, its name, its kind. */
 const row = (id: string, name: string, recordKind: string, facts: Record<string, string> = {}): BusinessRecord => ({ ...projectRecord, id, name, recordKind, facts, submittedValues: {} })
 const olivia = row(`user-${oliviaId}`, "Olivia Larsen", "User")
 const rc1042 = row(`route-${routeId}`, "RC-1042", "Route")

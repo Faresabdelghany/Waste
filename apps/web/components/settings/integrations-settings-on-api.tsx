@@ -26,7 +26,6 @@ import { importRow, integrationRowsOf, type IntegrationRow, type IntegrationTone
 import { cn } from "@/lib/utils"
 import { useGrants } from "@/components/platform/use-grants"
 
-/** The module whose `view` reads the deployment's connections. */
 const INTEGRATIONS_MODULE = "configure.integrations" satisfies ModuleKey
 
 export function IntegrationsSettingsOnApi() {

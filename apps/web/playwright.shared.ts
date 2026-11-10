@@ -35,7 +35,6 @@ export function managedServer(url: string): PlaywrightTestConfig["webServer"] {
   }
 }
 
-/** The github annotations under CI, a list locally, and the HTML report in the suite's own folder either way. */
 export function reporters(outputFolder: string): PlaywrightTestConfig["reporter"] {
   const html = ["html", { open: "never", outputFolder }] as const
   return ci ? [["github"], html] : [["list"], html]

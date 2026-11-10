@@ -57,7 +57,6 @@ export const navItems: NavItem[] = [
   ...WORKSPACE_KEYS.flatMap((id) => (id === "configure" || id === DASHBOARD.id ? [] : [itemOf(id, WORKSPACES[id].path)])),
 ]
 
-/** Whether a nav item is the page's: the root's is Operate, any other page's the item one of whose paths it starts with. */
 export function navItemActive(item: NavItem, pathname: string): boolean {
   if (pathname === "/") return item.id === HOME
   return item.paths.some((path) => pathname.startsWith(path))

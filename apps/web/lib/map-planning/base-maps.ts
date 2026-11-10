@@ -2,8 +2,8 @@
 // OpenFreeMap vector styles and Esri's World Imagery raster for satellite.
 // The swatch colours draw the thumbnails in CSS so the picker needs no
 // network. The light and dark app themes pick the default until the user
-// chooses. Pure data; components/waste/map-planning/planning-map.tsx
-// hands the style to MapLibre.
+// chooses. Pure data; components/maps/use-maplibre.ts hands the style to
+// MapLibre.
 
 export type BaseMapId = "streets" | "light" | "dark" | "satellite"
 

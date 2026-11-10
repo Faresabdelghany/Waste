@@ -20,15 +20,11 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatShortDay, isoWeek, SERVICE_DAY_SHORT_LABELS, SERVICE_DAYS, type ServiceDay } from "@waste/domain/days"
 
-/* ----------------------------- fixture data ----------------------------- */
-
 function moduleRecords(workspaceId: keyof typeof businessWorkspaces, moduleId: string): BusinessRecord[] {
   return (
     businessWorkspaces[workspaceId]?.modules.find((m) => m.id === moduleId)?.records ?? []
   )
 }
-
-/* ------------------------------ draft model ----------------------------- */
 
 const DAY_KEYS = SERVICE_DAYS
 type DayKey = ServiceDay
@@ -80,15 +76,12 @@ function sortedServiceDays(draft: SchemeDraft): DayKey[] {
   return [...draft.serviceDays].sort((a, b) => DAY_KEYS.indexOf(a) - DAY_KEYS.indexOf(b))
 }
 
-/** One generated route per service day: its day and its stop list. */
 function effectiveDayPlans(draft: SchemeDraft): { day: DayKey; containerIds: string[] }[] {
   return sortedServiceDays(draft).map((day) => ({
     day,
     containerIds: draft.sameAllDays ? draft.containerIds : (draft.containersByDay[day] ?? []),
   }))
 }
-
-/* --------------------------- recurrence helpers ------------------------- */
 
 function matchesDraft(date: Date, draft: SchemeDraft): boolean {
   const iso = toISODate(date)
@@ -166,8 +159,6 @@ function pseudoPos(id: string): { x: number; y: number } {
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return { x: 10 + ((h % 997) / 997) * 80, y: 12 + ((Math.floor(h / 997) % 991) / 991) * 74 }
 }
-
-/* ------------------------------ shared bits ----------------------------- */
 
 type VariantProps = {
   draft: SchemeDraft
@@ -424,8 +415,6 @@ function CreatedPanel({ draft, onClose }: { draft: SchemeDraft; onClose: () => v
   )
 }
 
-/* --------------- per-day containers step + route-map step ---------------- */
-
 function ContainersStep(props: Pick<VariantProps, "draft" | "setDraft" | "containers">) {
   const { draft, setDraft } = props
   const days = sortedServiceDays(draft)
@@ -590,8 +579,6 @@ function RouteMapStep({ draft, containers }: Pick<VariantProps, "draft" | "conta
     </div>
   )
 }
-
-/* ------------------------- Variant A — stepper -------------------------- */
 
 const A_STEPS = ["Scheme & scope", "Recurrence", "Assignment", "Containers", "Route map", "Review & create"]
 
@@ -779,8 +766,6 @@ function VariantAStepper(props: VariantProps) {
   )
 }
 
-/* ---------------------- Variant B — single-page form --------------------- */
-
 function VariantBFlatForm(props: VariantProps) {
   const { draft, setDraft, vehicles, drivers, onClose } = props
   const [created, setCreated] = useState(false)
@@ -905,8 +890,6 @@ function VariantBFlatForm(props: VariantProps) {
     </div>
   )
 }
-
-/* ---------------------- Variant C — calendar-first ----------------------- */
 
 function MonthGrid({ year, month, draft }: { year: number; month: number; draft: SchemeDraft }) {
   const first = new Date(year, month, 1)
@@ -1054,8 +1037,6 @@ function VariantCCalendarFirst(props: VariantProps) {
     </Overlay>
   )
 }
-
-/* ------------------------------- chrome ---------------------------------- */
 
 function Overlay({ children, onClose, width }: { children: React.ReactNode; onClose: () => void; width: string }) {
   return (

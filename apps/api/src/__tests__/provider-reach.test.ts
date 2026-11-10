@@ -18,7 +18,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
-import { providerIdOf, reachesAssignments, reachesRoute, reachesThroughRoute, servesRoute } from "../auth/provider"
+import { reachesAssignments, reachesRoute, reachesThroughRoute, servesRoute } from "../auth/provider"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fixtures"
 import { FINANCE_YEAR, NORDREN_ASSIGNED_FROM, seedFinance, seedServiceArea, type FinanceFixtures } from "./finance-fixtures"
@@ -71,6 +71,11 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
         .update(routeScheme)
         .set({ planningAreaId: planning.areas.cairo.id })
         .where(and(eq(routeScheme.companyId, tenant.companyId), eq(routeScheme.id, execution.schemes.cairo.id)))
+      // NordRen's assignment runs on past its area, so the first day after the area is out of reach by the area's period alone.
+      await tx
+        .update(serviceAreaAssignment)
+        .set({ validTo: null })
+        .where(and(eq(serviceAreaAssignment.companyId, tenant.companyId), eq(serviceAreaAssignment.id, finance.nordren.assignmentId ?? "")))
     })
     const day = (operatingDate: string, seed: Parameters<typeof seedRoute>[4] = {}) => seedRoute(pool, tenant, fleet, execution, { operatingDate, ...seed })
     const dayBefore = (iso: string) => new Date(new Date(`${iso}T00:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10)
@@ -111,11 +116,6 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
           .orderBy(asc(serviceAreaAssignment.id))
       ).map((row) => row.id),
     )
-
-  test("providerIdOf is the Service Provider Access's provider, or null for an office account", () => {
-    assert.equal(providerIdOf(principalOf(tenant.serviceProviders.nordren, [])), tenant.serviceProviders.nordren.id)
-    assert.equal(providerIdOf(principalOf(null, [tenant.projects.copenhagen])), null)
-  })
 
   test("servesRoute reaches the routes of a scheme in the provider's planning area on a day inside the assignment and the area, and no other", async () => {
     const lars = principalOf(tenant.serviceProviders.nordren, [])

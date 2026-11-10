@@ -37,7 +37,6 @@ export function wholeKilograms(value: string): number | undefined {
   return value.trim() !== "" && Number.isInteger(parsed) ? parsed : undefined
 }
 
-/** The body a kind takes. */
 export type PilotBody<Kind extends PilotCommandKind> = Extract<PilotCommand, { kind: Kind }>["body"]
 
 /** The stop a command names, or null for a route-level one. */
@@ -53,7 +52,6 @@ export type CommandIdSource = {
   after?: string
 }
 
-/** A sequence of command ids over the browser's clock and randomness, or those a test hands in. */
 export function createCommandIds({ now = Date.now, fill = (bytes) => crypto.getRandomValues(bytes), after }: CommandIdSource = {}): () => string {
   let previous = after
   return () => {

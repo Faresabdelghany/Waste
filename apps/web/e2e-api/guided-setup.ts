@@ -10,7 +10,6 @@ import { listAll, projectNamed } from "./tester"
 
 type Named = { id: string; name: string }
 
-/** The browser's API call a click makes: the answer of `method` on the path `path`. */
 export const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
@@ -40,7 +39,6 @@ export const wizard = (page: Page) => page.getByRole("dialog", { name: "New rout
 export const stepHeading = (page: Page) => wizard(page).locator("section h2")
 export const nextButton = (page: Page) => wizard(page).getByRole("button", { name: "Next", exact: true })
 
-/** Create route scheme → Guided Setup → Continue; resolves on step 1. */
 export async function startGuided(page: Page) {
   await page.getByRole("button", { name: "Create route scheme" }).click()
   await page.getByText("Guided Setup", { exact: true }).click()
@@ -48,14 +46,12 @@ export async function startGuided(page: Page) {
   await expect(stepHeading(page)).toHaveText("Which scope does this scheme plan for?")
 }
 
-/** Picks `option` (a name or a pattern) in the select labelled `label` inside `within`. */
 export async function pick(page: Page, within: Locator, label: string, option: string | RegExp) {
   const trigger = within.getByLabel(label, { exact: true })
   await trigger.click()
   await page.getByRole("option", { name: option, exact: typeof option === "string" }).click()
 }
 
-/** The option texts of the select labelled `label`, closed again after. */
 export async function optionTexts(page: Page, within: Locator, label: string): Promise<string[]> {
   await within.getByLabel(label, { exact: true }).click()
   await expect(page.getByRole("listbox")).toBeVisible()
@@ -64,7 +60,6 @@ export async function optionTexts(page: Page, within: Locator, label: string): P
   return texts
 }
 
-/** Step 1 on the seeded project and area, Residual, kerbside collection. */
 export async function fillScope(page: Page, name: string, fraction = "Residual") {
   const root = wizard(page)
   await root.getByLabel("Route scheme name").fill(name)
@@ -74,7 +69,6 @@ export async function fillScope(page: Page, name: string, fraction = "Residual")
   await pick(page, root, "Service type", "Kerbside collection")
 }
 
-/** Steps 1 and 2: the scope, then Mondays from a week today; resolves on step 3. */
 export async function toGroups(page: Page, name: string, fraction?: string) {
   await startGuided(page)
   await fillScope(page, name, fraction)
@@ -86,7 +80,6 @@ export async function toGroups(page: Page, name: string, fraction?: string) {
   await expect(stepHeading(page)).toHaveText("Who collects what on which service days?")
 }
 
-/** Opens step 3's group editor. */
 export async function openGroupEditor(page: Page): Promise<Locator> {
   await wizard(page).getByRole("button", { name: "Add collection group" }).first().click()
   const editor = page.getByRole("dialog", { name: "Add collection group" })
@@ -120,7 +113,6 @@ export async function fleetOfItsOwn(api: APIRequestContext): Promise<Fleet> {
   return { vehicle: (await vehicle.json()) as Fleet["vehicle"], driver: (await driver.json()) as Fleet["driver"] }
 }
 
-/** A group on Mondays with the fleet given, emptying 240 L bins; resolves back on step 3. */
 export async function addGroup(page: Page, fleet: Fleet) {
   const editor = await openGroupEditor(page)
   await editor.getByLabel("Group name").fill("Residual · bins")

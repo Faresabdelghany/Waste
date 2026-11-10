@@ -47,7 +47,6 @@ import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_PREFIX,
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
 import { moduleReadSentence } from "@/lib/api/read-state"
 
-/** What a pane says in place of rows: still reading, not the role's to see, a read refused, or nothing to show. */
 function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: string, filtered: boolean): { message: string; hint?: string } {
   const message = moduleReadSentence(answer, noun) ?? (filtered ? `No ${noun} match this search.` : `No ${noun} yet.`)
   return answer.notGranted && !answer.pending ? { message, hint: answer.problem?.detail } : { message }
@@ -56,12 +55,7 @@ function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: strin
 /** A dialog open on a snapshot of the row, or on a new one. */
 type Editing = { schema: BusinessFormSchema; values: BusinessFormValues; record: BusinessRecord | null }
 
-/** A product's status and its type, the values the list filters by. */
 const PRODUCT_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status), types: (record) => singleFilterValue(record.facts.Type) }
-
-// ---------------------------------------------------------------------------
-// Products
-// ---------------------------------------------------------------------------
 
 /** Settings › Commercial › Products: the catalogue as the API holds it, created and edited here. */
 export function ProductsPane() {
@@ -198,11 +192,6 @@ export function ProductsPane() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Price lists, in both modes
-// ---------------------------------------------------------------------------
-
-/** A price list's status, read on each project's day: the value the list filters by. */
 const LIST_READERS: FilterValueReaders = { statuses: (record) => singleFilterValue(record.status) }
 
 /** Apply index over one list on the Pilot (#291 C8): each line named by its row — the product and its conditions — from today on the list's project's clock, and the rows and the products read again once it lands. */
@@ -253,7 +242,6 @@ export function PriceListsPane() {
   const day = dayIn(new Date(), undefined)
 
   const lists = answer.records.filter(isPriceListRecord)
-  // How many rows each list holds: the rows that name it.
   const usage = useMemo(() => {
     const counts = new Map<string, number>()
     for (const row of answer.records.filter(isPriceRowRecord)) {

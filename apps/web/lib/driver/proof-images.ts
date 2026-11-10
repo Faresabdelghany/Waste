@@ -15,10 +15,8 @@ import { PROOF_OBJECT_MAX_BYTES } from "@waste/domain/storage-objects"
 
 import type { ProofBytes } from "./commands"
 
-/** The longer edge a photo is drawn to fit. */
 export const PHOTO_MAX_EDGE = 1600
 
-/** The JPEG qualities tried in turn until the photo fits. */
 const PHOTO_QUALITIES = [0.8, 0.6, 0.4] as const
 
 type Env = Readonly<Record<string, string | undefined>>
@@ -30,7 +28,6 @@ export function stopPhotosOf(env: Env): boolean {
 /** Whether any stop offers a photo of its own, not only with an exception. */
 export const STOP_PHOTOS: boolean = stopPhotosOf({ NEXT_PUBLIC_DRIVER_STOP_PHOTOS: process.env.NEXT_PUBLIC_DRIVER_STOP_PHOTOS })
 
-/** A picture's size scaled to fit its longer edge within `maxEdge`, its shape kept; a smaller one as it is. */
 export function fitWithin(width: number, height: number, maxEdge: number): { width: number; height: number } {
   const scale = Math.min(1, maxEdge / Math.max(width, height))
   return { width: Math.round(width * scale), height: Math.round(height * scale) }
@@ -76,7 +73,6 @@ export function dataUrlOf({ contentType, bytes }: ProofBytes): string {
   return `data:${contentType};base64,${btoa(binary)}`
 }
 
-/** The signature pad's canvas as PNG. */
 export async function signatureOf(canvas: HTMLCanvasElement): Promise<ProofBytes> {
   const blob = await encoded(canvas, "image/png")
   return { extension: "png", contentType: "image/png", bytes: await blob.arrayBuffer() }

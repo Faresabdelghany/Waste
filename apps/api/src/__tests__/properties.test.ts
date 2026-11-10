@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
+import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
@@ -400,6 +401,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
         { ...body(a.projects.copenhagen.id, "Bredgade 6"), location: townHall, parties: [{ customerId: housing.id, role: "owner" }] },
         Property,
       )
+      await nextMillisecond()
       const changed = await patch(olivia, created.id, { status: "inactive", notes: "Demolished" })
       assert.equal(changed.status, "inactive")
       assert.equal(changed.notes, "Demolished")
@@ -484,6 +486,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
         },
         Property,
       )
+      await nextMillisecond()
       const replaced = await putParties(olivia, created.id, [{ customerId: tenantCustomer.id, role: "payer" }])
       assert.deepEqual(replaced.parties, held([{ customerId: tenantCustomer.id, role: "payer" }]))
       assert.ok(replaced.updatedAt > created.updatedAt, "the record the set belongs to moved")

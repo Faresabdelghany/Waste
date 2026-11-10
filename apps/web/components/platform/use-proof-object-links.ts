@@ -12,7 +12,6 @@ import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { pickupProofObjects } from "@/lib/api/records/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 
-/** How long before its read URLs lapse a stop's objects are read again. */
 const RENEW_BEFORE_MS = 30_000
 
 /** The read URLs of the objects of the stop under `pickupServerId`, null for none to ask; `version` asks again after a change. */

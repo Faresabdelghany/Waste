@@ -1,5 +1,6 @@
 // The fixture asset catalogue's container types (Issue #39, 2026-09-25):
-// the seed of Settings › Asset management, pulled out of the store so the
+// the seed of the asset management store
+// (components/platform/asset-management-store.tsx), pulled out of it so the
 // tests can hold it against the fixture registry without React. Every
 // display type the registry seeds is weighed here for every fraction the
 // fixtures put in it, and timed, because the guided setup's estimates read
@@ -14,8 +15,8 @@
 // 1,100 L residual/cardboard, the wastewater tank — and "derived" for the
 // rest, each type's residual weight times the fraction density factor the
 // fallback table uses (organic 1.2, paper 0.6, cardboard 0.5, glass 1.5,
-// plastic 0.3, metal 0.8, mixed 1), rounded; a weight the Settings pane
-// saves is "catalogue" from then on. The derived weights are planning
+// plastic 0.3, metal 0.8, mixed 1), rounded; a weight the store saves
+// is "catalogue" from then on. The derived weights are planning
 // defaults, and they changed what a group weighs: a fraction the four older
 // types were not weighed for used to take the fallback table's kilograms
 // (which start from a lighter base — 10 kg for the 240 L bin against the
@@ -28,7 +29,6 @@
 
 export type LifecycleStatus = "Active" | "Inactive"
 export type ContainerKind = "waste-collection" | "wastewater"
-/** Where a container type's weight for a fraction came from — see `ContainerType.wasteFractionWeightSources`. */
 export type ContainerWeightSource = "catalogue" | "derived"
 
 export type ContainerType = {
@@ -53,7 +53,7 @@ export type ContainerType = {
   wasteFractionWeights: Record<string, number>
   /**
    * Where each weight came from, by the same id: "catalogue" for one the
-   * catalogue records or the Settings pane saved, "derived" for a planning
+   * catalogue records or the store saved, "derived" for a planning
    * default computed from the type's residual weight by the fallback table's
    * density factor (Issue #39). A weight with no entry counts as the
    * catalogue's — stores written before the field have none.
@@ -73,11 +73,6 @@ export const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 const fixtureCreatedAt = FIXTURE_CREATED_AT
 
-/**
- * A type's weight table with its sources: the fractions in `catalogue` are
- * the catalogue's own numbers, every other fraction in `derived` a planning
- * default derived from the residual weight (the module doc says how).
- */
 const weighed = (
   catalogue: Record<string, number>,
   derived: Record<string, number> = {},
@@ -180,7 +175,7 @@ export const FIXTURE_CONTAINER_TYPES: readonly ContainerType[] = [
     // weight". Weights are one emptying of the type per fraction, kg — the
     // 140 L as the 240 L's kerbside sibling, the igloo and the underground
     // unit as glass-first crane work — as the rest of the catalogue records
-    // them: a planning default the Settings pane can correct.
+    // them: a planning default the store can correct.
     {
       id: "two-wheel-140",
       name: "Two-wheel bin · 140 L",

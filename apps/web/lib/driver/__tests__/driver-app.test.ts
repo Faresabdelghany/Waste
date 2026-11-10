@@ -51,7 +51,6 @@ const WHO = "mads-login"
 const DEVICE = "web-test-device"
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-/** One phone: its database, its door, its position and its clock. */
 function phone(overrides: Partial<DriverAppOptions> = {}) {
   const factory = new IDBFactory()
   const door = fakeDoor()

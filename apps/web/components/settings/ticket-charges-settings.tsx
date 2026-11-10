@@ -1,6 +1,6 @@
 "use client"
 
-// Settings › Commercial › Ticket charges (#291 C3): the product each ticket
+// Settings › Tickets › Charges (#291 C3): the product each ticket
 // kind's work is charged at when a completion names none — what a completed
 // re-collection or service is priced at on the next billing run. A project's
 // set is read and replaced whole through the client (lib/api/ticket-charges.ts),

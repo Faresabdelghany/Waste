@@ -52,7 +52,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
 
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 }, geolocation: POSITION, permissions: ["geolocation"] })
   try {
-    // The office writes what the driver is told at the first stop's property, through the property's own edit form.
     await uninstructed()
     const place = (await (await api.get(`/properties/${propertyId}`)).json()) as { address: string; notes: string | null }
     await office.goto(`/customers?module=properties&record=property-${propertyId}`)
@@ -80,7 +79,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const stop = (index: number) => page.getByRole("article", { name: `Stop ${index + 1}`, exact: true })
     const dialog = page.getByRole("dialog")
 
-    // The instructions stand on every stop at that property and on no other, and nothing of the office's own notes does.
     const atProperty = stops.filter((pickup) => pickup.propertyId === propertyId).length
     const instructed = page.getByRole("article").filter({ has: page.getByRole("note", { name: "Driver instructions" }) })
     await expect(instructed).toHaveCount(atProperty)
@@ -90,7 +88,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     }
     if (place.notes !== null) await expect(page.getByText(place.notes)).toHaveCount(0)
 
-    // The next places still to do go to Maps in one link, in the order driven, from wherever the phone is.
     const navigate = new URL((await page.getByRole("link", { name: "Navigate the next stops in Maps" }).getAttribute("href")) ?? "")
     expect([navigate.pathname, navigate.searchParams.get("travelmode")]).toEqual(["/maps/dir/", "driving"])
     expect(navigate.searchParams.get("destination")).toMatch(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/)
@@ -147,7 +144,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await expect(stop(3).getByText("Sending")).toBeHidden()
     await expect(stop(3).getByRole("button", { name: "Complete" })).toBeEnabled()
 
-    // The office's Live board has the route active, with the position the driver's actions carried.
     await expect
       .poll(async () => (await listAll<LiveRoute>(api, "/routes/live", { projectId: route.projectId })).find((candidate) => candidate.id === route.id), { timeout: 15_000 })
       .toMatchObject({ status: "active", lastLocation: { type: "Point" } })
@@ -164,7 +160,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await expect(dialog).toBeHidden()
     await expect(page.getByText("Sending")).toHaveCount(0)
 
-    // Airplane mode, on the loaded page: taps still queue, the last read stays, and the banner counts what waits.
     await context.setOffline(true)
     await stop(3).getByRole("button", { name: "Complete" }).click()
     await stop(4).getByRole("button", { name: "Complete" }).click()
@@ -183,7 +178,6 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await dialog.getByRole("button", { name: "End route" }).click()
     await expect(page.getByRole("region", { name: `Route ${route.label}` }).getByText("Completed", { exact: true })).toBeVisible()
 
-    // One receipt per command and none twice: the start, an arrival, three outcomes, a weight, a note, a signature, a photo, a problem, pause, resume, an unload, two queued outcomes and the end.
     const token = await accessTokenOf(context)
     if (token === null) throw new Error("the driver's browser holds no API session")
     const asDriver = await apiAs(token)
@@ -205,11 +199,9 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const worked = ordered(ended)
     expect(Object.fromEntries(worked.slice(0, 5).map((pickup, index) => [index, pickup.status]))).toEqual({ 0: "completed", 1: "skipped", 2: "failed", 3: "completed", 4: "completed" })
     expect(worked[0].arrivedAt, "the first stop's arrival").not.toBeNull()
-    // The first stop's proofs carry the arrival, the weight and the note, as the office's details list them.
     const proofs = ((await (await api.get(`/pickups/${worked[0].id}`)).json()) as { proofs: { kind: string; weightKg: number | null; note: string | null }[] }).proofs
     expect(proofs.map((proof) => [proof.kind, proof.weightKg, proof.note])).toEqual(expect.arrayContaining([["arrival", null, null], ["weight", 212, null], ["note", null, "Lid cracked, still closes"], ["signature", null, null]]))
 
-    // The office reads the signature and the failed stop's photo back from the private bucket, through URLs the API signs.
     for (const [index, type] of [
       [0, "image/png"],
       [2, "image/jpeg"],
@@ -221,14 +213,12 @@ test("a driver works a dispatched route on a phone, through an outage, and every
       const object = await fetch(url)
       expect([object.status, object.headers.get("content-type")]).toEqual([200, type])
     }
-    // And sees the photo in the failed stop's details.
     const details = await openRoute(office, route)
     await details.getByTestId("route-stops").getByRole("button", { name: "Open stop" }).nth(2).click()
     const photo = office.getByRole("dialog", { name: /^Stop 3 · / }).getByTestId("pickup-commands").getByRole("img", { name: "The photo recorded at this stop" })
     await expect(photo).toBeVisible({ timeout: 30_000 })
     await expect.poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
 
-    // Resolution heard of the failed stop and the reported problem, each a ticket on its stop.
     await expect
       .poll(async () => (await listAll<Ticket>(api, "/tickets", { routeId: route.id })).map((ticket) => ticket.links.pickupId), { timeout: 30_000 })
       .toEqual(expect.arrayContaining([worked[2].id, worked[3].id]))

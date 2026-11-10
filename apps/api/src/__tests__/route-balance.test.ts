@@ -158,7 +158,8 @@ describe("balancing a day across vehicles", { skip: database.skip || owner.skip 
     )
     for (const touched of result.routes) {
       assert.ok(touched.planId !== null, "each touched route is asked a Plan")
-      assert.equal((await read(touched.routeId)).activePlan?.id ?? touched.planId, touched.planId)
+      // The day's routes name no depot, so the Plan asked is a baseline, which is active from its creation.
+      assert.equal((await read(touched.routeId)).activePlan?.id, touched.planId)
     }
     const left = (await read(over.id)).pickups.find((stop) => stop.id === move.pickupId)
     assert.deepEqual([left?.status, left?.reason], ["skipped", "removed-by-dispatcher"])
@@ -190,6 +191,7 @@ describe("balancing a day across vehicles", { skip: database.skip || owner.skip 
     await seedRoute(pool, a, fleet, ex, { operatingDate: day, pickups: [{ containerId: ex.containers.bin1.id, propertyId: ex.properties.parkvej.id }] })
     const proposal = await preview(day)
     assert.deepEqual(proposal.moves, [])
+    assert.equal(proposal.routes.length, 1, "the day's one route is weighed")
     for (const route of proposal.routes) assert.deepEqual(route.before, route.after)
   })
 })

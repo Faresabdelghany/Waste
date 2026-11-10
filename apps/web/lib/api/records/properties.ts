@@ -140,13 +140,10 @@ async function patchThenReplace<R extends Resource>(client: Client, path: string
   return row ?? (await get<R>(client, path))
 }
 
-/** The other states the wire lets a row move to, as the lifecycle's labels: every one but the row's own. */
 const transitionsFrom = (statuses: readonly string[], status: string) => statuses.filter((candidate) => candidate !== status).map(statusLabel)
 
-/** The distinct names, in the order met. */
 const distinct = (names: readonly string[]) => [...new Set(names)]
 
-/** `2 properties`, `1 member property`, `No members`: a set's size as its column reads. */
 const countLabel = (count: number, one: string, many: string) => (count === 0 ? "No members" : `${count} ${count === 1 ? one : many}`)
 
 /** The customer a record names under `key`, as a server id: null for none — blank, or None picked (`NO_ONE`) — a refusal for one the store does not hold as a customer. */
@@ -161,10 +158,8 @@ function entriesOf<Role extends string>(entries: readonly { id: string; role: Ro
   return entries.map((entry) => ({ ...referenced(context, prefix, entry.id), role: entry.role }))
 }
 
-/** A fact where there is something to say, and none where there is not. */
 const withFact = (label: string, value: string | undefined): Record<string, string> => (value === undefined ? {} : { [label]: value })
 
-/** The role as a sentence names it. */
 const ROLE_WORDS: Readonly<Record<PropertyParty["role"], string>> = { owner: "owner", payer: "payer", tenant: "tenant", administrator: "administrator", "service-contact": "service contact" }
 
 /**
@@ -184,7 +179,6 @@ function bookedAhead(parties: readonly PropertyPartyHeld[], today: string, conte
   return changes.map((change, index) => `${named[index].name ?? named[index].webId} ${change.verb} as ${ROLE_WORDS[change.party.role]} on ${change.day}`).join(" · ")
 }
 
-/** The facts a set shows, one per role that anybody holds: the names under the role's plural. */
 function roleFacts<Role extends string>(entries: readonly { webId: string; name?: string; role: Role }[], roles: readonly Role[], labels: Readonly<Record<Role, string>>): Record<string, string> {
   const facts: Record<string, string> = {}
   for (const role of roles) {
@@ -194,12 +188,7 @@ function roleFacts<Role extends string>(entries: readonly { webId: string; name?
   return facts
 }
 
-/** A pair as a set compares it: what it names and the role, order aside. */
 const pairKey = (id: string, role: string) => `${id} ${role}`
-
-// ---------------------------------------------------------------------------
-// Properties
-// ---------------------------------------------------------------------------
 
 /** What a property's update carries: a patch of the property, the whole set of parties, or both, each to its own route. */
 type PropertyWrite = { property?: object; parties?: PropertyParty[] }
@@ -352,15 +341,10 @@ export const propertyAdapter: ResourceAdapter<Property, unknown, PropertyWrite> 
     return write
   },
   create: (client, body) => create<Property>(client, "/properties", body).then((created) => created.body),
-  // The property first, then the whole set through its own route.
   update: (client, serverId, write) => {
     return patchThenReplace<Property>(client, `/properties/${serverId}`, write.property, `/properties/${serverId}/parties`, write.parties === undefined ? undefined : { parties: write.parties })
   },
 }
-
-// ---------------------------------------------------------------------------
-// What a group and a point share: their members
-// ---------------------------------------------------------------------------
 
 type Member<Role extends string> = { propertyId: string; role: Role }
 
@@ -413,10 +397,6 @@ function memberValues<Role extends string>(members: readonly { webId: string; ro
     [MEMBER_ROLES_KEY]: JSON.stringify(Object.fromEntries(members.map((member) => [member.webId, member.role]))),
   }
 }
-
-// ---------------------------------------------------------------------------
-// Property groups
-// ---------------------------------------------------------------------------
 
 /** What a group's update carries: a patch of the group, the whole membership, or both, each to its own route. */
 type GroupWrite = { group?: object; members?: PropertyGroupMember[] }
@@ -511,15 +491,10 @@ export const propertyGroupAdapter: ResourceAdapter<PropertyGroup, unknown, Group
     return write
   },
   create: (client, body) => create<PropertyGroup>(client, "/property-groups", body).then((created) => created.body),
-  // The group first, then the whole membership through its own route.
   update: (client, serverId, write) => {
     return patchThenReplace<PropertyGroup>(client, `/property-groups/${serverId}`, write.group, `/property-groups/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }
-
-// ---------------------------------------------------------------------------
-// Shared collection points
-// ---------------------------------------------------------------------------
 
 /** What a point's update carries: a patch of the point, the whole membership, or both, each to its own route. */
 type PointWrite = { point?: object; members?: SharedCollectionPointMember[] }
@@ -527,7 +502,6 @@ type PointWrite = { point?: object; members?: SharedCollectionPointMember[] }
 const POINT_NOUN = "a shared collection point"
 const POINT_MEMBER = "a point member"
 
-/** A closed list a point's form must name, as its token; a refusal in the point's words when blank, or naming the list for a token the wire lacks. */
 const pointToken = (record: BusinessRecord, key: string, tokens: readonly string[], what: string) =>
   tokenOf(record, key, tokens, what, POINT_NOUN) ?? refusal(key, `A shared collection point needs ${/^[aeiou]/.test(what) ? "an" : "a"} ${what}`)
 
@@ -683,15 +657,10 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint, unknown,
     return write
   },
   create: (client, body) => create<SharedCollectionPoint>(client, "/shared-collection-points", body).then((created) => created.body),
-  // The point first, then the whole membership through its own route.
   update: (client, serverId, write) => {
     return patchThenReplace<SharedCollectionPoint>(client, `/shared-collection-points/${serverId}`, write.point, `/shared-collection-points/${serverId}/members`, write.members === undefined ? undefined : { members: write.members })
   },
 }
-
-// ---------------------------------------------------------------------------
-// The modules
-// ---------------------------------------------------------------------------
 
 /** Customers › Properties: the service addresses and who their customers are. */
 export const propertiesModule = { ...PROPERTIES_MODULE, resources: [propertyAdapter] } satisfies ServerModule

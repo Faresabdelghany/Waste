@@ -54,7 +54,6 @@ export const isPublicPath = (pathname: string): boolean => pathname.startsWith(P
 /** The seeded role whose accounts land on the check-in. */
 export const SITE_ATTENDANT_ROLE: SystemRoleKey = "site-attendant"
 
-/** Where the office lands: operations. */
 export const OFFICE_LANDING = "/operate"
 
 /** What the landing reads of `/me`: the driver, the provider, and the role's key and grants, each read defensively. */
@@ -117,7 +116,6 @@ export function returnPath(next: string | null | undefined): string | null {
   return `${url.pathname}${url.search}${url.hash}`
 }
 
-/** Where sign-in sends the person: back to `next` when it is one of ours, else their landing. */
 export function afterSignIn(me: LandingFacts, next: string | null | undefined): string {
   return returnPath(next) ?? landingOf(me)
 }

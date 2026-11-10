@@ -62,7 +62,6 @@ const STATUS_BADGE_CLASS: Record<RouteEstimateStatus, string> = {
   "over-capacity": "border-transparent bg-destructive/10 text-destructive-foreground",
 }
 
-/** What the footer says the day's numbers are: one basis when every route agrees, both otherwise. */
 function basisLabel(routes: readonly WizardRoute[]): string {
   const bases = new Set<RouteEstimateBasis>(routes.map((route) => route.estimate.basis))
   if (bases.size === 0) return routeEstimateAdapter.labels.estimate

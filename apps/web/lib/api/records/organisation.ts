@@ -10,11 +10,10 @@
 // organisation module's project records are what the workspace scopes by
 // (lib/data/project-scope.ts): a project's web id is `project-<uuid>`, the
 // `project-` prefix that `isProjectRecordId` reads; and `weekend` and
-// `holidayList` land on `submittedValues` exactly as the Holiday lists pane
-// writes them (lib/data/holiday-lists.ts), which `resolveProjectCalendar`
+// `holidayList` land on `submittedValues`, which `resolveProjectCalendar`
 // reads. A role's web id is `role-<key>` for a
 // seeded role, since that is how lib/data/role-permissions.ts keys the
-// charter defaults and how the restricted shells name the role they run as.
+// charter defaults.
 //
 // A user names its role, its projects and its provider by server id, and the
 // form names them back by web id: the mapping reads both through the
@@ -52,15 +51,9 @@ export function typedPaymentTerms(record: BusinessRecord, blank: "refused" | "cl
   return refused === null ? Number(value.trim()) : refusal("paymentTermsDays", refused)
 }
 
-/** `typedPaymentTerms` as a patch reads a field: the days, or nothing said. */
 export const daysOf = (terms: ReturnType<typeof typedPaymentTerms>): number | undefined => (typeof terms === "number" ? terms : undefined)
 
-/** `typedPaymentTerms` as a nullable field reads: the days, none of its own, or nothing said. */
 export const daysOrNoneOf = (terms: ReturnType<typeof typedPaymentTerms>): number | null | undefined => (typeof terms === "number" || terms === null ? terms : undefined)
-
-// ---------------------------------------------------------------------------
-// Company
-// ---------------------------------------------------------------------------
 
 /** The company is one row with no collection: read at `/company`, changed there, created by nobody here. */
 export const companyAdapter: ResourceAdapter<Company, unknown, CompanyPatch> = {
@@ -126,10 +119,6 @@ export const companyAdapter: ResourceAdapter<Company, unknown, CompanyPatch> = {
  */
 export const isCompanyRecord = (record: BusinessRecord): boolean => companyAdapter.owns(record) && record.recordKind === "Company"
 
-// ---------------------------------------------------------------------------
-// Projects
-// ---------------------------------------------------------------------------
-
 /** `Project · municipality`, the fixture's context shape, from the wire's free-text kind. */
 const projectContext = (kind: string) => `Project · ${kind.toLowerCase()}`
 
@@ -179,7 +168,6 @@ export const projectAdapter: ResourceAdapter<Project> = {
       context: projectContext(project.kind),
       status: statusLabel(project.status),
       facts,
-      // A project record scopes itself: the one project it is.
       projectIds: [id],
       recordKind: "Project",
       // Whether its hires and jobs wait for a person before a run (M14 of #293), a flag as the form's switch says it.
@@ -268,10 +256,9 @@ const consecutive = (a: string, b: string) => (dayIndex(a) + 1) % SERVICE_DAYS.l
 
 /**
  * The `weekend` and `holidayList` a project record says, as the wire spells
- * them. The Holiday lists pane writes both onto `submittedValues` and deletes
- * `holidayList` when the list is taken away, so on a record that carries a
- * weekend an absent list is "no list", which the wire spells null; a record
- * that carries neither says nothing about either.
+ * them. On a record that carries a weekend an absent list is "no list",
+ * which the wire spells null; a record that carries neither says nothing
+ * about either.
  */
 function projectCalendarBody(record: BusinessRecord): { weekend?: string[]; holidayList?: string | null } {
   const weekend = typed(record, "weekend")
@@ -291,10 +278,6 @@ function kindOfContext(context: string): string {
   const text = kind ?? context
   return text ? capitalised(text) : "Project"
 }
-
-// ---------------------------------------------------------------------------
-// Service providers
-// ---------------------------------------------------------------------------
 
 const PROVIDER_CHILD_PREFIXES = ["service-provider-access-", "service-provider-activity-", "service-provider-price-", "service-provider-workspace-"]
 
@@ -354,10 +337,6 @@ export const serviceProviderAdapter: ResourceAdapter<ServiceProvider, ServicePro
   update: (client, serverId, body) => patch<ServiceProvider>(client, `/service-providers/${serverId}`, body),
 }
 
-// ---------------------------------------------------------------------------
-// Roles
-// ---------------------------------------------------------------------------
-
 /** The web's sparse access map from the wire's normalised grants. */
 export function accessMapOf(grants: readonly Grant[]): RoleAccessMap {
   return Object.fromEntries(grants.map((grant) => [grant.moduleKey, [...grant.actions]])) as RoleAccessMap
@@ -379,7 +358,6 @@ export const GRANTS_KEY = "grants"
 /** The role adapter's command, by the name the Users & roles pane sends: the whole matrix replaced (#291). */
 export const REPLACE_ROLE_GRANTS = "replace-grants"
 
-/** The grants a role record carries, or undefined when it carries none. */
 export function grantsOfRecord(record: Pick<BusinessRecord, "submittedValues">): Grant[] | undefined {
   const raw = typed(record, GRANTS_KEY)
   if (raw === undefined) return undefined
@@ -452,10 +430,6 @@ export const roleAdapter: ResourceAdapter<Role> = {
     },
   },
 }
-
-// ---------------------------------------------------------------------------
-// Users
-// ---------------------------------------------------------------------------
 
 /** The `projectAccess` option the access form spells, as the record's fact and typed value. */
 export const ALL_PROJECTS_ACCESS = "All projects"
@@ -563,10 +537,6 @@ export const userAdapter: ResourceAdapter<User, UserInvite, UserPatch> = {
     },
   },
 }
-
-// ---------------------------------------------------------------------------
-// The modules
-// ---------------------------------------------------------------------------
 
 /** Settings → Company & Projects: the company row first, then the projects. */
 export const organisationModule = {

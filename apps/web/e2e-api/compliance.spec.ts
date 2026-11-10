@@ -45,7 +45,6 @@ async function ok(response: Awaited<ReturnType<APIRequestContext["get"]>>, statu
   return response.json()
 }
 
-/** Picks an option of one of the Dashboard's selects by its label. */
 async function choose(page: Page, label: string, option: string) {
   await page.getByLabel(label, { exact: true }).click()
   await page.getByRole("option", { name: option, exact: true }).click()
@@ -87,7 +86,6 @@ test("the Compliance tab files the period's approved unloads with their waste co
     "POST /unloading-stations",
   )) as Named
 
-  // The driver starts the route, the office captures on it while it runs, and the driver ends the day.
   const context = await freshContext(browser)
   try {
     const driverPage = await context.newPage()
@@ -124,7 +122,6 @@ test("the Compliance tab files the period's approved unloads with their waste co
   const noCode = report.warnings.find((warning) => warning.kind === "no-waste-code" && warning.wasteFractionId === fraction.id)
   expect(noCode?.sentence).toBe(`${fraction.name} has no waste code: set it under the fraction in Settings › Master data before the report is filed`)
 
-  // The tab shows the report as the API reads it.
   await page.goto("/performance")
   await expect(page.getByTestId("dashboard-on-api")).toBeVisible()
   await page.getByRole("tab", { name: "Compliance" }).click()
@@ -142,7 +139,6 @@ test("the Compliance tab files the period's approved unloads with their waste co
   await expect(residualCells.nth(3)).toHaveText("200301")
   await expect(residualCells.nth(4)).toHaveText(count(residualRow?.netKg ?? 0))
 
-  // The file is the API's, as asked: semicolons, the byte-order mark, a data row per place and a warning row each.
   await choose(page, "Separator", "Semicolons")
   const download = page.waitForEvent("download")
   await page.getByTestId("waste-data-download").click()
@@ -156,7 +152,6 @@ test("the Compliance tab files the period's approved unloads with their waste co
   expect(records).toContainEqual([period.from, period.to, "", "", fraction.name, "", "", noCode?.sentence])
   expect(records.length, "the header, the report's rows and a row per warning").toBe(1 + report.rows.length + report.warnings.length)
 
-  // Settings › Master data sets the fraction's code, typed as the list prints it.
   await page.goto("/settings?pane=master-data")
   await page.getByPlaceholder("Search waste fractions").fill(fraction.name)
   await page.getByRole("button", { name: `Edit ${fraction.name}` }).click()
@@ -178,7 +173,6 @@ test("the Compliance tab files the period's approved unloads with their waste co
   await expect(page.getByRole("row").filter({ hasText: fraction.name }).getByText("200201", { exact: true })).toBeVisible()
   expect(((await ok(await api.get(`/waste-fractions/${fraction.id}`), 200, "GET fraction")) as Fraction).wasteCode).toBe("200201")
 
-  // And the tab files it under that code, the warning gone.
   await page.goto("/performance")
   await page.getByRole("tab", { name: "Compliance" }).click()
   await choose(page, "Project", projectName)

@@ -83,12 +83,10 @@ export function collectionCalendarFormValues(record: BusinessRecord): BusinessFo
 export type CollectionCalendarLookups = {
   /** Display name of a project (configure.organization record). */
   projectName: (projectId: string) => string | undefined
-  /** Display name of any related record, by relation target and id. */
   recordName: (relation: ModuleLocation, recordId: string) => string | undefined
 }
 
 export type CollectionCalendarWriteContext = {
-  /** Who is saving — stamped as the creator. */
   actorName: string
   /** Milliseconds since the epoch — the id suffix. */
   now: number
@@ -114,11 +112,6 @@ type FormDerivation = {
   projectIds: string[]
 }
 
-/**
- * The shared label-keyed derivation (lib/data/business-form-records.ts) with
- * this module's lookups, minus the name field's own fact — the record's name
- * already carries it — plus the project scope.
- */
 function deriveFromForm(
   schema: BusinessFormSchema,
   values: BusinessFormValues,
@@ -183,13 +176,6 @@ export function createCollectionCalendarRecord(
   }
 }
 
-/**
- * An edited collection calendar: the form's facts layer over the stored ones —
- * a cleared field drops its stale fact, and a fixture alias fact goes once its
- * field carries the value — the name and context follow the form, typed values
- * merge, relations and project scope are rebuilt, and status, owner, and
- * related chips stay.
- */
 export function updateCollectionCalendarRecord(
   existing: BusinessRecord,
   values: BusinessFormValues,

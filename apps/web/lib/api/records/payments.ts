@@ -29,7 +29,6 @@ import { amountRefusal, named, projectOf } from "./billing"
 import { refusal } from "./places"
 import { nameVia, typedReference } from "./references"
 
-/** What an edit of a payment is told. */
 export const PAYMENT_NEVER_CHANGES = "A payment is never edited: undo a wrong match by its reversal"
 
 /** A payment as the module reads it: a ledger row with a resource's stamps, its allocations where it was read whole. */
@@ -121,7 +120,6 @@ export const paymentAdapter: ResourceAdapter<PaymentResource, PaymentCreate> = {
     const projectWebId = typed(record, "projectId") ?? record.projectIds?.[0]
     const projectId = projectWebId === undefined ? undefined : context.resolve.serverIdOf(projectWebId)
     if (projectId === undefined) return refusal("projectId", "Pick a project the API holds")
-    // The invoice it pays lends it its currency; without one, the project's.
     const invoiceWebId = typed(record, "invoiceId")
     let invoiceId: string | undefined
     let currency = projectOf(context, projectId).currency ?? "DKK"

@@ -13,7 +13,6 @@ import { listPage, type ApiClient, type Page } from "../client"
 import type { ServerModule } from "./adapter"
 import { adapterFor } from "./server-records"
 
-/** The row a history is read by. */
 export type HistorySubject = { table: AuditedTable; rowId: string }
 
 /** The row a record's history is read by: its kind's audited table and its server id; null for a kind that keeps none, or a row with no server id yet. */

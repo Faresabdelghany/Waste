@@ -24,11 +24,6 @@ import type {
 } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
-/**
- * The fields a `filled` rule tells its message at where the values shown
- * break it: none where its condition does not hold, or where enough of its
- * fields hold a value.
- */
 export function filledRuleBreaks(rule: Extract<BusinessFormValidationRule, { type: "filled" }>, shown: BusinessFormValues): readonly string[] {
   const condition = shown[rule.when.fieldId]
   if (typeof condition !== "string" || !rule.when.oneOf.includes(condition)) return []
@@ -60,13 +55,11 @@ export type FormRecordResolvers = {
 export type FormRecordDerivation = {
   facts: Record<string, string>
   relationRefs: NonNullable<BusinessRecord["relationRefs"]>
-  /** Display values of the schema's context fields, in order, blanks dropped. */
   contextValues: string[]
   /** Display value of the schema's name field; "" when the form has none. */
   nameValue: string
 }
 
-/** What a submitted value reads as in facts and context. */
 export function displayFormValue(
   field: BusinessFormField,
   value: BusinessFormValue,

@@ -168,8 +168,7 @@ describe("POST /properties/:id/moves (#374)", { skip: database.skip || owner.ski
     const emptied = await subscribed(outgoing, property, collection, true)
     const rentedBin = await subscribed(outgoing, property, rental)
     const kept = await subscribed(outgoing, elsewhere, collection)
-    const run = await make(olivia, "/billing-runs", { projectId: copenhagen, periodFrom: "2026-10-01", periodTo: "2026-10-31" }, BillingRunDetail)
-    assert.ok(run.id)
+    await make(olivia, "/billing-runs", { projectId: copenhagen, periodFrom: "2026-10-01", periodTo: "2026-10-31" }, BillingRunDetail)
 
     const outcome = await moved(olivia, property.id, { agreementNumber: "AGR-M1N", payerCustomerId: administrator.id })
     assert.equal(outcome.dryRun, false)

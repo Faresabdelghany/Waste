@@ -228,7 +228,6 @@ function PermissionSectionCard({
   )
 }
 
-/** A role the panel was opened on that is not there any more. */
 export function RoleGone({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex flex-1 flex-col">
@@ -244,10 +243,9 @@ export function RoleGone({ onBack }: { onBack: () => void }) {
 
 /**
  * A role's matrix, by section: the access it is handed, each change handed
- * back whole through `onAccessChange` — the browser's store in fixture mode,
- * a draft saved at once on the Pilot (pilot-role-permissions.tsx) — and
- * read-only where there is none. `notice` stands under the title: why the
- * matrix is read-only, or what saving it does.
+ * back whole through `onAccessChange` — a draft saved at once on the Pilot
+ * (pilot-role-permissions.tsx) — and read-only where there is none. `notice`
+ * stands under the title: why the matrix is read-only, or what saving it does.
  */
 export function RolePermissionsMatrix({
   title,

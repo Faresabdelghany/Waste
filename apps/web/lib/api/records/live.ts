@@ -31,10 +31,8 @@ import { ofKind, typed } from "@/lib/records/fields"
 import { shownOn, timeOn } from "@/lib/format/clock"
 import { assignmentOf, toRouteRecord } from "./routes"
 
-/** The workspace module the live routes are the rows of. */
 export const LIVE_MODULE = moduleAt("route-studio.live")
 
-/** How often the board is read again while a person watches it. */
 export const LIVE_BOARD_REFRESH_MS = 30_000
 
 /**
@@ -50,7 +48,6 @@ export function whileWatched(read: () => void, every = LIVE_BOARD_REFRESH_MS): (
 
 const ROUTE_PREFIX = "route"
 
-/** "4 minutes ago": how long since the device was last seen, to the minute; the board's freshness. */
 function freshnessOf(instant: string, now: Date): string {
   const minutes = Math.max(0, Math.floor((now.getTime() - new Date(instant).getTime()) / 60_000))
   if (minutes < 1) return "Just now"
@@ -66,7 +63,6 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): RecordFi
   const planned = assignmentOf(context, live.planned)
   const actual = live.session === null ? undefined : assignmentOf(context, live.session)
   const { total, planned: open } = live.progress
-  // The session's newest recorded position, else the latest point a proof carried.
   const point = live.lastPosition?.location ?? live.lastLocation
   const now = context.now ?? new Date()
   const facts: Record<string, string> = {
@@ -153,7 +149,7 @@ export const liveRouteAdapter: ResourceAdapter<LiveRoute> = {
   kept: { path: "", message: READ_ONLY },
 }
 
-/** Route Studio › Live Operations: the routes running or due today, after the routes whose rows they are. */
+/** Route Studio › Live Operations: the routes running or due today. */
 export const liveModule = {
   ...LIVE_MODULE,
   resources: [liveRouteAdapter],

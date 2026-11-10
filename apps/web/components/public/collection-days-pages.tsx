@@ -228,7 +228,6 @@ export async function CollectionDaysPage({ params, searchParams, embed }: { para
   )
 }
 
-/** The dates, each with what is collected that day (the fractions in the project's language), why a day moved, and what the holiday policy skips. */
 function DateList({ dates, language, className }: { dates: CalendarDate[]; language: string; className?: string }) {
   return (
     <ul className={cn("divide-y divide-border rounded-lg border border-border bg-card text-card-foreground print:rounded-none print:border-black/30", className)}>

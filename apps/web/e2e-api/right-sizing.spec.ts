@@ -33,7 +33,6 @@ async function made<T>(api: APIRequestContext, path: string, data: unknown): Pro
   return (await response.json()) as T
 }
 
-/** The seeded driver runs `routeIds` one after another: started, the bin's fill said, ended. */
 async function driven(browser: Browser, runs: { routeId: string; pickupId: string; vehicleId: string; fill: string }[]) {
   const context = await freshContext(browser)
   try {
@@ -84,7 +83,6 @@ test("a bin the drivers empty a quarter full is proposed a size down, and approv
   await made(api, `/containers/${bin.id}/receive`, { warehouseId: warehouse.id })
   await made(api, `/containers/${bin.id}/placements`, { subscriptionId: subscription.id, wasteFractionId: residual.id, validFrom: today })
 
-  // Four collections of the bin today, on the office's own routes, each a quarter full or less.
   const driver = await driverNamed(api, SEEDED_DRIVER.name)
   const runs: { routeId: string; pickupId: string; vehicleId: string; fill: string }[] = []
   for (const fill of ["quarter", "empty", "quarter", "half"]) {
@@ -96,7 +94,6 @@ test("a bin the drivers empty a quarter full is proposed a size down, and approv
   }
   await driven(browser, runs)
 
-  // Propose now, then the proposal's details: a size down to the half-size product, approved from tomorrow.
   const loaded = answerOf(page, "GET", "/right-sizing-proposals")
   await page.goto("/customers?module=right-sizing")
   expect((await loaded).status()).toBe(200)

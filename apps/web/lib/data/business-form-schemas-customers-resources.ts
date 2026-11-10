@@ -1239,8 +1239,7 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
           {
             // Field id retained from the retired term for localStorage
             // compatibility (issue #13); options are the typed frequency
-            // catalog (issue #20) — save migrates the value onto
-            // submittedValues.serviceFrequencyId (normalizeContainerRecord).
+            // catalog (issue #20).
             id: "pickupSetting",
             label: "Service frequency",
             type: "select",

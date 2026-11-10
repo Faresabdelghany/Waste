@@ -24,11 +24,9 @@ import { routesWindowFrom } from "./routes"
 
 export type { ApiFile }
 
-/** The commands an unmatched ticket's details offer. */
 export const MATCH_TICKET = "match"
 export const DISMISS_TICKET = "dismiss"
 
-/** The commands a ticket's details offer: Match and Dismiss while it waits, none once it is matched or dismissed. */
 export const ticketCommandsOffered = (record: { submittedValues?: Record<string, unknown> }): string[] => (record.submittedValues?.status === "unmatched" ? [MATCH_TICKET, DISMISS_TICKET] : [])
 
 export const weighbridgeTicketAdapter: ResourceAdapter<WeighbridgeTicket> = {

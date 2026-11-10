@@ -240,7 +240,7 @@ describe("a subscription's pause (#291, slice 10)", { skip: database.skip || own
       assert.equal((await refused(await olivia(`/subscriptions/${shortened.subscription.id}`, { method: "PATCH", body: { validTo: "2026-12-01" } }), 409)).detail, strandedPauses(1))
 
       const changed = await served("AGR-8021")
-      const running = await begun(changed.subscription.id, "2026-09-01", MONDAYS[2])
+      await begun(changed.subscription.id, "2026-09-01", MONDAYS[2])
       const replacement = await create(olivia, `/subscriptions/${changed.subscription.id}/change`, { on: MONDAYS[0], quantity: 2 }, Subscription)
       assert.deepEqual(
         (await list(`?projectId=${a.projects.copenhagen.id}`)).filter((row) => row.subscriptionId === changed.subscription.id || row.subscriptionId === replacement.id).map((row) => [row.subscriptionId, row.validFrom, row.validTo]),
@@ -250,7 +250,6 @@ describe("a subscription's pause (#291, slice 10)", { skip: database.skip || own
         ],
         "the pause goes on under the replacement, as the containers do",
       )
-      assert.ok(running)
       const planned = await served("AGR-8022")
       await paused(planned.subscription.id, { validFrom: MONDAYS[1] })
       assert.equal((await refused(await olivia(`/subscriptions/${planned.subscription.id}/change`, { method: "POST", body: { on: MONDAYS[0], quantity: 2 } }), 409)).detail, pausesBeginLater(1))

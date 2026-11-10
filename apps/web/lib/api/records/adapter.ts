@@ -29,7 +29,6 @@ import { type LocalRefusal, webIdOf } from "@/lib/records/fields"
 
 import type { ApiClient } from "../client"
 
-/** A wire resource: the server's id and stamps, then its own fields. */
 export type Resource = { id: string; createdAt: string; updatedAt: string }
 
 /**
@@ -58,12 +57,9 @@ export type Resolver = {
   filter: (moduleKey: string, predicate: (record: BusinessRecord) => boolean) => BusinessRecord[]
 }
 
-/** A resolver over nothing: every lookup misses. What a mapping gets when the store has nothing else to offer. */
 export const NOTHING_RESOLVED: Resolver = { byServerId: () => undefined, serverIdOf: () => undefined, find: () => undefined, filter: () => [] }
 
-/** What a mapping may look at beside the resource itself. */
 export type MappingContext = {
-  /** The other records the mapping may name or be named by. */
   resolve: Resolver
   /** The clock, for "Today" and "3 days ago"; a test pins it. */
   now?: Date
@@ -216,11 +212,6 @@ export type ServerModule = {
   alsoViewedUnder?: readonly ModuleKey[]
 }
 
-/**
- * A resource as the prototype shows it: the envelope every row shares — the
- * web id its kind's prefix gives it, nothing for what the wire does not
- * carry, the stamps — under the fields its adapter says.
- */
 export function recordFrom<R extends Resource>(adapter: Pick<ResourceAdapter<R>, "prefix" | "toRecord">, resource: R, context: MappingContext): BusinessRecord {
   return { id: webIdOf(adapter.prefix, resource.id), ...NO_PRESENTATION, ...stampFacts(resource, context.now), ...adapter.toRecord(resource, context) }
 }
@@ -256,7 +247,6 @@ export function relativeDay(iso: string, now = new Date()): string {
   return `${Math.floor(days / 365)} year${days < 730 ? "" : "s"} ago`
 }
 
-/** The stamps every server record shows the same way. */
 function stampFacts(resource: Resource, now?: Date): Pick<BusinessRecord, "updated" | "freshness" | "source"> {
   const updated = relativeDay(resource.updatedAt, now)
   return { updated, freshness: updated, source: "Waste API" }

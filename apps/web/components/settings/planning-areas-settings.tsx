@@ -2,9 +2,7 @@
 
 // Settings → Operations → Areas & Zones: the management surface for planning
 // areas and notification zones (moved from the Plan workspace 2026-09-03,
-// D37). Rendered in the same full-page panel style as Asset management and
-// the Commercial registries (AssetPanelShell + toolbar + records table +
-// dialogs). The records stay business records under configure.areas so Route
+// D37). The records stay business records under configure.areas so Route
 // Schemes, containers, and Service Areas keep referencing them; the record
 // shape written here is lib/data/planning-areas.ts's.
 
@@ -86,8 +84,6 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   const schema = planningAreaSchema()
   const areasModule = planningAreasModule()
 
-  // Live records of any module (fixtures merged with stored records) — the
-  // relation targets the form offers and the names the facts display.
   const relationRecords = (location: ModuleLocation): BusinessRecord[] => {
     const module = getModuleDefinition(location)
     return module
@@ -193,7 +189,6 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
     })
   }
 
-  // Rows the search or filters hide: an empty table with none is not helped by another search.
   const narrowed = areaRecords.length > 0
   const emptyMessage = moduleReadSentence(areas, "planning areas") ?? (narrowed ? "No planning areas match this search." : "No planning areas yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.

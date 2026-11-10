@@ -16,7 +16,6 @@ export const COUNTRY_CODES: readonly string[] = (
 
 let displayNames: Intl.DisplayNames | null | undefined
 
-/** The country's name (`DK` → `Denmark`), or the code where the runtime has no name for it. */
 export function countryName(code: string): string {
   if (displayNames === undefined) {
     try {
@@ -28,7 +27,6 @@ export function countryName(code: string): string {
   return displayNames?.of(code) ?? code
 }
 
-/** The name a new list for the country is offered: its known list's, else `<Country> public holidays`. */
 export function suggestedHolidayListName(code: string, known: (country: string) => string | undefined): string {
   return known(code) ?? `${countryName(code)} public holidays`
 }

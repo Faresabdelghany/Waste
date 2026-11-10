@@ -51,10 +51,8 @@ import { waitingSentence } from "@/lib/api/read-state"
 
 const field = (id: string, label: string, relation?: ModuleLocation) => ({ id, label, type: "select" as const, required: true, ...(relation === undefined ? {} : { relation }) })
 
-/** Whose a credential is: a household's property, or a business's customer and agreement. */
 type HolderKind = "household" | "business"
 
-/** Register a plate or card: Customers › Site access's primary action. */
 export function RegisterCredentialSurface({ label }: PrimarySurfaceProps) {
   const pickers = useRelationPickers()
   const { upsertRecord } = useBusinessRecordStore()
@@ -279,7 +277,6 @@ export function RegisterCredentialSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** A credential's details: Edit its label and end, and Block or Unblock. */
 export function CredentialCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SITE_ACCESS_MODULE)
   const { busy, run, save } = useCommandRunner(SITE_ACCESS_MODULE, record.id)
@@ -395,7 +392,6 @@ export const SITE_VISITS_PRIMARY_ACTIONS = {
   checkIn: { module: SITE_VISITS_MODULE, action: "create" },
 } as const satisfies Record<string, ModuleAction>
 
-/** Operate › Site visits' primary: the attendant's check-in, and the Likely trades beside it, each where its grant is held. */
 export function SiteVisitsPrimarySurface({ label }: PrimarySurfaceProps) {
   const grants = useGrants()
   return (
@@ -413,7 +409,6 @@ export function SiteVisitsPrimarySurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** The likely trades read for a project, or why they could not be. */
 type TradesRead = { status: "idle" } | { status: "reading" } | { status: "read"; answer: FrequentVisitors } | { status: "refused"; sentence: string }
 
 /** Likely trades: the project's Properties whose counted visits reach its Visit Rule's threshold, most visits first. */
@@ -525,7 +520,6 @@ function LikelyTradesSurface() {
   )
 }
 
-/** A visit's details: Void, with why, while it stands. */
 export function SiteVisitCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SITE_VISITS_MODULE)
   const { busy, run } = useCommandRunner(SITE_VISITS_MODULE, record.id)

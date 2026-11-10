@@ -28,19 +28,16 @@ async function historyOf(api: APIRequestContext, table: string, rowId: string): 
 /** A CVR-shaped number no other run has used: eight digits, from the clock and a random tail. */
 const freshCvr = () => `9${String(Date.now() % 1_000_000).padStart(6, "0")}${Math.floor(Math.random() * 10)}`
 
-/** Hands the page's file input a CSV of these lines, as a person choosing a file would. */
 async function chooseFile(page: Page, name: string, lines: string[]) {
   await page.getByTestId("import-file").setInputFiles({ name, mimeType: "text/csv", buffer: Buffer.from(`${lines.join("\r\n")}\r\n`, "utf8") })
   await expect(page.getByTestId("import-file-reading")).toContainText(name)
 }
 
-/** Picks an option of one of the screen's selects by its label. */
 async function choose(page: Page, label: string, option: string) {
   await page.getByLabel(label, { exact: true }).click()
   await page.getByRole("option", { name: option, exact: true }).click()
 }
 
-/** The outcome badges of a results table, in row order, once they have arrived. */
 const outcomesOf = (page: Page, table: string) => page.getByTestId(table).getByTestId("import-result-row").locator("td:nth-child(2)")
 
 test("a customers file is previewed without a write, committed, and its refused row read back from the run", async ({ page, api }) => {
@@ -54,7 +51,6 @@ test("a customers file is previewed without a write, committed, and its refused 
   await page.goto("/improve/imports")
   await expect(page.getByTestId("imports-on-api")).toBeVisible()
 
-  // The template is the kind's header row.
   const download = page.waitForEvent("download")
   await page.getByTestId("import-template").click()
   const template = await readFile(await (await download).path(), "utf8")
@@ -94,7 +90,6 @@ test("a customers file is previewed without a write, committed, and its refused 
   const [run] = ((await runs.json()) as { items: ImportRun[] }).items
   expect([run?.fileName, run?.status, run?.counts]).toEqual([fileName, "completed", { created: 2, updated: 0, unchanged: 0, refused: 1 }])
 
-  // Its refusal, beside it in the recent runs.
   const listed = page.getByTestId("import-runs").getByTestId("import-run").filter({ hasText: fileName })
   await expect(listed).toContainText("2 new · 0 changed · 0 unchanged · 1 refused")
   await listed.getByRole("button", { name: "Refusals" }).click()

@@ -17,11 +17,9 @@ type Driver = { id: string; name: string }
 type Vehicle = { id: string; callsign: string | null; registration: string }
 type Period = { id: string; validFrom: string; validTo: string | null; reason: string }
 
-/** The browser's API call the page makes: the answer of `method` on a path under `path`. */
 const answerOf = (page: Page, method: string, path: RegExp) =>
   page.waitForResponse((response) => response.request().method() === method && path.test(new URL(response.url()).pathname.replace(/^\/waste-api/, "")))
 
-/** Opens a workspace module, waits for its rows to arrive from the API, then for the store's whole chain to land. */
 async function openLoaded(page: Page, url: string, listPath: RegExp) {
   const loaded = answerOf(page, "GET", listPath)
   await page.goto(url)
@@ -29,13 +27,11 @@ async function openLoaded(page: Page, url: string, listPath: RegExp) {
   await chainLanded(page)
 }
 
-/** The row's opener, after narrowing the list to the name through the module's own search. */
 async function openRow(page: Page, name: string) {
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(name)
   await page.getByRole("button", { name: `Open ${name}` }).click()
 }
 
-/** Picks an option of a select field in the open dialog by the start of its label. */
 async function pick(page: Page, field: string, option: RegExp) {
   await page.getByRole("dialog").getByRole("combobox", { name: new RegExp(`^${field}`) }).click()
   await page.getByRole("option", { name: option }).first().click()
@@ -57,7 +53,6 @@ const lineOf = (period: Period, reason: string) => {
   return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} · ${reason}`
 }
 
-/** Records a period through the details' form and answers the API's response to it. */
 async function record(page: Page, button: string, first: string, last: string, reason: string, path: RegExp) {
   await page.getByRole("dialog").getByRole("button", { name: button, exact: true }).click()
   const form = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: button }) })
@@ -88,7 +83,6 @@ test("Fleet: a driver's absence recorded in their details is listed by its last 
   await expect(details.getByTestId("driver-absences-periods").getByText(line)).toBeVisible()
   await page.keyboard.press("Escape")
 
-  // An allocation naming her on the Tuesday, made in the browser: the API's 409, told in its words.
   await openLoaded(page, "/fleet?module=vehicle-planning", /^\/vehicle-allocations$/)
   await page.getByRole("button", { name: "Plan allocation" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Allocate a vehicle" }) })
@@ -104,7 +98,6 @@ test("Fleet: a driver's absence recorded in their details is listed by its last 
   await expect(page.getByText(sentence)).toBeVisible()
   await dialog.getByRole("button", { name: "Cancel" }).click()
 
-  // Removed in her details: the API answers 204 and lists none of hers over the week.
   await openLoaded(page, "/fleet?module=drivers", /^\/drivers$/)
   await openRow(page, "Freja Nielsen")
   const periods = page.getByRole("dialog").getByTestId("driver-absences-periods")
@@ -131,14 +124,12 @@ test("Fleet: a vehicle's time out of use recorded in its details refuses an ad-h
   const line = lineOf(period, "Inspection")
   await expect(details.getByTestId("vehicle-unavailability-periods").getByText(line)).toBeVisible()
 
-  // A second over the same day: refused in the API's sentence, the dialog left open on it.
   const again = await record(page, "Record out of use", monday, addDays(monday, 2), "Repair", /^\/vehicle-unavailability$/)
   expect(again.status()).toBe(409)
   const already = `NR-12 is already unavailable ${periodPhrase(period)} (inspection); one period covers a day`
   await expect(page.getByText(already)).toBeVisible()
   await page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Record out of use" }) }).getByRole("button", { name: "Cancel" }).click()
 
-  // An ad-hoc route naming NR-12 that Monday.
   const route = await api.post("/routes", { data: { projectId: project.id, operatingDate: monday, vehicleId: nr12?.id } })
   expect(route.status()).toBe(409)
   expect((await problemOf(route)).detail).toBe(`NR-12 is unavailable ${periodPhrase(period)} (inspection); a route needs a vehicle that is there`)

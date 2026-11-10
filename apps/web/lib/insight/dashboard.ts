@@ -39,7 +39,6 @@ export const rangeOf = (id: DashboardRangeId): DashboardRange => DASHBOARD_RANGE
 /** Two days, both inclusive. */
 export type DayWindow = { from: string; to: string }
 
-/** The window of a preset that ends today: today and the days before it. */
 export function windowEnding(today: string, days: number): DayWindow {
   return { from: addDays(today, -(days - 1)), to: today }
 }
@@ -84,19 +83,16 @@ export function rateChange(current: Rate, previous: Rate | undefined, upIsGood: 
   return { text: points === 0 ? "<1 pp" : `${points} pp`, direction, tone: toneOf(direction, upIsGood) }
 }
 
-/** A rate as a person reads it: a whole percent, or a dash for a rate of nothing. */
 export function percentOf(rate: Rate): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`
 }
 
 const days = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" })
 
-/** A day as an axis and a table read it: `Oct 5`. */
 export function dayLabel(day: string): string {
   return days.format(new Date(`${day}T00:00:00Z`))
 }
 
-/** An interval as a table reads it: its one day, or its first and last. */
 export function intervalLabel(span: DayWindow): string {
   return span.from === span.to ? dayLabel(span.from) : `${dayLabel(span.from)} – ${dayLabel(span.to)}`
 }
@@ -135,7 +131,6 @@ export const DASHBOARD_TABS = [
 
 export type DashboardTabId = (typeof DASHBOARD_TABS)[number]["id"]
 
-/** The tabs a role is shown: its module viewed, and every module the tab needs beside it. */
 export function tabsShown(viewed: ReadonlySet<ModuleKey>): (typeof DASHBOARD_TABS)[number][] {
   return DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey) && tab.needs.every((moduleKey: ModuleKey) => viewed.has(moduleKey)))
 }
@@ -149,10 +144,8 @@ export const SCHEME_COLUMNS = ["Route scheme", "Project", "Routes", "Started", "
 /** What a project's ad-hoc routes (#111) are called in the scheme table: they have no scheme, so no scheme's name. */
 export const AD_HOC_ROUTES = "Ad-hoc routes"
 
-/** A scheme row's name: its scheme's, or `AD_HOC_ROUTES` for a project's ad-hoc routes. */
 export const schemeNameOf = (scheme: Pick<ServiceScheme, "name">): string => scheme.name ?? AD_HOC_ROUTES
 
-/** A scheme row's key: its scheme, or the project whose ad-hoc routes it counts. */
 export const schemeKeyOf = (scheme: Pick<ServiceScheme, "routeSchemeId" | "projectId">): string => scheme.routeSchemeId ?? `ad-hoc|${scheme.projectId}`
 
 /** One scheme's row of the table, by `SCHEME_COLUMNS`. */
@@ -173,7 +166,6 @@ export function schemeRowOf(scheme: ServiceScheme, projectName: (id: string) => 
   ]
 }
 
-/** The schemes, the ones missing the most pickups first, then by name. */
 export function schemesByAttention(report: ServiceReport): ServiceScheme[] {
   return [...report.schemes].sort((a, b) => b.pickups.missed - a.pickups.missed || schemeNameOf(a).localeCompare(schemeNameOf(b)))
 }
@@ -188,7 +180,6 @@ export const TONNAGE_GROUPINGS = [
 
 export type TonnageGrouping = (typeof TONNAGE_GROUPINGS)[number]["id"]
 
-/** A rolled-up row: what it is a row of, and its weights. */
 export type TonnageLine = {
   key: string
   /** The interval, where the grouping keeps it. */
@@ -217,7 +208,6 @@ const keyOf = (row: TonnageRow, grouping: TonnageGrouping): string => {
   }
 }
 
-/** The report's unload rows rolled up by the grouping: by fraction and by station heaviest first, by period in order, every row as the report orders them. */
 export function tonnageLines(report: Pick<TonnageReport, "unloads">, grouping: TonnageGrouping): TonnageLine[] {
   const lines = new Map<string, TonnageLine>()
   for (const row of report.unloads) {
@@ -248,7 +238,6 @@ export function tonnageLines(report: Pick<TonnageReport, "unloads">, grouping: T
   return rolled
 }
 
-/** The label a rolled-up row is read by on a chart: its fraction, its station or its period. */
 export function tonnageLabelOf(line: TonnageLine): string {
   return line.fraction ?? line.station ?? (line.period === null ? "" : intervalLabel(line.period))
 }

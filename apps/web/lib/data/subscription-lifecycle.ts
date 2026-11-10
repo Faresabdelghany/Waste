@@ -34,32 +34,27 @@ export const CHANGE_SERVICE_FORM = (products: readonly BusinessFormOption[]): Bu
     { id: "quantity", label: "Quantity", type: "number", min: 1, description: "Blank keeps the quantity." },
   ], "The subscription ends the day before the new service begins.")
 
-/** Pause: from its first day through its last, or until it is resumed. */
 export const PAUSE_FORM: BusinessFormSchema = dialog("Subscription pause", "Pause", "No collection is planned for the subscription's bins while it is paused; a stop already dispatched is named for removal by hand.", "Pause", [
   { id: "from", label: "Paused from", type: "date", required: true, description: "Today or later." },
   { id: "lastDay", label: "Last day paused", type: "date", description: "Blank pauses it until it is resumed." },
 ])
 
-/** Terminate: the agreement's last day of service. */
 export const TERMINATE_FORM: BusinessFormSchema = dialog("Agreement", "Terminate", "The agreement, its subscriptions and their placements end after this day; the bins stay in service until they are collected.", "Terminate", [
   { id: "lastDay", label: "Last day of service", type: "date", required: true },
 ], "The agreement, its subscriptions and their placements end after this day.")
 
-/** What a pause offers on the project's day: its cancel before it begins, its resume while it runs, nothing once it has ended. */
 export function pauseOffers(pause: Pick<SubscriptionPause, "validFrom" | "validTo">, today: string): "cancel" | "resume" | null {
   return PAUSE_OFFERS[periodOn(pause, today)]
 }
 
 const PAUSE_OFFERS: Record<PeriodStanding, "cancel" | "resume" | null> = { upcoming: "cancel", "in-force": "resume", ended: null }
 
-/** A pause as its line reads: its first and last day in, and what it is on the project's day. */
 export function pauseLine(pause: Pick<SubscriptionPause, "validFrom" | "validTo">, today: string): string {
   const span = pause.validTo === null ? `from ${pause.validFrom} until resumed` : `${pause.validFrom} – ${lastDayIn(pause.validTo)}`
   const offers = pauseOffers(pause, today)
   return `Paused ${span} · ${offers === "cancel" ? "planned" : offers === "resume" ? "running" : "ended"}`
 }
 
-/** How many stops a sentence names before it counts the rest. */
 const NAMED = 3
 
 /** The sentence the stops a command left standing are told in, by route and day; null where it left none. */

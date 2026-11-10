@@ -33,7 +33,6 @@ export function identityRefusalOf(key: CompanyIdentityKey, text: string): string
 
 export const PAYMENT_TERMS_REFUSAL = `Payment terms are a whole number of days from 0 to ${PAYMENT_TERMS_MAX}`
 
-/** The sentence refusing terms typed as days, or null for a whole number from 0 to `PAYMENT_TERMS_MAX`. */
 export function paymentTermsRefusalOf(text: string): string | null {
   const trimmed = text.trim()
   return /^\d+$/.test(trimmed) && Number(trimmed) <= PAYMENT_TERMS_MAX ? null : PAYMENT_TERMS_REFUSAL
@@ -48,7 +47,6 @@ export function paymentTermsLabel(days: number | null): string {
 
 const SCHEME_LABELS: Readonly<Record<PaymentReferenceScheme, string>> = { none: "None", "fik-71": "FIK 71", "fik-75": "FIK 75" }
 
-/** A payment reference scheme as the pane and a project's facts name it. */
 export const paymentReferenceSchemeLabel = (scheme: PaymentReferenceScheme): string => SCHEME_LABELS[scheme]
 
 /** Whether a project's hires and jobs wait for a person before a run invoices them (M14 of #293), as its facts and the pane name it. */

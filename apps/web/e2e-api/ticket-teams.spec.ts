@@ -37,7 +37,6 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     await expect(toasts(page)).toContainText("Team added")
     await expect(pane.getByRole("cell", { name, exact: true })).toBeVisible()
 
-    // Copenhagen Central's complaints go to the new team.
     await page.goto("/settings?pane=tickets")
     await pane.getByRole("tab", { name: "Default teams" }).click()
     const read = answerOf(page, "GET", `/projects/${project.id}/ticket-team-defaults`)
@@ -49,14 +48,12 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     expect((saved.request().postDataJSON() as Pick<Defaults, "defaults">).defaults).toContainEqual({ kind: "complaint", ticketTypeId: null, teamId: team.id })
     await expect(toasts(page)).toContainText("Default teams saved")
 
-    // A complaint opened without a team waits with the project's default for the kind.
     const subject = uniqueName("E2E team complaint")
     const opened = await api.post("/tickets", { data: { projectId: project.id, subject, description: "Bin left on the pavement", kind: "complaint" } })
     expect(opened.status(), await opened.text()).toBe(201)
     const ticket = (await opened.json()) as ApiTicket
     expect(ticket.teamId).toBe(team.id)
 
-    // The list's Team category finds it.
     const listed = answerOf(page, "GET", "/tickets")
     await page.goto("/tickets")
     expect((await listed).status()).toBe(200)
@@ -68,7 +65,6 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     await page.getByRole("button", { name: "Apply filters" }).click()
     await main.getByText(subject).first().click()
 
-    // Its details hand it to no team, through the patch.
     const details = page.getByRole("dialog", { name: subject })
     await expect(details.getByRole("button", { name: "Change Team" })).toHaveText(name)
     await details.getByRole("button", { name: "Change Team" }).click()

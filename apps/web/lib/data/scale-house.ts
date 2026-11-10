@@ -23,22 +23,16 @@ export const SCALE_TICKET_RECORD_KIND = "Scale ticket"
 export const VEHICLE_TARE_PREFIX = "vehicle-tare"
 export const VEHICLE_TARE_RECORD_KIND = "Registered tare"
 
-/** The lines the window's Weigh out form splits a load into. */
 export const WINDOW_LINES = 3
 
-/** A ticket's status as the window reads it. */
 export const SCALE_TICKET_STATUS_LABELS: Readonly<Record<ScaleTicketStatus, string>> = { open: "Weighed in", completed: "Completed", voided: "Voided" }
 
-/** A registered tare's status. */
 export const VEHICLE_TARE_STATUS_LABELS: Readonly<Record<VehicleTareStatus, string>> = { active: "Active", retired: "Retired" }
 
-/** Whom a ticket is for. */
 export const PARTY_LABELS: Readonly<Record<ScaleTicketParty, string>> = { account: "Account customer", cash: "Walk-in" }
 
-/** Where a ticket's tare came from. */
 export const TARE_SOURCE_LABELS: Readonly<Record<TareSource, string>> = { weighed: "Second pass", registered: "Registered tare" }
 
-/** Why a ticket was voided. */
 export const VOID_REASON_LABELS: Readonly<Record<ScaleTicketVoidReason, string>> = {
   "entered-in-error": "Entered in error",
   duplicate: "Duplicate of another ticket",
@@ -103,7 +97,6 @@ export const WEIGH_IN_FORM: BusinessFormSchema = {
 /** The window's products: those sold by the tonne or the cubic metre (M16b of #293). */
 const productRelation = moduleAt("commercial.products")
 
-/** The fields of one line of the Weigh out form, numbered from 1; the first is required. A line sold by the cubic metre declares its volume. */
 const lineFields = (n: number) => [
   { id: `fraction${n}`, label: `Fraction ${n}`, type: "select" as const, required: n === 1, relation: masterRelation },
   { id: `origin${n}`, label: `Origin municipality ${n}`, type: "text" as const, description: n === 1 ? "The kommunekode, four digits: 0101." : undefined },
@@ -144,7 +137,6 @@ export const WEIGH_OUT_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Ticket completed." },
 }
 
-/** Void: why, and more where the reason is another. */
 export const VOID_TICKET_FORM: BusinessFormSchema = {
   key: "operate.scale-house",
   mode: "action",
@@ -166,7 +158,6 @@ export const VOID_TICKET_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Ticket voided." },
 }
 
-/** Register tare: a vehicle's weight empty, by its plate, its trailer's and the container it carries. */
 export const TARE_FORM: BusinessFormSchema = {
   key: "operate.scale-house",
   mode: "create",
@@ -194,7 +185,6 @@ export const TARE_FORM: BusinessFormSchema = {
   execution: { kind: "create-record", initialStatus: "Active", completionMessage: "Tare registered." },
 }
 
-/** Re-weigh: the tare's new weight and its day. */
 export const REWEIGH_FORM: BusinessFormSchema = {
   key: "operate.scale-house",
   mode: "action",

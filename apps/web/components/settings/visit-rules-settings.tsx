@@ -99,7 +99,6 @@ export function VisitRulesSettings() {
       ? "No project to charge recycling-centre visits in."
       : (readSentence({ problem: setting.problem && problemSentence(setting.problem), answered: shown !== null }, "Visit Rules") ?? `${project.name} has no Visit Rule: its visits are logged and charged nothing.`)
 
-  // The products a rule may charge: the project's active ones sold in the unit asked, and any it charges now whatever they are.
   const productOptions = (unit: string, kept: readonly string[]) => (shown?.products ?? []).filter((candidate) => (candidate.unit === unit && candidate.status === "active") || kept.includes(candidate.id))
 
   return (

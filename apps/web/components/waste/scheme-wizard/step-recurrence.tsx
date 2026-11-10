@@ -68,7 +68,6 @@ export function StepRecurrence({
   const setEffectiveFrom = (effectiveFrom: string) =>
     update({
       effectiveFrom,
-      // The fortnight anchor follows the start date.
       ...(data.frequency === "every-2-weeks"
         ? { weekRotation: fortnightRotation(effectiveFrom) }
         : {}),

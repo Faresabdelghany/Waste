@@ -43,7 +43,6 @@ export function effectiveDayPlans(
   }))
 }
 
-/** "Wed 11 · Sun 11" — the review-step and record-fact counts line. */
 export function dayPlanCountSummary(plans: readonly SchemeDayPlan[]): string {
   if (plans.length === 0) return "No service days"
   return plans
@@ -126,7 +125,7 @@ export type SchemeValidationInput = {
  * What the rule-overlap warning needs to know about another rule-mode scheme:
  * same planning area + shared service day + intersecting fractions +
  * non-disjoint effective periods likely double-plan the same containers.
- * Extracted from records by matching.ts schemeStopRuleSources.
+ * Extracted from records by groups.ts schemeStopRuleSources.
  */
 export type SchemeStopRuleSource = {
   schemeName: string
@@ -705,7 +704,6 @@ export function allocationConflictSourceFromValues(
   }
 }
 
-/** The minimal record shape the allocation supersession pass reads. */
 export type AllocationRecordLike = {
   id: string
   name: string

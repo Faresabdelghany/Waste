@@ -14,7 +14,6 @@ function dayMonthYear(iso: string): string {
   return `${formatDayMonth(iso)} ${iso.slice(0, 4)}`
 }
 
-/** "Mon–Fri" for a contiguous Monday-first run, "Tue/Fri" otherwise — any weekday set (service days, a weekend). */
 export function formatWorkingDays(days: ServiceDay[]): string {
   if (days.length === 0) return EMPTY_FACT
   const ordered = [...days].sort(
@@ -32,7 +31,6 @@ export function formatWorkingDays(days: ServiceDay[]): string {
   return ordered.map((day) => SERVICE_DAY_SHORT_LABELS[day]).join("/")
 }
 
-/** "1 Jan – 31 Dec 2026", "From 1 Jan 2026", "Until 31 Dec 2026", or "—". */
 export function formatValidity(validFrom: string, validTo: string): string {
   if (!validFrom && !validTo) return EMPTY_FACT
   if (!validTo) return `From ${dayMonthYear(validFrom)}`

@@ -13,10 +13,8 @@ import type { CustomerNoticeEvent, NotificationRules, NotificationRulesPut } fro
 import { unfilledByNotice } from "@waste/domain/notifications/notices"
 import { BROADCAST_NOTICES } from "@waste/domain/notifications/vocabulary"
 
-/** The picker's value for a notice the project does not send. */
 export const NOT_SENT = "not-sent"
 
-/** Each notice as the section names it, in the vocabulary's order. */
 export const CUSTOMER_NOTICES: ReadonlyArray<{ event: CustomerNoticeEvent; label: string; hint: string }> = [
   { event: "bulky-booking-booked", label: "Bulky collection booked", hint: "When the office books a bulky collection." },
   { event: "bulky-booking-cancelled", label: "Bulky collection cancelled", hint: "When a booked collection is cancelled." },
@@ -32,14 +30,11 @@ export const CUSTOMER_NOTICES: ReadonlyArray<{ event: CustomerNoticeEvent; label
 /** Whether a notice is a broadcast, which may name the areas it reaches. */
 export const isBroadcast = (event: CustomerNoticeEvent): boolean => (BROADCAST_NOTICES as readonly CustomerNoticeEvent[]).includes(event)
 
-/** The templates a notice may be sent from: the project's, for service, active, naming no value the notice does not fill. */
 export const noticeTemplateOptions = (templates: readonly MessageTemplate[], event: CustomerNoticeEvent): MessageTemplate[] =>
   templates.filter((template) => template.purpose === "service" && template.status === "active" && unfilledByNotice(event, `${template.subject ?? ""} ${template.body}`).length === 0)
 
-/** A notice's pick: its template, or `NOT_SENT`, and a broadcast's areas. */
 export type NoticePick = { templateId: string; planningAreaIds: string[] }
 
-/** Each notice's pick, read off the project's rules. */
 export const noticePicksOf = (rules: NotificationRules): Record<CustomerNoticeEvent, NoticePick> =>
   Object.fromEntries(
     CUSTOMER_NOTICES.map(({ event }) => {
@@ -48,7 +43,6 @@ export const noticePicksOf = (rules: NotificationRules): Record<CustomerNoticeEv
     }),
   ) as Record<CustomerNoticeEvent, NoticePick>
 
-/** The body the picks send: each notice with a template, in the vocabulary's order, a broadcast with its areas. */
 export const noticeRulesBody = (picks: Readonly<Record<CustomerNoticeEvent, NoticePick>>): NotificationRulesPut => ({
   rules: CUSTOMER_NOTICES.flatMap(({ event }) => {
     const { templateId, planningAreaIds } = picks[event]

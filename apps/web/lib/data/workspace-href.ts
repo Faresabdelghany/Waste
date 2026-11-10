@@ -9,7 +9,6 @@ import { WORKSPACES, moduleSpecOf, type ModuleLocation } from "@/lib/modules/man
 
 import { DEFAULT_SETTINGS_PANE, settingsAddressHref, settingsHref } from "@/lib/modules/settings-panes"
 
-/** The params that name a module, and a record in it, on the page showing them: `params` kept beside them. */
 export function moduleParams(moduleId: string, recordId?: string, params?: URLSearchParams): URLSearchParams {
   const named = new URLSearchParams(params)
   named.set("module", moduleId)

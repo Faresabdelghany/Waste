@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures"
 // Slice 1 of #81 (Issue #175): the planning configuration read from the API.
 // The setup project's administrator session is the browser's, and the areas
 // and calendars are the seeded tenant's (#143): what the fixture suite's
-// tests of the same surfaces (e2e/tests/map-planning.spec.ts) cannot say —
+// tests of the same surfaces cannot say —
 // a status read off the API's versions, a row the fixtures do not have, an
 // id the server minted — is said here.
 

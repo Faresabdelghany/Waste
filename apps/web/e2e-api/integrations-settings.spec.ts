@@ -28,7 +28,6 @@ test.describe("integrations (#487)", () => {
 
     for (const vendor of ["Webfleet", "Navision", "Digital Post"]) await expect(page.getByText(vendor)).toHaveCount(0)
 
-    // Refresh asks again.
     const [again] = await Promise.all([answerOf(page, "GET", "/integrations"), page.getByRole("button", { name: "Refresh" }).click()])
     expect(again.status()).toBe(200)
   })

@@ -50,7 +50,6 @@ const arc: UnloadingStation = { id: "01a0d2a4-a280-7012-8000-000000000001", ...S
 const west: Warehouse = { id: "01a0d2a4-a280-7011-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "WAREHOUSE-WEST", name: "Warehouse West", address: "Logistikvej 8, Valby", location: null, depotId: null, status: "active", notes: null }
 const nordhavnWarehouse: Warehouse = { ...west, id: "01a0d2a4-a280-7011-8000-000000000002", code: "WAREHOUSE-NORDHAVN", name: "Nordhavn Warehouse", address: "Kaj 14, Nordhavn", depotId: nordhavnDepot.id }
 
-// The modules loaded before the places: the organisation, the providers, the master data.
 const noResolve: MappingContext = { resolve: NOTHING_RESOLVED, now: NOW }
 const copenhagenRecord = recordFrom(projectAdapter, copenhagen, noResolve)
 const harborRecord = recordFrom(projectAdapter, harbor, noResolve)

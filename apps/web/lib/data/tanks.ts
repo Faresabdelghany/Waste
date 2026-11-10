@@ -18,7 +18,6 @@ import { thousands } from "./tank-words"
 
 export { LITRES_MAX, litresOf, TANK_INSPECTION_OUTCOME_LABELS, TANK_KIND_LABELS, TANK_OUTLET_LABELS, tankSummary } from "./tank-words"
 
-/** When the next emptying is due, against the project's today. */
 export function dueSentence(tank: Pick<TankInstallation, "dueOn">, today: string): string {
   if (tank.dueOn === null) return "Due now: never emptied"
   if (tank.dueOn < today) return `Overdue since ${tank.dueOn}`
@@ -44,7 +43,6 @@ const wholeNumber = (value: string): number | undefined => (/^\d+$/.test(value.t
 /** What the Register tank form holds: the container by server id, the rest as typed. */
 export type TankTyped = { containerId: string; kind: string; volumeLitres: string; outlet: string; emptyingIntervalMonths: string; lastEmptiedOn: string; validFrom: string; notes: string }
 
-/** The tank's body, or the refusal at the field the office has to fix first. */
 export function tankBodyOf(typed: TankTyped, propertyServerId: string): TankInstallationCreate | LocalRefusal {
   if (typed.containerId === "") return { path: "containerId", message: "Pick the container that stands for the tank" }
   const volumeLitres = wholeNumber(typed.volumeLitres)
@@ -67,10 +65,8 @@ export function tankBodyOf(typed: TankTyped, propertyServerId: string): TankInst
   }
 }
 
-/** What the Record inspection form holds. */
 export type InspectionTyped = { inspectedOn: string; outcome: string; findings: string; nextInspectionOn: string }
 
-/** The inspection's body, or the refusal at the field the office has to fix first. */
 export function inspectionBodyOf(typed: InspectionTyped): TankInspectionCreate | LocalRefusal {
   if (typed.inspectedOn === "") return { path: "inspectedOn", message: "Pick the day the tank was inspected" }
   if (typed.nextInspectionOn !== "" && typed.nextInspectionOn <= typed.inspectedOn) return { path: "nextInspectionOn", message: "The next inspection comes after this one" }

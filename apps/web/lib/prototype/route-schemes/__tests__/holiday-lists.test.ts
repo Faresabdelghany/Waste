@@ -43,7 +43,6 @@ const CPH_2027 = [
   "2027-12-26",
 ]
 
-/** The 2026 days as entries, named through the Danish lookup. */
 const copenhagen2026 = CPH_2026.split(", ").map((date) => ({ date, name: danishHolidayName(date) ?? "" }))
 
 describe("holidayEntryValues — what the editor writes back", () => {

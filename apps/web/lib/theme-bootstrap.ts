@@ -27,7 +27,6 @@ const presetPalettes = Object.fromEntries(
 const selectionKeys = persistedKeys(APP_THEME_SELECTION_STORAGE_KEY)
 const customThemeKeys = persistedKeys(CUSTOM_THEME_STORAGE_KEY)
 
-/** The inline script, run before any module loads: the theme from storage, or PUBLIC_PAGE_THEME on a public page. */
 export const THEME_BOOTSTRAP_SOURCE = `
 (() => {
   try {

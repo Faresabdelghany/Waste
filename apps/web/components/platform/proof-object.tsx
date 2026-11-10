@@ -1,5 +1,3 @@
-// A proof's object as a stop's or a ticket's details show it: the photo or
-// signature its signed URL reads (`useProofObjectLinks`), or why there is none.
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
 

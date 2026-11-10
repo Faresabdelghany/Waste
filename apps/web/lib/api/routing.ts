@@ -22,7 +22,6 @@ export function routingQuota(client: ApiClient): Promise<RoutingQuota> {
   return get<RoutingQuota>(client, "/routing/quota")
 }
 
-/** One Plan with its legs. */
 export function planDetail(client: ApiClient, planId: string, signal?: AbortSignal): Promise<PlanDetail> {
   return get<PlanDetail>(signal === undefined ? client : { ...client, signal }, `/plans/${encodeURIComponent(planId)}`)
 }

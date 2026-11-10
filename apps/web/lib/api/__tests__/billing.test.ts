@@ -308,7 +308,6 @@ describe("Explain price on a billable event's own question (#259)", () => {
   const OWN_LIST = "01a0d2a4-a280-7028-8000-000000000002"
   const DEFAULT_LIST = "01a0d2a4-a280-7028-8000-000000000001"
   const agreement = state.get("customers.agreements")!.records[0]
-  // The rows the question is read through, as their adapters make them: the row that won and its list, the project's default list, the route's scheme in its area, the pickup's container of its type.
   const winningRow = made(`price-row-${ready.priceListRowId}`, "Price row", { priceListId: `price-list-${OWN_LIST}`, productId: `product-${res240.id}` })
   const ownList = made(`price-list-${OWN_LIST}`, "Price list", { isDefault: false })
   const defaultList = made(`price-list-${DEFAULT_LIST}`, "Price list", { isDefault: true })

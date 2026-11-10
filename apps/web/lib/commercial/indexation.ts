@@ -20,7 +20,6 @@ export function basisPointsOf(text: string): number {
   return sign === "-" ? -points : points
 }
 
-/** Basis points as a signed percent: 500 is `+5%`, -125 is `-1.25%`. */
 export const percentLabel = (points: number) => `${points < 0 ? "-" : "+"}${(Math.abs(points) / 100).toFixed(2).replace(/\.?0+$/, "")}%`
 
 /** Why a row stays as it is, as the preview and the answer say it. */
@@ -30,7 +29,6 @@ export const SKIP_SENTENCES: Readonly<Record<IndexSkipReason, string>> = {
   "product-not-active": "Its product is no longer active",
 }
 
-/** What a plan comes to, in a sentence: how many prices move and how many stay. */
 export function indexSummary(result: Pick<IndexResult, "lines">): string {
   const moved = result.lines.filter((line) => line.skipped === null).length
   const stayed = result.lines.length - moved

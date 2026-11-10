@@ -24,7 +24,6 @@ import { waitingSentence } from "@/lib/api/read-state"
 
 const { workspaceId, moduleId } = VEHICLE_PLANNING_MODULE
 
-/** Allocate: the reservation. */
 export function AllocateSurface({ label }: PrimarySurfaceProps) {
   return (
     <CreateSurface
@@ -40,7 +39,6 @@ export function AllocateSurface({ label }: PrimarySurfaceProps) {
 /** A dialog open on a snapshot of the row: the change's schema and values hold while the store's optimistic write and its rollback replace the row. */
 type Open = { kind: "change"; schema: BusinessFormSchema; values: BusinessFormValues } | { kind: "release" }
 
-/** An allocation's change, confirm and release, and its history, in its details. */
 export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
   const { upsertRecord } = useBusinessRecordStore()
   const pickers = useRelationPickers()

@@ -5,13 +5,12 @@ import { chainLanded, expect, test } from "./fixtures"
 import { schemeWithRoutes } from "./routes-support"
 
 // Map Planning on the API (slice 9b of #81, Issue #184): the map places the
-// server's containers where their placements in force today are delivered
-// at — the seeded tenant's placed containers at their properties' points —
-// so the fixture suite's Containers list test (e2e/tests/map-planning.spec.ts)
-// lives here now, against the seeded registry, and since #186 its Create
-// service area test too, and the page's frame and its toolbar's opening
-// state. Tile requests are aborted: the base map reports itself unavailable
-// and the markers still stand.
+// server's containers where their placements in force today are delivered at
+// — the seeded tenant's placed containers at their properties' points — so
+// the fixture suite's Containers list test lives here now, against the seeded
+// registry, and since #186 its Create service area test too, and the page's
+// frame and its toolbar's opening state. Tile requests are aborted: the base
+// map reports itself unavailable and the markers still stand.
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
 const CANVAS = '[data-testid="planning-map-canvas"]'
@@ -34,7 +33,6 @@ const CENTRAL = { from: { x: 0.3, y: 0.15 }, to: { x: 0.9, y: 0.9 } }
 /** Its south: Copenhagen Central's containers alone, clear of Nordhavn's, which are Harbor Commercial's, to the north-east. */
 const COPENHAGEN_SOUTH = { from: { x: 0.3, y: 0.45 }, to: { x: 0.95, y: 0.95 } }
 
-/** Drags a rectangle over `area` of the initial view, as fractions of it, with the rectangle tool. */
 async function selectRectangle(page: Page, area = CENTRAL): Promise<void> {
   await page.getByRole("button", { name: "Select with a rectangle" }).click()
   const overlay = page.locator(DRAW)
@@ -97,7 +95,6 @@ test("the Containers list mirrors the selection of the server's placed container
   }
   await expect(page.locator("[data-marker][data-highlighted]")).toHaveCount(0)
 
-  // Row → marker.
   const firstRow = rows.first()
   await firstRow.hover()
   await expect(page.locator('[data-marker][data-highlighted="true"]').first()).toBeVisible()
@@ -122,7 +119,6 @@ test("the Containers list mirrors the selection of the server's placed container
   await page.locator(CANVAS).hover({ position: { x: 5, y: 5 } })
   await expect(rows.locator('xpath=self::*[@data-highlighted="true"]')).toHaveCount(0)
 
-  // A row opens the container's details.
   const label = await firstRow.locator("span.font-medium").innerText()
   await firstRow.click()
   await expect(page.getByRole("dialog")).toContainText(label)
@@ -132,7 +128,6 @@ test("the filters offer each scheme whose routes stop at a container, a name hol
   // A scheme of the run's own, generated: its routes stop at the seeded Residual containers in Indre By Operations.
   const { scheme } = await schemeWithRoutes(api, `${uniqueName("E2E Map scheme")} · Week A`, 7)
   await openMapPlanning(page)
-  // Every seeded placed container across the tenant's areas, before the filter.
   const markers = page.locator("[data-marker]")
   const before = await markers.count()
   await page.getByRole("button", { name: "Filter", exact: true }).click()
@@ -204,7 +199,6 @@ test("Create service area opens the Pilot's award form on the selection's planni
   expect(award.assignment).not.toBeNull()
   await expect(dialog).toHaveCount(0)
 
-  // Drawn as its planning areas' stored boundaries, switched on by itself, and covering every selected container.
   const outline = page.locator("[data-service-area-outline]").filter({ hasText: name })
   await expect(outline).toHaveCount(1)
   await expect(page.locator("[data-service-area-outline]")).toHaveCount(1)
