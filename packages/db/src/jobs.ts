@@ -28,7 +28,14 @@
 //                    request, and no connection is held beyond the pool's;
 //   the question  — whether a job a sender sent is still pg-boss's to run
 //                    (`jobHeld`), spelled here beside the states that mean
-//                    so.
+//                    so;
+//   the redrive   — pg-boss's own `redrive` of a dead-letter queue, through
+//                    the same never-started instance, for the operator's
+//                    door (the Pilot's `redrive` operation, pilot/phases.ts):
+//                    every dead letter a fresh job on the queue it failed
+//                    on. The worker's dead-letter queue is named here, since
+//                    the worker that makes it and the operator who empties
+//                    it both spell it.
 //
 // What this needs of the database is what migration 0011 granted: `USAGE` on
 // `pgboss`, `SELECT, INSERT, UPDATE, DELETE` on its tables and `EXECUTE` on
@@ -36,7 +43,7 @@
 // the narrower set a send really needs); `src/__tests__/jobs.test.ts` proves
 // the send as `wms_api` against the local stack.
 import { sql, type SQL } from "drizzle-orm"
-import { fromDrizzle, PgBoss, type Db, type SendOptions } from "pg-boss"
+import { fromDrizzle, PgBoss, type Db, type RedrivePreview, type SendOptions } from "pg-boss"
 
 import type { Database, Tx } from "./client"
 import { PGBOSS_SCHEMA } from "./sql/pgboss"
@@ -103,19 +110,9 @@ export class QueueMissing extends Error {
 /** pg-boss's own sentence for it (manager.js, `getQueueCache`); src/__tests__/jobs.test.ts holds the pinned library to it. */
 const QUEUE_DOES_NOT_EXIST = /^Queue \S+ does not exist$/
 
-/**
- * pg-boss's `send` for a process that runs no pg-boss, over `pool`. The
- * instance is built and never started: no pool of its own, no maintenance,
- * no cron pass, no listener; its one read is the queue's row, once per
- * queue name, through `pool`, and its writes go through the `db` each
- * `send` names. `pool` must not be the pool whose connections the callers
- * hold while they send — a request that sends inside its transaction holds
- * one, and `max` such requests on a cold cache would each wait for a
- * connection none of them can free — so the API hands its one-connection
- * probe pool, never its request pool.
- */
-export function createJobSender(pool: Database): JobSender {
-  const boss = new PgBoss({
+/** A pg-boss built over `pool` and never started: no pool of its own, no maintenance, no cron pass, no listener. */
+const neverStarted = (pool: Database): PgBoss =>
+  new PgBoss({
     db: fromDrizzle(pool.db, sql),
     schema: PGBOSS_SCHEMA,
     migrate: false,
@@ -126,16 +123,59 @@ export function createJobSender(pool: Database): JobSender {
     persistWarnings: false,
     useListenNotify: false,
   })
-  return {
-    send: async (name, data, options) => {
-      try {
-        return await boss.send(name, data, options ?? {})
-      } catch (error) {
-        if (error instanceof Error && QUEUE_DOES_NOT_EXIST.test(error.message)) throw new QueueMissing(name)
-        throw error
-      }
-    },
+
+/** pg-boss's refusal of a queue nobody made, as `QueueMissing`. */
+async function onItsQueue<T>(queue: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work()
+  } catch (error) {
+    if (error instanceof Error && QUEUE_DOES_NOT_EXIST.test(error.message)) throw new QueueMissing(queue)
+    throw error
   }
+}
+
+/**
+ * pg-boss's `send` for a process that runs no pg-boss, over `pool`. The
+ * instance is built and never started; its one read is the queue's row, once
+ * per queue name, through `pool`, and its writes go through the `db` each
+ * `send` names. `pool` must not be the pool whose connections the callers
+ * hold while they send — a request that sends inside its transaction holds
+ * one, and `max` such requests on a cold cache would each wait for a
+ * connection none of them can free — so the API hands its one-connection
+ * probe pool, never its request pool.
+ */
+export function createJobSender(pool: Database): JobSender {
+  const boss = neverStarted(pool)
+  return { send: (name, data, options) => onItsQueue(name, () => boss.send(name, data, options ?? {})) }
+}
+
+/** The dead-letter queue every outbox consumer's queue names (apps/worker/src/runtime/outbox.ts): where a job that failed past its retries is copied, data intact, for an operator to redrive. */
+export const OUTBOX_DEAD_QUEUE = "outbox.dead"
+
+/** What a redrive found on the dead-letter queue before it moved anything, and how many jobs it moved. */
+export type Redrive = RedrivePreview & { moved: number }
+
+/** pg-boss moves at most this many jobs in one call, oldest first. */
+const REDRIVE_BATCH = 1000
+
+/**
+ * Every dead letter on `queue` re-created as a fresh job on the queue it
+ * failed on, under that queue's policy as it stands: pg-boss's own `redrive`,
+ * previewed first so the caller can say where the jobs went, then moved in as
+ * many batches as the letters the preview counted need and no more — one
+ * that fails again while this runs is dead-lettered again and waits for the
+ * next redrive, so a redrive is never a loss and never a loop. A letter
+ * whose queue is gone stays where it is and is counted `unroutable`. Throws
+ * `QueueMissing` on a database no worker has started on.
+ */
+export async function redriveDeadLetters(pool: Database, queue: string): Promise<Redrive> {
+  const boss = neverStarted(pool)
+  return onItsQueue(queue, async () => {
+    const preview = await boss.previewRedrive(queue)
+    let moved = 0
+    for (let left = preview.total; left > 0; left -= REDRIVE_BATCH) moved += await boss.redrive(queue, { limit: REDRIVE_BATCH })
+    return { ...preview, moved }
+  })
 }
 
 /**

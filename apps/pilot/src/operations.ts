@@ -1,4 +1,4 @@
-// The Pilot's six operations (Issue #152), each the phases its job runs, in
+// The Pilot's operations (Issue #152), each the phases its job runs, in
 // order, one workflow step each. .github/workflows/pilot-database.yml is their
 // thin caller — the checkout, the workspace, a phase's environment, and
 // between two phases the artifact the phase before named — and
@@ -8,7 +8,7 @@
 // operation.ts; the context a phase gets (the Pilot-target check, the layout
 // of files and artifacts) is @waste/db's src/pilot/phase.ts.
 import { BACKUP_ARTIFACT, LOGIN_STATE_ARTIFACT, removePlaintext, writeSourceRun, type ArtifactKind, type Context, type Phase } from "@waste/db/pilot/phase"
-import { checkPhases, grantLoginsPhases, recoverLoginsPhases, releasePhases, resetToSeedPhases, restorePhases } from "@waste/db/pilot/phases"
+import { checkPhases, grantLoginsPhases, recoverLoginsPhases, redrivePhases, releasePhases, resetToSeedPhases, restorePhases } from "@waste/db/pilot/phases"
 
 import { fetchSourceArtifact } from "./artifacts"
 import { GITHUB_API, type RepositoryOptions } from "./github"
@@ -121,4 +121,5 @@ export const OPERATIONS: readonly Operation[] = [
     admit: admitting(operated, sourceRunNamed),
     phases: [choosing(LOGIN_STATE_ARTIFACT), recoverLoginsPhases.recover],
   },
+  { name: "redrive", admit: operated, phases: [redrivePhases.redrive] },
 ]

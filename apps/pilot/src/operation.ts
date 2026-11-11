@@ -1,6 +1,6 @@
 // What one of the Pilot's operations is (Issue #152): a name the workflow's
 // `operation` input offers, what must hold before any of its phases runs, and
-// its phases in order (operations.ts holds the six). Admission is the
+// its phases in order (operations.ts holds them). Admission is the
 // workflow's own rule: with the Pilot as the target the run is on main, and an
 // operation that replaces what the API reads, or reads another run's
 // artifact, has its input say so. The command line a workflow step runs is
@@ -11,7 +11,7 @@ import { unreachableHint } from "@waste/db/pilot/identity"
 import { failureMessage } from "@waste/db/sqlstate"
 
 /** The operations, as the workflow's `operation` input offers them. */
-export const PILOT_OPERATIONS = ["check", "release", "reset-to-seed", "grant-logins", "restore", "recover-logins"] as const
+export const PILOT_OPERATIONS = ["check", "release", "reset-to-seed", "grant-logins", "restore", "recover-logins", "redrive"] as const
 export type PilotOperation = (typeof PILOT_OPERATIONS)[number]
 
 export type Operation = {

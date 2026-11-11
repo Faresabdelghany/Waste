@@ -28,6 +28,9 @@
 #   restore         a named run's backup restored inside the write barrier
 #   recover-logins  the LOGIN states a named restore or reset recorded, put
 #                   back after it failed or was cancelled
+#   redrive         every job on the worker's dead-letter queue, `outbox.dead`,
+#                   put back on the queue it failed on, once the fix is
+#                   released; refused while a migration is pending
 #
 # Each operation is the list of phases apps/pilot/src/operations.ts gives it,
 # in order, and a job is their thin caller: the checkout, the workspace, then
@@ -78,6 +81,7 @@ on:
           - grant-logins
           - restore
           - recover-logins
+          - redrive
       run_seed:
         description: "release: run the idempotent demo seed after the migrations"
         type: boolean
@@ -450,3 +454,23 @@ jobs:
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
         run: node --import tsx src/operate.ts recover-logins recover
+
+  redrive:
+    name: Redrive the worker's dead letters
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'redrive'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+        with:
+          filter: "@waste/pilot..."
+          cache: "false"
+      - name: Journal check, then every dead letter back on its queue
+        working-directory: apps/pilot
+        env:
+          DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
+        run: node --import tsx src/operate.ts redrive redrive

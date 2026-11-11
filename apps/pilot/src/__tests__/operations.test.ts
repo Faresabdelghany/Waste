@@ -76,7 +76,7 @@ describe("the Pilot database workflow", () => {
         operation.name,
       )
     }
-    assert.deepEqual([...JOBS.keys()], ["check", "resolve", "release", "reset-to-seed", "grant-logins", "restore", "recover-logins"])
+    assert.deepEqual([...JOBS.keys()], ["check", "resolve", "release", "reset-to-seed", "grant-logins", "restore", "recover-logins", "redrive"])
   })
 
   test("runs the cleanup whatever happened before, and every other phase only while the job has not failed", () => {
