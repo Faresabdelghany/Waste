@@ -12,8 +12,11 @@
 //                 recycling centre's check-in, after those two: the seeded
 //                 role's key. The office lands on operations where its role
 //                 views anything there, else on the sidebar's first page it
-//                 views anything on, and on operations, which says it may
-//                 view nothing, where it views nothing at all. `/driver` is
+//                 views anything on that is not the Dashboard — a page of
+//                 reports is no place to start work, so it is the landing
+//                 only of a role that views nothing else — and on
+//                 operations, which says it may view nothing, where it views
+//                 nothing at all. `/driver` is
 //                 the Driver App (#145, components/waste/driver/),
 //                 `/service-provider-workspace` the provider's restricted
 //                 shell, `/check-in` the attendant's phone-first page
@@ -56,12 +59,15 @@ export const SITE_ATTENDANT_ROLE: SystemRoleKey = "site-attendant"
 
 export const OFFICE_LANDING = "/operate"
 
+/** The Dashboard's page, Improve's: the landing only of a role that views no other page. */
+const DASHBOARD_PAGE: NavItemId = "improve"
+
 /** What the landing reads of `/me`: the driver, the provider, and the role's key and grants, each read defensively. */
 export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: (Pick<Me["role"], "key"> & { grants?: Grants }) | null }
 
 /** Whether a role views anything on an office page: one of the Dashboard's tabs, or one of the modules a workspace's page shows. */
 function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
-  if (id === "improve") return tabsShown(viewed).length > 0
+  if (id === DASHBOARD_PAGE) return tabsShown(viewed).length > 0
   return pageModuleIds(id).some((moduleId) => viewed.has(moduleKeyOf(id, moduleId)))
 }
 
@@ -70,8 +76,8 @@ function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
  * a driver on the Driver App, then a Service Provider's account on its
  * workspace, then a Site attendant on the check-in, then the office on
  * operations where its role views anything there, else on the sidebar's
- * first page it views anything on, else on operations, whose page says it may
- * view nothing. A body with no `driver`, no `serviceProvider` or no `role`
+ * first page it views anything on, the Dashboard last of them, else on
+ * operations, whose page says it may view nothing. A body with no `driver`, no `serviceProvider` or no `role`
  * at all — an API from before it — is no driver's, no provider's and no
  * attendant's, and one with no grants lands the office on operations: `/me`
  * is read as a type and not checked, so the facts are read defensively.
@@ -84,7 +90,8 @@ export function landingOf(me: LandingFacts): string {
   if (grants === undefined) return OFFICE_LANDING
   const viewed = viewedModules(grants)
   if (viewsPage("operate", viewed)) return OFFICE_LANDING
-  return navItems.find((item) => viewsPage(item.id, viewed))?.href ?? OFFICE_LANDING
+  const pages = navItems.filter((item) => viewsPage(item.id, viewed))
+  return (pages.find((item) => item.id !== DASHBOARD_PAGE) ?? pages[0])?.href ?? OFFICE_LANDING
 }
 
 // Only to parse a relative `next` against: a value that resolves anywhere
