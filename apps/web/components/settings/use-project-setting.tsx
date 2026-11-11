@@ -104,16 +104,16 @@ export function useProjectSetting<Read, Draft = never, Refusal = never>(resource
   }
 }
 
-/** The project a per-project pane shows, picked; held while `disabled`, as while a draft would be dropped unasked. */
-export function ProjectPicker({ id, setting, disabled = false }: { id: string; setting: Pick<ProjectSetting<unknown, unknown, unknown>, "projects" | "project" | "pickProject">; disabled?: boolean }) {
+/** The project a per-project pane shows, picked; held while `disabled`, as while a draft would be dropped unasked. `field` draws it as a field of a form, its label a field's and its picker the cell's width, where a pane's toolbar draws it inline. */
+export function ProjectPicker({ id, setting, disabled = false, field = false }: { id: string; setting: Pick<ProjectSetting<unknown, unknown, unknown>, "projects" | "project" | "pickProject">; disabled?: boolean; field?: boolean }) {
   const { projects, project, pickProject } = setting
   return (
     <>
-      <Label htmlFor={id} className="text-sm text-muted-foreground">
+      <Label htmlFor={id} className={field ? undefined : "text-sm text-muted-foreground"}>
         Project
       </Label>
       <Select value={project?.id ?? ""} onValueChange={pickProject} disabled={projects.length === 0 || disabled}>
-        <SelectTrigger id={id} className="w-64">
+        <SelectTrigger id={id} className={field ? undefined : "w-64"}>
           <SelectValue placeholder="Pick a project" />
         </SelectTrigger>
         <SelectContent>
