@@ -1,0 +1,13 @@
+-- The Dashboard keeps Performance alone (the owner's decision of 2026-11-11):
+-- Improve's Analytics and Compliance go, and with them the access modules
+-- `improve.analytics` and `improve.compliance` leave the vocabulary
+-- (@waste/domain/access/modules). `role_grant.module_key` is text with no
+-- CHECK — the contracts hold it to the vocabulary at the API — so no
+-- constraint changes and drizzle-kit writes nothing here: the file is
+-- hand-written whole. Run by the owner, it deletes every role's grant on the
+-- two keys, a system role's and a custom role's alike, which the audit trail
+-- records under its role. No table, view, function or index was the two
+-- modules' alone: their reports counted the unloads, the weight proofs and
+-- the invoices, which stay as they are. The file is found by its name, not
+-- its number, which it takes at its turn.
+DELETE FROM "wms"."role_grant" WHERE "module_key" IN ('improve.analytics', 'improve.compliance');

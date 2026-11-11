@@ -1,16 +1,14 @@
-// The reports on the wire (#292: #291's slice 26, "KPI reads", and #290's
-// O12, "tonnage reporting"): read-only aggregates over rows that exist, for
-// the Dashboard and the Improve workspace. Nothing here is stored — a report
-// counts the dated Routes and their Pickups, the Tickets, the Invoices and
-// their lines, the Unloads with their weight reviews and the pickups' weight
-// proofs at the moment it is asked — and what each count means is the
-// domain's (@waste/domain/insight/readings), so a client reads these fields
-// by the same rules the API counted them by.
+// The reports on the wire (#292: #291's slice 26, "KPI reads"): read-only
+// aggregates over rows that exist, for the Dashboard. Nothing here is stored
+// — a report counts the dated Routes and their Pickups and the Tickets at the
+// moment it is asked — and what each count means is the domain's
+// (@waste/domain/insight/readings), so a client reads these fields by the
+// same rules the API counted them by.
 //
-// Four reads, each over a window of days and the caller's projects, each
-// under two grants: the Improve module it is read in, and the module whose
-// rows it counts, since a total is the content of the rows it totals and a
-// role refused the rows is refused their count:
+// Two reads, each over a window of days and the caller's projects, each
+// under two grants: Improve's Performance, the module it is read in, and the
+// module whose rows it counts, since a total is the content of the rows it
+// totals and a role refused the rows is refused their count:
 //
 //   GET /reports/service  — the routes that ran and whether they started on
 //                           time, and their pickups: collected, missed (by
@@ -22,14 +20,6 @@
 //                           by their due time or after it, and the open ones
 //                           now, overdue among them. `improve.performance`
 //                           and `operate.tickets`.
-//   GET /reports/revenue  — what was invoiced: the documents issued over the
-//                           window by currency, per interval and per product.
-//                           `improve.analytics` and `commercial.invoices`.
-//   GET /reports/tonnage  — what was unloaded: the unloads' net weights by
-//                           project, fraction, station and interval, split by
-//                           weight review, and the weights recorded at the
-//                           pickups. `improve.analytics` and
-//                           `route-studio.weights`.
 //
 // The window is two days, `from` and `to`, both inclusive, as the route and
 // pickup lists take theirs (`dayWindowOrdered`), and at most
@@ -42,25 +32,21 @@
 // than silently ignored: a misspelt filter would otherwise answer the whole
 // company's numbers as if they were one fraction's.
 //
-// A day is the project's: a route's, a pickup's and a pickup's weight's is
-// the route's operating date, an invoice's its `issuedOn`, and a ticket's
-// opening and closing and an unload's the instant rendered in
+// A day is the project's: a route's and a pickup's is the route's operating
+// date, and a ticket's opening and closing the instant rendered in
 // `project.timezone`. The days a report reads begin at `REPORT_FIRST_DAY`.
 // A rate is 0..1, or null where there was nothing to divide by — a rate of
 // nothing is not zero (`rate`).
 import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG } from "@waste/domain/insight/reports"
-import { REPORT_INTERVALS, WASTE_DATA_WARNINGS } from "@waste/domain/insight/vocabulary"
-import { CSV_SEPARATORS } from "@waste/domain/imports/vocabulary"
+import { REPORT_INTERVALS } from "@waste/domain/insight/vocabulary"
 import * as z from "zod"
 
-import { Currency } from "./codes"
 import { IsoDate, IsoDateTime } from "./dates"
 import { PickupReason } from "./execution"
 import { Id } from "./ids"
-import { WasteCode } from "./catalogue"
 import { requiredDayWindow } from "./queries"
 import { TicketKind } from "./resolution"
-import { Minor, NonNegativeTotal } from "./resource"
+import { NonNegativeTotal } from "./resource"
 
 /** How a report's series cuts its window: by the day, the ISO week or the calendar month. */
 export const ReportInterval = z.enum(REPORT_INTERVALS)
@@ -87,28 +73,12 @@ export type ServiceReportQuery = z.infer<typeof ServiceReportQuery>
 export const TicketReportQuery = reportWindow.safeExtend({ interval })
 export type TicketReportQuery = z.infer<typeof TicketReportQuery>
 
-/** `GET /reports/revenue`. */
-export const RevenueReportQuery = reportWindow.safeExtend({ interval })
-export type RevenueReportQuery = z.infer<typeof RevenueReportQuery>
-
-/** `GET /reports/tonnage`: one fraction's weights, one station's unloads. */
-export const TonnageReportQuery = reportWindow.safeExtend({
-  interval,
-  wasteFractionId: Id.optional(),
-  /** The unloads at one station; a pickup's weight is weighed at the kerb and is not narrowed by it. */
-  unloadingStationId: Id.optional(),
-})
-export type TonnageReportQuery = z.infer<typeof TonnageReportQuery>
-
 /** A count of rows: zero or more, summed and never written, so with no `integer` bound. */
 const Count = NonNegativeTotal
 
 /** A rate, 0..1, or null where there was nothing to divide by. */
 export const Rate = z.number().min(0).max(1).nullable()
 export type Rate = z.infer<typeof Rate>
-
-/** Whole kilograms, summed: a city's tonnage over a long window may pass an `integer`. */
-const Kilograms = NonNegativeTotal
 
 /** The window a report answers, as it read the query: the interval as defaulted, the project as asked or null for every one of the caller's. */
 export const ReportWindow = z.object({
@@ -222,164 +192,3 @@ export const TicketReport = z.object({
   intervals: z.array(z.object({ ...intervalFields, opened: Count, closed: Count })),
 })
 export type TicketReport = z.infer<typeof TicketReport>
-
-/** What a set of documents of one currency comes to: how many invoices and credit notes, and their totals in minor units, a credit note's negative. */
-const documentTotals = {
-  currency: Currency,
-  invoices: Count,
-  creditNotes: Count,
-  netMinor: Minor,
-  vatMinor: Minor,
-  grossMinor: Minor,
-}
-
-/** One currency's documents issued over the window. */
-export const RevenueTotals = z.object(documentTotals)
-export type RevenueTotals = z.infer<typeof RevenueTotals>
-
-/** One interval's documents of one currency; an interval without any is absent. */
-export const RevenueInterval = z.object({ ...intervalFields, ...documentTotals })
-export type RevenueInterval = z.infer<typeof RevenueInterval>
-
-/** One product's lines of one currency: the quantity, a credited or reversed line's counted against it, and the net. */
-export const RevenueProduct = z.object({ productId: Id, name: z.string(), currency: Currency, quantity: z.int(), netMinor: Minor })
-export type RevenueProduct = z.infer<typeof RevenueProduct>
-
-/** `GET /reports/revenue`. */
-export const RevenueReport = z.object({
-  window: ReportWindow,
-  /** By currency, in code order: amounts of two currencies are never summed. */
-  currencies: z.array(RevenueTotals),
-  intervals: z.array(RevenueInterval),
-  /** By currency, then the net, largest first. */
-  products: z.array(RevenueProduct),
-})
-export type RevenueReport = z.infer<typeof RevenueReport>
-
-/** Net weights by weight review: what counts (approved and captured, apart), what was rejected beside it, and what the station refused (O9 of #290), never in the net. */
-const weighedFields = {
-  /** Approved and captured: the tonnage. */
-  netKg: Kilograms,
-  approvedKg: Kilograms,
-  /** Nobody has reviewed it yet. */
-  capturedKg: Kilograms,
-  /** The unloads counted in `netKg`. */
-  unloads: Count,
-  rejectedKg: Kilograms,
-  rejectedUnloads: Count,
-  /** Loads the station refused, whose weight left on the truck. */
-  refusedKg: Kilograms,
-  refusedUnloads: Count,
-}
-
-/** One project's unloads of one fraction at one station over one interval; a combination without any is absent. */
-export const TonnageRow = z.object({
-  ...intervalFields,
-  projectId: Id,
-  wasteFractionId: Id,
-  wasteFractionName: z.string(),
-  unloadingStationId: Id,
-  unloadingStationName: z.string(),
-  ...weighedFields,
-})
-export type TonnageRow = z.infer<typeof TonnageRow>
-
-/** One project's pickup weights of one fraction over one interval: each collected pickup's latest reading, on its route's operating day. */
-export const PickupWeightRow = z.object({
-  ...intervalFields,
-  projectId: Id,
-  wasteFractionId: Id,
-  wasteFractionName: z.string(),
-  weightKg: Kilograms,
-  pickups: Count,
-})
-export type PickupWeightRow = z.infer<typeof PickupWeightRow>
-
-/** `GET /reports/tonnage`. */
-export const TonnageReport = z.object({
-  window: ReportWindow,
-  totals: z.object({ ...weighedFields, pickupWeightKg: Kilograms, weighedPickups: Count }),
-  /** By interval, then project, fraction name and station name in English collation. */
-  unloads: z.array(TonnageRow),
-  /** By interval, then project and fraction name. */
-  pickupWeights: z.array(PickupWeightRow),
-})
-export type TonnageReport = z.infer<typeof TonnageReport>
-
-// The waste-data report (#291 slice 29, C29, row 19.4): a period's reviewed
-// Unloads as net kilograms per municipality — the project the unloads were
-// collected for — unloading station and waste fraction, each fraction with
-// its waste code, for the office to file with the national waste-data
-// system by hand; `GET /reports/waste-data.csv` is the same report as a file
-// (@waste/domain/insight/waste-data says its columns). An unload counts when
-// its latest weight review approved it; one nobody has reviewed is counted
-// in a warning and not in a row, a rejected one nowhere, and a corrected one
-// through its correction once that is approved.
-
-/** `GET /reports/waste-data`: one of the caller's projects or all of them, over a period of days. */
-export const WasteDataReportQuery = reportWindow
-export type WasteDataReportQuery = z.infer<typeof WasteDataReportQuery>
-
-/** `GET /reports/waste-data.csv`: the report's query, and the file's separator. */
-export const WasteDataFileQuery = reportWindow.safeExtend({
-  separator: z.enum(CSV_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
-})
-export type WasteDataFileQuery = z.infer<typeof WasteDataFileQuery>
-
-/** One municipality's reviewed weight of one fraction at one station over the period. */
-export const WasteDataRow = z.object({
-  projectId: Id,
-  /** The project's name: the municipality the unloads were collected for. */
-  municipality: z.string(),
-  unloadingStationId: Id,
-  unloadingStationName: z.string(),
-  wasteFractionId: Id,
-  wasteFractionName: z.string(),
-  /** Null where the fraction has none: the report warns of it. */
-  wasteCode: WasteCode.nullable(),
-  netKg: Kilograms,
-  unloads: Count,
-})
-export type WasteDataRow = z.infer<typeof WasteDataRow>
-
-export const WasteDataWarningKind = z.enum(WASTE_DATA_WARNINGS)
-export type WasteDataWarningKind = z.infer<typeof WasteDataWarningKind>
-
-/** What the report warns of beside its rows, with the sentence the file's warning row carries. */
-export const WasteDataWarning = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("no-waste-code"), wasteFractionId: Id, wasteFractionName: z.string(), sentence: z.string() }),
-  z.object({
-    kind: z.literal("not-a-municipality"),
-    projectId: Id,
-    /** The project's name, which its rows carry as the municipality. */
-    municipality: z.string(),
-    /** The project's kind, which is not `Municipality`. */
-    projectKind: z.string(),
-    sentence: z.string(),
-  }),
-  z.object({
-    kind: z.literal("not-reviewed"),
-    projectId: Id,
-    municipality: z.string(),
-    unloadingStationId: Id,
-    unloadingStationName: z.string(),
-    wasteFractionId: Id,
-    wasteFractionName: z.string(),
-    unloads: Count,
-    netKg: Kilograms,
-    sentence: z.string(),
-  }),
-])
-export type WasteDataWarning = z.infer<typeof WasteDataWarning>
-
-/** `GET /reports/waste-data`. */
-export const WasteDataReport = z.object({
-  window: z.object({ projectId: Id.nullable(), from: IsoDate, to: IsoDate }),
-  /** By municipality, station and fraction, in name order. */
-  rows: z.array(WasteDataRow),
-  /** The reviewed weight the rows add up to. */
-  totals: z.object({ netKg: Kilograms, unloads: Count }),
-  /** Of the rows: a fraction without a code, then a project that is not a municipality, each in name order; then the unloads nobody has reviewed, in the rows' order. */
-  warnings: z.array(WasteDataWarning),
-})
-export type WasteDataReport = z.infer<typeof WasteDataReport>

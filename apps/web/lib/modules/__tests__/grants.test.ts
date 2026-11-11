@@ -26,7 +26,7 @@ describe("the grants", () => {
   })
 
   test("view the modules they grant `view` on", () => {
-    assert.deepEqual([...viewedModules([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "improve.analytics", actions: [] }])], ["improve.performance"])
+    assert.deepEqual([...viewedModules([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "improve.imports", actions: [] }])], ["improve.performance"])
     assert.equal(viewedModules(undefined).size, 0)
   })
 })

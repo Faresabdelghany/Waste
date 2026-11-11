@@ -164,7 +164,6 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("resources", VIEW),
       only("configure.areas", ALL),
       only("configure.calendars", ALL),
-      only("improve.analytics", VIEW),
     ),
   },
   {

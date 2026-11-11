@@ -1,23 +1,22 @@
-// The reports' queries and answers (#292, C26 and O12): a strict window of
-// days, at most a year, its interval defaulted, refused by name for a filter
-// it does not read; and the four answers, a rate null where there was nothing
-// to divide by.
+// The reports' queries and answers (#292, C26): a strict window of days, at
+// most a year, its interval defaulted, refused by name for a filter it does
+// not read; and the two answers, a rate null where there was nothing to
+// divide by.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED, dayWindowFits } from "@waste/domain/days"
 import { REPORT_DAY_TOO_EARLY, REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS, REPORT_WINDOW_TOO_LONG } from "@waste/domain/insight/reports"
 
-import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery } from "../reports"
+import { ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery } from "../reports"
 import { refusal } from "./expect"
 
 const PROJECT = "01a0d3a5-e5e0-7000-8000-000000000001"
 const FRACTION = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STATION = "01a0d3a5-e5e0-7000-8000-000000000003"
 const SCHEME = "01a0d3a5-e5e0-7000-8000-000000000004"
-const PRODUCT = "01a0d3a5-e5e0-7000-8000-000000000005"
 
-const QUERIES = { ServiceReportQuery, TicketReportQuery, RevenueReportQuery, TonnageReportQuery }
+const QUERIES = { ServiceReportQuery, TicketReportQuery }
 
 describe("the report queries", () => {
   test("take a window of two days, both inclusive, the interval `day` when absent and the project optional", () => {
@@ -55,9 +54,8 @@ describe("the report queries", () => {
   test("are strict: a parameter the report does not read is refused by name, never ignored", () => {
     assert.deepEqual(refusal(TicketReportQuery.safeParse({ from: "2026-10-01", to: "2026-10-31", wasteFractionId: FRACTION })).map((issue) => issue.path), [""])
     assert.deepEqual(refusal(ServiceReportQuery.safeParse({ from: "2026-10-01", to: "2026-10-31", unloadingStationId: STATION })).map((issue) => issue.path), [""])
-    assert.deepEqual(refusal(RevenueReportQuery.safeParse({ from: "2026-10-01", to: "2026-10-31", limit: "50" })).map((issue) => issue.path), [""])
+    assert.deepEqual(refusal(TicketReportQuery.safeParse({ from: "2026-10-01", to: "2026-10-31", limit: "50" })).map((issue) => issue.path), [""])
     assert.deepEqual(ServiceReportQuery.parse({ from: "2026-10-01", to: "2026-10-31", wasteFractionId: FRACTION, routeSchemeId: SCHEME }).routeSchemeId, SCHEME)
-    assert.deepEqual(TonnageReportQuery.parse({ from: "2026-10-01", to: "2026-10-31", wasteFractionId: FRACTION, unloadingStationId: STATION }).unloadingStationId, STATION)
   })
 })
 
@@ -104,58 +102,5 @@ describe("the report answers", () => {
     }
     assert.deepEqual(TicketReport.parse(report), report)
     assert.deepEqual(refusal(TicketReport.safeParse({ ...report, byKind: [{ kind: "complaint-ish", opened: 0, closed: 0, open: 0 }] })).map((issue) => issue.path), ["byKind.0.kind"])
-  })
-
-  test("the revenue report: by currency, a credit note's amounts negative, per interval and per product", () => {
-    const totals = { currency: "DKK", invoices: 2, creditNotes: 1, netMinor: 150_000, vatMinor: 37_500, grossMinor: 187_500 }
-    const report = {
-      window,
-      currencies: [totals],
-      intervals: [{ from: "2026-10-01", to: "2026-10-04", ...totals }],
-      products: [{ productId: PRODUCT, name: "Emptying 240 L", currency: "DKK", quantity: -1, netMinor: -12_500 }],
-    }
-    assert.deepEqual(RevenueReport.parse(report), report)
-    assert.deepEqual(refusal(RevenueReport.safeParse({ ...report, currencies: [{ ...totals, currency: "dkk" }] })).map((issue) => issue.path), ["currencies.0.currency"])
-  })
-
-  test("the tonnage report: the totals, the unloads by project, fraction, station and interval, and the pickup weights", () => {
-    const weighed = { netKg: 4_200, approvedKg: 3_000, capturedKg: 1_200, unloads: 2, rejectedKg: 800, rejectedUnloads: 1, refusedKg: 640, refusedUnloads: 1 }
-    const report = {
-      window,
-      totals: { ...weighed, pickupWeightKg: 96, weighedPickups: 2 },
-      unloads: [{ from: "2026-10-05", to: "2026-10-11", projectId: PROJECT, wasteFractionId: FRACTION, wasteFractionName: "Residual waste", unloadingStationId: STATION, unloadingStationName: "Amager Bakke", ...weighed }],
-      pickupWeights: [{ from: "2026-10-05", to: "2026-10-11", projectId: PROJECT, wasteFractionId: FRACTION, wasteFractionName: "Residual waste", weightKg: 96, pickups: 2 }],
-    }
-    assert.deepEqual(TonnageReport.parse(report), report)
-    assert.deepEqual(refusal(TonnageReport.safeParse({ ...report, totals: { ...report.totals, netKg: 1.5 } })).map((issue) => issue.path), ["totals.netKg"])
-  })
-})
-
-describe("the waste-data report (#291 slice 29)", () => {
-  test("is asked for a period of one project or all of them, with no series, and its file for a separator", () => {
-    assert.deepEqual(WasteDataReportQuery.parse({ from: "2026-01-01", to: "2026-03-31" }), { from: "2026-01-01", to: "2026-03-31" })
-    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2026-01-01", to: "2026-03-31", interval: "month" })).map((issue) => issue.path), [""])
-    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2026-03-31", to: "2026-01-01" })).map((issue) => issue.message), [DAY_WINDOW_ORDERED])
-    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2025-01-01", to: "2026-03-31" })).map((issue) => issue.message), [REPORT_WINDOW_TOO_LONG])
-    assert.equal(WasteDataFileQuery.parse({ projectId: PROJECT, from: "2026-01-01", to: "2026-01-31" }).separator, "comma")
-    assert.equal(WasteDataFileQuery.parse({ from: "2026-01-01", to: "2026-01-31", separator: "semicolon" }).separator, "semicolon")
-    assert.equal(WasteDataFileQuery.safeParse({ from: "2026-01-01", to: "2026-01-31", separator: "tab" }).success, false)
-  })
-
-  test("answers rows with their codes, the totals, and its warnings each with a sentence", () => {
-    const place = { projectId: PROJECT, municipality: "Copenhagen Central", unloadingStationId: STATION, unloadingStationName: "ARC Amager Bakke", wasteFractionId: FRACTION, wasteFractionName: "Residual waste" }
-    const report = {
-      window: { projectId: null, from: "2026-01-01", to: "2026-03-31" },
-      rows: [{ ...place, wasteCode: "200301", netKg: 8_000, unloads: 1 }, { ...place, wasteCode: null, netKg: 1_200, unloads: 1 }],
-      totals: { netKg: 9_200, unloads: 2 },
-      warnings: [
-        { kind: "no-waste-code", wasteFractionId: FRACTION, wasteFractionName: "Glass", sentence: "Glass has no waste code" },
-        { kind: "not-a-municipality", projectId: PROJECT, municipality: "Harbor Commercial", projectKind: "Business unit", sentence: "Harbor Commercial is not a municipality" },
-        { kind: "not-reviewed", ...place, unloads: 2, netKg: 6_800, sentence: "2 unloads" },
-      ],
-    }
-    assert.deepEqual(WasteDataReport.parse(report), report)
-    assert.equal(WasteDataReport.safeParse({ ...report, rows: [{ ...report.rows[0], wasteCode: "20 03 01" }] }).success, false, "a code on the wire is compact")
-    assert.equal(WasteDataReport.safeParse({ ...report, warnings: [{ kind: "late", sentence: "?" }] }).success, false)
   })
 })

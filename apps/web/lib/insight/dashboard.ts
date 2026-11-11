@@ -1,12 +1,11 @@
-// The Dashboard on the Pilot (#292, #291 slice 27, #290 O12): what the
-// screen reads off the four reports, kept out of the components so it is
-// tested without a browser. The reports count rows that exist and the
-// domain says what a count means (@waste/domain/insight/readings); this
-// module says how a person reads them — the period picker's windows, each
-// against the period just before it, a change told in points for a rate and
-// in percent for a count, a rate of nothing shown as a dash and never as
-// 0 %, kilograms as tonnes once they are tonnes, and the tonnage report
-// rolled up by fraction, station or period with the CSV of what is shown.
+// The Dashboard on the Pilot (#292, #291 slice 27): what the screen reads
+// off the two reports, kept out of the components so it is tested without a
+// browser. The reports count rows that exist and the domain says what a
+// count means (@waste/domain/insight/readings); this module says how a
+// person reads them — the period picker's windows, each against the period
+// just before it, a change told in points for a rate and in percent for a
+// count, a rate of nothing shown as a dash and never as 0 %, and the Route
+// Schemes' rows with the CSV of what is shown.
 //
 // "Today" is the project's day where the store holds the project's timezone,
 // else the browser's (`dayIn`, lib/format/clock.ts), and the
@@ -14,7 +13,7 @@
 // a change is told against is as long and just before it; a series cut by the
 // week is told against the period whole weeks before, so its weeks are cut on
 // the same weekdays and set beside each other like for like.
-import type { Rate, ReportInterval, ServiceInterval, ServiceReport, ServiceScheme, TonnageReport, TonnageRow } from "@waste/contracts/reports"
+import type { Rate, ReportInterval, ServiceInterval, ServiceReport, ServiceScheme } from "@waste/contracts/reports"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { windowDays } from "@waste/domain/insight/intervals"
 import { addDays } from "@waste/domain/days"
@@ -55,17 +54,13 @@ export function previousWindow(window: DayWindow, interval: ReportInterval = "da
   return { from: addDays(window.from, -back), to: addDays(window.to, -back) }
 }
 
-/** A change against the previous period, and whether it is good news: up for a collection rate, down for missed pickups, neither for tonnage. */
+/** A change against the previous period, and whether it is good news: up for a collection rate, down for missed pickups. */
 export type Change = { text: string; direction: "up" | "down" | "flat"; tone: "positive" | "negative" | "neutral" }
 
-/** Which way is good news for a measure: up, down, or neither (`null`), as for a tonnage, whose change is only a change. */
-export type GoodNews = boolean | null
-
-const toneOf = (direction: Change["direction"], upIsGood: GoodNews): Change["tone"] =>
-  direction === "flat" || upIsGood === null ? "neutral" : (direction === "up") === upIsGood ? "positive" : "negative"
+const toneOf = (direction: Change["direction"], upIsGood: boolean): Change["tone"] => (direction === "flat" ? "neutral" : (direction === "up") === upIsGood ? "positive" : "negative")
 
 /** A count's change in percent, under a whole percent "<1%", and from none "from 0"; none without the period before. The direction is the counts', never the rounding's. */
-export function countChange(current: number, previous: number | undefined, upIsGood: GoodNews): Change | null {
+export function countChange(current: number, previous: number | undefined, upIsGood: boolean): Change | null {
   if (previous === undefined) return null
   const direction = current > previous ? "up" : current < previous ? "down" : "flat"
   if (direction === "flat") return { text: "0%", direction, tone: "neutral" }
@@ -89,7 +84,7 @@ export function percentOf(rate: Rate): string {
 
 const days = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" })
 
-export function dayLabel(day: string): string {
+function dayLabel(day: string): string {
   return days.format(new Date(`${day}T00:00:00Z`))
 }
 
@@ -111,32 +106,8 @@ export function throughputOf(current: readonly ServiceInterval[], previous: read
   }))
 }
 
-/** The weights' grant: the tonnage and the waste-data reports count the unloads under it. */
-export const WEIGHTS_MODULE: ModuleKey = "route-studio.weights"
-
-/** The waste-data filing's Improve module (#291 slice 29). */
-export const COMPLIANCE_MODULE: ModuleKey = "improve.compliance"
-
-/**
- * The Dashboard's tabs, Improve's modules, each shown under its own grant;
- * Compliance, the waste-data filing over a period of its own, only beside
- * the weights' grant too, since every number it shows is read under both
- * (`needs`), where the other tabs show what their role reads card by card.
- */
-export const DASHBOARD_TABS = [
-  { id: "performance", label: "Performance", moduleKey: "improve.performance", needs: [] },
-  { id: "analytics", label: "Analytics", moduleKey: "improve.analytics", needs: [] },
-  { id: "compliance", label: "Compliance", moduleKey: COMPLIANCE_MODULE, needs: [WEIGHTS_MODULE] },
-] as const satisfies readonly { id: string; label: string; moduleKey: ModuleKey; needs: readonly ModuleKey[] }[]
-
-export type DashboardTabId = (typeof DASHBOARD_TABS)[number]["id"]
-
-export function tabsShown(viewed: ReadonlySet<ModuleKey>): (typeof DASHBOARD_TABS)[number][] {
-  return DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey) && tab.needs.every((moduleKey: ModuleKey) => viewed.has(moduleKey)))
-}
-
-/** The revenue report's grant: the invoices', not Improve's. */
-export const REVENUE_MODULE: ModuleKey = "commercial.invoices"
+/** Improve's Performance: the module the Dashboard is read under. */
+export const PERFORMANCE_MODULE: ModuleKey = "improve.performance"
 
 /** The scheme table's columns, as the screen and its CSV read them. */
 export const SCHEME_COLUMNS = ["Route scheme", "Project", "Routes", "Started", "On time", "Late", "Pickups due", "Completed", "Missed", "Open", "Collection rate", "On-time rate"] as const
@@ -168,95 +139,4 @@ export function schemeRowOf(scheme: ServiceScheme, projectName: (id: string) => 
 
 export function schemesByAttention(report: ServiceReport): ServiceScheme[] {
   return [...report.schemes].sort((a, b) => b.pickups.missed - a.pickups.missed || schemeNameOf(a).localeCompare(schemeNameOf(b)))
-}
-
-/** How the tonnage report's rows are rolled up: one row per fraction, per station, per interval, or the report's own rows. */
-export const TONNAGE_GROUPINGS = [
-  { id: "fraction", label: "By fraction" },
-  { id: "station", label: "By station" },
-  { id: "interval", label: "By period" },
-  { id: "all", label: "Every row" },
-] as const
-
-export type TonnageGrouping = (typeof TONNAGE_GROUPINGS)[number]["id"]
-
-export type TonnageLine = {
-  key: string
-  /** The interval, where the grouping keeps it. */
-  period: DayWindow | null
-  projectId: string | null
-  fraction: string | null
-  station: string | null
-  netKg: number
-  approvedKg: number
-  capturedKg: number
-  unloads: number
-  rejectedKg: number
-  rejectedUnloads: number
-}
-
-const keyOf = (row: TonnageRow, grouping: TonnageGrouping): string => {
-  switch (grouping) {
-    case "fraction":
-      return row.wasteFractionId
-    case "station":
-      return row.unloadingStationId
-    case "interval":
-      return row.from
-    case "all":
-      return [row.from, row.projectId, row.wasteFractionId, row.unloadingStationId].join("|")
-  }
-}
-
-export function tonnageLines(report: Pick<TonnageReport, "unloads">, grouping: TonnageGrouping): TonnageLine[] {
-  const lines = new Map<string, TonnageLine>()
-  for (const row of report.unloads) {
-    const key = keyOf(row, grouping)
-    const line = lines.get(key) ?? {
-      key,
-      period: grouping === "interval" || grouping === "all" ? { from: row.from, to: row.to } : null,
-      projectId: grouping === "all" ? row.projectId : null,
-      fraction: grouping === "fraction" || grouping === "all" ? row.wasteFractionName : null,
-      station: grouping === "station" || grouping === "all" ? row.unloadingStationName : null,
-      netKg: 0,
-      approvedKg: 0,
-      capturedKg: 0,
-      unloads: 0,
-      rejectedKg: 0,
-      rejectedUnloads: 0,
-    }
-    line.netKg += row.netKg
-    line.approvedKg += row.approvedKg
-    line.capturedKg += row.capturedKg
-    line.unloads += row.unloads
-    line.rejectedKg += row.rejectedKg
-    line.rejectedUnloads += row.rejectedUnloads
-    lines.set(key, line)
-  }
-  const rolled = [...lines.values()]
-  if (grouping === "fraction" || grouping === "station") return rolled.sort((a, b) => b.netKg - a.netKg || (a.fraction ?? a.station ?? "").localeCompare(b.fraction ?? b.station ?? ""))
-  return rolled
-}
-
-export function tonnageLabelOf(line: TonnageLine): string {
-  return line.fraction ?? line.station ?? (line.period === null ? "" : intervalLabel(line.period))
-}
-
-/** The CSV of the rolled-up rows as shown: the columns the grouping keeps, then the weights in kilograms. */
-export function tonnageCsvOf(lines: readonly TonnageLine[], grouping: TonnageGrouping, projectName: (id: string) => string): { header: string[]; rows: CsvCell[][] } {
-  const keys: { header: string; cell: (line: TonnageLine) => CsvCell }[] = []
-  if (grouping === "interval" || grouping === "all") keys.push({ header: "From", cell: (line) => line.period?.from }, { header: "To", cell: (line) => line.period?.to })
-  if (grouping === "all") keys.push({ header: "Project", cell: (line) => (line.projectId === null ? "" : projectName(line.projectId)) })
-  if (grouping === "fraction" || grouping === "all") keys.push({ header: "Waste fraction", cell: (line) => line.fraction })
-  if (grouping === "station" || grouping === "all") keys.push({ header: "Unloading station", cell: (line) => line.station })
-  const weights: { header: string; cell: (line: TonnageLine) => CsvCell }[] = [
-    { header: "Net kg", cell: (line) => line.netKg },
-    { header: "Approved kg", cell: (line) => line.approvedKg },
-    { header: "Not reviewed kg", cell: (line) => line.capturedKg },
-    { header: "Unloads", cell: (line) => line.unloads },
-    { header: "Rejected kg", cell: (line) => line.rejectedKg },
-    { header: "Rejected unloads", cell: (line) => line.rejectedUnloads },
-  ]
-  const columns = [...keys, ...weights]
-  return { header: columns.map((column) => column.header), rows: lines.map((line) => columns.map((column) => column.cell(line))) }
 }

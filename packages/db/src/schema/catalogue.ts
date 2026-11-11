@@ -13,8 +13,7 @@
 // `waste_code` (#291 slice 29, migration 0029) is the entry of the European
 // List of Waste the national waste-data system keys the fraction by, held to
 // @waste/domain/registry/waste-code's one shape by `waste_fraction_waste_code_shape`;
-// nullable, since a fraction is collected before anyone files it, and the
-// waste-data report names a fraction without one with a warning.
+// nullable, since a fraction is collected before anyone files it.
 //
 // `service_frequency` is @waste/fixtures' `ServiceFrequencyDefinition` as a table,
 // and `service_frequency_shape` is its rule: a null `collections_per_week` is

@@ -26,7 +26,7 @@
 // the adapter, which refuses the same body by name before the API sees it.
 //
 // A waste fraction carries its waste code (#291 slice 29), the European List
-// of Waste entry the waste-data report files it under: typed as the list
+// of Waste entry the national waste-data system keys it by: typed as the list
 // prints it (`20 03 01`), kept compact (`wasteCodeOf`), held to the domain's
 // shape (`@waste/domain/registry/waste-code`, the one the contracts and the
 // database read), and cleared by leaving the field blank. Since M13 of #293

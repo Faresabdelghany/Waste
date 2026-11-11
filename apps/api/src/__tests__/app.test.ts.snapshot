@@ -258,12 +258,8 @@ GET /public/{slug}/addresses/{id}/collection-days getPublicCollectionDays open 2
 GET /public/{slug}/addresses/{id}/collection-days.ics getPublicCollectionDaysCalendar open 200 400 404 429
 GET /public/{slug}/drop-off-points getPublicDropOffPoints open 200 400 404 429
 GET /readyz getReadiness open 200 503
-GET /reports/revenue getRevenueReport bearer 200 400 401 403
 GET /reports/service getServiceReport bearer 200 400 401 403
 GET /reports/tickets getTicketReport bearer 200 400 401 403
-GET /reports/tonnage getTonnageReport bearer 200 400 401 403
-GET /reports/waste-data getWasteDataReport bearer 200 400 401 403
-GET /reports/waste-data.csv getWasteDataFile bearer 200 400 401 403
 GET /right-sizing-proposals listRightSizingProposals bearer 200 400 401 403
 POST /right-sizing-proposals/run runRightSizing bearer 200 401 403
 GET /right-sizing-proposals/{id} getRightSizingProposal bearer 200 400 401 403 404

@@ -35,16 +35,19 @@ describe("the landing", () => {
 
   test("an office account lands where its role views something: on operations where it views anything there, else on the sidebar's first page it views, the Dashboard only when it views no other", () => {
     const seeded = (key: SystemRoleKey) => ({ ...OFFICE, role: { key, grants: SYSTEM_ROLES.find((role) => role.key === key)?.grants ?? [] } })
-    // The Route Planner views nothing of operations, and the Dashboard's Analytics before the planning it works in.
+    // The Route Planner views nothing of operations nor of the Dashboard: the planning it works in is the first page it views.
     assert.equal(landingOf(seeded("route-planner")), "/plan")
+    // The Fleet Manager views operations; the Dashboard's Performance it views too is not where it starts.
+    assert.equal(landingOf(seeded("fleet-manager")), "/operate")
     assert.equal(landingOf(seeded("dispatcher")), "/operate")
     assert.equal(landingOf(seeded("company-administrator")), "/operate")
     const custom = (grants: Grants) => ({ ...OFFICE, role: { key: null, grants } })
     assert.equal(landingOf(custom([{ moduleKey: "fleet.vehicles", actions: ["view"] }])), "/fleet")
     assert.equal(landingOf(custom([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "fleet.vehicles", actions: ["view"] }])), "/fleet")
     assert.equal(landingOf(custom([{ moduleKey: "improve.performance", actions: ["view"] }])), "/performance")
-    // The Driver App is no module of the operations page, nor is Compliance a Dashboard tab without the weights beside it.
-    assert.equal(landingOf(custom([{ moduleKey: "operate.driver-app", actions: ["view"] }, { moduleKey: "improve.compliance", actions: ["view"] }, { moduleKey: "plan.map-planning", actions: ["view"] }])), "/plan")
+    // The Driver App is no module of the operations page, nor are Improve's Imports the Dashboard's page: Performance alone is.
+    assert.equal(landingOf(custom([{ moduleKey: "operate.driver-app", actions: ["view"] }, { moduleKey: "improve.imports", actions: ["view"] }, { moduleKey: "plan.map-planning", actions: ["view"] }])), "/plan")
+    assert.equal(landingOf(custom([{ moduleKey: "improve.imports", actions: ["view"] }])), "/operate", "a role that views the Imports alone views no page")
   })
 
   test("an office account whose role views nothing anywhere lands on operations, which says so", () => {

@@ -2,7 +2,7 @@
 
 <p align="center">
   A multi-workspace prototype of the operations platform for waste & recycling logistics —
-  covering daily operations, route planning, fleet, customers, assets, commercial, and analytics.
+  covering daily operations, route planning, fleet, customers, assets, commercial, and performance.
 </p>
 
 ---
@@ -32,7 +32,7 @@ The platform is organized into role- and domain-oriented workspaces, each render
 | `/resources` | Resources — containers, assets, warehouses, staff |
 | `/commercial` | Commercial — pricing, invoicing, contracts |
 | `/service-providers` | Service providers — external haulers, awarded service areas, activity |
-| `/improve` | Improve — analytics, performance, quality |
+| `/improve` | Dashboard — performance |
 | `/configure` | Configure — organization and platform settings |
 | `/control-center` | Control Center — live dispatch and monitoring |
 
