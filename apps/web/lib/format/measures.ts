@@ -18,15 +18,6 @@ export function formatWeight(kilograms: number): string {
   return `${enUS(kilograms / 1000, 1)} t`
 }
 
-const tonnes = new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-const grouped = new Intl.NumberFormat("en")
-
-export function weightOf(kg: number): string {
-  return kg >= 1000 ? `${tonnes.format(kg / 1000)} t` : `${grouped.format(kg)} kg`
-}
-
-export const compactWeight = (kg: number): string => (kg >= 1000 ? `${Math.round(kg / 100) / 10} t` : `${kg} kg`)
-
 export const kilograms = (value: number): string => `${new Intl.NumberFormat("en").format(value)} kg`
 
 export function formatVolume(litres: number): string {

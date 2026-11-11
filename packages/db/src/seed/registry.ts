@@ -179,8 +179,7 @@ const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[proje
 // separately collected kitchen waste, paper, and the packaging codes of
 // chapter 15 where the fraction is packaging — which the seed owns as it
 // owns the name, so a seeded database migrated past the column gains the
-// codes on its next seed; "Mixed" and "Wastewater" have none, which the
-// waste-data report names with a warning.
+// codes on its next seed; "Mixed" and "Wastewater" have none.
 // Each with its treatment (M13 of #293): residual waste to an
 // energy-from-waste plant, organic to biogas or compost, the dry recyclables recycled; a mixed
 // load and wastewater carry none, since how they are treated depends on where they go.

@@ -1,17 +1,15 @@
 // How the Dashboard reads the reports on the Pilot (#292): the period
 // picker's windows and the period before each, a change told in points for
 // a rate and in percent for a count with whether it is good news, a rate of
-// nothing as a dash, weights as tonnes, the throughput series beside the
-// period before, the grants a tab is read under, and the tonnage report
-// rolled up with the CSV of what is shown.
+// nothing as a dash, the throughput series beside the period before, and
+// the Route Schemes' rows.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { PickupStandings, RouteCounts, ServiceInterval, TonnageReport, TonnageRow } from "@waste/contracts/reports"
+import type { PickupStandings, RouteCounts, ServiceInterval } from "@waste/contracts/reports"
 import { intervalsOver, windowDays } from "@waste/domain/insight/intervals"
 
-import { countChange, DASHBOARD_RANGES, intervalLabel, percentOf, previousWindow, AD_HOC_ROUTES, rangeOf, rateChange, schemeKeyOf, schemeNameOf, schemeRowOf, schemesByAttention, throughputOf, tonnageCsvOf, tonnageLabelOf, tonnageLines, windowEnding } from "../dashboard"
-import { weightOf } from "@/lib/format/measures"
+import { countChange, DASHBOARD_RANGES, intervalLabel, percentOf, previousWindow, AD_HOC_ROUTES, rangeOf, rateChange, schemeKeyOf, schemeNameOf, schemeRowOf, schemesByAttention, throughputOf, windowEnding } from "../dashboard"
 import { countedOf } from "@/lib/format/counts"
 
 describe("the period picker", () => {
@@ -49,13 +47,12 @@ describe("a change against the period before", () => {
     assert.deepEqual(countChange(110, 100, false), { text: "10%", direction: "up", tone: "negative" }, "more missed pickups is bad news")
     assert.deepEqual(countChange(90, 100, false), { text: "10%", direction: "down", tone: "positive" })
     assert.deepEqual(countChange(5, 5, true), { text: "0%", direction: "flat", tone: "neutral" })
-    assert.deepEqual(countChange(120, 100, null), { text: "20%", direction: "up", tone: "neutral" }, "more tonnage is neither good nor bad news")
   })
 
   test("from nothing a count rises from 0, a change under a percent is told as one, and without the period before there is no change", () => {
     assert.deepEqual(countChange(4, 0, false), { text: "from 0", direction: "up", tone: "negative" }, "missed pickups appearing is bad news, not nothing to compare")
     assert.deepEqual(countChange(0, 0, true), { text: "0%", direction: "flat", tone: "neutral" })
-    assert.deepEqual(countChange(10_040, 10_000, null), { text: "<1%", direction: "up", tone: "neutral" }, "a change the rounding hides is still a change")
+    assert.deepEqual(countChange(10_040, 10_000, false), { text: "<1%", direction: "up", tone: "negative" }, "a change the rounding hides is still a change")
     assert.equal(countChange(4, undefined, true), null)
   })
 
@@ -81,12 +78,6 @@ describe("what a number reads as", () => {
     assert.equal(countedOf(1, "unload"), "1 unload")
     assert.equal(countedOf(0, "unload"), "0 unloads")
     assert.equal(countedOf(1_204, "pickup"), "1,204 pickups")
-  })
-
-  test("a weight in tonnes from a tonne up, in kilograms below", () => {
-    assert.equal(weightOf(17_800), "17.8 t")
-    assert.equal(weightOf(1_000), "1.0 t")
-    assert.equal(weightOf(850), "850 kg")
   })
 
   test("an interval its day, or its first and last", () => {
@@ -133,74 +124,5 @@ describe("the scheme rows", () => {
     const report = { window, routes: empty, pickups: pickups(0), rates, missedByReason: [], intervals: [], schemes: [centrum, adHoc, havnen] }
     assert.deepEqual(schemesByAttention(report).map(schemeNameOf), ["Havnen Mondays", AD_HOC_ROUTES, "Centrum Mondays"])
     assert.equal(schemeRowOf(adHoc, () => "Copenhagen Central")[0], AD_HOC_ROUTES)
-  })
-})
-
-const row = (extra: Partial<TonnageRow>): TonnageRow => ({
-  from: "2026-10-05",
-  to: "2026-10-11",
-  projectId: "01a0d3a5-e5e0-7000-8000-000000000001",
-  wasteFractionId: "01a0d3a5-e5e0-7000-8000-00000000000a",
-  wasteFractionName: "Residual waste",
-  unloadingStationId: "01a0d3a5-e5e0-7000-8000-0000000000aa",
-  unloadingStationName: "ARC Amager Bakke",
-  netKg: 0,
-  approvedKg: 0,
-  capturedKg: 0,
-  unloads: 0,
-  rejectedKg: 0,
-  rejectedUnloads: 0,
-  refusedKg: 0,
-  refusedUnloads: 0,
-  ...extra,
-})
-
-const report: Pick<TonnageReport, "unloads"> = {
-  unloads: [
-    row({ netKg: 10_000, approvedKg: 8_000, capturedKg: 2_000, unloads: 2 }),
-    row({ wasteFractionId: "01a0d3a5-e5e0-7000-8000-00000000000b", wasteFractionName: "Glass", unloadingStationId: "01a0d3a5-e5e0-7000-8000-0000000000bb", unloadingStationName: "Vestforbrænding", rejectedKg: 1_500, rejectedUnloads: 1 }),
-    row({ from: "2026-10-12", to: "2026-10-18", netKg: 4_800, capturedKg: 4_800, unloads: 1 }),
-  ],
-}
-
-describe("tonnageLines", () => {
-  test("by fraction and by station, heaviest first, the weights summed across periods", () => {
-    assert.deepEqual(
-      tonnageLines(report, "fraction").map((line) => [tonnageLabelOf(line), line.netKg, line.approvedKg, line.capturedKg, line.unloads, line.rejectedKg]),
-      [
-        ["Residual waste", 14_800, 8_000, 6_800, 3, 0],
-        ["Glass", 0, 0, 0, 0, 1_500],
-      ],
-    )
-    assert.deepEqual(
-      tonnageLines(report, "station").map((line) => [tonnageLabelOf(line), line.netKg]),
-      [
-        ["ARC Amager Bakke", 14_800],
-        ["Vestforbrænding", 0],
-      ],
-    )
-  })
-
-  test("by period in the report's order, and every row as the report has it", () => {
-    assert.deepEqual(
-      tonnageLines(report, "interval").map((line) => [tonnageLabelOf(line), line.netKg, line.rejectedKg]),
-      [
-        ["Oct 5 – Oct 11", 10_000, 1_500],
-        ["Oct 12 – Oct 18", 4_800, 0],
-      ],
-    )
-    assert.equal(tonnageLines(report, "all").length, 3)
-  })
-})
-
-describe("tonnageCsvOf", () => {
-  test("holds the columns the grouping keeps, then the weights in kilograms", () => {
-    const byFraction = tonnageCsvOf(tonnageLines(report, "fraction"), "fraction", () => "Copenhagen Central")
-    assert.deepEqual(byFraction.header, ["Waste fraction", "Net kg", "Approved kg", "Not reviewed kg", "Unloads", "Rejected kg", "Rejected unloads"])
-    assert.deepEqual(byFraction.rows[0], ["Residual waste", 14_800, 8_000, 6_800, 3, 0, 0])
-    const every = tonnageCsvOf(tonnageLines(report, "all"), "all", () => "Copenhagen Central")
-    assert.deepEqual(every.header.slice(0, 5), ["From", "To", "Project", "Waste fraction", "Unloading station"])
-    assert.deepEqual(every.rows[0].slice(0, 5), ["2026-10-05", "2026-10-11", "Copenhagen Central", "Residual waste", "ARC Amager Bakke"])
-    assert.deepEqual(tonnageCsvOf(tonnageLines(report, "interval"), "interval", () => "").header.slice(0, 3), ["From", "To", "Net kg"])
   })
 })

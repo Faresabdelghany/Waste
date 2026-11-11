@@ -6,28 +6,23 @@ import { ID_RANDOM_BYTES, mintId } from "@waste/domain/ids"
 import { accessTokenOf, apiAs, expect, freshContext, signIn, test } from "./fixtures"
 import { addDays, dispatchedRouteFor, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E } from "./env"
-import { listAll } from "./tester"
 
-// Insight on the API (#292, #291 slices 26–28, #290 O12). The Dashboard
-// shows the seeded tenant's numbers: a route generated on a seeded scheme
-// and dispatched (dispatched-route.ts) is run by the seeded driver through
-// the driver door — started, its first stop collected, its second failed,
-// the day ended with the rest closed — and an office unload is captured on
-// it; the service and tonnage reports move by exactly that, and /performance
-// shows the reports' own numbers for the route's project over the last 7
-// days, the tonnage report downloading as the rows it shows. And the
-// workspace's Export downloads a module's rows as the table shows them —
-// every page of them, under the table's headers.
+// Insight on the API (#292, #291 slices 26–28). The Dashboard shows the
+// seeded tenant's numbers: a route generated on a seeded scheme and
+// dispatched (dispatched-route.ts) is run by the seeded driver through the
+// driver door — started, its first stop collected, its second failed, the
+// day ended with the rest closed; the service report moves by exactly that,
+// and /performance, one page with no tabs, shows the report's own numbers
+// for the route's project over the last 7 days. And the workspace's Export
+// downloads a module's rows as the table shows them — every page of them,
+// under the table's headers.
 
 type ServiceReport = { routes: { started: number }; pickups: { completed: number; missed: number }; rates: { collection: number | null; missed: number | null } }
-type TonnageRow = { wasteFractionName: string; netKg: number }
-type TonnageReport = { totals: { netKg: number }; unloads: TonnageRow[] }
 type Named = { id: string; name: string }
 
-/** The tiles' spelling of a rate, a count and a weight (lib/insight/dashboard.ts). */
+/** The tiles' spelling of a rate and a count (lib/insight/dashboard.ts). */
 const percent = (rate: number | null) => (rate === null ? "—" : `${Math.round(rate * 100)}%`)
 const count = (value: number) => new Intl.NumberFormat("en").format(value)
-const weight = (kg: number) => (kg >= 1000 ? `${new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(kg / 1000)} t` : `${count(kg)} kg`)
 
 async function report<Report>(api: APIRequestContext, path: string, query: Record<string, string>): Promise<Report> {
   const response = await api.get(path, { params: query })
@@ -86,7 +81,7 @@ async function choose(page: Page, filter: string, option: string) {
   await page.getByRole("option", { name: option, exact: true }).click()
 }
 
-test("the Dashboard shows the tenant's numbers after a generated route is run, and the tonnage report downloads as it is shown", async ({ page, api, browser }) => {
+test("the Dashboard shows the tenant's numbers after a generated route is run, on one page with no tabs", async ({ page, api, browser }) => {
   test.setTimeout(180_000)
   const { route, today } = await dispatchedRouteFor(api)
   if (route.planned.vehicleId === null) throw new Error(`${route.label} was dispatched with no vehicle`)
@@ -126,14 +121,6 @@ test("the Dashboard shows the tenant's numbers after a generated route is run, a
   expect(after.pickups.missed).toBe(before.pickups.missed + stops.length - 1)
   expect(after.routes.started).toBe(before.routes.started + 1)
 
-  const [station] = await listAll<Named>(api, "/unloading-stations")
-  const residual = (await listAll<Named & { key: string }>(api, "/waste-fractions")).find((fraction) => fraction.key === "residual")
-  if (station === undefined || residual === undefined) throw new Error("the seed has no station or no residual fraction")
-  const captured = await api.post(`/routes/${route.id}/unloads`, { data: { unloadingStationId: station.id, wasteFractionId: residual.id, netKg: 6_400, occurredAt: new Date(Date.now() - 30_000).toISOString() } })
-  expect(captured.status(), await captured.text()).toBe(201)
-  const tonnage = await report<TonnageReport>(api, "/reports/tonnage", window)
-  expect(tonnage.totals.netKg).toBeGreaterThanOrEqual(6_400)
-
   const projectResponse = await api.get(`/projects/${route.projectId}`)
   const { name: projectName } = (await projectResponse.json()) as Named
 
@@ -145,15 +132,7 @@ test("the Dashboard shows the tenant's numbers after a generated route is run, a
   await expect(page.getByTestId("kpi-collection-rate-value")).toHaveText(percent(after.rates.collection))
   await expect(page.getByTestId("kpi-missed-value")).toHaveText(count(after.pickups.missed))
   await expect(page.getByTestId("route-schemes").getByText("RS-Central · Week A")).toBeVisible()
-
-  await page.getByRole("tab", { name: "Analytics" }).click()
-  await expect(page.getByTestId("kpi-net-tonnage-value")).toHaveText(weight(tonnage.totals.netKg))
-  const residualKg = tonnage.unloads.filter((row) => row.wasteFractionName === residual.name).reduce((sum, row) => sum + row.netKg, 0)
-  const download = page.waitForEvent("download")
-  await page.getByTestId("tonnage").getByRole("button", { name: "CSV" }).click()
-  const csv = await downloaded(await download)
-  expect(csv[0]).toEqual(["Waste fraction", "Net kg", "Approved kg", "Not reviewed kg", "Unloads", "Rejected kg", "Rejected unloads"])
-  expect(csv.find((row) => row[0] === residual.name)?.[1]).toBe(String(residualKg))
+  await expect(page.getByRole("tab")).toHaveCount(0)
 })
 
 test("the workspace's Export downloads a module's rows as the table shows them, every page of them, under its headers", async ({ page }) => {

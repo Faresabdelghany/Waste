@@ -109,10 +109,9 @@ export function unloadOf(row: UnloadRow, load: LoadReading | null = null, possib
  * the stops of its fraction weighed since the route's last accepted unload of
  * it (`onBoardByUnload`), read against the project's tolerance
  * (`loadReading`). The window needs every unload of the route, not only the
- * rows answered, and each stop's latest weight — the tonnage report's reading
- * of a stop's weight — at the instant the stop was first weighed, so a weight
- * corrected after the truck tipped stays with the load it was tipped in. A row
- * with no stop weighed before it is absent.
+ * rows answered, and each stop's latest weight at the instant the stop was
+ * first weighed, so a weight corrected after the truck tipped stays with the
+ * load it was tipped in. A row with no stop weighed before it is absent.
  */
 async function loadsOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Map<string, LoadReading>> {
   if (rows.length === 0) return new Map()

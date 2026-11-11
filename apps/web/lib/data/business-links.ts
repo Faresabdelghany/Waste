@@ -55,7 +55,6 @@ const fallbackModules: Array<ModuleLocation & { terms: string[] }> = [
   { ...moduleAt("route-studio.weights"), terms: ["weight record", "weight records", "weighbridge"] },
   { ...moduleAt("route-studio.pickups"), terms: ["pickup", "pickups", "stop", "stops", "proof bundle", "proof bundles"] },
   { ...moduleAt("improve.imports"), terms: ["import", "imports", "export", "exports"] },
-  { ...moduleAt("improve.compliance"), terms: ["report", "reports"] },
 ]
 
 const ignoredTokens = new Set([

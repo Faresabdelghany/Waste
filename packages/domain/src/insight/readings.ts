@@ -1,8 +1,7 @@
-// What a report's counts mean (#292, C26 and O12). The reports store nothing:
-// the API counts rows that exist — the dated Route and its Pickups, the
-// Ticket, the Invoice and its lines, the Unload and its weight review, a
-// stop's weight proof — and these are the rules it counts them by, spelled
-// once so the API's statements, the web's reading of them and a test agree.
+// What a report's counts mean (#292, C26). The reports store nothing: the
+// API counts rows that exist — the dated Route and its Pickups, the Ticket —
+// and these are the rules it counts them by, spelled once so the API's
+// statements, the web's reading of them and a test agree.
 //
 // A pickup stands in one of four places. `completed` is collected. `missed`
 // is a stop that was due and not collected: `failed` (the driver tried) or
@@ -24,9 +23,9 @@
 // The statement holds the comparison in SQL, since the instant is the
 // operating date and the planned time read in `project.timezone`.
 //
-// An unload's net weight counts by its weight review (Issue #112): `approved`
-// and `captured` (nobody has looked yet) count, apart from each other so a
-// report says how much of its tonnage is reviewed; `rejected` is reported
+// An unload's net weight counts by its weight review (Issue #112), as a
+// Transfer Station's material stock reads it (execution/haul-out.ts):
+// `approved` and `captured` (nobody has looked yet) count; `rejected` is told
 // beside and counts in no total; `corrected` is superseded, since the
 // correction wrote a new unload that carries the weight, and is not counted
 // at all — counting both would count the load twice.
@@ -55,7 +54,7 @@ export function pickupStanding(status: PickupStatus, reason: PickupReason | null
 /** How late after its planned start a route may start and still be on time. */
 export const ON_TIME_GRACE_MINUTES = 15
 
-/** Where an unload's net weight stands in a tonnage report. */
+/** Where an unload's net weight stands in a total of what was tipped. */
 export type UnloadStanding = "approved" | "captured" | "rejected" | "superseded"
 
 export function unloadStanding(status: WeightReviewStatus): UnloadStanding {

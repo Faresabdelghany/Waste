@@ -79,11 +79,9 @@ export const MODULE_KEYS = [
   "commercial.payments",
   // Dashboard
   "improve.intelligence",
-  "improve.analytics",
   "improve.autopilot",
   "improve.imports",
   "improve.performance",
-  "improve.compliance",
   // Configure
   "configure.organization",
   "configure.access",

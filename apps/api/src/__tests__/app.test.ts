@@ -390,24 +390,20 @@ describe("GET /openapi.json", () => {
     }
   })
 
-  test("documents the four reports with their strict windows, their filters and their grants (#292)", async () => {
+  test("documents the two reports with their strict windows, their filters and their grants (#292)", async () => {
     const document = await spec()
     const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
     const window = ["query:from", "query:interval", "query:projectId", "query:to"]
     assert.deepEqual(byName(document.paths["/reports/service"].get).sort(), [...window, "query:routeSchemeId", "query:wasteFractionId"].sort())
     assert.deepEqual(byName(document.paths["/reports/tickets"].get).sort(), window)
-    assert.deepEqual(byName(document.paths["/reports/revenue"].get).sort(), window)
-    assert.deepEqual(byName(document.paths["/reports/tonnage"].get).sort(), [...window, "query:unloadingStationId", "query:wasteFractionId"].sort())
 
-    // Two grants each: the Improve module it is read in, and the module whose rows it counts.
-    for (const [path, improve, rows] of [
-      ["/reports/service", "improve.performance", "route-studio.routes"],
-      ["/reports/tickets", "improve.performance", "operate.tickets"],
-      ["/reports/revenue", "improve.analytics", "commercial.invoices"],
-      ["/reports/tonnage", "improve.analytics", "route-studio.weights"],
+    // Two grants each: Improve's Performance, the module it is read in, and the module whose rows it counts.
+    for (const [path, rows] of [
+      ["/reports/service", "route-studio.routes"],
+      ["/reports/tickets", "operate.tickets"],
     ] as const) {
       const operation = document.paths[path].get
-      assert.ok((operation.responses["403"].description ?? "").includes(`\`view\` on \`${improve}\` and \`view\` on \`${rows}\``), path)
+      assert.ok((operation.responses["403"].description ?? "").includes(`\`view\` on \`improve.performance\` and \`view\` on \`${rows}\``), path)
       assert.ok((operation.description ?? "").includes(`at most ${REPORT_WINDOW_MAX_DAYS} days`), path)
       assert.match(operation.description ?? "", /a parameter this report does not read is refused by name/, path)
     }

@@ -4,8 +4,8 @@
 // ticket.
 //
 // What a station holds is a reading, never a stored figure: by project and
-// fraction, what our Unloads tipped there (by their weight review, as the
-// tonnage report counts them: approved and not yet reviewed, never a rejected
+// fraction, what our Unloads tipped there (by their weight review, as
+// `unloadStanding` reads it: approved and not yet reviewed, never a rejected
 // weight nor one a correction superseded, and never a load the station
 // refused), less what left on Outbound Loads that were not cancelled, plus
 // the office's adjustments after a stock count. It may read below zero: the

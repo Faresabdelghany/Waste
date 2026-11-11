@@ -1,5 +1,5 @@
-// A CSV file as the web writes one (#292, #291 slice 28 and #290 O12): the
-// workspace's Export, the Dashboard's tonnage report and its scheme table.
+// A CSV file as the web writes one (#292, #291 slice 28): the workspace's
+// Export and the Dashboard's scheme table.
 // RFC 4180: fields separated by commas, records by CRLF, a field quoted when
 // it holds a comma, a quote, a line break or leading or trailing space, a
 // quote inside doubled. A field that starts with `=`, `+`, `-`, `@`, a tab or
@@ -13,7 +13,7 @@
 //
 // Building the text is pure and tested; `downloadBlob` is the one browser
 // call, a Blob behind a temporary link, which `downloadCsv` hands a text and
-// a file the API wrote (the waste-data report's) hands its bytes.
+// a file the API wrote (an invoice's document) hands its bytes.
 
 export type CsvCell = string | number | null | undefined
 

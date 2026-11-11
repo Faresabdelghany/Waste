@@ -1226,9 +1226,8 @@ export const commercialImproveBusinessFormSchemas = [
           {
             id: "metricId",
             label: "Governed metric",
-            type: "select",
+            type: "text",
             required: true,
-            relation: moduleAt("improve.compliance"),
           },
           {
             id: "analysisFrom",
@@ -1386,111 +1385,6 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
   {
-    key: "improve.analytics",
-    mode: "create",
-    recordKind: "Analytics dashboard",
-    title: "Create dashboard",
-    description:
-      "Create a scoped dashboard backed by governed metrics and saved filters. Existing classic dashboards remain available until functional and data parity is confirmed.",
-    submitLabel: "Create dashboard",
-    nameField: "dashboardName",
-    contextFieldIds: ["projectId", "audience", "defaultPeriod"],
-    sections: [
-      {
-        id: "dashboard",
-        title: "Dashboard definition",
-        description:
-          "Validation: name, scope, audience, and at least one governed metric are required. Viewer permissions always narrow the saved scope.",
-        fields: [
-          {
-            id: "dashboardName",
-            label: "Dashboard name",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "projectId",
-            label: "Project",
-            type: "select",
-            required: true,
-            relation: moduleAt("configure.organization"),
-          },
-          {
-            id: "audience",
-            label: "Audience",
-            type: "select",
-            required: true,
-            options: [
-              { value: "private", label: "Only me" },
-              { value: "team", label: "Selected team" },
-              { value: "project", label: "Project members" },
-              { value: "service-provider", label: "Restricted service provider audience" },
-            ],
-          },
-          {
-            id: "metricIds",
-            label: "Governed metric IDs",
-            type: "textarea",
-            required: true,
-            description:
-              "Relationship: active metric definitions from Intelligence / Trust. At least one is required.",
-          },
-          {
-            id: "defaultPeriod",
-            label: "Default period",
-            type: "select",
-            required: true,
-            options: [
-              { value: "today", label: "Today" },
-              { value: "last-7-days", label: "Last 7 days" },
-              { value: "last-30-days", label: "Last 30 days" },
-              { value: "month-to-date", label: "Month to date" },
-              { value: "custom", label: "Custom" },
-            ],
-          },
-        ],
-      },
-      {
-        id: "saved-view",
-        title: "Initial saved view",
-        description:
-          "Filters, grouping, grain, comparison, and missing-value behavior are stored explicitly so the dashboard is reproducible.",
-        fields: [
-          {
-            id: "filterDefinition",
-            label: "Filters",
-            type: "textarea",
-            description: "Use governed dimensions only.",
-          },
-          {
-            id: "groupBy",
-            label: "Group by",
-            type: "text",
-          },
-          {
-            id: "timeGrain",
-            label: "Time grain",
-            type: "select",
-            options: [
-              { value: "hour", label: "Hour" },
-              { value: "day", label: "Day" },
-              { value: "week", label: "Week" },
-              { value: "month", label: "Month" },
-            ],
-          },
-          {
-            id: "showMissingAsZero",
-            label: "Display missing values as zero",
-            type: "checkbox",
-            defaultValue: false,
-            description:
-              "Off by default. It may be enabled only when the selected metric definition declares zero-safe missing behavior.",
-          },
-        ],
-      },
-    ],
-  },
-  {
     key: "improve.autopilot",
     mode: "create",
     recordKind: "Automation flow version",
@@ -1580,9 +1474,8 @@ export const commercialImproveBusinessFormSchemas = [
           {
             id: "expectedImpactMetric",
             label: "Expected-impact metric",
-            type: "select",
+            type: "text",
             required: true,
-            relation: moduleAt("improve.compliance"),
           },
         ],
       },
@@ -1912,178 +1805,6 @@ export const commercialImproveBusinessFormSchemas = [
             min: 3,
             description:
               "Required when results could identify people; must meet or exceed the active privacy policy.",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    key: "improve.compliance",
-    mode: "disabled",
-    recordKind: "Report, metric, trust, or exposure action",
-    title: "Use Reports & Trust workflow",
-    description:
-      "Reports & Trust is a governed Intelligence area retained as a current navigation module. Metric versions, scheduled reports, AI audit, exposure, feedback, and retraction are distinct records and actions.",
-    submitLabel: "Open Reports & Trust",
-    disabledReason:
-      "Generic creation is disabled. Use Define metric, Create report, Review exposure, or Retract output so lineage, privacy, approval, and immutable history are preserved.",
-    contextFieldIds: ["projectId", "recordType", "validFrom", "classification"],
-    sections: [
-      {
-        id: "metric-definition",
-        title: "Metric definition version",
-        description:
-          "Validation: key, formula, unit, grain, aggregation, sources, freshness target, effective dates, and missing-value policy are mandatory. Published versions are immutable.",
-        fields: [
-          {
-            id: "metricName",
-            label: "Metric name",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "metricKey",
-            label: "Metric key",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "formula",
-            label: "Definition and formula",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "unit",
-            label: "Unit",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "grain",
-            label: "Supported grain",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "aggregation",
-            label: "Aggregation method",
-            type: "select",
-            required: true,
-            options: [
-              { value: "sum", label: "Sum" },
-              { value: "average", label: "Average" },
-              { value: "weighted-average", label: "Weighted average" },
-              { value: "ratio", label: "Ratio from components" },
-              { value: "non-additive", label: "Non-additive" },
-            ],
-          },
-          {
-            id: "missingValuePolicy",
-            label: "Missing-value policy",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "sourceLineage",
-            label: "Source lineage",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "validFrom",
-            label: "Effective from",
-            type: "date",
-            required: true,
-          },
-        ],
-      },
-      {
-        id: "governed-report",
-        title: "Governed report",
-        description:
-          "Relationship: report pins metric versions and source cutoff. Validation: project scope, audience, classification, period, format, retention, and delivery permission are explicit.",
-        fields: [
-          {
-            id: "recordType",
-            label: "Record type",
-            type: "select",
-            required: true,
-            options: [
-              { value: "report", label: "Report" },
-              { value: "metric", label: "Metric definition" },
-              { value: "exposure-review", label: "Exposure review" },
-            ],
-          },
-          {
-            id: "projectId",
-            label: "Project",
-            type: "select",
-            required: true,
-            relation: moduleAt("configure.organization"),
-          },
-          {
-            id: "classification",
-            label: "Data classification",
-            type: "select",
-            required: true,
-            options: [
-              { value: "internal", label: "Internal" },
-              { value: "restricted", label: "Restricted" },
-              { value: "confidential", label: "Confidential" },
-              { value: "public-approved", label: "Public · approved" },
-            ],
-          },
-          {
-            id: "metricVersions",
-            label: "Pinned metric versions",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "retentionDays",
-            label: "Retention",
-            type: "number",
-            required: true,
-            min: 1,
-            unit: "days",
-          },
-        ],
-      },
-      {
-        id: "ai-audit-retraction",
-        title: "AI audit and retraction",
-        description:
-          "Every generated output records prompt/question, model/service version, source cutoff, actor, scope, feedback, and exposure. Retraction preserves the original and adds status, reason, actor, and timestamp.",
-        fields: [
-          {
-            id: "outputId",
-            label: "Generated output",
-            type: "text",
-            required: true,
-          },
-          {
-            id: "action",
-            label: "Action",
-            type: "select",
-            required: true,
-            options: [
-              { value: "approve-exposure", label: "Approve exposure" },
-              { value: "restrict", label: "Restrict exposure" },
-              { value: "retract", label: "Retract output" },
-            ],
-          },
-          {
-            id: "actionReason",
-            label: "Reason",
-            type: "textarea",
-            required: true,
-          },
-          {
-            id: "sensitiveAccessReason",
-            label: "Sensitive-access reason",
-            type: "textarea",
-            description: "Required when reviewing confidential source data.",
           },
         ],
       },

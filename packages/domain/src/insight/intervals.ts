@@ -1,4 +1,4 @@
-// How a report's window of days is cut into its series (#292, C26 and O12).
+// How a report's window of days is cut into its series (#292, C26).
 // A window is two `YYYY-MM-DD` days, both inclusive — the route and pickup
 // lists' window (`from`/`to` over the operating date) — and a series is the
 // window cut into days, ISO weeks (Monday to Sunday, the project's working

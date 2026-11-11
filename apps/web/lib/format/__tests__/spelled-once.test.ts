@@ -22,7 +22,7 @@ import { ACTION_COMMAND_OPTIONS, COMMAND_HEADINGS, TRIGGER_HEADINGS } from "@/li
 import { weekendLabel } from "@/lib/api/records/organisation"
 import { statusLabel } from "@/lib/records/fields"
 
-import { compactWeight, kilograms } from "../measures"
+import { kilograms } from "../measures"
 import { capitalised } from "../words"
 
 /** The copies, as they were spelled before. */
@@ -49,8 +49,6 @@ const FORMER = {
   kg: (value: number): string => `${String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} kg`,
   /** allocations.ts's capacity. */
   capacity: (value: number) => `${value.toLocaleString("en-GB")} kg`,
-  /** tonnage-chart.tsx's axis. */
-  compactKg: (kg: number) => (kg >= 1000 ? `${Math.round(kg / 100) / 10} t` : `${kg} kg`),
   /** generation.ts's counted, and the hand-spelled plurals. */
   counted: (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`,
   /** lib/driver/route-view.ts's stopsInOrder. */
@@ -112,7 +110,6 @@ describe("a weighing in kilograms", () => {
       assert.equal(kilograms(value), FORMER.kilograms(value), String(value))
       assert.equal(kilograms(value), FORMER.kg(value), String(value))
       assert.equal(kilograms(value), FORMER.capacity(value), String(value))
-      assert.equal(compactWeight(value), FORMER.compactKg(value), String(value))
     }
   })
 })

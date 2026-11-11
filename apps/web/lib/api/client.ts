@@ -121,7 +121,7 @@ export type ApiFile = { bytes: ArrayBuffer; contentType: string | null; fileName
 
 /**
  * The name a `Content-Disposition` header gives a file
- * (`attachment; filename="waste-data-2025-01-01-2025-12-31.csv"`): the
+ * (`attachment; filename="transfer-note-2025-0001.pdf"`): the
  * extended `filename*=UTF-8''…` form first where both are given (RFC 6266),
  * then the plain one, quoted or bare; null without one.
  */
@@ -141,10 +141,8 @@ export function fileNameOf(disposition: string | null): string | null {
 }
 
 /**
- * `GET path` for a file (`/reports/waste-data.csv`), asking for `accept`: the
- * body's bytes as they came, since `Response.text()` would drop a text
- * file's byte-order mark, which is how a spreadsheet knows the bytes are
- * UTF-8. A refusal is a problem as for any read.
+ * `GET path` for a file (`/invoices/:id/document`), asking for `accept`: the
+ * body's bytes as they came. A refusal is a problem as for any read.
  */
 export async function getFile(client: ApiClient, path: string, accept: string): Promise<ApiFile> {
   const response = await request(client, "GET", path, undefined, accept)
