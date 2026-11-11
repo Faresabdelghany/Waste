@@ -35,6 +35,7 @@
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { OUTBOX_DEAD_QUEUE } from "@waste/db/jobs"
 import { probePoolOptions } from "@waste/db/probe"
 import { supabaseStorage } from "@waste/db/storage"
 import { CHECK_TIMEOUT_MS } from "@waste/process/readiness"
@@ -47,7 +48,6 @@ import { parseEnv } from "./env"
 import { JOBS, type WorkerContext } from "./jobs"
 import { messagingProviderFromEnv } from "./messaging/select"
 import { createBoss, startBoss, type Boss } from "./runtime/boss"
-import { OUTBOX_DEAD_QUEUE } from "./runtime/outbox"
 import { staleOutboxCount } from "./runtime/relay-outbox"
 
 const env = parseEnv(process.env)

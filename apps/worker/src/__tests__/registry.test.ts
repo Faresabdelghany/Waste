@@ -13,6 +13,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
 import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
+import { OUTBOX_DEAD_QUEUE } from "@waste/db/jobs"
 import { FINANCE_EVENT_KINDS } from "@waste/domain/finance/from-event"
 import { CUSTOMER_NOTICE_KINDS } from "@waste/domain/notifications/notices"
 import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
@@ -38,7 +39,7 @@ import { notifyStaff } from "../notifications/staff-notifications"
 import { purgeProofObjectsJob } from "../execution/purge-proof-objects"
 import { sweepHorizonJob } from "../routing/sweep-horizon"
 import { runScheduledBilling } from "../finance/run-billing"
-import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, routesOf, UNCONSUMED_RETENTION_SECONDS } from "../runtime/outbox"
+import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueue, DEAD_LETTER_QUEUE_OPTIONS, defineOutboxConsumer, OUTBOX_DEAD, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, payloadOf, relayedEventOf, RelayedJob, routesOf, UNCONSUMED_RETENTION_SECONDS } from "../runtime/outbox"
 import { jobContext } from "./context"
 
 const ROUTES = routesOf(CONSUMERS)
