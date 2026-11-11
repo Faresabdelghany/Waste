@@ -28,7 +28,7 @@ import { statusLabel } from "@/lib/records/fields"
 import type { BusinessFormField, BusinessFormFieldType, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
-import { TICKET_TEAMS_MODULE } from "./ticket-teams"
+import { NO_TEAM, TICKET_TEAMS_MODULE } from "./ticket-teams"
 import { capitalised } from "@/lib/format/words"
 
 /** The module the types are records of: the teams', the API's grant for both being `configure.templates`. */
@@ -51,7 +51,7 @@ export const FIELD_REQUIREMENT_LABELS: Readonly<Record<TicketFieldRequirement, s
 
 export const COMMAND_HEADINGS: readonly { command: TicketCommand; heading: string }[] = TICKET_COMMANDS.map((command) => ({ command, heading: capitalised(TICKET_COMMAND_VERBS[command]) }))
 
-export const TICKET_TYPE_FORM: BusinessFormSchema = {
+const TICKET_TYPE_FORM: BusinessFormSchema = {
   key: "configure.templates",
   mode: "create",
   recordKind: "Ticket type",
@@ -74,10 +74,21 @@ export const TICKET_TYPE_FORM: BusinessFormSchema = {
   ],
 }
 
-/** A type as the pane adds it: minted under a browser id until the API answers with its own. */
-export function createTicketTypeRecord(values: BusinessFormValues, { now }: { now: number }): BusinessRecord {
+/** The form's field for the type's default team in the project shown (#606): the project's setting, written once the type exists, and never a value of the type's own. */
+export const TYPE_DEFAULT_TEAM_FIELD = "defaultTeamId"
+
+/** The form a type is added with: `TICKET_TYPE_FORM`, and, where a project is shown, the team a ticket of the type goes to there, picked from `teams` and none until picked. */
+export function ticketTypeFormFor(project: { name: string } | null, teams: readonly BusinessFormOption[]): BusinessFormSchema {
+  if (project === null) return TICKET_TYPE_FORM
+  const team: BusinessFormField = { id: TYPE_DEFAULT_TEAM_FIELD, label: `Default team in ${project.name}`, type: "select", defaultValue: NO_TEAM, options: teams }
+  return { ...TICKET_TYPE_FORM, sections: TICKET_TYPE_FORM.sections.map((section) => ({ ...section, fields: [...section.fields, team] })) }
+}
+
+/** A type as the pane adds it: minted under a browser id — the clock's where `now` is not given — until the API answers with its own. Its default team is no value of its own and is left out. */
+export function createTicketTypeRecord(values: BusinessFormValues, { now = Date.now() }: { now?: number } = {}): BusinessRecord {
   const name = typeof values.name === "string" ? values.name.trim() : ""
-  return mintedRecord({ id: `configure-ticket-type-${now}`, name, status: "Active", recordKind: "Ticket type", values: { ...values, status: "Active" } })
+  const own = Object.fromEntries(Object.entries(values).filter(([field]) => field !== TYPE_DEFAULT_TEAM_FIELD))
+  return mintedRecord({ id: `configure-ticket-type-${now}`, name, status: "Active", recordKind: "Ticket type", values: { ...own, status: "Active" } })
 }
 
 /** A type's fields as its record carries them; none where it carries none or a list the pane cannot read. */

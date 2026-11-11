@@ -2,7 +2,9 @@
 // pane and the tickets' Team picker read it, its create, its edit — the name
 // and the status patched, the members replaced through their own route — a
 // ticket's team on the record, in the create and in the patch, the list's
-// Team category, and a project's default team per kind as rows and a body.
+// Team category, and a project's default team per kind and per type as the
+// rows the Default teams tab lists, the choices a team is picked from, and the
+// set one row's edit puts back (#606).
 // Every body is held against the contracts' own zod schemas.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
@@ -14,7 +16,7 @@ import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
 import { type BusinessRecord } from "../../data/business-modules"
 import { NO_ONE } from "../../data/properties"
-import { createTicketTeamRecord, NO_TEAM, PICK_A_HELD_TEAM, teamDefaultRowsOf, teamDefaultsBodyOf, updateTicketTeamRecord } from "../../data/ticket-teams"
+import { createTicketTeamRecord, defaultsWithTeam, NO_TEAM, PICK_A_HELD_TEAM, pickedTeamOf, teamChoicesOf, teamDefaultRowsOf, teamOfScope, teamShownOf, updateTicketTeamRecord } from "../../data/ticket-teams"
 import { ticketListReaders, updateTicketRecord } from "../../data/tickets"
 import { NOTHING_RESOLVED, recordFrom, type MappingContext } from "../records/adapter"
 import { isServerBacked } from "../records/modules"
@@ -22,6 +24,7 @@ import { projectAdapter } from "../records/organisation"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { isTicketTeamRecord, ticketTeamAdapter, ticketTeamsModule } from "../records/ticket-teams"
 import { ticketAdapter } from "../records/tickets"
+import { moveDefaultTeam } from "../ticket-team-defaults"
 import { bodyOf, clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-28T10:00:00Z")
@@ -192,12 +195,6 @@ describe("a project's default team per kind and per type", () => {
         [OLD, "Old intake (Complaint)", deskRecord.id],
       ],
     )
-    const body = teamDefaultsBodyOf(
-      rows.map((row) => (row.ticketTypeId === BULKY ? { ...row, teamId: yardRecord.id } : row)),
-      serverIdOf,
-    )
-    assert.deepEqual(body, { defaults: [{ kind: null, ticketTypeId: BULKY, teamId: yardId }, { kind: null, ticketTypeId: OLD, teamId: deskId }] })
-    assert.ok(TicketTeamDefaultsSet.safeParse(body).success)
     // A type no list the role reads holds: said so, no kind made up for it and never its id; and while the types are still read, said that.
     const unread = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [{ kind: null, ticketTypeId: OLD, teamId: deskId }] }, webIdOf, [])
     assert.deepEqual([unread.at(-1)?.ticketTypeId, unread.at(-1)?.label], [OLD, "A ticket type not shown to your role"])
@@ -208,11 +205,63 @@ describe("a project's default team per kind and per type", () => {
     assert.equal(failed.at(-1)?.label, "A ticket type that could not be read")
   })
 
-  test("its body names each kind with a team by server id, and refuses a team the API does not hold", () => {
-    const rows = teamDefaultRowsOf({ projectId: copenhagen.id, defaults: [] }, webIdOf).map((row) => (row.kind === "overflow" ? { ...row, teamId: yardRecord.id } : row.kind === "complaint" ? { ...row, teamId: deskRecord.id } : row))
-    const body = teamDefaultsBodyOf(rows, serverIdOf)
-    assert.deepEqual(body, { defaults: [{ kind: "overflow", ticketTypeId: null, teamId: yardId }, { kind: "complaint", ticketTypeId: null, teamId: deskId }] })
-    assert.ok(TicketTeamDefaultsSet.safeParse(body).success)
-    assert.deepEqual(teamDefaultsBodyOf([{ kind: "other", ticketTypeId: null, key: "kind:other", label: "Other", teamId: "team-unknown" }], serverIdOf), { key: "kind:other", message: PICK_A_HELD_TEAM })
+  const BULKY = "01a0d2a4-a280-700a-8000-0000000000b1"
+  const set = { projectId: copenhagen.id, defaults: [{ kind: "complaint" as const, ticketTypeId: null, teamId: deskId }, { kind: null, ticketTypeId: BULKY, teamId: yardId }] }
+
+  test("a set names a kind's or a type's team by server id, or none", () => {
+    assert.equal(teamOfScope(set, { kind: "complaint", ticketTypeId: null }), deskId)
+    assert.equal(teamOfScope(set, { kind: null, ticketTypeId: BULKY }), yardId)
+    assert.equal(teamOfScope(set, { kind: "overflow", ticketTypeId: null }), null)
+    assert.equal(teamOfScope(set, { kind: null, ticketTypeId: "01a0d2a4-a280-700a-8000-0000000000b9" }), null)
+  })
+
+  test("one row's edit puts the whole set back with that row's team moved, every other entry as it stood (#606)", () => {
+    const named = defaultsWithTeam(set, { kind: "overflow", ticketTypeId: null }, yardId)
+    assert.deepEqual(named, { defaults: [{ kind: "complaint", ticketTypeId: null, teamId: deskId }, { kind: null, ticketTypeId: BULKY, teamId: yardId }, { kind: "overflow", ticketTypeId: null, teamId: yardId }] })
+    assert.ok(TicketTeamDefaultsSet.safeParse(named).success)
+    const moved = defaultsWithTeam(set, { kind: null, ticketTypeId: BULKY }, deskId)
+    assert.deepEqual(moved, { defaults: [{ kind: "complaint", ticketTypeId: null, teamId: deskId }, { kind: null, ticketTypeId: BULKY, teamId: deskId }] })
+    assert.ok(TicketTeamDefaultsSet.safeParse(moved).success)
+    // No team: the row is left out, a kind's tickets opening with none and a type's following its kind's.
+    assert.deepEqual(defaultsWithTeam(set, { kind: "complaint", ticketTypeId: null }, null), { defaults: [{ kind: null, ticketTypeId: BULKY, teamId: yardId }] })
+    assert.deepEqual(defaultsWithTeam(set, { kind: "overflow", ticketTypeId: null }, null), { defaults: set.defaults })
+  })
+
+  test("the edit reads the project's set as it stands before it puts it back, so a row another person moved meanwhile is kept", async () => {
+    const meanwhile = { projectId: copenhagen.id, defaults: [...set.defaults, { kind: "overflow" as const, ticketTypeId: null, teamId: deskId }] }
+    const answered = { projectId: copenhagen.id, defaults: [{ kind: "complaint", ticketTypeId: null, teamId: yardId }, meanwhile.defaults[1], meanwhile.defaults[2]] }
+    const { fetch, calls } = scripted([() => json(meanwhile), () => json(answered)])
+    const written = await moveDefaultTeam(clientOver(fetch), copenhagen.id, { kind: "complaint", ticketTypeId: null }, yardId)
+    assert.deepEqual(calls.map((call) => [call.init.method ?? "GET", call.url]), [
+      ["GET", `http://api.test/projects/${copenhagen.id}/ticket-team-defaults`],
+      ["PUT", `http://api.test/projects/${copenhagen.id}/ticket-team-defaults`],
+    ])
+    assert.deepEqual(bodyOf(calls[1]), { defaults: [{ kind: "complaint", ticketTypeId: null, teamId: yardId }, { kind: null, ticketTypeId: BULKY, teamId: yardId }, { kind: "overflow", ticketTypeId: null, teamId: deskId }] })
+    assert.deepEqual(written, answered)
+  })
+
+  test("a picker's value is the team by server id, none, or refused where the API does not hold the team", () => {
+    assert.deepEqual(pickedTeamOf(deskRecord.id, serverIdOf), { teamId: deskId })
+    assert.deepEqual(pickedTeamOf(NO_TEAM, serverIdOf), { teamId: null })
+    assert.deepEqual(pickedTeamOf("team-unknown", serverIdOf), { message: PICK_A_HELD_TEAM })
+  })
+
+  test("a team is picked from none, the teams that take tickets, and the one already named whatever its status", () => {
+    const teams = [deskRecord, yardRecord]
+    assert.deepEqual(teamChoicesOf(false, teams, NO_TEAM), [{ value: NO_TEAM, label: "No team" }, { value: deskRecord.id, label: "Container desk" }])
+    // A type with no team of its own goes to its kind's.
+    assert.deepEqual(teamChoicesOf(true, teams, yardRecord.id), [{ value: NO_TEAM, label: "As its kind" }, { value: deskRecord.id, label: "Container desk" }, { value: yardRecord.id, label: "Yard · Inactive" }])
+  })
+
+  test("a row reads its team's name, its status once retired, and for none what its tickets do instead", () => {
+    const teams = [deskRecord, yardRecord]
+    const row = (teamId: string, ticketTypeId: string | null = null) => ({ teamId, ticketTypeId })
+    assert.equal(teamShownOf(row(deskRecord.id), teams, false), "Container desk")
+    assert.equal(teamShownOf(row(yardRecord.id), teams, false), "Yard · Inactive")
+    assert.equal(teamShownOf(row(NO_TEAM), teams, false), "No team")
+    assert.equal(teamShownOf(row(NO_TEAM, BULKY), teams, false), "As its kind")
+    // A team the list does not hold is never read as its id: said to be on its way while the teams are read, and unlisted once they were answered or their read failed.
+    assert.equal(teamShownOf(row(deskRecord.id), [], true), "Reading the team…")
+    assert.equal(teamShownOf(row(deskRecord.id), [], false), "A team that is not listed")
   })
 })
