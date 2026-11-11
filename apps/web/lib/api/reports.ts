@@ -1,24 +1,12 @@
-// What the Dashboard asks the API (#292, #291 slices 26, 27 and 29, #290
-// O12): the four reports over a window of days and the caller's projects —
-// `GET /reports/service` and `/reports/tickets` (Improve's Performance),
-// `/reports/tonnage` (Improve's Analytics) and `/reports/revenue` (the
-// invoices' own grant) — and the waste-data report over a filing's period,
-// `/reports/waste-data` and its file (Improve's Compliance). Read-only,
-// outside the record store: a report is an answer to a question, never a
-// module's rows. The contracts are types here; a runtime zod import would
-// land in the Dashboard's bundle.
-import type {
-  ReportInterval,
-  RevenueReport,
-  ServiceReport,
-  TicketReport,
-  TonnageReport,
-  WasteDataReport,
-} from "@waste/contracts/reports"
+// What the Dashboard asks the API (#292, #291 slices 26 and 27): the two
+// reports over a window of days and the caller's projects —
+// `GET /reports/service` and `/reports/tickets`, Improve's Performance.
+// Read-only, outside the record store: a report is an answer to a question,
+// never a module's rows. The contracts are types here; a runtime zod import
+// would land in the Dashboard's bundle.
+import type { ReportInterval, ServiceReport, TicketReport } from "@waste/contracts/reports"
 
-import type { FileSeparator, WasteDataQuery } from "@/lib/insight/waste-data"
-
-import { get, getFile, withQuery, type ApiClient, type ApiFile } from "./client"
+import { get, withQuery, type ApiClient } from "./client"
 
 /** The window every report takes: one project's or every one the caller works in, two days both inclusive, the series' interval. */
 export type ReportWindowQuery = { projectId?: string; from: string; to: string; interval: ReportInterval }
@@ -31,7 +19,7 @@ const query = (window: ReportWindowQuery, extra: Readonly<Record<string, string 
   ...extra,
 })
 
-export function reportKey(report: "service" | "tickets" | "revenue" | "tonnage", window: ReportWindowQuery, filters: Readonly<Record<string, string | undefined>> = {}): string {
+export function reportKey(report: "service" | "tickets", window: ReportWindowQuery, filters: Readonly<Record<string, string | undefined>> = {}): string {
   return withQuery(`/reports/${report}`, query(window, filters))
 }
 
@@ -43,28 +31,4 @@ export function serviceReport(client: ApiClient, window: ReportWindowQuery, filt
 /** How the tickets were opened and closed, and which are open now. */
 export function ticketReport(client: ApiClient, window: ReportWindowQuery): Promise<TicketReport> {
   return get<TicketReport>(client, withQuery("/reports/tickets", query(window)))
-}
-
-/** What was invoiced, by currency. */
-export function revenueReport(client: ApiClient, window: ReportWindowQuery): Promise<RevenueReport> {
-  return get<RevenueReport>(client, withQuery("/reports/revenue", query(window)))
-}
-
-const periodQuery = (query: WasteDataQuery) => ({ projectId: query.projectId, from: query.from, to: query.to })
-
-export const wasteDataKey = (query: WasteDataQuery): string => withQuery("/reports/waste-data", periodQuery(query))
-
-/** A period's approved unloads by municipality, station and fraction, with the warnings to read before filing. */
-export function wasteDataReport(client: ApiClient, query: WasteDataQuery): Promise<WasteDataReport> {
-  return get<WasteDataReport>(client, wasteDataKey(query))
-}
-
-/** The same report as the API's file, its bytes as written (the byte-order mark kept) and the name it gives it. */
-export function wasteDataFile(client: ApiClient, query: WasteDataQuery, separator: FileSeparator): Promise<ApiFile> {
-  return getFile(client, withQuery("/reports/waste-data.csv", { ...periodQuery(query), separator }), "text/csv")
-}
-
-/** What was unloaded at the stations and weighed at the kerb. */
-export function tonnageReport(client: ApiClient, window: ReportWindowQuery, filters: { wasteFractionId?: string; unloadingStationId?: string } = {}): Promise<TonnageReport> {
-  return get<TonnageReport>(client, withQuery("/reports/tonnage", query(window, filters)))
 }

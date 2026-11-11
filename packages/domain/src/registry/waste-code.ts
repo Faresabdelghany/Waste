@@ -6,8 +6,7 @@
 // an entry the list marks hazardous, as it prints them. Stored compact,
 // `200301`, as the database's CHECK and the contracts' regex read the one
 // spelling here; a person types it as the list prints it, `20 03 01`, and
-// `wasteCodeOf` takes the spaces out. A fraction may have none: the
-// regulatory report names such a fraction with its code blank and a warning.
+// `wasteCodeOf` takes the spaces out. A fraction may have none.
 
 /** The shape a waste code takes, as a regular expression's source: a chapter 01–20, four more digits, and an optional asterisk. */
 export const WASTE_CODE_PATTERN = "^(0[1-9]|1[0-9]|20)[0-9]{4}\\*?$"

@@ -47,7 +47,7 @@ function pathsOf(id: NavItemId, href: string): readonly string[] {
 const itemOf = (id: NavItemId, href: string): NavItem => ({ id, label: WORKSPACES[id].label, href, paths: pathsOf(id, href) })
 
 /** The Dashboard leads the sidebar, at its own page; every other workspace follows in the domain's order, at its page, under its name. */
-const DASHBOARD: NavItem = itemOf("improve", "/performance")
+export const DASHBOARD: NavItem = itemOf("improve", "/performance")
 
 /** The item the root shows: without the API `/` is Operate's page, and on the Pilot it lands a person by `/me`. */
 const HOME: NavItemId = "operate"

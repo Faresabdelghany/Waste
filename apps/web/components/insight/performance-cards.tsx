@@ -1,6 +1,6 @@
 "use client"
 
-// The Dashboard's Performance tab on the Pilot (#292, #291 slice 27): Improve's
+// The Dashboard's cards on the Pilot (#292, #291 slice 27): Improve's
 // Performance module over the API's service and ticket reports, each read for
 // the window and for the period before it. Four tiles — the collection rate,
 // the missed pickups, the routes on time, the tickets opened — each against
@@ -29,7 +29,7 @@ import { comparisonOf, StatRow, StatTile } from "./stat-tile"
 import { ThroughputChart } from "./throughput-chart"
 import { useReport } from "@/components/platform/use-report"
 
-export type TabProps = {
+type PerformanceProps = {
   current: ReportWindowQuery
   previous: ReportWindowQuery
   /** The period before, "Oct 11 – Oct 17": what a change is told against. */
@@ -40,7 +40,7 @@ export type TabProps = {
   fileStem: string
 }
 
-export function PerformanceTab({ current, previous, against, viewed, projectName, fileStem }: TabProps) {
+export function PerformanceCards({ current, previous, against, viewed, projectName, fileStem }: PerformanceProps) {
   const routesShown = viewed.has("route-studio.routes")
   const ticketsShown = viewed.has("operate.tickets")
   const service = useReport(routesShown ? reportKey("service", current) : null, (client) => serviceReport(client, current))

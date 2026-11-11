@@ -37,8 +37,8 @@ import type { Me } from "@waste/contracts/me"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import type { SystemRoleKey } from "@waste/domain/access/system-roles"
 
-import { navItems, type NavItemId } from "../data/sidebar"
-import { tabsShown } from "../insight/dashboard"
+import { DASHBOARD, navItems, type NavItemId } from "../data/sidebar"
+import { PERFORMANCE_MODULE } from "../insight/dashboard"
 import { pageModuleIds } from "../modules/manifest"
 import { PROVIDER_WORKSPACE_PATH } from "../modules/provider-pages"
 import { viewedModules, type Grants } from "@/lib/modules/grants"
@@ -59,15 +59,12 @@ export const SITE_ATTENDANT_ROLE: SystemRoleKey = "site-attendant"
 
 export const OFFICE_LANDING = "/operate"
 
-/** The Dashboard's page, Improve's: the landing only of a role that views no other page. */
-const DASHBOARD_PAGE: NavItemId = "improve"
-
 /** What the landing reads of `/me`: the driver, the provider, and the role's key and grants, each read defensively. */
 export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: (Pick<Me["role"], "key"> & { grants?: Grants }) | null }
 
-/** Whether a role views anything on an office page: one of the Dashboard's tabs, or one of the modules a workspace's page shows. */
+/** Whether a role views anything on an office page: the Dashboard's Performance, or one of the modules a workspace's page shows. */
 function viewsPage(id: NavItemId, viewed: ReadonlySet<ModuleKey>): boolean {
-  if (id === DASHBOARD_PAGE) return tabsShown(viewed).length > 0
+  if (id === DASHBOARD.id) return viewed.has(PERFORMANCE_MODULE)
   return pageModuleIds(id).some((moduleId) => viewed.has(moduleKeyOf(id, moduleId)))
 }
 
@@ -91,7 +88,7 @@ export function landingOf(me: LandingFacts): string {
   const viewed = viewedModules(grants)
   if (viewsPage("operate", viewed)) return OFFICE_LANDING
   const pages = navItems.filter((item) => viewsPage(item.id, viewed))
-  return (pages.find((item) => item.id !== DASHBOARD_PAGE) ?? pages[0])?.href ?? OFFICE_LANDING
+  return (pages.find((item) => item.id !== DASHBOARD.id) ?? pages[0])?.href ?? OFFICE_LANDING
 }
 
 // Only to parse a relative `next` against: a value that resolves anywhere

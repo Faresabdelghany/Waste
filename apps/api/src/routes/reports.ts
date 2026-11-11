@@ -1,83 +1,51 @@
-// The reports (#292: #291's slice 26, "KPI reads", and #290's O12, "tonnage
-// reporting"): four reads that count rows that exist and store nothing, for
-// the Dashboard and the Improve workspace. The wire is
+// The reports (#292: #291's slice 26, "KPI reads"): two reads that count
+// rows that exist and store nothing, for the Dashboard. The wire is
 // @waste/contracts/reports, which says what each answers; what a count means
 // is @waste/domain/insight/readings, and how a window is cut into its series
 // is @waste/domain/insight/intervals.
 //
 //   GET /reports/service  `improve.performance` + `route-studio.routes`
 //   GET /reports/tickets  `improve.performance` + `operate.tickets`
-//   GET /reports/revenue  `improve.analytics`   + `commercial.invoices`
-//   GET /reports/tonnage  `improve.analytics`   + `route-studio.weights`
-//   GET /reports/waste-data and /reports/waste-data.csv
-//                         `improve.compliance`  + `route-studio.weights`
 //
-// Two grants each, both `view`: the Improve module the report is read in —
-// Performance's operational service, Analytics' period analysis — and the
-// module whose rows it counts, since a total is the content of the rows it
-// totals and a role refused the routes, the tickets, the invoices or the
-// unloads is refused their counts too (a scheme's name, a station's
-// tonnage). The charters give both to the roles that read each
-// (@waste/domain/access/system-roles): the Operations Manager all four, the
-// Dispatcher and the Fleet Manager service and tickets, the Route Planner
-// and the Fleet Manager tonnage, the Finance Specialist revenue.
+// Two grants each, both `view`: Improve's Performance, the module the report
+// is read in, and the module whose rows it counts, since a total is the
+// content of the rows it totals and a role refused the routes or the tickets
+// is refused their counts too (a scheme's name). The charters give both to
+// the roles that read each (@waste/domain/access/system-roles): the
+// Operations Manager, the Dispatcher and the Fleet Manager.
 //
 // Every statement is fenced twice, the tenant and `inProjects` on the table
 // it reads from, and the tables it joins are joined within the tenant; a
 // `projectId` the caller does not work in is a 400 on the query
 // (`requireProject`), and an account that works in no project reads zeros.
-// A statement counts by day — a route's operating date, an invoice's
-// `issuedOn`, an instant rendered on its project's clock — and the handler
-// folds the days into the window's intervals through the domain, so which
-// interval a day is in is decided in one place and never by a `date_trunc`.
-// A day of an instant on its project's clock is an expression no index
-// holds, so each such test is joined by a coarse bound on the instant itself
-// — from a day before the window's first to two days after its last, wider
-// than any timezone's offset — which the instant's index can prune by. Each
-// read is a handful of grouped statements over the window and no page: the
-// window is at most a year (`REPORT_WINDOW_MAX_DAYS`), and what grows with
-// the data — routes, pickups, documents, unloads — is counted, never listed.
-// Names sort in one collation, English's, whatever the server's locale.
-//
-// The waste-data report (#291 slice 29, C29) is the regulatory one: a
-// period's reviewed Unloads — those whose latest weight review approved them
-// — as net kilograms per municipality (the project they were collected for),
-// unloading station and waste fraction, each fraction with its waste code,
-// for the office to file with the national waste-data system by hand; no
-// series, since a filing is one period's. It is read under Improve's
-// Compliance, the module a report that leaves the company is read in, and
-// the weights' own grant. An unload nobody has reviewed is a warning and not
-// a row, a rejected one is counted nowhere, a corrected one through its
-// correction once that is approved; a fraction without a code keeps its
-// rows, the code blank, beside a warning, and so does a project whose kind
-// is not a municipality, its name in the municipality's place. Those two
-// warnings are of the rows filed: a fraction or a project with unreviewed
-// loads alone is in the not-reviewed warning and no other. The `.csv` read
-// is the same report as the file @waste/domain/insight/waste-data writes, an
-// attachment the office downloads; on demand, never on a schedule.
+// A statement counts by day — a route's operating date, an instant rendered
+// on its project's clock — and the handler folds the days into the window's
+// intervals through the domain, so which interval a day is in is decided in
+// one place and never by a `date_trunc`. A day of an instant on its
+// project's clock is an expression no index holds, so each such test is
+// joined by a coarse bound on the instant itself — from a day before the
+// window's first to two days after its last, wider than any timezone's
+// offset — which the instant's index can prune by. Each read is a handful of
+// grouped statements over the window and no page: the window is at most a
+// year (`REPORT_WINDOW_MAX_DAYS`), and what grows with the data — routes,
+// pickups, tickets — is counted, never listed. Names sort in one collation,
+// English's, whatever the server's locale.
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
-import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
-import { SEPARATOR_CHARACTERS } from "@waste/domain/imports/csv"
 import { intervalOf, intervalsOver, type DayInterval } from "@waste/domain/insight/intervals"
-import { ON_TIME_GRACE_MINUTES, pickupStanding, rate, unloadStanding } from "@waste/domain/insight/readings"
+import { ON_TIME_GRACE_MINUTES, pickupStanding, rate } from "@waste/domain/insight/readings"
 import { REPORT_FIRST_DAY, REPORT_WINDOW_MAX_DAYS } from "@waste/domain/insight/reports"
 import type { ReportInterval as Interval } from "@waste/domain/insight/vocabulary"
-import { isMunicipality, wasteDataCsv, wasteDataWarningSentence, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind } from "@waste/domain/resolution/vocabulary"
-import { RevenueReport, RevenueReportQuery, ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, TonnageReport, TonnageReportQuery, WasteDataFileQuery, WasteDataReport, WasteDataReportQuery, type MissedReason, type PickupStandings, type PickupWeightRow, type ReportWindow, type RevenueInterval, type RevenueProduct, type RevenueTotals, type RouteCounts, type ServiceRates, type ServiceScheme, type TicketKindCounts, type TonnageRow, type WasteDataRow, type WasteDataWarning } from "@waste/contracts/reports"
+import { ServiceReport, ServiceReportQuery, TicketReport, TicketReportQuery, type MissedReason, type PickupStandings, type ReportWindow, type RouteCounts, type ServiceRates, type ServiceScheme, type TicketKindCounts } from "@waste/contracts/reports"
 import type { Tx } from "@waste/db/client"
 import { dayOnClock, instantOnClock } from "@waste/db/query/project-clock"
-import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
-import { product, wasteFraction } from "@waste/db/schema/catalogue"
-import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
-import { billableEvent, invoice, invoiceLine } from "@waste/db/schema/finance"
+import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
-import { unloadingStation } from "@waste/db/schema/places"
 import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, count, countDistinct, desc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, lte, sql, type SQL } from "drizzle-orm"
+import { and, count, countDistinct, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, lte, sql, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import type { Context } from "hono"
 
@@ -88,18 +56,13 @@ import { describeJson, routes } from "../operation"
 import { describeProblem } from "../problem"
 
 const PERFORMANCE = "improve.performance"
-const ANALYTICS = "improve.analytics"
-const COMPLIANCE = "improve.compliance"
 
 /** What every report's 400 says beyond its own filters. */
 const WINDOW_REFUSED = `a parameter is one the report does not read, \`from\` or \`to\` is missing, not a day or before ${REPORT_FIRST_DAY}, the window runs backwards or is longer than ${REPORT_WINDOW_MAX_DAYS} days, \`interval\` is not \`day\`, \`week\` or \`month\`, or \`projectId\` is not a project this account works in`
 
-/** What the waste-data report's 400 says: a filing is one period, so no `interval` is read. */
-const PERIOD_REFUSED = `a parameter is one the report does not read (\`interval\` among them, since a filing is one period with no series), \`from\` or \`to\` is missing, not a day or before ${REPORT_FIRST_DAY}, the period runs backwards or is longer than ${REPORT_WINDOW_MAX_DAYS} days, or \`projectId\` is not a project this account works in`
-
 /** What a report's window and filters say in every description. */
 const WINDOW_SENTENCE = `\`from\` and \`to\` are the window's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`interval\` (\`day\` when absent) cuts it into the series — days, ISO weeks from Monday, calendar months, the first and last clipped to the window. \`projectId\` narrows the report to one of the caller's projects, and absent it spans every project the caller works in; an account that works in none reads zeros. The query is strict: a parameter this report does not read is refused by name.`
-const describe403 = (improve: ModuleKey, rows: ModuleKey) => describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${improve}\` and \`view\` on \`${rows}\`, the rows this report counts.`)
+const describe403 = (rows: ModuleKey) => describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${PERFORMANCE}\` and \`view\` on \`${rows}\`, the rows this report counts.`)
 
 type WindowQuery = { projectId?: string; from: string; to: string; interval: Interval }
 
@@ -128,9 +91,6 @@ function instantInWindow(instant: PgColumn, window: DayInterval): SQL {
 }
 
 const countWhere = (condition: SQL | undefined) => sql<number>`count(*) filter (where ${condition})`.mapWith(Number)
-
-/** A sum of whole numbers, as a number: Postgres answers `sum` as numeric text. */
-const total = (value: PgColumn | SQL) => sql<number>`coalesce(sum(${value}), 0)::bigint`.mapWith(Number)
 
 /** Names in one order wherever the API runs. */
 export const byName = new Intl.Collator("en").compare
@@ -368,272 +328,18 @@ async function ticketReport(tx: Tx, principal: Principal, query: TicketReportQue
   }
 }
 
-const noDocuments = (currency: string): RevenueTotals => ({ currency, invoices: 0, creditNotes: 0, netMinor: 0, vatMinor: 0, grossMinor: 0 })
-
-async function revenueReport(tx: Tx, principal: Principal, query: RevenueReportQuery): Promise<RevenueReport> {
-  const { projectId } = query
-  const window = { from: query.from, to: query.to }
-  const documentGroups = await tx
-    .select({
-      currency: invoice.currency,
-      kind: invoice.kind,
-      issuedOn: invoice.issuedOn,
-      n: count(),
-      netMinor: total(invoice.netMinor),
-      vatMinor: total(invoice.vatMinor),
-      grossMinor: total(invoice.grossMinor),
-    })
-    .from(invoice)
-    .where(and(fenced(invoice, principal, projectId), inWindow(invoice.issuedOn, window)))
-    .groupBy(invoice.currency, invoice.kind, invoice.issuedOn)
-  // A line counts its quantity against its product where it takes the service back — a credit note's line, or the line of a reversal — whatever its price, a free product's included.
-  const signedQuantity = sql`case when ${invoiceLine.creditsLineId} is not null or ${billableEvent.kind} = 'reversal' then -${invoiceLine.quantity} else ${invoiceLine.quantity} end`
-  const productGroups = await tx
-    .select({ currency: invoice.currency, productId: product.id, name: product.name, quantity: total(signedQuantity), netMinor: total(invoiceLine.netMinor) })
-    .from(invoiceLine)
-    .innerJoin(invoice, and(eq(invoice.companyId, invoiceLine.companyId), eq(invoice.id, invoiceLine.invoiceId)))
-    .innerJoin(product, and(eq(product.companyId, invoiceLine.companyId), eq(product.id, invoiceLine.productId)))
-    .leftJoin(billableEvent, and(eq(billableEvent.companyId, invoiceLine.companyId), eq(billableEvent.id, invoiceLine.billableEventId)))
-    .where(and(fenced(invoiceLine, principal, projectId), inWindow(invoice.issuedOn, window)))
-    .groupBy(invoice.currency, product.id, product.name)
-
-  const currencies = new Map<string, RevenueTotals>()
-  const intervals = new Map<string, RevenueInterval>()
-  const add = (tally: RevenueTotals, group: (typeof documentGroups)[number]) => {
-    if (group.kind === "credit-note") tally.creditNotes += group.n
-    else tally.invoices += group.n
-    tally.netMinor += group.netMinor
-    tally.vatMinor += group.vatMinor
-    tally.grossMinor += group.grossMinor
-  }
-  for (const group of documentGroups) {
-    const byCurrency = currencies.get(group.currency) ?? noDocuments(group.currency)
-    currencies.set(group.currency, byCurrency)
-    add(byCurrency, group)
-    const span = intervalOf(group.issuedOn, window, query.interval)
-    const key = `${span.from}|${group.currency}`
-    const byInterval = intervals.get(key) ?? { ...span, ...noDocuments(group.currency) }
-    intervals.set(key, byInterval)
-    add(byInterval, group)
-  }
-  const products: RevenueProduct[] = productGroups
-    .map((group) => ({ productId: group.productId, name: group.name, currency: group.currency, quantity: group.quantity, netMinor: group.netMinor }))
-    .sort((a, b) => a.currency.localeCompare(b.currency) || b.netMinor - a.netMinor || byName(a.name, b.name))
-  return {
-    window: windowOf(query),
-    currencies: [...currencies.values()].sort((a, b) => a.currency.localeCompare(b.currency)),
-    intervals: [...intervals.values()].sort((a, b) => a.from.localeCompare(b.from) || a.currency.localeCompare(b.currency)),
-    products,
-  }
-}
-
-const noWeights = () => ({ netKg: 0, approvedKg: 0, capturedKg: 0, unloads: 0, rejectedKg: 0, rejectedUnloads: 0, refusedKg: 0, refusedUnloads: 0 })
-
-/** Whether the station refused the load (O9 of #290): a refused load's weight left on the truck, so it is tipped tonnage nowhere. */
-const refused = sql<boolean>`${unload.refusalReason} is not null`
-
-async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQuery): Promise<TonnageReport> {
-  const { projectId, wasteFractionId, unloadingStationId } = query
-  const window = { from: query.from, to: query.to }
-  const occurred = dayOn(unload.occurredAt)
-  const review = weightReviewOf(tx, principal.companyId, unload.id)
-  const status = reviewStatus(review.decision)
-  const unloadGroups = await tx
-    .select({
-      projectId: unload.projectId,
-      wasteFractionId: unload.wasteFractionId,
-      wasteFractionName: wasteFraction.name,
-      unloadingStationId: unload.unloadingStationId,
-      unloadingStationName: unloadingStation.name,
-      day: occurred,
-      status,
-      refused,
-      netKg: total(unload.netKg),
-      n: count(),
-    })
-    .from(unload)
-    .innerJoin(project, projectOf(unload))
-    .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, unload.companyId), eq(wasteFraction.id, unload.wasteFractionId)))
-    .innerJoin(unloadingStation, and(eq(unloadingStation.companyId, unload.companyId), eq(unloadingStation.id, unload.unloadingStationId)))
-    .leftJoinLateral(review, sql`true`)
-    .where(
-      and(
-        fenced(unload, principal, projectId),
-        instantInWindow(unload.occurredAt, window),
-        wasteFractionId === undefined ? undefined : eq(unload.wasteFractionId, wasteFractionId),
-        unloadingStationId === undefined ? undefined : eq(unload.unloadingStationId, unloadingStationId),
-      ),
-    )
-    .groupBy(unload.projectId, unload.wasteFractionId, wasteFraction.name, unload.unloadingStationId, unloadingStation.name, occurred, status, refused)
-  // A pickup's weight counts where the pickup was collected, on its route's operating day as the service report counts the pickup, by its latest
-  // reading: a weight proof appended later is the later word, as a review is. Only the window's routes' proofs are read.
-  const latest = tx
-    .selectDistinctOn([proofOfService.pickupId], {
-      pickupId: proofOfService.pickupId,
-      projectId: route.projectId,
-      operatingDate: route.operatingDate,
-      wasteFractionId: pickup.wasteFractionId,
-      weightKg: proofOfService.weightKg,
-    })
-    .from(proofOfService)
-    .innerJoin(pickup, and(eq(pickup.companyId, proofOfService.companyId), eq(pickup.id, proofOfService.pickupId)))
-    .innerJoin(route, and(eq(route.companyId, proofOfService.companyId), eq(route.id, proofOfService.routeId)))
-    .where(
-      and(
-        fenced(proofOfService, principal, projectId),
-        eq(proofOfService.kind, "weight"),
-        eq(pickup.status, "completed"),
-        routesOfWindow(window),
-        wasteFractionId === undefined ? undefined : eq(pickup.wasteFractionId, wasteFractionId),
-      ),
-    )
-    .orderBy(proofOfService.pickupId, desc(proofOfService.id))
-    .as("latest_weight")
-  const pickupGroups = await tx
-    .select({ projectId: latest.projectId, wasteFractionId: latest.wasteFractionId, wasteFractionName: wasteFraction.name, day: latest.operatingDate, weightKg: total(latest.weightKg), n: count() })
-    .from(latest)
-    .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, principal.companyId), eq(wasteFraction.id, latest.wasteFractionId)))
-    .groupBy(latest.projectId, latest.wasteFractionId, wasteFraction.name, latest.operatingDate)
-
-  const totals = { ...noWeights(), pickupWeightKg: 0, weighedPickups: 0 }
-  const rows = new Map<string, TonnageRow>()
-  for (const group of unloadGroups) {
-    const standing = unloadStanding(group.status as WeightReviewStatus)
-    // A corrected unload's weight is its correction's, counted on that row.
-    if (standing === "superseded") continue
-    const span = intervalOf(group.day, window, query.interval)
-    const key = [span.from, group.projectId, group.wasteFractionId, group.unloadingStationId].join("|")
-    const row = rows.get(key) ?? { ...span, projectId: group.projectId, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName, unloadingStationId: group.unloadingStationId, unloadingStationName: group.unloadingStationName, ...noWeights() }
-    rows.set(key, row)
-    for (const tally of [row, totals]) {
-      // A rejected reading is no weight to trust wherever the load went; a refused load's weight is the truck's still.
-      if (standing === "rejected") {
-        tally.rejectedKg += group.netKg
-        tally.rejectedUnloads += group.n
-      } else if (group.refused) {
-        tally.refusedKg += group.netKg
-        tally.refusedUnloads += group.n
-      } else {
-        tally.netKg += group.netKg
-        tally.unloads += group.n
-        if (standing === "approved") tally.approvedKg += group.netKg
-        else tally.capturedKg += group.netKg
-      }
-    }
-  }
-  const weights = new Map<string, PickupWeightRow>()
-  for (const group of pickupGroups) {
-    const span = intervalOf(group.day, window, query.interval)
-    const key = [span.from, group.projectId, group.wasteFractionId].join("|")
-    const row = weights.get(key) ?? { ...span, projectId: group.projectId, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName, weightKg: 0, pickups: 0 }
-    weights.set(key, row)
-    row.weightKg += group.weightKg
-    row.pickups += group.n
-    totals.pickupWeightKg += group.weightKg
-    totals.weighedPickups += group.n
-  }
-  return {
-    window: windowOf(query),
-    totals,
-    unloads: [...rows.values()].sort(
-      (a, b) => a.from.localeCompare(b.from) || a.projectId.localeCompare(b.projectId) || byName(a.wasteFractionName, b.wasteFractionName) || byName(a.unloadingStationName, b.unloadingStationName),
-    ),
-    pickupWeights: [...weights.values()].sort((a, b) => a.from.localeCompare(b.from) || a.projectId.localeCompare(b.projectId) || byName(a.wasteFractionName, b.wasteFractionName)),
-  }
-}
-
-const withSentence = (warning: DomainWarning): WasteDataWarning => ({ ...warning, sentence: wasteDataWarningSentence(warning) })
-
-async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataReportQuery): Promise<WasteDataReport> {
-  const { projectId } = query
-  const window = { from: query.from, to: query.to }
-  const review = weightReviewOf(tx, principal.companyId, unload.id)
-  const status = reviewStatus(review.decision)
-  const groups = await tx
-    .select({
-      projectId: unload.projectId,
-      municipality: project.name,
-      projectKind: project.kind,
-      unloadingStationId: unload.unloadingStationId,
-      unloadingStationName: unloadingStation.name,
-      wasteFractionId: unload.wasteFractionId,
-      wasteFractionName: wasteFraction.name,
-      wasteCode: wasteFraction.wasteCode,
-      status,
-      refused,
-      netKg: total(unload.netKg),
-      n: count(),
-    })
-    .from(unload)
-    .innerJoin(project, projectOf(unload))
-    .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, unload.companyId), eq(wasteFraction.id, unload.wasteFractionId)))
-    .innerJoin(unloadingStation, and(eq(unloadingStation.companyId, unload.companyId), eq(unloadingStation.id, unload.unloadingStationId)))
-    .leftJoinLateral(review, sql`true`)
-    .where(and(fenced(unload, principal, projectId), instantInWindow(unload.occurredAt, window)))
-    .groupBy(unload.projectId, project.name, project.kind, unload.unloadingStationId, unloadingStation.name, unload.wasteFractionId, wasteFraction.name, wasteFraction.wasteCode, status, refused)
-
-  const rows: WasteDataRow[] = []
-  const unreviewed: Extract<DomainWarning, { kind: "not-reviewed" }>[] = []
-  const uncoded: Extract<DomainWarning, { kind: "no-waste-code" }>[] = []
-  const notMunicipal: Extract<DomainWarning, { kind: "not-a-municipality" }>[] = []
-  for (const group of groups) {
-    const standing = unloadStanding(group.status as WeightReviewStatus)
-    // A rejected weight is filed nowhere, nor a load the station refused (O9 of #290), and a corrected one through its correction.
-    if (standing === "rejected" || standing === "superseded" || group.refused) continue
-    const place = { projectId: group.projectId, municipality: group.municipality, unloadingStationId: group.unloadingStationId, unloadingStationName: group.unloadingStationName, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName }
-    if (standing !== "approved") {
-      unreviewed.push({ kind: "not-reviewed", ...place, unloads: group.n, netKg: group.netKg })
-      continue
-    }
-    rows.push({ ...place, wasteCode: group.wasteCode, netKg: group.netKg, unloads: group.n })
-    if (group.wasteCode === null && !uncoded.some((warning) => warning.wasteFractionId === group.wasteFractionId)) {
-      uncoded.push({ kind: "no-waste-code", wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName })
-    }
-    if (!isMunicipality(group.projectKind) && !notMunicipal.some((warning) => warning.projectId === group.projectId)) {
-      notMunicipal.push({ kind: "not-a-municipality", projectId: group.projectId, municipality: group.municipality, projectKind: group.projectKind })
-    }
-  }
-  // By name, then by id, so two names the collation holds equal still come in one order.
-  const byPlace = (a: WasteDataRow | (typeof unreviewed)[number], b: typeof a) =>
-    byName(a.municipality, b.municipality) ||
-    a.projectId.localeCompare(b.projectId) ||
-    byName(a.unloadingStationName, b.unloadingStationName) ||
-    a.unloadingStationId.localeCompare(b.unloadingStationId) ||
-    byName(a.wasteFractionName, b.wasteFractionName) ||
-    a.wasteFractionId.localeCompare(b.wasteFractionId)
-  rows.sort(byPlace)
-  unreviewed.sort(byPlace)
-  uncoded.sort((a, b) => byName(a.wasteFractionName, b.wasteFractionName) || a.wasteFractionId.localeCompare(b.wasteFractionId))
-  notMunicipal.sort((a, b) => byName(a.municipality, b.municipality) || a.projectId.localeCompare(b.projectId))
-  return {
-    window: { projectId: projectId ?? null, from: query.from, to: query.to },
-    rows,
-    totals: { netKg: rows.reduce((sum, row) => sum + row.netKg, 0), unloads: rows.reduce((sum, row) => sum + row.unloads, 0) },
-    warnings: [...uncoded, ...notMunicipal, ...unreviewed].map(withSentence),
-  }
-}
-
-function reading<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
-  return (c: Context<AuthEnv>, query: Query): Promise<Report> => {
+function answer<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
+  return async (c: Context<AuthEnv>, query: Query) => {
     const principal = c.get("principal")
     if (query.projectId !== undefined) requireProject(principal, query.projectId, "projectId", "query")
-    return read(c.get("tx"), principal, query)
+    return c.json(await read(c.get("tx"), principal, query))
   }
-}
-
-function answer<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
-  const readFor = reading(read)
-  return async (c: Context<AuthEnv>, query: Query) => c.json(await readFor(c, query))
 }
 
 export function reportRoutes(deps: RouteDeps) {
   const { now } = deps
   const service = answer(serviceReport)
   const tickets = answer((tx, principal, query: TicketReportQuery) => ticketReport(tx, principal, query, now()))
-  const revenue = answer(revenueReport)
-  const tonnage = answer(tonnageReport)
-  const wasteData = answer(wasteDataReport)
-  const wasteDataFor = reading(wasteDataReport)
   return routes(deps)
     .get(
       "/reports/service",
@@ -648,7 +354,7 @@ export function reportRoutes(deps: RouteDeps) {
         invalid: [`the query does not parse: ${WINDOW_REFUSED}, or a filter is not an id`],
         responses: {
           200: describeJson("The service report.", ServiceReport),
-          403: describe403(PERFORMANCE, "route-studio.routes"),
+          403: describe403("route-studio.routes"),
         },
       },
       (c) => service(c, c.req.valid("query")),
@@ -666,88 +372,9 @@ export function reportRoutes(deps: RouteDeps) {
         invalid: [`the query does not parse: ${WINDOW_REFUSED}`],
         responses: {
           200: describeJson("The ticket report.", TicketReport),
-          403: describe403(PERFORMANCE, "operate.tickets"),
+          403: describe403("operate.tickets"),
         },
       },
       (c) => tickets(c, c.req.valid("query")),
-    )
-    .get(
-      "/reports/revenue",
-      {
-        operationId: "getRevenueReport",
-        summary: "What was invoiced",
-        description: `The documents issued over the window — invoices and credit notes, by \`issuedOn\` — by currency, never summed across two: how many of each and their net, VAT and gross in minor units, a credit note's negative. The same per interval of the series and currency, an interval without a document absent, and per product and currency: the quantity, a line that takes the service back (a credit note's, a reversal's) counted against it, and the net, largest first. ${WINDOW_SENTENCE}`,
-        module: ANALYTICS,
-        action: "view",
-        also: ["commercial.invoices", "view"],
-        query: RevenueReportQuery,
-        invalid: [`the query does not parse: ${WINDOW_REFUSED}`],
-        responses: {
-          200: describeJson("The revenue report.", RevenueReport),
-          403: describe403(ANALYTICS, "commercial.invoices"),
-        },
-      },
-      (c) => revenue(c, c.req.valid("query")),
-    )
-    .get(
-      "/reports/tonnage",
-      {
-        operationId: "getTonnageReport",
-        summary: "What was unloaded and weighed",
-        description: `The unloads of the window — recorded at a station on one of its days, on the project's clock — by project, fraction, station and interval of the series, a combination without an unload absent: their net weight in whole kilograms by weight review, \`approvedKg\` and \`capturedKg\` (nobody has reviewed it yet) making up \`netKg\`, and a rejected unload's weight beside them and in no total; a corrected unload is not counted, its correction is. And the weights recorded at the pickups (the \`weight\` proof, a lifter's or a hand scale's reading, each pickup's latest) of the pickups collected on the window's routes, by project, fraction and the route's operating day's interval. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows both to one fraction, \`unloadingStationId\` the unloads to one station.`,
-        module: ANALYTICS,
-        action: "view",
-        also: ["route-studio.weights", "view"],
-        query: TonnageReportQuery,
-        invalid: [`the query does not parse: ${WINDOW_REFUSED}, or a filter is not an id`],
-        responses: {
-          200: describeJson("The tonnage report.", TonnageReport),
-          403: describe403(ANALYTICS, "route-studio.weights"),
-        },
-      },
-      (c) => tonnage(c, c.req.valid("query")),
-    )
-    .get(
-      "/reports/waste-data",
-      {
-        operationId: "getWasteDataReport",
-        summary: "The waste-data report for the national system",
-        description: `The unloads of the period whose latest weight review approved them — recorded at a station on one of its days, on the project's clock — as net kilograms per municipality (the project they were collected for), unloading station and waste fraction, each fraction with its waste code; a combination without an approved unload is absent, and there is no series. Beside the rows, the warnings of what they file — a fraction without a waste code (its rows carry the code null) and a project whose kind is not \`Municipality\` (its rows carry its name as the municipality) — then the unloads nobody has reviewed, per municipality, station and fraction, which no row counts. A rejected unload is counted nowhere, a corrected one through its correction once that is approved. \`from\` and \`to\` are the period's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`projectId\` narrows it to one of the caller's projects, and absent it spans every project the caller works in. \`GET /reports/waste-data.csv\` is the same report as a file.`,
-        module: COMPLIANCE,
-        action: "view",
-        also: ["route-studio.weights", "view"],
-        query: WasteDataReportQuery,
-        invalid: [`the query does not parse: ${PERIOD_REFUSED}`],
-        responses: {
-          200: describeJson("The waste-data report.", WasteDataReport),
-          403: describe403(COMPLIANCE, "route-studio.weights"),
-        },
-      },
-      (c) => wasteData(c, c.req.valid("query")),
-    )
-    .get(
-      "/reports/waste-data.csv",
-      {
-        operationId: "getWasteDataFile",
-        summary: "The waste-data report as a file",
-        description: `The waste-data report as a plain CSV of our own, for the office to file with the national waste-data system by hand: UTF-8 behind a byte-order mark, CRLF records, the columns \`period_from\`, \`period_to\`, \`municipality\`, \`unloading_station\`, \`fraction\`, \`waste_code\` (blank where the fraction has none), \`kg\` and \`warning\`; a data row per municipality, station and fraction, then a warning row each, its sentence in \`warning\` and \`kg\` blank. It is not the national system's own import layout. \`separator=semicolon\` writes it for a spreadsheet under a Danish locale. The query is the report's.`,
-        module: COMPLIANCE,
-        action: "view",
-        also: ["route-studio.weights", "view"],
-        query: WasteDataFileQuery,
-        invalid: [`the query does not parse: ${PERIOD_REFUSED}, or \`separator\` is neither \`comma\` nor \`semicolon\``],
-        responses: {
-          200: { description: "The file, as an attachment.", content: { "text/csv": { schema: { type: "string" as const } } } },
-          403: describe403(COMPLIANCE, "route-studio.weights"),
-        },
-      },
-      async (c) => {
-        const { separator, ...query } = c.req.valid("query")
-        const report = await wasteDataFor(c, query)
-        return c.body(wasteDataCsv({ from: report.window.from, to: report.window.to, rows: report.rows, warnings: report.warnings }, SEPARATOR_CHARACTERS[separator]), 200, {
-          "content-type": "text/csv; charset=utf-8",
-          "content-disposition": `attachment; filename="waste-data-${query.from}-${query.to}.csv"`,
-        })
-      },
     )
 }

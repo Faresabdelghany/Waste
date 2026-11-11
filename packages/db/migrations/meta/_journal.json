@@ -813,6 +813,13 @@
       "when": 1794384670715,
       "tag": "0115_drop_route_problem_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1794387671833,
+      "tag": "0116_drop_analytics_compliance",
+      "breakpoints": true
     }
   ]
 }

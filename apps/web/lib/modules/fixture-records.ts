@@ -24,8 +24,6 @@ const copenhagenFixtureRecordIds = [
   "portal-activity-parkvej",
   "portal-request-8826",
   "insight-441",
-  "dashboard-ops",
-  "dashboard-service-provider",
   "flow-14",
   "flow-09",
   "suggestion-881",
@@ -54,8 +52,6 @@ const companyWideFixtureRecordIds = [
   "report-ads-july",
   "metric-route-cost",
   "compliance-gps",
-  "report-mgmt-july",
-  "metric-proof",
   "integration-navision",
   "sales-lead-greenloop",
 ] as const
