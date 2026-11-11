@@ -33,14 +33,16 @@ describe("the landing", () => {
     assert.equal(afterSignIn({ ...OFFICE, ...attendant }, null), "/check-in")
   })
 
-  test("an office account lands where its role views something: on operations where it views anything there, else on the sidebar's first page it views", () => {
+  test("an office account lands where its role views something: on operations where it views anything there, else on the sidebar's first page it views, the Dashboard only when it views no other", () => {
     const seeded = (key: SystemRoleKey) => ({ ...OFFICE, role: { key, grants: SYSTEM_ROLES.find((role) => role.key === key)?.grants ?? [] } })
-    // The Route Planner views nothing of operations; the Dashboard's Analytics is the first page of the sidebar it views.
-    assert.equal(landingOf(seeded("route-planner")), "/performance")
+    // The Route Planner views nothing of operations, and the Dashboard's Analytics before the planning it works in.
+    assert.equal(landingOf(seeded("route-planner")), "/plan")
     assert.equal(landingOf(seeded("dispatcher")), "/operate")
     assert.equal(landingOf(seeded("company-administrator")), "/operate")
     const custom = (grants: Grants) => ({ ...OFFICE, role: { key: null, grants } })
     assert.equal(landingOf(custom([{ moduleKey: "fleet.vehicles", actions: ["view"] }])), "/fleet")
+    assert.equal(landingOf(custom([{ moduleKey: "improve.performance", actions: ["view"] }, { moduleKey: "fleet.vehicles", actions: ["view"] }])), "/fleet")
+    assert.equal(landingOf(custom([{ moduleKey: "improve.performance", actions: ["view"] }])), "/performance")
     // The Driver App is no module of the operations page, nor is Compliance a Dashboard tab without the weights beside it.
     assert.equal(landingOf(custom([{ moduleKey: "operate.driver-app", actions: ["view"] }, { moduleKey: "improve.compliance", actions: ["view"] }, { moduleKey: "plan.map-planning", actions: ["view"] }])), "/plan")
   })
