@@ -1,4 +1,4 @@
-// The release's and the reset's database phases (Issue #152), run as the
+// The release's, the reset's and the redrive's database phases (Issue #152), run as the
 // workflow runs them — one after another through a context, the artifact
 // store between them played by a copy — on a fresh database per test, the
 // barrier closed on throwaway roles (roles are cluster-wide, and every other
@@ -22,15 +22,18 @@ import path from "node:path"
 import { after, before, describe, test } from "node:test"
 
 import { isDatabaseRequired } from "@waste/tooling/database-under-test"
+import { PgBoss } from "pg-boss"
 
 import { createDb } from "../client"
+import { OUTBOX_DEAD_QUEUE } from "../jobs"
 import { migrateDatabase } from "../migrate"
 import { backupTools } from "../pilot/backup-scripts"
 import { LOGIN_STATE_FILE, readLogins } from "../pilot/barrier"
 import { createContext, type Context, type Environment } from "../pilot/phase"
-import { releasePhases, resetToSeedPhases } from "../pilot/phases"
+import { redrivePhases, releasePhases, resetToSeedPhases } from "../pilot/phases"
 import { LOCAL_RUN } from "../pilot/run"
 import { seedDemo } from "../seed/demo"
+import { PGBOSS_SCHEMA } from "../sql/pgboss"
 import { databaseUnderTest, freshDatabase, sharedDatabase } from "./database"
 
 const database = databaseUnderTest()
@@ -140,4 +143,66 @@ describe("a reset to the seed's phases", { skip }, () => {
         await owner.close()
       }
     }))
+})
+
+describe("a redrive's phase", { skip }, () => {
+  /** Two consumers' queues dead-lettering to the worker's dead-letter queue, as its boot makes them, and one job failed past its retries on each of the first `failed`. */
+  async function withDeadLetters(context: Context, failed: number, body: (boss: PgBoss, queues: readonly string[]) => Promise<void>): Promise<void> {
+    const boss = new PgBoss({ connectionString: context.adminUrl(), max: 1, schema: PGBOSS_SCHEMA, migrate: false, supervise: false, schedule: false })
+    await boss.start()
+    const queues = ["outbox.specimen.finance", "outbox.specimen.resolution"]
+    try {
+      await boss.createQueue(OUTBOX_DEAD_QUEUE)
+      for (const [index, queue] of queues.entries()) {
+        await boss.createQueue(queue, { deadLetter: OUTBOX_DEAD_QUEUE, retryLimit: 2 })
+        if (index >= failed) continue
+        const id = await boss.send(queue, { n: index }, { retryLimit: 0 })
+        const [job] = await boss.fetch(queue)
+        assert.equal(job.id, id)
+        await boss.fail(queue, job.id, { message: "the cause, not yet fixed" })
+      }
+      await body(boss, queues)
+    } finally {
+      await boss.stop({ graceful: false })
+    }
+  }
+
+  test("refuses a database no worker has started on, which has no dead-letter queue", () =>
+    onFreshDatabase("waste_redrive_none", {}, async ({ context }) => {
+      await assert.rejects(redrivePhases.redrive.run(context), /^Error: No outbox\.dead queue on this database: the worker that makes it has not started here$/)
+    }))
+
+  test("refuses a database behind main's migrations: the fix the jobs wait for is not released", () =>
+    onFreshDatabase("waste_redrive_behind", {}, async ({ context }) => {
+      const owner = createDb(context.adminUrl(), { max: 1 })
+      try {
+        await owner.sql`delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`
+      } finally {
+        await owner.close()
+      }
+      await assert.rejects(redrivePhases.redrive.run(context), /^Error: 1 migration\(s\) pending: release first, so the jobs run on the code that fixes them$/)
+    }))
+
+  test("says so when there is no dead letter, and moves nothing", () =>
+    onFreshDatabase("waste_redrive_empty", {}, async ({ context, said }) =>
+      withDeadLetters(context, 0, async () => {
+        await redrivePhases.redrive.run(context)
+        assert.equal(said.at(-1), "outbox.dead holds no dead letter: nothing to redrive")
+      })))
+
+  test("puts every dead letter back on the queue it failed on, a fresh job under that queue's policy, and says where they went", () =>
+    onFreshDatabase("waste_redrive", {}, async ({ context, said }) =>
+      withDeadLetters(context, 2, async (boss, queues) => {
+        assert.equal((await boss.findJobs(OUTBOX_DEAD_QUEUE, {})).length, 2, "one dead letter for each failed job")
+        await redrivePhases.redrive.run(context)
+        assert.deepEqual(said.slice(-2), [
+          "outbox.dead held 2 dead letter(s): 1 from outbox.specimen.finance, 1 from outbox.specimen.resolution",
+          "Redrove 2, each a fresh job on the queue it failed on; one that fails again is dead-lettered again",
+        ])
+        assert.deepEqual(await boss.findJobs(OUTBOX_DEAD_QUEUE, {}), [], "the dead-letter queue is empty")
+        for (const [index, queue] of queues.entries()) {
+          const waiting = (await boss.findJobs<{ n: number }>(queue, {})).filter((job) => job.state === "created")
+          assert.deepEqual(waiting.map((job) => [job.data, job.retryLimit]), [[{ n: index }, 2]], `${queue}: its job again, with the queue's own retries and not the send's none`)
+        }
+      })))
 })

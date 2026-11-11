@@ -21,8 +21,8 @@ export type User = { id: string; email: string; fullName: string; roleId: string
 export const TESTER_ROLE = "Route Planner"
 export const TESTER_PROJECT = "Copenhagen Central"
 
-/** Where the Route Planner lands (`landingOf`): it views nothing of operations, so on the sidebar's first page it views, the Dashboard, for its Analytics. */
-export const TESTER_LANDING = /\/performance/
+/** Where the Route Planner lands (`landingOf`): it views nothing of operations, so on the sidebar's first page it views after the Dashboard, the planning it works in. */
+export const TESTER_LANDING = /\/plan/
 
 export async function listAll<Item>(api: APIRequestContext, path: string, query: Readonly<Record<string, string>> = {}): Promise<Item[]> {
   const items: Item[] = []

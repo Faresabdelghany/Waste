@@ -78,7 +78,7 @@ describe("migrateDatabase on a fresh database", { skip: database.skip }, () => {
       select proname from pg_proc where pronamespace = 'wms'::regnamespace order by proname`
     assert.deepEqual(
       functions.map((row) => row.proname),
-      ["audit_row", "current_company_id", "outbox_event_route_problem", "touch_updated_at", "uuidv7"],
+      ["audit_row", "current_company_id", "touch_updated_at", "uuidv7"],
     )
     const [role] = await owner.sql<{ rolbypassrls: boolean; rolsuper: boolean }[]>`
       select rolbypassrls, rolsuper from pg_roles where rolname = ${API_ROLE}`

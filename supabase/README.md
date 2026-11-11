@@ -6,7 +6,7 @@ This directory holds the local stack's configuration (`config.toml`, read by `pn
 
 Every owner-level action on the Pilot's database goes through one workflow, `.github/workflows/pilot-database.yml` (Issue #152, decided in #133). Nothing else holds the owner's connection string: not a developer's machine, not the Supabase CLI, not an MCP session. The workflow runs one fixed operation per run, and every operation's job runs under the `pilot` environment, which admits `main` alone. Since 2026-10-28 (ADR-0011) the `release` runs **by itself** once CI has passed on a commit pushed to `main`, releasing exactly that commit with `deploy_api` on and `run_seed` off; every operation, `release` included, can still be dispatched by hand on `main`.
 
-**No approval gate.** The owner removed the `pilot` environment's required reviewer on 2026-10-28, superseding the approval gate decided in #133 and built in #152. Every operation — `release`, `restore`, `reset-to-seed`, `grant-logins`, `recover-logins` — runs without approval the moment it is triggered. What protects the Pilot now is in the jobs: CI green on the exact commit released, the journal check before anything is written, an encrypted backup before every migration (and before every restore and reset), the fingerprint check after, the write barrier around a restore or a reset, and the live proof of the deployed build. Anyone who can push to `main` or dispatch the workflow acts on the Pilot.
+**No approval gate.** The owner removed the `pilot` environment's required reviewer on 2026-10-28, superseding the approval gate decided in #133 and built in #152. Every operation — `release`, `restore`, `reset-to-seed`, `grant-logins`, `recover-logins`, `redrive` — runs without approval the moment it is triggered. What protects the Pilot now is in the jobs: CI green on the exact commit released, the journal check before anything is written, an encrypted backup before every migration (and before every restore and reset), the fingerprint check after, the write barrier around a restore or a reset, and the live proof of the deployed build. Anyone who can push to `main` or dispatch the workflow acts on the Pilot.
 
 | Operation | What it does | Inputs |
 |---|---|---|
@@ -16,6 +16,7 @@ Every owner-level action on the Pilot's database goes through one workflow, `.gi
 | `grant-logins` | LOGIN for exactly `wms_api` and `wms_worker` with the environment's app-role passwords. | — |
 | `restore` | A named run's backup restored inside the write barrier. | `source_run_id`, `services_suspended` |
 | `recover-logins` | The LOGIN states a restore or reset recorded, put back after it failed or was cancelled. | `source_run_id` |
+| `redrive` | Every job on the worker's dead-letter queue, `outbox.dead`, put back on the queue it failed on. | — |
 
 No input is SQL, a shell command or a path; a run id is validated before any step uses it. To dispatch: Actions › Pilot database › Run workflow, branch `main`, choose the operation; the job starts without asking. From a terminal: `gh workflow run pilot-database.yml --ref main -f operation=check`.
 
@@ -113,6 +114,12 @@ The job refuses a Pilot behind `main`'s migrations (the seed is `main`'s: run `r
 
 - **The owner's password** (`postgres`): reset it in the dashboard (Database › Settings) whenever the connection string has been seen anywhere but the `pilot` environment and the password manager; copy the Session pooler string from the Connect dialog, percent-encode the password, add `?sslmode=require`, and replace `PILOT_DATABASE_ADMIN_URL` and the password manager's copy. The pooler may answer 28P01 for about a minute after a reset. A reset does not touch the app roles' logins.
 - **The app roles' passwords**: generate new ones; store the new URLs as `PILOT_DATABASE_URL` and `PILOT_WORKER_DATABASE_URL` and in the Suga service's environment; run `grant-logins`; redeploy the service so it reads them; confirm `/readyz` answers with each least-privileged role; then delete any old copy.
+
+## A redrive
+
+An outbox consumer's job that fails past its retries is copied to the worker's dead-letter queue, `outbox.dead`, with its data and the queue it failed on; the worker's `/readyz` counts those waiting as `deadLetters`. Nothing works that queue. Once the cause is fixed **and released**, `redrive` puts every dead letter back: each is re-created as a fresh job on the queue it failed on, under that queue's retry policy as it stands, and the worker runs it.
+
+The job checks the journal first and refuses while a migration is pending, since the fix the jobs wait for is then not live. It takes no input: no queue, no job id, no filter. It says how many dead letters the queue held, from which queues, and how many it moved. A job that fails again is dead-lettered again, so a redrive loses nothing; run it again after the next fix. A dead letter whose queue no longer exists stays where it is and is counted in the summary. The Suga service stays running: the worker is what works the redriven jobs.
 
 ## Adoption
 

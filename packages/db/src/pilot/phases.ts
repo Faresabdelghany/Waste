@@ -19,6 +19,7 @@ import type { Sql } from "postgres"
 import { grantLogin } from "../bootstrap"
 import { createDb } from "../client"
 import { requireFingerprint } from "../fingerprint"
+import { OUTBOX_DEAD_QUEUE, QueueMissing, redriveDeadLetters } from "../jobs"
 import { migrateAndSay, requireJournal } from "../migrate"
 import { resetToSeed, spellReset } from "../reset-to-seed"
 import { GRANTED_ROLES, OWNER } from "../roles"
@@ -189,6 +190,37 @@ export const recoverLoginsPhases = {
         const scope = { identity: await databaseIdentity(sql, url), run: source.run, commit: source.commit, barrier: context.barrier }
         context.summary(spellOpened(await openFromRecord(sql, readFileSync(file, "utf8"), scope)))
       })
+    },
+  } satisfies Phase,
+}
+
+/**
+ * redrive: every job on the worker's dead-letter queue put back on the queue
+ * it failed on, once the cause is fixed and released — pg-boss's own redrive
+ * (jobs.ts), with no filter an operator could type. Refuses a database with
+ * migrations pending, where the fix is not released yet. A job that fails
+ * again is dead-lettered again; one whose queue is gone stays, and is said.
+ */
+export const redrivePhases = {
+  redrive: {
+    name: "redrive",
+    async run(context) {
+      const url = context.adminUrl()
+      const { pending } = await requireJournal(url, context.log)
+      if (pending.length > 0) throw new Refusal(`${pending.length} migration(s) pending: release first, so the jobs run on the code that fixes them`)
+      const pool = createDb(url, { max: 1 })
+      try {
+        const { total, destinations, unroutable, moved } = await redriveDeadLetters(pool, OUTBOX_DEAD_QUEUE)
+        if (total === 0) return context.summary(`${OUTBOX_DEAD_QUEUE} holds no dead letter: nothing to redrive`)
+        context.summary(`${OUTBOX_DEAD_QUEUE} held ${total} dead letter(s): ${destinations.map(({ name, count }) => `${count} from ${name}`).join(", ") || "none with a queue to go back to"}`)
+        context.summary(`Redrove ${moved}, each a fresh job on the queue it failed on; one that fails again is dead-lettered again`)
+        if (unroutable > 0) context.summary(`${unroutable} left in place: the queue they failed on is gone`)
+      } catch (error) {
+        if (error instanceof QueueMissing) throw new Refusal(`No ${OUTBOX_DEAD_QUEUE} queue on this database: the worker that makes it has not started here`)
+        throw error
+      } finally {
+        await pool.close()
+      }
     },
   } satisfies Phase,
 }

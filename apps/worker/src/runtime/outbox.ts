@@ -66,7 +66,9 @@
 // `publishes` it, `DEAD_LETTER_QUEUE_OPTIONS`: kept ninety days, worked by
 // nobody), data and output intact and `sourceName`/`sourceId` naming where it
 // came from; `/readyz` carries the queue's waiting count as `deadLetters`,
-// information and never a 503, and the redrive is pg-boss's own: `await
+// information and never a 503, and the redrive is pg-boss's own (on the Pilot
+// the `redrive` operation runs it for every dead letter, `redriveDeadLetters`
+// in `@waste/db/jobs`, where the queue is named): `await
 // boss.previewRedrive("outbox.dead")` to see where the jobs would go, `await
 // boss.redrive("outbox.dead", { ids })` (or `{ sourceName:
 // "outbox.<kind>.<consumer>" }`, or no filter for all of them) to re-create
@@ -76,6 +78,7 @@
 // letter and not each consumer, so a consumer added later cannot forget it.
 import { Id } from "@waste/contracts/ids"
 import { OutboxEvent, OutboxKind, outboxPayloadOf, type OutboxPayload } from "@waste/contracts/outbox"
+import { OUTBOX_DEAD_QUEUE } from "@waste/db/jobs"
 import { aggregateOf, type AggregateOf } from "@waste/domain/outbox/vocabulary"
 import type { WorkOptions } from "pg-boss"
 import * as z from "zod"
@@ -90,9 +93,6 @@ export const consumerQueue = <Kind extends OutboxKind, Name extends string>(kind
 
 /** A consumer's name as its queues spell it: lowercase letters and hyphens, the context it belongs to. */
 export const CONSUMER_NAME = /^[a-z]+(?:-[a-z]+)*$/
-
-/** The dead-letter queue every consumer's queue names: where a job that failed past its retries is copied, data intact, for an operator to redrive. */
-export const OUTBOX_DEAD_QUEUE = "outbox.dead"
 
 /** What a job on an `outbox.<kind>` queue carries: the contracts' `OutboxEvent`, stamped, with the tenant it belongs to. */
 export const RelayedJob = OutboxEvent.extend({
