@@ -298,7 +298,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       return fn(tx)
     })
 
-  test("0008 created the seven tables in wms, each fenced, four with the updated_at trigger and the three ledgers with none, and gave company its counter at 1000; 0114 gave the outbox the route problem's trigger", async () => {
+  test("0008 created the seven tables in wms, each fenced, four with the updated_at trigger and the three ledgers with none, and gave company its counter at 1000", async () => {
     // The API role's policies alone: the public door's own (0017) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] | null }[]>`
@@ -310,7 +310,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       order by c.relname`
     assert.deepEqual(
       rows.map(({ table, enabled, forced, policies, triggers }) => ({ table, enabled, forced, policies, triggers })),
-      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: LEDGERS.includes(table) ? null : table === getTableName(outboxEvent) ? ["outbox_event_route_problem", `${table}_touch_updated_at`] : [`${table}_touch_updated_at`] })),
+      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: LEDGERS.includes(table) ? null : [`${table}_touch_updated_at`] })),
     )
     const [counter] = await owner.sql<{ default: string; nullable: string }[]>`select column_default as default, is_nullable as nullable from information_schema.columns where table_schema = 'wms' and table_name = 'company' and column_name = 'next_route_number'`
     assert.deepEqual(counter, { default: "1000", nullable: "NO" })
