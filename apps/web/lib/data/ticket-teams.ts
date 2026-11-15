@@ -1,10 +1,11 @@
 // Ticket teams on the Pilot (O30 of #290, row 7.20): where the teams live, the
 // form a team is added and edited with, and a project's default team per kind
-// as rows a person picks and the body `PUT /projects/:id/ticket-team-defaults`
-// replaces the set with. The teams are records of `configure.templates`
+// and per type as the rows a person reads, the choices one is picked from and
+// the set `PUT /projects/:id/ticket-team-defaults` is handed when one row
+// moves (#606). The teams are records of `configure.templates`
 // (lib/api/records/ticket-teams.ts), written through the record store; the
-// defaults are one project's configuration and read and written directly, as
-// the SLA is (components/settings/ticket-teams-settings.tsx).
+// defaults are one project's configuration and read and written directly
+// (lib/api/ticket-team-defaults.ts), as the SLA is.
 import type { TicketTeamDefaults, TicketTeamDefaultsSet } from "@waste/contracts/ticket-teams"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 
@@ -12,7 +13,7 @@ import { moduleAt } from "@/lib/modules/keys"
 
 import { type Grants, mayOn } from "@/lib/modules/grants"
 import { statusLabel } from "@/lib/records/fields"
-import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import { mintedRecord } from "./containers"
 import { scopeKey, typeLabel, typesListed, type TicketScope, type TypeChoices } from "./ticket-scope"
@@ -85,19 +86,51 @@ export function teamDefaultRowsOf(defaults: TicketTeamDefaults, webIdOf: (server
   return [...TICKET_KINDS.map((kind) => row({ kind, ticketTypeId: null }, statusLabel(kind))), ...typesListed(types, named).map((type) => row({ kind: null, ticketTypeId: type.id }, typeLabel(type)))]
 }
 
+/** The team a set names for one kind or type, by server id; null where it names none. */
+export const teamOfScope = (defaults: TicketTeamDefaults, scope: TicketScope): string | null => defaults.defaults.find((entry) => scopeKey(entry) === scopeKey(scope))?.teamId ?? null
+
+/** The set with one kind's or type's team moved (#606): named afresh, changed, or left out with null, every other entry as it stood. The body `PUT` replaces the set with. */
+export function defaultsWithTeam(defaults: TicketTeamDefaults, scope: TicketScope, teamId: string | null): TicketTeamDefaultsSet {
+  const others = defaults.defaults.filter((entry) => scopeKey(entry) !== scopeKey(scope))
+  if (teamId === null) return { defaults: others }
+  const named = { kind: scope.kind, ticketTypeId: scope.ticketTypeId, teamId }
+  // A row the set holds keeps its place, so the answer reads in the order it was read in.
+  return { defaults: others.length === defaults.defaults.length ? [...others, named] : defaults.defaults.map((entry) => (scopeKey(entry) === scopeKey(scope) ? named : entry)) }
+}
+
 export const PICK_A_HELD_TEAM = "Pick a team the API holds"
 
-/** The body the rows become: each kind or type with a team, by server id; or the first row whose team the API does not hold. */
-export function teamDefaultsBodyOf(rows: readonly TeamDefaultRow[], serverIdOf: (webId: string) => string | undefined): TicketTeamDefaultsSet | { key: string; message: string } {
-  const defaults: TicketTeamDefaultsSet["defaults"] = []
-  for (const row of rows) {
-    if (row.teamId === NO_TEAM) continue
-    const teamId = serverIdOf(row.teamId)
-    if (teamId === undefined) return { key: row.key, message: PICK_A_HELD_TEAM }
-    defaults.push({ kind: row.kind, ticketTypeId: row.ticketTypeId, teamId })
-  }
-  return { defaults }
+/** The team a picker's value names, by server id and null for none; or the refusal where the API does not hold it. */
+export function pickedTeamOf(teamId: string, serverIdOf: (webId: string) => string | undefined): { teamId: string | null } | { message: string } {
+  if (teamId === NO_TEAM) return { teamId: null }
+  const held = serverIdOf(teamId)
+  return held === undefined ? { message: PICK_A_HELD_TEAM } : { teamId: held }
 }
+
+type TeamRead = Pick<BusinessRecord, "id" | "name" | "status">
+
+/** What no team reads as: a kind's tickets open with none, a type's go to its kind's. */
+const noTeamLabel = (ofType: boolean): string => (ofType ? "As its kind" : "No team")
+
+const teamLabel = (team: TeamRead): string => (team.status === "Active" ? team.name : `${team.name} · ${team.status}`)
+
+/** What a kind's team, or with `ofType` a type's, is picked from: none, each team that takes tickets, and the one `held` already whatever its status, so the picker reads what is saved. */
+export function teamChoicesOf(ofType: boolean, teams: readonly TeamRead[], held: string): BusinessFormOption[] {
+  return [{ value: NO_TEAM, label: noTeamLabel(ofType) }, ...teams.filter((team) => team.status === "Active" || team.id === held).map((team) => ({ value: team.id, label: teamLabel(team) }))]
+}
+
+/** How a row's team reads in the list: its name, its status beside it once it takes no new ticket, and for none what the row's tickets do instead. A team the list does not hold is on its way while the teams are `reading`, and unlisted once they were answered or their read failed. */
+export function teamShownOf(row: Pick<TeamDefaultRow, "teamId" | "ticketTypeId">, teams: readonly TeamRead[], reading: boolean): string {
+  if (row.teamId === NO_TEAM) return noTeamLabel(row.ticketTypeId !== null)
+  const team = teams.find((candidate) => candidate.id === row.teamId)
+  if (team === undefined) return reading ? "Reading the team…" : "A team that is not listed"
+  return teamLabel(team)
+}
+
+/** What a default team the API took is told as: whose it is, in which project, and the team. */
+export const defaultTeamSaved = (label: string, projectName: string, team: string): { title: string; description: string } => ({ title: "Default team saved", description: `${label} in ${projectName}: ${team}.` })
+
+export const DEFAULT_TEAM_NOT_SAVED = "The default team was not saved"
 
 /** What the person's role lets them do with the teams: read them under `view` on the templates' module, change them under `edit`, add one under `create`. */
 export const ticketTeamsAccessOf = (grants: Grants | null): { view: boolean; edit: boolean; create: boolean } => ({

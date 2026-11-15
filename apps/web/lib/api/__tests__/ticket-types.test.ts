@@ -26,6 +26,8 @@ import {
   formValuesOfFields,
   TICKET_TYPE_PERMISSIONS_KEY,
   ticketTypeFormFields,
+  ticketTypeFormFor,
+  TYPE_DEFAULT_TEAM_FIELD,
   typeActionsOf,
   typeFieldFormId,
   typeFieldsOf,
@@ -105,6 +107,20 @@ describe("a ticket type", () => {
     assert.deepEqual(body, { name: "Sofa pick-up", kind: "container-request", description: null, status: "active", isDefault: true })
     assert.ok(TicketTypeCreate.safeParse(body).success)
     assert.deepEqual(ticketTypeAdapter.toCreateBody?.(createTicketTypeRecord({ name: "Sofa" }, { now: 2 }), context), { path: "kind", message: "Pick the kind the type belongs to" })
+  })
+
+  test("its form asks the default team in the project shown, which is the project's setting and never the type's own (#606)", () => {
+    const teams = [{ value: "no-team", label: "As its kind" }, { value: "team-1", label: "Container desk" }]
+    const field = ticketTypeFormFor({ name: "Copenhagen Central" }, teams).sections.flatMap((section) => section.fields).find((candidate) => candidate.id === TYPE_DEFAULT_TEAM_FIELD)
+    assert.deepEqual([field?.label, field?.type, field?.defaultValue, field?.options], ["Default team in Copenhagen Central", "select", "no-team", teams])
+    // An account that works in no project is asked for no team: there is no project to set it in.
+    assert.deepEqual(
+      ticketTypeFormFor(null, teams).sections.flatMap((section) => section.fields).map((candidate) => candidate.id),
+      ["name", "kind", "description", "isDefault"],
+    )
+    const made = createTicketTypeRecord({ name: "Sofa pick-up", kind: "container-request", description: "", isDefault: false, [TYPE_DEFAULT_TEAM_FIELD]: "team-1" }, { now: 3 })
+    assert.equal(TYPE_DEFAULT_TEAM_FIELD in (made.submittedValues ?? {}), false)
+    assert.deepEqual(ticketTypeAdapter.toCreateBody?.(made, context), { name: "Sofa pick-up", kind: "container-request", description: null, status: "active", isDefault: false })
   })
 
   test("an edit patches what moved of the type, then replaces its fields and its permissions each where it changed, roles by server id", async () => {

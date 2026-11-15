@@ -17,12 +17,16 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowUp, Info, Plus, Trash } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
+import type { TicketTeamDefaults } from "@waste/contracts/ticket-teams"
 import type { TicketTypeAction, TicketTypePermission } from "@waste/contracts/ticket-types"
 import { fieldSetIssue } from "@waste/domain/resolution/ticket-types"
 import { type TicketCommand, type TicketFieldInput, type TicketFieldRequirement, type TicketKind } from "@waste/domain/resolution/vocabulary"
 import { PillTab, PillTabsList, RecordPageHeader } from "@/components/page-layout"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/settings-pane-kit"
+import { DefaultTeamSelect } from "@/components/settings/ticket-teams-settings"
 import { TicketTypeAutomation, type AutomationChoices } from "@/components/settings/ticket-type-automation"
+import { ProjectPicker, useProjectSetting, type ProjectPick } from "@/components/settings/use-project-setting"
+import { useTicketTeams } from "@/components/settings/use-ticket-teams"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -34,17 +38,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useApiSession } from "@/components/platform/api-session-store"
+import { useApiClient, useApiSession } from "@/components/platform/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/platform/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerResolver, whenSaved, type SavedOutcome } from "@/components/platform/business-record-store"
+import { problemOfError, problemSentence } from "@/lib/api/problem"
 import { vehicleAdapter } from "@/lib/api/records/fleet"
 import { roleAdapter, userAdapter } from "@/lib/api/records/organisation"
 import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { isTicketTypeRecord } from "@/lib/api/records/ticket-types"
 import { accessUnknownSentence } from "@/lib/api/session"
+import { moveDefaultTeam, readTeamDefaults } from "@/lib/api/ticket-team-defaults"
 import { VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { projectShown } from "@/lib/data/project-scope"
+import type { TicketScope } from "@/lib/data/ticket-scope"
+import { DEFAULT_TEAM_NOT_SAVED, defaultTeamSaved, NO_TEAM, pickedTeamOf, teamChoicesOf, teamOfScope, teamShownOf, ticketTeamsAccessOf } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
 import {
   actionsIssue,
@@ -56,9 +65,10 @@ import {
   fieldOfDraft,
   newFieldDraft,
   relabelled,
+  ticketTypeFormFor,
   ticketTypesAccessOf,
-  TICKET_TYPE_FORM,
   TICKET_TYPES_MODULE,
+  TYPE_DEFAULT_TEAM_FIELD,
   typeActionsOf,
   typeFieldsOf,
   typePermissionsOf,
@@ -72,12 +82,17 @@ import { useGrants } from "@/components/platform/use-grants"
 /**
  * The pane, a tab of Settings › Tickets (#548 of #544): `tabs` is the page's tab strip, drawn in this pane's header.
  * `openTypeId` is the type whose own page stands in the list's place, by the API's id, or null for the list; `onOpenType` opens one, or the list with null.
+ * `pick` is the project the page's tabs share: a type's form sets its default team in it (#606).
  */
-export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: ReactNode; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
+export function TicketTypesSettings({ tabs, pick, openTypeId, onOpenType }: { tabs?: ReactNode; pick: ProjectPick; openTypeId: string | null; onOpenType: (typeId: string | null) => void }) {
   const session = useApiSession()
+  const client = useApiClient()
   const access = ticketTypesAccessOf(useGrants())
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
   const resolver = useServerResolver()
+  const ticketTeams = useTicketTeams()
+  // The project the page's tabs share: a new type's default team is set in it.
+  const project = projectShown(session.me?.projects ?? [], pick.projectId, (candidate) => candidate.id)
   const types = useModuleRecords(TICKET_TYPES_MODULE.workspaceId, TICKET_TYPES_MODULE.moduleId)
   const users = useModuleRecords(ACCESS_MODULE.workspaceId, ACCESS_MODULE.moduleId)
   const roles = users.records.filter((record) => roleAdapter.owns(record) && !isSoftDeleted(record))
@@ -93,6 +108,8 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   }
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
+  // A new type's default team is out to the API, after the type itself landed (#606).
+  const [settingTeam, setSettingTeam] = useState(false)
   // A type is addressed by the API's id, which a reload maps to the same row; a row the server does not hold yet by its own.
   const addressOf = (record: BusinessRecord) => resolver.serverIdOf(record.id) ?? record.id
   const addressed = openTypeId === null ? undefined : (resolver.byServerId(openTypeId)?.id ?? openTypeId)
@@ -101,6 +118,10 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   const listShowing = useRef(true)
   useEffect(() => {
     listShowing.current = addressed === undefined
+    // Gone with the pane: an answer that arrives after it opens nothing.
+    return () => {
+      listShowing.current = false
+    }
   })
 
   const write = (record: BusinessRecord, done: (saved: SavedOutcome | undefined) => void, said: string, madeDefault: boolean) => {
@@ -119,11 +140,40 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   }
   const madeDefault = (before: BusinessRecord | null, after: BusinessRecord) => after.submittedValues?.isDefault === true && before?.submittedValues?.isDefault !== true
   const handleCreate = (values: BusinessFormValues) => {
-    const made = createTicketTypeRecord(values, { now: Date.now() })
+    // Minted on the clock inside the lib: the compiler's lint refuses `Date.now()` in this handler.
+    const made = createTicketTypeRecord(values)
+    const typed = values[TYPE_DEFAULT_TEAM_FIELD]
+    const teamPicked = typeof typed === "string" && typed !== "" ? typed : NO_TEAM
+    const team = pickedTeamOf(teamPicked, ticketTeams.serverIdOf)
+    if ("message" in team) {
+      toast.error("The ticket type was not added", { description: team.message })
+      return
+    }
     // A new type lands on its own page, addressed by the id the API gave it, while the list still shows; one whose answer named none is found on the list.
     const landOn = (saved: SavedOutcome | undefined) => {
-      setCreating(false)
-      if (listShowing.current && saved !== undefined && saved.kind !== "unchanged" && saved.serverId !== undefined) onOpenType(saved.serverId)
+      const serverId = saved !== undefined && saved.kind !== "unchanged" ? saved.serverId : undefined
+      const land = () => {
+        setCreating(false)
+        if (listShowing.current && serverId !== undefined) onOpenType(serverId)
+      }
+      if (team.teamId === null || client === null || project === null) return land()
+      const failed = (description: string) => toast.error(DEFAULT_TEAM_NOT_SAVED, { description })
+      if (serverId === undefined) {
+        failed("The type's own page sets it.")
+        return land()
+      }
+      const told = defaultTeamSaved(made.name, project.name, teamShownOf({ teamId: teamPicked, ticketTypeId: serverId }, ticketTeams.teams, ticketTeams.reading))
+      // The project's setting, written once the type has an id to name. The dialog stays, held, until it answers: the type's page reads the set as it opens, and the person is still where they asked.
+      setSettingTeam(true)
+      void moveDefaultTeam(client, project.id, { kind: null, ticketTypeId: serverId }, team.teamId)
+        .then(
+          () => toast.success(told.title, { description: told.description }),
+          (error: unknown) => failed(problemSentence(problemOfError(error))),
+        )
+        .finally(() => {
+          setSettingTeam(false)
+          land()
+        })
     }
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
@@ -133,7 +183,7 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
   if (addressed !== undefined) {
     if (opened === undefined) return <TicketTypeMissing message={types.ready ? "No ticket type has this address." : emptyMessage} onBack={() => onOpenType(null)} />
     const save = (record: BusinessRecord, saved: (row: BusinessRecord) => void) => write(record, (outcome) => saved(savedRow(outcome, record)), "Ticket type saved", madeDefault(opened, record))
-    return <TicketTypePage key={opened.id} record={opened} roles={roles} choices={choices} saving={saving} editable={access.edit} onBack={() => onOpenType(null)} onSave={save} />
+    return <TicketTypePage key={opened.id} record={opened} serverId={resolver.serverIdOf(opened.id)} pick={pick} roles={roles} choices={choices} saving={saving} editable={access.edit} onBack={() => onOpenType(null)} onSave={save} />
   }
 
   return (
@@ -200,17 +250,17 @@ export function TicketTypesSettings({ tabs, openTypeId, onOpenType }: { tabs?: R
         </div>
       </RecordsSection>
 
-      {/* The form names no row of another module: every option is its own. */}
-      {/* Held open while the create is out, so the answer finds the person where they asked. */}
+      {/* The form names no row of another module: every option is its own, the teams' handed to its schema. */}
+      {/* Held open while the create, then its default team, is out, so the answer finds the person where they asked. */}
       <BusinessRecordFormDialog
-        schema={TICKET_TYPE_FORM}
+        schema={ticketTypeFormFor(project, teamChoicesOf(true, ticketTeams.teams, NO_TEAM))}
         open={creating}
         onOpenChange={(open) => {
-          if (!saving) setCreating(open)
+          if (!saving && !settingTeam) setCreating(open)
         }}
         onSubmit={handleCreate}
         relationOptions={(field) => field.options ?? []}
-        submitting={saving}
+        submitting={saving || settingTeam}
       />
     </AssetPanelShell>
   )
@@ -232,8 +282,37 @@ function TicketTypeMissing({ message, onBack }: { message: string; onBack: () =>
  * One type's page: its own fields, its custom fields in order, who may give each status command and its automation — saved together, each set written where it changed.
  * Read-only for a role that may not edit types. `onSave` hands back the row the save left, once the API has answered.
  */
-function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSave }: { record: BusinessRecord; roles: readonly BusinessRecord[]; choices: AutomationChoices; saving: boolean; editable: boolean; onBack: () => void; onSave: (record: BusinessRecord, saved: (row: BusinessRecord) => void) => void }) {
+function TicketTypePage({
+  record,
+  serverId,
+  pick,
+  roles,
+  choices,
+  saving,
+  editable,
+  onBack,
+  onSave,
+}: {
+  record: BusinessRecord
+  /** The type's id on the API, which a project's default team names it by; undefined while the API holds no such row. */
+  serverId: string | undefined
+  pick: ProjectPick
+  roles: readonly BusinessRecord[]
+  choices: AutomationChoices
+  saving: boolean
+  editable: boolean
+  onBack: () => void
+  onSave: (record: BusinessRecord, saved: (row: BusinessRecord) => void) => void
+}) {
   const isDefault = record.submittedValues?.isDefault === true
+  // The type's default team in the project shown (#606): the project's setting, the row the Default teams tab lists for the type, held as a draft until Save type.
+  const ticketTeams = useTicketTeams()
+  const teamDefaults = useProjectSetting<TicketTeamDefaults, string>({ name: "ticket-team-defaults", readable: ticketTeamsAccessOf(useGrants()).view, read: readTeamDefaults }, pick)
+  const teamScope: TicketScope | null = serverId === undefined ? null : { kind: null, ticketTypeId: serverId }
+  // Undefined until the project's set is read; then the team it names for the type, or null for none.
+  const namedTeam = teamDefaults.base === null || teamScope === null ? undefined : teamOfScope(teamDefaults.base, teamScope)
+  const savedTeam = namedTeam === undefined ? null : namedTeam === null ? NO_TEAM : ticketTeams.webIdOf(namedTeam)
+  const team = teamDefaults.draft ?? savedTeam
   const [name, setName] = useState(record.name)
   const [description, setDescription] = useState(typeof record.submittedValues?.description === "string" ? record.submittedValues.description : "")
   const [active, setActive] = useState(record.status === "Active")
@@ -277,12 +356,27 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
     if (unlabelled !== -1) return setRefusal(`Field ${unlabelled + 1}: give it a label.`)
     const automation = actionsIssue(actions)
     if (automation !== undefined) return setRefusal(automation)
+    const teamDraft = teamDefaults.draft
+    const pickedTeam = teamDraft === null ? null : pickedTeamOf(teamDraft, ticketTeams.serverIdOf)
+    if (pickedTeam !== null && "message" in pickedTeam) return setRefusal(pickedTeam.message)
+    // The API's rule, said before the type is written: a project's set names no retired type afresh, though one it names already keeps its row.
+    if (pickedTeam !== null && pickedTeam.teamId !== null && !active && namedTeam === null) return setRefusal("A retired type is given no default team: keep it active, or leave its team as its kind's.")
+    // The project's setting, written once the type's own save has landed: a type the API refused moves no team.
+    const saveTeam = () => {
+      const project = teamDefaults.project
+      if (teamDraft === null || pickedTeam === null || teamScope === null || project === null) return
+      const told = defaultTeamSaved(name.trim(), project.name, teamShownOf({ teamId: teamDraft, ticketTypeId: teamScope.ticketTypeId }, ticketTeams.teams, ticketTeams.reading))
+      teamDefaults.save((client, projectId) => moveDefaultTeam(client, projectId, teamScope, pickedTeam.teamId), { saved: () => told, failed: DEFAULT_TEAM_NOT_SAVED }, (answered) => answered)
+    }
     // A field the API now holds keeps its key from here on: tickets carry their values under it, so a later relabel must not move it.
     const freezeSavedKeys = (saved: BusinessRecord) => {
       const held = new Set(typeFieldsOf(saved).map((field) => field.key))
       setFields((current) => current.map((draft) => (held.has(draft.key) ? { ...draft, keyTouched: true } : draft)))
     }
-    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }), freezeSavedKeys)
+    onSave(updatedTicketTypeRecord(record, { name, description, status: active ? "Active" : "Inactive", isDefault: makeDefault, fields: wire, permissions, actions }), (saved) => {
+      freezeSavedKeys(saved)
+      saveTeam()
+    })
   }
 
   return (
@@ -301,7 +395,7 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
           line={record.facts.Kind}
           actions={
             editable ? (
-              <Button size="sm" onClick={save} disabled={saving}>
+              <Button size="sm" onClick={save} disabled={saving || teamDefaults.saving}>
                 Save type
               </Button>
             ) : undefined
@@ -493,6 +587,32 @@ function TicketTypePage({ record, roles, choices, saving, editable, onBack, onSa
             />
           </TabsContent>
         </fieldset>
+        {/* The type's default team in one project, under its own fields. Outside the tabs' fieldset, so a role that only reads the page still picks the project whose team it reads; the team's picker is held for it by its own `disabled`. An account that works in no project has none to set the team in. */}
+        {tab === "details" && teamDefaults.project !== null && (
+          <div className="mx-auto mt-4 min-w-0 max-w-[1500px]">
+            <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                {/* Held while a team is picked and not saved: the pick is the shown project's. */}
+                <ProjectPicker id="ticket-type-team-project" setting={teamDefaults} disabled={teamDefaults.draft !== null} field />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="ticket-type-default-team">Default team</Label>
+                <DefaultTeamSelect
+                  id="ticket-type-default-team"
+                  value={team ?? ""}
+                  choices={teamChoicesOf(true, ticketTeams.teams, savedTeam ?? NO_TEAM)}
+                  onChange={(teamId) => {
+                    if (teamId === savedTeam) teamDefaults.discard()
+                    else teamDefaults.edit(teamId)
+                    setRefusal(null)
+                  }}
+                  disabled={!editable || team === null || saving || teamDefaults.saving}
+                />
+                {teamDefaults.problem !== null && <p className="text-xs text-destructive">{problemSentence(teamDefaults.problem)}</p>}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Tabs>
   )
