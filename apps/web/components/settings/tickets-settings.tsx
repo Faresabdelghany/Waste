@@ -6,7 +6,8 @@
 // was, drawing the page's tab strip in its own header; a type's own
 // deadline, default team and charge are rows of the Deadlines, Default teams
 // and Charges tabs beside its kind's, and the three
-// tabs share one project. The tab and a ticket type's own page are the
+// tabs share one project, which a type's form sets its default team in too
+// (#606). The tab and a ticket type's own page are the
 // address's, so a reload or a shared link lands on them. The teams
 // themselves are Settings › Users & roles' Teams tab. Offered on the Pilot
 // alone.
@@ -50,7 +51,7 @@ export function TicketsSettings({ params, onParamsChange, onOpenPane }: Settings
 
   switch (tab) {
     case "types":
-      return <TicketTypesSettings tabs={tabs} openTypeId={params.type ?? null} onOpenType={openType} />
+      return <TicketTypesSettings tabs={tabs} pick={pick} openTypeId={params.type ?? null} onOpenType={openType} />
     case "default-teams":
       return <TicketDefaultTeamsSettings tabs={tabs} pick={pick} onOpenTeams={openTeams} />
     case "deadlines":
