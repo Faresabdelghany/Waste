@@ -11,7 +11,7 @@ import type { Me } from "@waste/contracts/me"
 import type { BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, recordFrom } from "../records/adapter"
 import { ME_PROJECTS } from "../records/me-projects"
-import { createRecordStore, type RecordStore, type RecordStoreNotices } from "../records/record-store"
+import { createRecordStore, LOAD_READS_IN_FLIGHT, type RecordStore, type RecordStoreNotices } from "../records/record-store"
 import { customerAdapter } from "../records/registry"
 import { bodyOf, clientOver, json, type Call } from "./scripted-fetch"
 
@@ -92,5 +92,58 @@ describe("the record store's controller", () => {
     asked[0](json({ ...osterbro, name: "Østerbro Housing A/S" }))
     assert.equal((await written)?.kind, "updated", "the API answered, and its caller is told")
     assert.equal(store.server.getSnapshot().size, 0, "the signed-out store holds nothing of it")
+  })
+})
+
+// #649: the session's reads were sent one after the other, so a page waited
+// for every module ahead of its own. They now go out a few at a time and land
+// in SERVER_MODULES' order, so a module still maps against those before it.
+describe("the session's load (#649)", () => {
+  const VIEWED: Me["role"]["grants"][number]["moduleKey"][] = ["customers.contacts", "resources.warehouses", "fleet.vehicles", "fleet.drivers", "commercial.products"]
+  const LISTS: Record<string, string> = { "/customers": "customers.contacts", "/warehouses": "resources.warehouses", "/vehicles": "fleet.vehicles", "/drivers": "fleet.drivers", "/products": "commercial.products", "/price-lists": "commercial.products" }
+
+  /** A session whose every read waits until the test answers it. */
+  function heldSession() {
+    const held = new Map<string, () => void>()
+    const { calls, client } = apiAnswering((call) => new Promise<Response>((resolve) => held.set(new URL(call.url).pathname, () => resolve(json({ items: [], nextCursor: null })))))
+    const store = createRecordStore(QUIET)
+    store.client.set(client)
+    const landed: string[] = []
+    store.server.subscribe(() => {
+      for (const [key, state] of store.server.getSnapshot()) if (state.status === "ready" && (VIEWED as string[]).includes(key) && !landed.includes(key)) landed.push(key)
+    })
+    store.startSession(true, async () => me(VIEWED.map((moduleKey) => ({ moduleKey, actions: ["view"] }))))
+    const settle = async () => {
+      for (let tick = 0; tick < 20; tick += 1) await new Promise((resolve) => setImmediate(resolve))
+    }
+    const answer = async (pathname: string) => {
+      held.get(pathname)?.()
+      held.delete(pathname)
+      await settle()
+    }
+    return { store, calls, held, landed, settle, answer }
+  }
+
+  const modulesOut = (held: Map<string, () => void>) => new Set([...held.keys()].map((pathname) => LISTS[pathname]))
+
+  test("a few modules are read at once, never more than LOAD_READS_IN_FLIGHT, the next sent as one answers", async () => {
+    const { held, settle, answer } = heldSession()
+    await settle()
+    assert.deepEqual([...modulesOut(held)], VIEWED.slice(0, LOAD_READS_IN_FLIGHT), "the first three, in order, at once")
+    await answer("/warehouses")
+    assert.deepEqual([...modulesOut(held)].sort(), ["customers.contacts", "fleet.drivers", "fleet.vehicles"], "the fourth sent as the second answered")
+  })
+
+  test("a module answered before one ahead of it lands after it, in SERVER_MODULES' order", async () => {
+    const { store, held, landed, settle, answer } = heldSession()
+    await settle()
+    await answer("/vehicles")
+    await answer("/warehouses")
+    assert.deepEqual(landed, [], "nothing lands before the customers")
+    await answer("/customers")
+    assert.deepEqual(landed, ["customers.contacts", "resources.warehouses", "fleet.vehicles"])
+    while (held.size > 0) await answer([...held.keys()][0])
+    while (store.loading.getSnapshot()) await new Promise((resolve) => setImmediate(resolve))
+    assert.deepEqual(landed, VIEWED)
   })
 })
