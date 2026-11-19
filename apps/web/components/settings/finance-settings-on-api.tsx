@@ -36,7 +36,7 @@ import {
 } from "@/lib/data/finance-settings"
 import { PAYMENT_REFERENCE_SCHEMES, type PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
-import { moduleReadSentence } from "@/lib/api/read-state"
+import { moduleAnswered, moduleReadSentence } from "@/lib/api/read-state"
 
 const typedOf = (record: BusinessRecord, key: string): string => {
   const value = record.submittedValues?.[key]
@@ -58,7 +58,7 @@ export function FinanceSettingsOnApi() {
     >
       {/* Keyed by what was read: a re-read the store answers starts the form from it. */}
       {company !== null && organisation.ready && <CompanyIdentity key={[...COMPANY_IDENTITY_FIELDS.map((field) => typedOf(company, field.key)), typedOf(company, "postalAddress")].join("|")} company={company} />}
-      <RecordsSection shown={projects.length} total={projects.length}>
+      <RecordsSection shown={projects.length} total={projects.length} answered={moduleAnswered(organisation)}>
         <div className="overflow-x-auto">
           <Table className="min-w-[640px]">
             <TableHeader>

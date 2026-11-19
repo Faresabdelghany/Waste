@@ -76,6 +76,12 @@ type BusinessRecordFormDialogProps = {
   reviewSummary?: (values: BusinessFormValues) => readonly ReviewItem[]
   /** A write of this dialog's is out to the API (#239): its submit is held, and the dialog waits, open, for the answer. */
   submitting?: boolean
+  /**
+   * Why the form cannot be sent yet: its module not read from the API (#650).
+   * Its submit is disabled and the sentence shown beside it, and both go once
+   * the module is read; what was typed stays.
+   */
+  heldBecause?: string
 }
 
 function initialValues(
@@ -418,7 +424,9 @@ export function BusinessRecordFormDialog({
   validateValues,
   reviewSummary,
   submitting = false,
+  heldBecause,
 }: BusinessRecordFormDialogProps) {
+  const held = submitting || heldBecause !== undefined
   const [values, setValues] = useState<BusinessFormValues>(() =>
     initialValues(schema, initialValueOverrides),
   )
@@ -566,7 +574,7 @@ export function BusinessRecordFormDialog({
   }
 
   const advance = () => {
-    if (submitting) return
+    if (held) return
     setAttempted(true)
     if (Object.keys(fieldErrors).length > 0) return
     if (schema.execution?.reviewBeforeSubmit) {
@@ -578,7 +586,7 @@ export function BusinessRecordFormDialog({
   }
 
   const confirm = () => {
-    if (!reviewConfirmed || submitting) return
+    if (!reviewConfirmed || held) return
     onSubmit(submittedValues)
   }
 
@@ -875,6 +883,11 @@ export function BusinessRecordFormDialog({
         )}
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
+          {heldBecause !== undefined && (
+            <p role="status" className="mr-auto self-center text-xs text-muted-foreground">
+              {heldBecause}
+            </p>
+          )}
           {step === "review" ? (
             <>
               <Button
@@ -887,7 +900,7 @@ export function BusinessRecordFormDialog({
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </Button>
-              <Button onClick={confirm} disabled={!reviewConfirmed || submitting}>
+              <Button onClick={confirm} disabled={!reviewConfirmed || held}>
                 <CheckCircle className="h-4 w-4" />
                 {completionLabel(schema)}
               </Button>
@@ -897,7 +910,7 @@ export function BusinessRecordFormDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={advance} disabled={submitting}>
+              <Button onClick={advance} disabled={held}>
                 {schema.submitLabel}
               </Button>
             </>

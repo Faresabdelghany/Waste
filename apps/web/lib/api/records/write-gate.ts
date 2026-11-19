@@ -44,7 +44,7 @@ function unreadModule(target: ModuleState, label: string, when: string): string 
       return `Your role does not view ${label}.`
     case "idle":
     case "loading":
-      return `${label} is being read from the API; ${when} once it is.`
+      return `The ${label} list is being read from the API; ${when} once it is.`
     case "kept-on-api":
       return keptOnApi(label)
   }

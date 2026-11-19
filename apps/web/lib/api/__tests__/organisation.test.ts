@@ -14,6 +14,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope, isProjectRecordId, projectRecordsOf, type ProjectRecordId } from "../../data/project-scope"
 import { NOTHING_RESOLVED, recordFrom, type MappingContext, type Resolver } from "../records/adapter"
 import { webIdOf } from "@/lib/records/fields"
+import { MODULES } from "@/lib/modules/manifest"
 import {
   accessMapOf,
   accessModule,
@@ -337,6 +338,15 @@ describe("the service providers", () => {
     assert.equal(record.facts.CVR, "40291188")
     assert.equal(record.facts["Primary contact"], "Lars Mikkelsen")
     assert.equal(record.status, "Active")
+  })
+
+  test("the list's columns are headed by what the record holds: its country and registration number, then its primary contact (#654)", () => {
+    const record = recordFrom(serviceProviderAdapter, nordren, context())
+    const spec = MODULES["service-providers.service-providers"]
+    assert.equal(spec.contextLabel, "Country · registration number")
+    assert.equal(record.context, "Denmark · 40291188")
+    assert.equal(spec.valueLabel, "Primary contact")
+    assert.equal(record.value, "Lars Mikkelsen")
   })
 
   test("owns provider rows and none of the access, activity or price records that share the prefix", () => {

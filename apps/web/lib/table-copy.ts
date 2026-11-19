@@ -5,6 +5,18 @@ export function recordCountLabel(shown: number, total: number = shown): string {
   return shown === total ? `${total} ${noun}` : `${shown} of ${total} ${noun}`
 }
 
+/** A list's count above its table, none while its read has not answered: a zero is an answer (#655). */
+export function listCountLabel(shown: number, total: number, answered: boolean): string | null {
+  return answered ? recordCountLabel(shown, total) : null
+}
+
+/** The range a paged table shows beneath it; its empty label once it has answered with no rows, nothing before (#655). */
+export function pageRangeLabel({ page, pageSize, totalCount, emptyLabel, answered }: { page: number; pageSize: number; totalCount: number; emptyLabel: string; answered: boolean }): string | null {
+  if (!answered) return null
+  if (totalCount === 0) return emptyLabel
+  return `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalCount)} of ${totalCount}`
+}
+
 /**
  * What an empty table says beneath its message when its search or filters hide every row it has, and only then:
  * a table with no rows at all is not helped by another search.

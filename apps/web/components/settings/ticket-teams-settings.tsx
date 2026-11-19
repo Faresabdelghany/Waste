@@ -61,6 +61,8 @@ export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?:
     setting.save((client, projectId) => moveDefaultTeam(client, projectId, row, picked.teamId), { saved: () => told, failed: DEFAULT_TEAM_NOT_SAVED }, (defaults) => defaults)
   }
 
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = accessUnknownSentence(session) === null && access.view && !setting.problem && base !== null
   const emptyMessage =
     accessUnknownSentence(session) ??
     (!access.view
@@ -90,7 +92,7 @@ export function TicketDefaultTeamsSettings({ tabs, pick, onOpenTeams }: { tabs?:
           )}
         </div>
       )}
-      <RecordsSection shown={rows.length} total={rows.length}>
+      <RecordsSection shown={rows.length} total={rows.length} answered={answered}>
         <div className="overflow-x-auto">
           <Table className="min-w-[520px]">
             <TableHeader>

@@ -45,7 +45,7 @@ import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
-import { moduleReadSentence } from "@/lib/api/read-state"
+import { moduleAnswered, moduleReadSentence } from "@/lib/api/read-state"
 
 function emptyMessageOf(answer: ReturnType<typeof useModuleRecords>, noun: string, filtered: boolean): { message: string; hint?: string } {
   const message = moduleReadSentence(answer, noun) ?? (filtered ? `No ${noun} match this search.` : `No ${noun} yet.`)
@@ -119,6 +119,7 @@ export function ProductsPane() {
       <RecordsSection
         shown={filtered.length}
         total={answer.records.length}
+        answered={moduleAnswered(answer)}
         actions={
           <>
             <Button variant="ghost" size="sm" asChild>
@@ -183,7 +184,7 @@ export function ProductsPane() {
             </TableBody>
           </Table>
         </div>
-        <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
+        <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} answered={moduleAnswered(answer)} />
       </RecordsSection>
       {editing !== null && (
         <BusinessRecordFormDialog schema={editing.schema} open onOpenChange={(isOpen) => !isOpen && setEditing(null)} onSubmit={save} relationOptions={(field, values) => pickers.options(field, values, undefined, editing.values)} initialValueOverrides={editing.values} />
@@ -302,6 +303,7 @@ export function PriceListsPane() {
       <RecordsSection
         shown={filtered.length}
         total={lists.length}
+        answered={moduleAnswered(answer)}
         actions={
           <Button size="sm" disabled={!answer.ready || saving || !pickers.readyFor(PRICE_LIST_FORM)} onClick={() => setEditing({ schema: PRICE_LIST_FORM, values: {}, record: null })}>
             <Plus className="h-4 w-4" weight="bold" />
@@ -363,7 +365,7 @@ export function PriceListsPane() {
             </TableBody>
           </Table>
         </div>
-        <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
+        <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} answered={moduleAnswered(answer)} />
       </RecordsSection>
       {editing !== null && (
         <BusinessRecordFormDialog schema={editing.schema} open onOpenChange={(isOpen) => !isOpen && setEditing(null)} onSubmit={save} relationOptions={(field, values) => pickers.options(field, values, undefined, editing.values)} initialValueOverrides={editing.values} />

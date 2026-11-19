@@ -40,6 +40,7 @@ import {
   rereadsOf,
   resolverOver,
   sameSources,
+  stampedAt,
   spellsStatus,
   untilDayTurns,
   withCreated,
@@ -1000,5 +1001,20 @@ describe("a write or a command of several requests that fails after one landed",
     const refused = scripted([() => problem(409, "Not in stock")])
     const notSent = await commandRecord(clientOver(refused.fetch), moduleOf(twoStep("read")), current, record("t-1", "One"), "move", undefined, options())
     assert.deepEqual(notSent.kind === "refused" ? [notSent.problem.detail, [...notSent.touches]] : notSent.kind, ["Not in stock", ["resources.inventory"]], "refused at the movement: what it touches is read again as before, its own row as it was")
+  })
+})
+
+describe("stampedAt (#649)", () => {
+  const rows = (name: string) => loaded({ records: [record(`${name}-1`, name)], serverIds: new Map([[`${name}-1`, "1"]]) }, 5)
+  test("a module whose first read landed while the read waited its turn is stamped as it landed; one ready before keeps how it stood", () => {
+    const before = rows("Before")
+    const movedSince = rows("Moved")
+    const began: ServerRecordsState = new Map([["a.ready", before], ["b.loading", loading(IDLE)]])
+    const landedMeanwhile = rows("Landed")
+    const now: ServerRecordsState = new Map([["a.ready", movedSince], ["b.loading", landedMeanwhile], ["c.idle", IDLE]])
+    const stamped = stampedAt(began, now)
+    assert.equal(stamped.get("a.ready"), before, "a write or a read again since still counts as a change")
+    assert.equal(stamped.get("b.loading"), landedMeanwhile, "its first read landing is the load's order, not a change")
+    assert.equal(stamped.has("c.idle"), false, "a module ready in neither is as it was")
   })
 })

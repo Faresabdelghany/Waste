@@ -29,6 +29,10 @@ import {
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { countedOf } from "@/lib/format/counts"
+import { useServerModuleState } from "@/components/platform/business-record-store"
+import { countOnceRead } from "@/lib/api/read-state"
+import type { ModuleState } from "@/lib/api/records/server-records"
+import { awaitedRowsSentence } from "@/lib/table-copy"
 
 function providerStatusTone(status: string): StatusTone {
   // "Deactive"/"Inactive" contain the "active" substring, so they must be
@@ -65,18 +69,17 @@ function InformationItem({
   )
 }
 
+/** Each count null until its module has been read (`countOnceRead`, #656). */
+type RelationshipCounts = { users: number | null; vehicles: number | null; drivers: number | null; serviceAreas: number | null }
+
+const countRead = (count: number | null) => (count === null ? "Loading…" : String(count))
+
 function ServiceProviderInformation({
   record,
-  users,
-  vehicles,
-  drivers,
-  serviceAreas,
+  counts,
 }: {
   record: BusinessRecord
-  users: readonly BusinessRecord[]
-  vehicles: readonly BusinessRecord[]
-  drivers: readonly BusinessRecord[]
-  serviceAreas: readonly BusinessRecord[]
+  counts: RelationshipCounts
 }) {
   const submitted = record.submittedValues ?? {}
   const submittedText = (fieldId: string) => {
@@ -95,10 +98,10 @@ function ServiceProviderInformation({
     ["Relationship state", record.status],
   ] as const
   const relationshipInformation = [
-    ["Service areas", String(serviceAreas.length)],
-    ["Users", String(users.length)],
-    ["Vehicles", String(vehicles.length)],
-    ["Drivers", String(drivers.length)],
+    ["Service areas", countRead(counts.serviceAreas)],
+    ["Users", countRead(counts.users)],
+    ["Vehicles", countRead(counts.vehicles)],
+    ["Drivers", countRead(counts.drivers)],
   ] as const
 
   return (
@@ -145,10 +148,13 @@ type RelatedRecordsTableProps = {
   onCreate: () => void
   workspaceId?: WorkspaceId
   moduleId?: string
+  /** The records' module as the store holds it (null on the browser's own path): no count and no empty sentence before it is read (#656). */
+  state: ModuleState | null
 }
 
 function RelatedRecordsTable({
   records,
+  state,
   entityLabel,
   contextLabel,
   valueLabel,
@@ -161,6 +167,8 @@ function RelatedRecordsTable({
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(
     records,
   )
+  const count = countOnceRead(records.length, state)
+  const emptyMessage = awaitedRowsSentence(state) ?? emptyLabel
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -168,7 +176,7 @@ function RelatedRecordsTable({
         <div className="overflow-hidden rounded-xl border border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
             <span className="text-xs text-muted-foreground">
-              {countedOf(records.length, entityLabel.toLowerCase())}
+              {count === null ? null : countedOf(count, entityLabel.toLowerCase())}
             </span>
             <Button size="sm" onClick={onCreate}>
               <Plus className="h-4 w-4" weight="bold" />
@@ -202,7 +210,7 @@ function RelatedRecordsTable({
                   <TableRow>
                     <TableCell colSpan={6} className="h-52 text-center">
                       <Buildings className="mx-auto h-6 w-6 text-muted-foreground" />
-                      <p className="mt-2 text-sm font-medium">{emptyLabel}</p>
+                      <p className="mt-2 text-sm font-medium">{emptyMessage}</p>
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -256,6 +264,11 @@ function RelatedRecordsTable({
   )
 }
 
+/** A tab's count, drawn only once its module has been read (#656). */
+function TabCount({ count }: { count: number | null }) {
+  return count === null ? null : <span className="ml-1.5 text-[10px] text-muted-foreground">{count}</span>
+}
+
 export function ServiceProviderDetailsPage({
   record,
   users,
@@ -277,6 +290,20 @@ export function ServiceProviderDetailsPage({
     target: "user" | "vehicle" | "driver" | "service-area" | "service-provider-price",
   ) => void
 }) {
+  const states = {
+    users: useServerModuleState("service-providers", "service-provider-workspace"),
+    vehicles: useServerModuleState("fleet", "vehicles"),
+    drivers: useServerModuleState("fleet", "drivers"),
+    serviceAreas: useServerModuleState("service-providers", "service-areas"),
+    prices: useServerModuleState("commercial", "service-provider-prices"),
+  }
+  const counts = {
+    users: countOnceRead(users.length, states.users),
+    vehicles: countOnceRead(vehicles.length, states.vehicles),
+    drivers: countOnceRead(drivers.length, states.drivers),
+    serviceAreas: countOnceRead(serviceAreas.length, states.serviceAreas),
+    prices: countOnceRead(serviceProviderPrices.length, states.prices),
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header>
@@ -303,36 +330,31 @@ export function ServiceProviderDetailsPage({
                 Service provider information
               </PillTab>
               <PillTab value="users">
-                Users <span className="ml-1.5 text-[10px] text-muted-foreground">{users.length}</span>
+                Users <TabCount count={counts.users} />
               </PillTab>
               <PillTab value="vehicles">
-                Vehicles <span className="ml-1.5 text-[10px] text-muted-foreground">{vehicles.length}</span>
+                Vehicles <TabCount count={counts.vehicles} />
               </PillTab>
               <PillTab value="drivers">
-                Drivers <span className="ml-1.5 text-[10px] text-muted-foreground">{drivers.length}</span>
+                Drivers <TabCount count={counts.drivers} />
               </PillTab>
               <PillTab value="service-areas">
-                Service areas <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceAreas.length}</span>
+                Service areas <TabCount count={counts.serviceAreas} />
               </PillTab>
               <PillTab value="prices">
-                Prices <span className="ml-1.5 text-[10px] text-muted-foreground">{serviceProviderPrices.length}</span>
+                Prices <TabCount count={counts.prices} />
               </PillTab>
             </PillTabsList>
           </div>
         </div>
 
         <TabsContent value="information" className="mt-0 min-h-0 flex-1">
-          <ServiceProviderInformation
-            record={record}
-            users={users}
-            vehicles={vehicles}
-            drivers={drivers}
-            serviceAreas={serviceAreas}
-          />
+          <ServiceProviderInformation record={record} counts={counts} />
         </TabsContent>
         <TabsContent value="users" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
             records={users}
+            state={states.users}
             entityLabel="User"
             contextLabel="Role and scope"
             valueLabel="Access"
@@ -344,6 +366,7 @@ export function ServiceProviderDetailsPage({
         <TabsContent value="vehicles" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
             records={vehicles}
+            state={states.vehicles}
             entityLabel="Vehicle"
             contextLabel="Type and assignment"
             valueLabel="Availability"
@@ -357,6 +380,7 @@ export function ServiceProviderDetailsPage({
         <TabsContent value="drivers" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
             records={drivers}
+            state={states.drivers}
             entityLabel="Driver"
             contextLabel="Employment and access"
             valueLabel="Availability"
@@ -370,6 +394,7 @@ export function ServiceProviderDetailsPage({
         <TabsContent value="service-areas" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
             records={serviceAreas}
+            state={states.serviceAreas}
             entityLabel="Service area"
             contextLabel="Service scope"
             valueLabel="Effective period"
@@ -383,6 +408,7 @@ export function ServiceProviderDetailsPage({
         <TabsContent value="prices" className="mt-0 min-h-0 flex-1">
           <RelatedRecordsTable
             records={serviceProviderPrices}
+            state={states.prices}
             entityLabel="Service provider price"
             contextLabel="Service area · validity"
             valueLabel="Current fee"

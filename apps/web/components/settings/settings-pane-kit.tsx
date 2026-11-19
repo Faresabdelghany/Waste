@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageActions, TableCard } from "@/components/page-layout"
-import { NARROWED_HINT, recordCountLabel } from "@/lib/table-copy"
+import { NARROWED_HINT, listCountLabel } from "@/lib/table-copy"
 import { useSettingsPaneFrame } from "@/components/settings/settings-pane-frame"
 
 export function Field({
@@ -58,20 +58,25 @@ export function DialogSection({
   )
 }
 
-/** A Settings pane's list: `TableCard` counting its rows, the list's own actions (New …, Add …) in its header. */
+/**
+ * A Settings pane's list: `TableCard` counting its rows, the list's own actions (New …, Add …) in its header.
+ * `answered` false while its read is out, not the role's or failed: then it counts nothing (#655).
+ */
 export function RecordsSection({
   shown,
   total,
+  answered = true,
   actions,
   children,
 }: {
   shown: number
   total: number
+  answered?: boolean
   actions?: ReactNode
   children: ReactNode
 }) {
   return (
-    <TableCard summary={recordCountLabel(shown, total)} actions={actions}>
+    <TableCard summary={listCountLabel(shown, total, answered)} actions={actions}>
       {children}
     </TableCard>
   )

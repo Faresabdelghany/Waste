@@ -16,6 +16,7 @@ import { projectAdapter } from "../../api/records/organisation"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { ticketAdapter } from "../../api/records/tickets"
 import { ASSIGNEE_ACCOUNT_KEY } from "@/lib/data/tickets"
+import { filledRuleBreaks } from "../business-form-records"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, ALERT_LIST_INITIAL, alertListReaders, createAlertRecord, ticketValuesOfAlert } from "../alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
 import { type BusinessRecord } from "../business-modules"
@@ -194,6 +195,17 @@ describe("Raise alert and the alert's dialogs", () => {
     assert.deepEqual(new Set(fieldIdsOf(ALERT_FORM)), new Set(Object.keys(filled)))
     const body = alertAdapter.toCreateBody?.(createAlertRecord(filled, { now: 1 }), context)
     assert.ok(AlertCreate.safeParse(body).success, JSON.stringify(body))
+  })
+
+  test("names a route, a vehicle, a driver or a container before it is sent, in the form's words (#652)", () => {
+    const rule = ALERT_FORM.validationRules?.find((candidate) => candidate.type === "filled")
+    assert.ok(rule && rule.type === "filled", "a filled rule over the four")
+    assert.deepEqual([...rule.fields], ["routeId", "vehicleId", "driverId", "containerId"])
+    assert.equal(rule.message, "Choose a route, a vehicle, a driver or a container.")
+    const none = Object.fromEntries(Object.entries(filled).filter(([fieldId]) => !rule.fields.includes(fieldId)))
+    assert.deepEqual(filledRuleBreaks(rule, none), ["routeId"])
+    assert.deepEqual(filledRuleBreaks(rule, { ...none, driverId: filled.driverId }), [])
+    assert.deepEqual(filledRuleBreaks(rule, filled), [])
   })
 
   test("resolve and link-ticket are the contracts' bodies", () => {

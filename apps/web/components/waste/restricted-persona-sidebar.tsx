@@ -27,13 +27,13 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { SidebarActiveRoutes, SidebarBrand, SidebarPages, SidebarSearch } from "@/components/sidebar-parts"
+import { SidebarActiveRoutes, SidebarBrand, SidebarPages, SidebarSearch, type SidebarSearchModule } from "@/components/sidebar-parts"
 import { useApiConfigured } from "@/components/platform/api-session-store"
 import { useBusinessRecordStore } from "@/components/platform/business-record-store"
 import { useProviderWorkspace } from "@/components/platform/provider-account"
 import { ROUTES_MODULE } from "@/lib/data/routes"
 import { PROVIDER_PAGES, PROVIDER_WORKSPACE_PATH } from "@/lib/modules/provider-pages"
-import type { ProviderPageId } from "@/lib/modules/manifest"
+import { moduleSpecOf, providerPageModules, type ProviderPageId } from "@/lib/modules/manifest"
 import {
   resolveActiveRouteSummaries,
   useActiveRoutes,
@@ -92,6 +92,16 @@ const PROVIDER_PAGE_ICONS: Record<ProviderPageId, PersonaNavItem["icon"]> = {
 
 const serviceProviderNavItems: PersonaNavItem[] = PROVIDER_PAGES.map((page) => ({ label: page.label, href: page.path, icon: PROVIDER_PAGE_ICONS[page.id] }))
 
+/**
+ * What a provider's Search reads: its pages' modules, each record opening on
+ * its page. Only on the Pilot, where the API fences every row to the
+ * provider's own; in fixture mode the store holds every provider's, so the
+ * search offers the pages alone (#648).
+ */
+const PROVIDER_SEARCH_MODULES: readonly SidebarSearchModule[] = PROVIDER_PAGES.flatMap((page) =>
+  providerPageModules(page.id).map((location) => ({ location, label: moduleSpecOf(location)?.title ?? page.label, page: page.path })),
+)
+
 /** The workspace's landing, its first page: its routes (#291 C24). */
 const LANDING_PAGE = PROVIDER_PAGES[0].path
 
@@ -124,7 +134,7 @@ function ServiceProviderManagerSidebar() {
       <SidebarBrand scope={apiConfigured ? provider?.legalName ?? "" : "NordRen ApS"} />
 
       <SidebarContent className="px-0 gap-0">
-        <SidebarSearch />
+        <SidebarSearch pages={serviceProviderNavItems} modules={apiConfigured ? PROVIDER_SEARCH_MODULES : []} />
         <SidebarPages pages={serviceProviderNavItems.map((item) => ({ ...item, active: isItemActive(item.href) }))} />
         <SidebarActiveRoutes routes={activeRouteItems} hint="Star a route on the Routes page to pin it here." />
       </SidebarContent>

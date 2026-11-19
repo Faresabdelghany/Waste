@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import type { Problem } from "../problem"
 import { problemSentence } from "../problem"
-import { moduleReadSentence, notShownSentence, readSentence, waitingSentence } from "../read-state"
+import { countOnceRead, moduleAnswered, moduleReadSentence, notShownSentence, readSentence, waitingSentence } from "../read-state"
 
 const PROBLEMS: Problem[] = [
   { type: "about:blank", title: "Forbidden", status: 403, detail: "The role does not view the module" },
@@ -86,5 +86,26 @@ const WAITING: readonly (readonly [string, string, string, boolean])[] = [
 describe("a record's surface while its module is read", () => {
   test("says what each surface said, word for word", () => {
     for (const [said, noun, follows, is] of WAITING) assert.equal(waitingSentence(noun, follows, { is }), said)
+  })
+})
+
+describe("countOnceRead", () => {
+  test("a module read, or one on the browser's own path, is counted; one not read yet is not (#656)", () => {
+    assert.equal(countOnceRead(2, { status: "ready" }), 2)
+    assert.equal(countOnceRead(0, { status: "ready" }), 0)
+    assert.equal(countOnceRead(3, null), 3)
+    for (const status of ["idle", "loading", "failed", "not-granted", "kept-on-api"] as const) {
+      assert.equal(countOnceRead(0, { status }), null, status)
+    }
+  })
+})
+
+describe("moduleAnswered", () => {
+  const problem: Problem = { type: "about:blank", title: "Forbidden", status: 403 }
+  test("only rows read, the role's and not refused are an answer to count (#655)", () => {
+    assert.equal(moduleAnswered({ pending: false, notGranted: false, problem: null }), true)
+    assert.equal(moduleAnswered({ pending: true, notGranted: false, problem: null }), false)
+    assert.equal(moduleAnswered({ pending: false, notGranted: true, problem }), false)
+    assert.equal(moduleAnswered({ pending: false, notGranted: false, problem }), false)
   })
 })

@@ -6,7 +6,7 @@
 // two a person acts on, blocked and ready. An invoice is filtered by what its
 // payments make of it too, and the payments by where they stand and who paid
 // them (#291 C6).
-import { singleFilterValue } from "@/lib/prototype/business-filters"
+import { singleFilterValue, type FilterValueReaders } from "@/lib/prototype/business-filters"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isPriceRowRecord } from "@/lib/data/commercial"
@@ -18,7 +18,7 @@ const status = (record: BusinessRecord) => [record.status]
 
 export const PRICE_ROWS_LIST: ModuleList = {
   shows: isPriceRowRecord,
-  readers: () => ({ statuses: status, priceLists: fact("Price list"), products: fact("Product"), planningAreas: fact("Zone"), customers: fact("Negotiated customer") }),
+  readers: (): FilterValueReaders => ({ statuses: status, priceLists: fact("Price list"), products: fact("Product"), planningAreas: fact("Zone"), customers: fact("Negotiated customer") }),
   initial: {},
 }
 
@@ -29,21 +29,21 @@ export const PRICE_ROWS_LIST: ModuleList = {
  * the filter finds what a payer is billed as the invoices' does.
  */
 export const EVENTS_LIST: ModuleList = {
-  readers: () => ({ statuses: status, kinds: fact("Kind"), blockReasons: fact("Block reason"), agreements: fact("Agreement"), customers: (record) => [...new Set([...fact("Customer")(record), ...fact("Payer")(record)])], products: fact("Product"), routes: fact("Route"), serviceDates: fact("Service date") }),
+  readers: (): FilterValueReaders => ({ statuses: status, kinds: fact("Kind"), blockReasons: fact("Block reason"), agreements: fact("Agreement"), customers: (record) => [...new Set([...fact("Customer")(record), ...fact("Payer")(record)])], products: fact("Product"), routes: fact("Route"), serviceDates: fact("Service date") }),
   initial: { statuses: ["Blocked", "Ready"] },
 }
 
 export const BILLING_LIST: ModuleList = {
-  readers: () => ({ statuses: status }),
+  readers: (): FilterValueReaders => ({ statuses: status }),
   initial: {},
 }
 
 export const INVOICES_LIST: ModuleList = {
-  readers: () => ({ kinds: fact("Kind"), statuses: status, paymentStatuses: fact("Payment"), customers: fact("Customer"), billingRuns: fact("Billing run") }),
+  readers: (): FilterValueReaders => ({ kinds: fact("Kind"), statuses: status, paymentStatuses: fact("Payment"), customers: fact("Customer"), billingRuns: fact("Billing run") }),
   initial: {},
 }
 
 export const PAYMENTS_LIST: ModuleList = {
-  readers: () => ({ statuses: status, sources: fact("Source"), customers: fact("Payer") }),
+  readers: (): FilterValueReaders => ({ statuses: status, sources: fact("Source"), customers: fact("Payer") }),
   initial: {},
 }

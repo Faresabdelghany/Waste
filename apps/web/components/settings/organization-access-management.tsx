@@ -85,7 +85,7 @@ import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
 import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { cn } from "@/lib/utils"
-import { moduleReadSentence } from "@/lib/api/read-state"
+import { countOnceRead, moduleAnswered, moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
 import { densityClass, detailsColumn, listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
@@ -269,6 +269,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   const setStatus = (team: BusinessRecord, status: "Active" | "Inactive") =>
     write(updateTicketTeamRecord(team, { status }), () => undefined, status === "Active" ? "Team reactivated" : "Team retired")
 
+  const teamsAnswered = accessUnknownSentence(session) === null && moduleAnswered(teams)
   const emptyMessage =
     accessUnknownSentence(session) ??
     moduleReadSentence(teams, "teams", { notShown: "ticket teams" }) ??
@@ -302,6 +303,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
         <RecordsSection
           shown={filtered.length}
           total={rows.length}
+          answered={teamsAnswered}
           actions={
             <Button size="sm" onClick={() => setCreating(true)} disabled={!access.create || !teams.ready || saving}>
               <Plus className="h-4 w-4" weight="bold" /> New team
@@ -344,7 +346,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
               )}
             </TableBody>
           </Table>
-          <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
+          <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} answered={teamsAnswered} />
         </RecordsSection>
       </AssetPanelShell>
 
@@ -372,7 +374,8 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   // The pane reads and writes the access module through the record store and nothing else (Issue #163).
   const { me } = useApiSession()
   const { getRecords, upsertRecord, sendCommand } = useBusinessRecordStore()
-  const accessModuleState = useServerModuleState("configure", "access") ?? IDLE
+  const accessRead = useServerModuleState("configure", "access")
+  const accessModuleState = accessRead ?? IDLE
   const activeTab = (params.tab as UsersRolesTab | undefined) ?? "users"
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
@@ -541,7 +544,12 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const roleUserCount = (roleName: string) =>
     userRows.filter((user) => user.role === roleName).length
 
-  const tabCounts: Readonly<Record<UsersRolesTab, number>> = { users: userRows.length, roles: roleRows.length, teams: teamRows.length }
+  // A tab counts its rows once they are read, never a zero while they are on their way (#656).
+  const tabCounts: Readonly<Record<UsersRolesTab, number | null>> = {
+    users: countOnceRead(userRows.length, accessRead),
+    roles: countOnceRead(roleRows.length, accessRead),
+    teams: teams.ready ? teamRows.length : null,
+  }
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs
@@ -555,9 +563,9 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           {settingsTabsOf("access").map((tab) => (
             <PillTab key={tab.value} value={tab.value} nav>
               {tab.label}
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {tabCounts[tab.value]}
-              </span>
+              {tabCounts[tab.value] === null ? null : (
+                <span className="ml-1.5 text-[10px] text-muted-foreground">{tabCounts[tab.value]}</span>
+              )}
             </PillTab>
           ))}
         </PillTabsList>
@@ -610,6 +618,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           <RecordsSection
             shown={filteredUsers.length}
             total={userRows.length}
+            answered={pilotReady}
             actions={
               <Button
                 size="sm"
@@ -691,6 +700,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               pageCount={usersPageCount}
               totalCount={usersTotalCount}
               onPageChange={setUsersPage}
+              answered={pilotReady}
             />
           </RecordsSection>
         </AssetPanelShell>
@@ -727,6 +737,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           <RecordsSection
             shown={filteredRoles.length}
             total={roleRows.length}
+            answered={pilotReady}
             actions={
               <Button
                 size="sm"
@@ -798,6 +809,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               pageCount={rolesPageCount}
               totalCount={rolesTotalCount}
               onPageChange={setRolesPage}
+              answered={pilotReady}
             />
           </RecordsSection>
         </AssetPanelShell>

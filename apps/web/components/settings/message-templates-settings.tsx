@@ -67,6 +67,8 @@ export function MessageTemplatesSettings() {
     )
   }
 
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = access.view && !setting.problem && base !== null
   const emptyMessage = !access.view
     ? notShownSentence("message templates")
     : project === null
@@ -85,6 +87,7 @@ export function MessageTemplatesSettings() {
       <RecordsSection
         shown={templates.length}
         total={templates.length}
+        answered={answered}
         actions={
           <Button size="sm" disabled={!access.create || project === null || base === null} onClick={() => open({ ...NEW_TEMPLATE })}>
             <Plus className="h-4 w-4" weight="bold" />

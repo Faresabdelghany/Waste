@@ -97,6 +97,8 @@ export function PickupExceptionChargesSettings() {
     )
   }
 
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = access.view && !setting.problem && shown !== null
   const emptyMessage = !access.view
     ? notShownSentence("exception charges")
     : project === null
@@ -114,6 +116,7 @@ export function PickupExceptionChargesSettings() {
       <RecordsSection
         shown={rules.length}
         total={rules.length}
+        answered={answered}
         actions={
           <Button size="sm" disabled={!access.create || project === null || shown === null} onClick={() => open(null)}>
             <Plus className="h-4 w-4" weight="bold" />

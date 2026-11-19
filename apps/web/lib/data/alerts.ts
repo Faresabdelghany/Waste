@@ -27,6 +27,15 @@ export const ALERT_FORM: BusinessFormSchema = {
   submitLabel: "Raise alert",
   nameField: "title",
   execution: { kind: "create-record", completionMessage: "Alert raised." },
+  // The API's `NAMES_A_SUBJECT`, asked before the request, at the section's first field (#652).
+  validationRules: [
+    {
+      type: "filled",
+      fields: ["routeId", "vehicleId", "driverId", "containerId"],
+      at: ["routeId"],
+      message: "Choose a route, a vehicle, a driver or a container.",
+    },
+  ],
   sections: [
     {
       id: "alert",

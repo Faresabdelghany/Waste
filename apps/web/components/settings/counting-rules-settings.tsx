@@ -102,6 +102,8 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
   const rows = rules.report ?? []
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = accessUnknownSentence(session) === null && access.view && !rules.problem && rules.report !== null
   const emptyMessage = accessUnknownSentence(session) ?? readSentence({ viewed: access.view, problem: rules.problem && problemSentence(rules.problem), answered: rules.report !== null }, "counting rules") ?? "No counting rule yet."
 
   return (
@@ -118,6 +120,7 @@ export function CountingRulesSettings({ tabs, onOpenTeams }: { tabs?: ReactNode;
       <RecordsSection
         shown={rows.length}
         total={rows.length}
+        answered={answered}
         actions={
           <Button size="sm" disabled={!access.create || client === null} onClick={() => setEditing("new")}>
             <Plus className="h-4 w-4" weight="bold" />

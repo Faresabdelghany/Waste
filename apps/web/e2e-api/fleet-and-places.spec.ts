@@ -76,6 +76,41 @@ async function createWarehouse(page: Page, values: { name: string; code: string;
   return response
 }
 
+// #650: a form opened before its module is read waits for it, its submit
+// held with the reason, rather than refusing what was typed.
+test("Drivers: a form opened before the drivers are read holds its submit, says why, and lets it go once they are", async ({ page }) => {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/waste-api/drivers?**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    await held
+    await route.fallback()
+  })
+  await page.route("**/waste-api/drivers", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    await held
+    await route.fallback()
+  })
+  await page.goto("/fleet?module=drivers")
+  await page.getByRole("button", { name: "Create driver profile" }).click()
+  const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Create driver profile" }) })
+  await expect(dialog).toBeVisible()
+  const submit = dialog.getByRole("button", { name: "Create driver profile" })
+  await expect(submit).toBeDisabled()
+  await expect(dialog.getByRole("status")).toHaveText("The Drivers list is being read from the API; the form can be saved once it is.")
+  const name = dialog.getByLabel("Driver name")
+  await name.fill("E2E typed while held")
+
+  release()
+  await page.unroute("**/waste-api/drivers?**")
+  await page.unroute("**/waste-api/drivers")
+  await expect(submit).toBeEnabled()
+  await expect(dialog.getByRole("status")).toHaveCount(0)
+  await expect(name).toHaveValue("E2E typed while held")
+})
+
 test("Warehouses: created in the browser with Location, read back, and a code taken meanwhile refused by sentence", async ({ page, api }) => {
   const project = await projectNamed(api, TESTER_PROJECT)
   const name = uniqueName("E2E Warehouse")

@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { KEPT_ON_API } from "../api/records/server-records"
-import { awaitedRowsSentence, recordCountLabel } from "../table-copy"
+import { awaitedRowsSentence, listCountLabel, pageRangeLabel, recordCountLabel } from "../table-copy"
 
 describe("recordCountLabel", () => {
   test("one record is singular", () => {
@@ -41,5 +41,28 @@ describe("awaitedRowsSentence", () => {
     assert.equal(awaitedRowsSentence({ status: "ready", problem: null }), null)
     assert.equal(awaitedRowsSentence({ status: "not-granted", problem: null }), null)
     assert.equal(awaitedRowsSentence(null), null)
+  })
+})
+
+// #655: a list whose read has not answered has no count, and is not "No matching records".
+describe("listCountLabel", () => {
+  test("a list that has answered counts its rows", () => {
+    assert.equal(listCountLabel(0, 0, true), "0 records")
+    assert.equal(listCountLabel(3, 12, true), "3 of 12 records")
+  })
+
+  test("a list whose read has not answered says no count", () => {
+    assert.equal(listCountLabel(0, 0, false), null)
+  })
+})
+
+describe("pageRangeLabel", () => {
+  test("rows shown read as their range, none as the empty label", () => {
+    assert.equal(pageRangeLabel({ page: 2, pageSize: 25, totalCount: 30, emptyLabel: "No matching records", answered: true }), "Showing 26–30 of 30")
+    assert.equal(pageRangeLabel({ page: 1, pageSize: 25, totalCount: 0, emptyLabel: "No matching records", answered: true }), "No matching records")
+  })
+
+  test("a list whose read has not answered says nothing beneath it", () => {
+    assert.equal(pageRangeLabel({ page: 1, pageSize: 25, totalCount: 0, emptyLabel: "No matching records", answered: false }), null)
   })
 })

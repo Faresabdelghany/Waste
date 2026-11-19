@@ -192,10 +192,12 @@ function reportRead(context: RecordStoreContext, key: string, problem: Problem) 
  * when the API or the person changes — a token refresh, which happens every
  * hour, changes neither and reloads nothing, since a request in flight reads
  * the current client at the moment it is sent. No session (signed out,
- * adapter off, expired and not refreshed) empties them. The switched modules
- * load in SERVER_MODULES' order, one after the other, so a later module's
- * mapping resolves the earlier ones' rows (a user names its role and its
- * projects); each lands as it arrives, and a module that fails is reported
+ * adapter off, expired and not refreshed) empties them. The switched modules'
+ * lists are asked for a few at a time (`LOAD_READS_IN_FLIGHT`, #649) and land
+ * in SERVER_MODULES' order, each mapped once the one before it has landed, so
+ * a later module's mapping resolves the earlier ones' rows (a user names its
+ * role and its projects) as when they were read one after the other; a
+ * module that fails is reported
  * once and shows no rows — unless the API refused the account itself (Issue
  * #150): the client has ended the session by then, so the load stops there,
  * reported nowhere but /login. Only the modules the person's `/me` role
@@ -211,6 +213,36 @@ function reportRead(context: RecordStoreContext, key: string, problem: Problem) 
  * sign-in as someone else included: the last person's rows are never shown
  * under the next one while theirs load.
  */
+/**
+ * How many of the session load's module reads are out at once (#649): enough
+ * that a page waits for a third of the modules ahead of it, few enough to
+ * leave the Pilot API's pool of five connections room for everyone else.
+ */
+export const LOAD_READS_IN_FLIGHT = 3
+
+/** At most `size` fetches at once; the next starts as one settles, in the order they asked. */
+function fetchSlots(size: number): <T>(fetch: () => Promise<T>) => Promise<T> {
+  let out = 0
+  const waiting: (() => void)[] = []
+  return (fetch) =>
+    new Promise((resolve, reject) => {
+      const run = () => {
+        out += 1
+        fetch()
+          .then(resolve, reject)
+          .finally(() => {
+            out -= 1
+            waiting.shift()?.()
+          })
+      }
+      if (out < size) run()
+      else waiting.push(run)
+    })
+}
+
+/** The client a load's read is sent with: the token as it stands, or the one the session began with, under the session's signal. */
+const sessionClient = (context: RecordStoreContext, initial: ApiClient, signal: AbortSignal): ApiClient => ({ ...(context.client.getSnapshot() ?? initial), signal })
+
 export function startSession(context: RecordStoreContext, signedIn: boolean, loadMe: () => Promise<Me>): () => void {
   const { server } = context
   context.generation.set((generation) => generation + 1)
@@ -238,19 +270,30 @@ export function startSession(context: RecordStoreContext, signedIn: boolean, loa
       // Where the role does not view the organisation, a row's project resolves through `/me`'s projects (Issue #217).
       return projects !== undefined && !modules.includes(organisationModule) ? withMeProjects(marked, projects) : marked
     })
-    for (const module of modules) {
-      if (controller.signal.aborted) return
+    // Every module's read is queued at once, in order, so a read again after a
+    // command (Issue #198) still follows the load's read of its module. The
+    // lists go out a few at a time (#649) and each module is mapped only once
+    // the one before it has landed, as when they were read one after the other.
+    const slot = fetchSlots(LOAD_READS_IN_FLIGHT)
+    let turn: Promise<unknown> = Promise.resolve()
+    const reads = modules.map((module) => {
       const key = moduleKeyOf(module.workspaceId, module.moduleId)
-      // The one read a module has, which a read again after a command
-      // (Issue #198) takes too, one after the other. The token as it stands
-      // when this module's read is sent; the one the session began with if
-      // it lapsed under it, so the read goes out and the API's refusal is
-      // reported rather than nothing at all.
-      const problem = await enqueue(context.pendingReads, key, () =>
-        readModuleInto(server, { ...(context.client.getSnapshot() ?? initial), signal: controller.signal }, module, {
+      const after = turn
+      const read = enqueue(context.pendingReads, key, () =>
+        // The token as it stands when this module's lists are asked for; the
+        // one the session began with if it lapsed under it, so the read goes
+        // out and the API's refusal is reported rather than nothing at all.
+        readModuleInto(server, sessionClient(context, initial, controller.signal), module, {
           alive: () => !controller.signal.aborted,
+          fetchSlot: slot,
+          turn: after,
         }),
       )
+      turn = read.catch(() => null)
+      return { key, read }
+    })
+    for (const { key, read } of reads) {
+      const problem = await read.catch(problemOfError)
       if (controller.signal.aborted) return
       if (problem === null) continue
       if (isAccountRefusal(problem)) return

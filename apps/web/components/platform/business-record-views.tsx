@@ -1,5 +1,6 @@
 "use client"
 
+import { noWindowSentence, timeWindowOf, type TimeWindow } from "@/lib/data/time-window"
 import React, { useEffect, useMemo, useState } from "react"
 import {
   CheckCircle,
@@ -489,27 +490,6 @@ export function BusinessRecordBoardView({
   )
 }
 
-type TimeWindow = {
-  startMinutes: number
-  endMinutes: number
-  label: string
-}
-
-const TIME_WINDOW_PATTERN = /(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/
-
-function parseTimeWindow(record: BusinessRecord): TimeWindow | null {
-  const candidates = [record.value, ...Object.values(record.facts)]
-  for (const candidate of candidates) {
-    const match = candidate.match(TIME_WINDOW_PATTERN)
-    if (!match) continue
-    const startMinutes = Number(match[1]) * 60 + Number(match[2])
-    const endMinutes = Number(match[3]) * 60 + Number(match[4])
-    if (endMinutes <= startMinutes) continue
-    return { startMinutes, endMinutes, label: match[0] }
-  }
-  return null
-}
-
 function formatHour(hour: number) {
   return `${String(hour).padStart(2, "0")}:00`
 }
@@ -530,7 +510,7 @@ export function BusinessRecordDayTimeline({
     const scheduled: Array<{ record: BusinessRecord; window: TimeWindow }> = []
     const unscheduled: BusinessRecord[] = []
     for (const record of records) {
-      const window = parseTimeWindow(record)
+      const window = timeWindowOf(record)
       if (window) scheduled.push({ record, window })
       else unscheduled.push(record)
     }
@@ -615,7 +595,7 @@ export function BusinessRecordDayTimeline({
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-border/70 p-6 text-sm text-muted-foreground">
-          No records with a time window match the current filters.
+          {noWindowSentence(narrowed)}
         </div>
       )}
 
