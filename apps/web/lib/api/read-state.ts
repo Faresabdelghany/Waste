@@ -3,6 +3,7 @@
 // and why. Every surface names what it reads in its own noun ("the planning
 // areas", "the master data"), and says once it has the rows what they hold.
 import type { Problem } from "./problem"
+import type { ModuleState } from "./records/server-records"
 
 /** How a sentence names what it reads: `is` for a mass noun ("the master data is"), `notShown` where the role is told of it by another name. */
 export type ReadNoun = { readonly is?: boolean; readonly notShown?: string }
@@ -39,4 +40,13 @@ export function readSentence(read: { viewed?: boolean; problem: string | null; a
   if (read.problem !== null) return unreadSentence(noun, read.problem)
   if (!read.answered) return readingSentence(noun)
   return null
+}
+
+/**
+ * How many rows a counter shows: their number once their module has been read
+ * (or on the browser's own path, `null` state), and none before. A zero is an
+ * answer, never a module still being read (#656), as the sidebar's badge.
+ */
+export function countOnceRead(rows: number, state: Pick<ModuleState, "status"> | null): number | null {
+  return state === null || state.status === "ready" ? rows : null
 }
