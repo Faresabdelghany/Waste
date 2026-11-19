@@ -258,6 +258,7 @@ import { useActorName } from "@/components/platform/shell-identity"
 import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 import { RecordToolbar } from "@/components/platform/record-toolbar"
+import { offersTimeline } from "@/lib/data/time-window"
 import { countedOf, pluralOf } from "@/lib/format/counts"
 import { duplicateFieldErrors } from "@/lib/data/form-uniqueness"
 
@@ -1291,10 +1292,14 @@ export function BusinessWorkspace({
   const showRouteStarColumn = isRoutesView
   const isServiceProviderUsersView = activeModule.layout === "accounts"
   const isRichRecordView = moduleViewKind === "rich"
+  // Timeline only where a row of the list, before search and filters, has a window to place (#657).
+  const timelineOffered = isRichRecordView && offersTimeline(scopedRecords)
   const moduleViewTypes: readonly BusinessViewType[] = isRichRecordView
-    ? ["table", "list", "board", "timeline"]
+    ? timelineOffered
+      ? ["table", "list", "board", "timeline"]
+      : ["table", "list", "board"]
     : ["table"]
-  const activeViewType: BusinessViewType = isRichRecordView
+  const activeViewType: BusinessViewType = isRichRecordView && (viewOptions.viewType !== "timeline" || timelineOffered)
     ? viewOptions.viewType
     : "table"
   const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create") && !keptOnApi
