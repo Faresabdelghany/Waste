@@ -85,7 +85,7 @@ import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
 import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { cn } from "@/lib/utils"
-import { moduleReadSentence } from "@/lib/api/read-state"
+import { countOnceRead, moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
 import { densityClass, detailsColumn, listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
@@ -372,7 +372,8 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   // The pane reads and writes the access module through the record store and nothing else (Issue #163).
   const { me } = useApiSession()
   const { getRecords, upsertRecord, sendCommand } = useBusinessRecordStore()
-  const accessModuleState = useServerModuleState("configure", "access") ?? IDLE
+  const accessRead = useServerModuleState("configure", "access")
+  const accessModuleState = accessRead ?? IDLE
   const activeTab = (params.tab as UsersRolesTab | undefined) ?? "users"
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
   // The Teams tab's rows, read here for the tab's count.
@@ -541,7 +542,12 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
   const roleUserCount = (roleName: string) =>
     userRows.filter((user) => user.role === roleName).length
 
-  const tabCounts: Readonly<Record<UsersRolesTab, number>> = { users: userRows.length, roles: roleRows.length, teams: teamRows.length }
+  // A tab counts its rows once they are read, never a zero while they are on their way (#656).
+  const tabCounts: Readonly<Record<UsersRolesTab, number | null>> = {
+    users: countOnceRead(userRows.length, accessRead),
+    roles: countOnceRead(roleRows.length, accessRead),
+    teams: teams.ready ? teamRows.length : null,
+  }
   const tabs = (
     <div className="flex items-center gap-1 overflow-x-auto pb-1">
       <Tabs
@@ -555,9 +561,9 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           {settingsTabsOf("access").map((tab) => (
             <PillTab key={tab.value} value={tab.value} nav>
               {tab.label}
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
-                {tabCounts[tab.value]}
-              </span>
+              {tabCounts[tab.value] === null ? null : (
+                <span className="ml-1.5 text-[10px] text-muted-foreground">{tabCounts[tab.value]}</span>
+              )}
             </PillTab>
           ))}
         </PillTabsList>
