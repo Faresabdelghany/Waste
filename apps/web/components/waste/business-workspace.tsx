@@ -1000,6 +1000,19 @@ export function BusinessWorkspace({
   // The module whose form is open, by the form's key: what the form's own write and pickers follow.
   const formModule = formSchema ? moduleSpecOfKey(formSchema.key) : undefined
   const formTargetOnApi = useServerModuleState(formWriteTarget?.workspaceId ?? workspace.id, formWriteTarget?.module.id ?? activeModule.id)
+  // The submit's own gate, asked while the form is open: a form whose module
+  // the API has not read holds its submit and says why, and lets it go once
+  // the module is read, rather than refusing a filled form (#650).
+  const formGate =
+    formSchema?.execution !== undefined && formSchema.execution.kind !== "preview" && formWriteTarget
+      ? writeGate({
+          target: formTargetOnApi,
+          label: formWriteTarget.module.label,
+          when: "the form can be saved",
+          editing: editingRecord === null ? undefined : { id: editingRecord.id, name: editingRecord.name },
+        })
+      : null
+  const formHeldBecause = formGate?.kind === "held" ? formGate.description : undefined
   // Route Schemes get a chooser between Quick create and the Guided Setup wizard.
   const isSchemeCreateFlow =
     activeModuleFormSchema !== undefined && activeModule.writes === "scheme"
@@ -3988,6 +4001,7 @@ export function BusinessWorkspace({
           validateValues={validateFormValues}
           reviewSummary={getFormReviewSummary}
           submitting={formSaving}
+          heldBecause={formHeldBecause}
         />
       )}
       {relatedCreateTarget &&
@@ -4007,6 +4021,7 @@ export function BusinessWorkspace({
             validateValues={validateFormValues}
             reviewSummary={getFormReviewSummary}
             submitting={formSaving}
+            heldBecause={formHeldBecause}
           />
         )}
       {editingRecord && editFormSchema && (
@@ -4024,6 +4039,7 @@ export function BusinessWorkspace({
           validateValues={validateFormValues}
           reviewSummary={getFormReviewSummary}
           submitting={formSaving}
+          heldBecause={formHeldBecause}
         />
       )}
       <Suspense fallback={null}>
