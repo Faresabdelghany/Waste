@@ -10,6 +10,7 @@ import {
   Database,
   Flag,
   Funnel,
+  Globe,
   Handshake,
   IdentificationBadge,
   MapPin,
@@ -18,7 +19,6 @@ import {
   Path,
   Receipt,
   Scales,
-  Speedometer,
   Spinner,
   SteeringWheel,
   Tag,
@@ -87,9 +87,7 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   collectionCalendars: CalendarBlank,
   planningAreas: MapTrifold,
   propertyTypes: Buildings,
-  serviceAreas: MapTrifold,
-  serviceScopes: Database,
-  reliabilityBands: Speedometer,
+  countries: Globe,
   roles: IdentificationBadge,
   ticketTypes: Tag,
   priorities: Flag,
@@ -186,19 +184,9 @@ const containerCategories: FilterDefinition[] = [
 const serviceProviderCategories: FilterDefinition[] = [
   { id: "statuses", label: "Status", values: (record) => [record.status] },
   {
-    id: "serviceAreas",
-    label: "Service area",
-    values: (record) => singleFilterValue(record.facts["Service area"]),
-  },
-  {
-    id: "serviceScopes",
-    label: "Service scope",
-    values: (record) => splitFilterValues(record.facts["Service scope"]),
-  },
-  {
-    id: "reliabilityBands",
-    label: "Reliability",
-    values: (record) => singleFilterValue(record.facts["Reliability band"]),
+    id: "countries",
+    label: "Country",
+    values: (record) => singleFilterValue(record.facts.Country),
   },
 ]
 

@@ -16,8 +16,8 @@ export const SERVICE_PROVIDERS = workspaceSpec("service-providers", {
       description:
         "External service providers, company details, compliance, access, fleet links, and performance.",
       entityLabel: "Service provider",
-      contextLabel: "Service area · period",
-      valueLabel: "Service state",
+      contextLabel: "Country · registration number",
+      valueLabel: "Primary contact",
       primaryAction: "New service provider",
       lifecycle: ["Draft", "Upcoming", "Active", "Expiring", "Expired", "Terminated"],
       rules: [

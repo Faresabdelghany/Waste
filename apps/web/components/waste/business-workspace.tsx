@@ -1197,21 +1197,10 @@ export function BusinessWorkspace({
         businessFilters.propertyTypes,
         "Property type",
       )
-      const matchesServiceArea = matchesFactFilter(
+      const matchesCountry = matchesFactFilter(
         record,
-        businessFilters.serviceAreas,
-        "Service area",
-      )
-      const matchesServiceScope = matchesFactFilter(
-        record,
-        businessFilters.serviceScopes,
-        "Service scope",
-        true,
-      )
-      const matchesReliability = matchesFactFilter(
-        record,
-        businessFilters.reliabilityBands,
-        "Reliability band",
+        businessFilters.countries,
+        "Country",
       )
       // Service provider users created before the Role field rename carry the fact
       // under "Service provider role", so check both keys.
@@ -1250,9 +1239,7 @@ export function BusinessWorkspace({
         matchesRouteScheme &&
         matchesCollectionCalendar &&
         matchesPropertyType &&
-        matchesServiceArea &&
-        matchesServiceScope &&
-        matchesReliability &&
+        matchesCountry &&
         matchesRole &&
         matchesTicketType &&
         matchesPriority &&

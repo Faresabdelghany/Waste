@@ -295,6 +295,7 @@ export const serviceProviderAdapter: ResourceAdapter<ServiceProvider, ServicePro
       id,
       name: provider.legalName,
       context: `${countryName(provider.country)} · ${provider.registrationNumber}`,
+      value: provider.contactName,
       status: "Active",
       facts: {
         CVR: provider.registrationNumber,
