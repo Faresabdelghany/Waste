@@ -184,7 +184,18 @@ test("an alert about a vehicle is raised by hand, acknowledged and handed to a t
   await form.getByRole("textbox", { name: /^Details/ }).fill("No position from WH-24 for 14 minutes")
   await pick(form, page, "Kind", "Resource")
   await pick(form, page, "Severity", "High")
+  // #652: what the alert is about is asked before any request, in the form's words.
+  let sentEmpty = false
+  const noteEmpty = (request: { method: () => string; url: () => string }) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/waste-api/alerts") sentEmpty = true
+  }
+  page.on("request", noteEmpty)
+  await form.getByRole("button", { name: "Raise alert" }).click()
+  await expect(form.getByText("Choose a route, a vehicle, a driver or a container.")).toBeVisible()
+  page.off("request", noteEmpty)
+  expect(sentEmpty, "no alert is sent naming nothing").toBe(false)
   await pick(form, page, "Vehicle", "WH-24 · CN 42 018 · Active")
+  await expect(form.getByText("Choose a route, a vehicle, a driver or a container.")).toHaveCount(0)
   const [raised] = await Promise.all([answerOf(page, "POST", "/alerts"), form.getByRole("button", { name: "Raise alert" }).click()])
   expect(raised.status(), await raised.text()).toBe(201)
   expect(raised.request().postDataJSON()).toEqual({ projectId: project.id, title, details: "No position from WH-24 for 14 minutes", kind: "resource", severity: "high", vehicleId: vehicle?.id })
