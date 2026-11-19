@@ -89,6 +89,42 @@ async function addServiceProvider(page: Page, values: { legalName: string; regis
   return response
 }
 
+// #651: the write is optimistic, so the new row is in the module while its
+// request is out. The form must not read it as a duplicate of itself.
+test("Service Providers: while a new provider's request is out, the form says nothing of its name or number already existing", async ({ page }) => {
+  const legalName = uniqueName("E2E Provider in flight")
+  const registration = registrationNumber()
+  await openLoaded(page, "/service-providers", "/service-providers")
+
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let sent = () => {}
+  const out = new Promise<void>((resolve) => {
+    sent = resolve
+  })
+  await page.route("**/waste-api/service-providers", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    sent()
+    await held
+    await route.fallback()
+  })
+
+  const created = addServiceProvider(page, { legalName, registrationNumber: registration, contactName: "E2E Contact", contactEmail: "provider@waste-e2e.example" })
+  await out
+  const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add service provider" }) })
+  await expect(dialog.getByLabel("Legal company name")).toHaveValue(legalName)
+  // Long enough for the store's optimistic row to have reached the form's check.
+  await page.waitForTimeout(500)
+  await expect(dialog.getByText("already exists in this module")).toHaveCount(0)
+
+  release()
+  expect((await created).status()).toBe(201)
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText(legalName)
+  await page.unroute("**/waste-api/service-providers")
+})
+
 async function serviceProviderThroughApi(api: APIRequestContext, registration: string) {
   const response = await api.post("/service-providers", {
     data: { legalName: uniqueName("E2E Elsewhere Provider"), registrationNumber: registration, country: "DK", contactName: "Elsewhere", contactEmail: "elsewhere@waste-e2e.example" },

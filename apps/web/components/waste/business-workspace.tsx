@@ -259,6 +259,7 @@ import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 import { RecordToolbar } from "@/components/platform/record-toolbar"
 import { countedOf, pluralOf } from "@/lib/format/counts"
+import { duplicateFieldErrors } from "@/lib/data/form-uniqueness"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -900,14 +901,20 @@ export function BusinessWorkspace({
   const [openFormSession, setOpenFormSession] = useState(0)
   const [savingSession, setSavingSession] = useState<number | null>(null)
   const formSaving = savingSession === openFormSession
+  // The row the open form's write put in the store: while its request is out
+  // (`formSaving`) it is in the module's rows, and is no duplicate of the
+  // form's own values (#651). Once answered it is a row like any other.
+  const [formWrittenId, setFormWrittenId] = useState<string | null>(null)
   const leaveForm = () => {
     formSession.current += 1
     setOpenFormSession(formSession.current)
+    setFormWrittenId(null)
   }
   /** A write of the form open now: held while out, its answer for `landed` only while the form is still the one it was made in. */
   const formWrite = (outcome: Promise<WriteOutcome> | undefined, record: BusinessRecord, landed: (stillOpen: boolean) => void) => {
     const session = formSession.current
     setSavingSession(session)
+    setFormWrittenId(record.id)
     whenSaved(
       answered(outcome, record.id, () => toast.error(`${record.name} was not saved`, { description: "The write did not complete; try again." })),
       () => landed(formSession.current === session),
@@ -2239,49 +2246,13 @@ export function BusinessWorkspace({
   const validateFormValues = useCallback(
     (values: BusinessFormValues) => {
       if (!formSchema) return {}
-      const errors: Record<string, string> = {}
-      const fields = formSchema.sections.flatMap((section) => section.fields)
-      const uniqueFields = fields
-        .filter(
-          (field) =>
-            field.id === formSchema.nameField ||
-            field.id === "barcode" ||
-            /(code|reference|registrationNumber|externalId)$/i.test(field.id),
-        )
-        // An agreement's number is not unique on the API: one agreement of a
-        // number is valid at a time, and the next may follow it (ADR-0005),
-        // which the API refuses in its own sentence when the periods overlap.
-        .filter((field) => !(agreementsOnApi && field.id === formSchema.nameField))
-
-      for (const field of uniqueFields) {
-        const value = values[field.id]
-        if (typeof value !== "string" || !value.trim()) continue
-        const normalizedValue = value.trim().toLowerCase()
-        const duplicate = formTargetRecords.some((record) => {
-          if (record.id === editingRecord?.id) return false
-          const submittedValue = record.submittedValues?.[field.id]
-          if (
-            typeof submittedValue === "string" &&
-            submittedValue.trim().toLowerCase() === normalizedValue
-          ) {
-            return true
-          }
-          const fixtureValue = record.facts[field.label]
-          if (
-            typeof fixtureValue === "string" &&
-            fixtureValue.trim().toLowerCase() === normalizedValue
-          ) {
-            return true
-          }
-          return (
-            field.id === formSchema.nameField &&
-            record.name.trim().toLowerCase() === normalizedValue
-          )
-        })
-        if (duplicate) {
-          errors[field.id] = `${field.label} already exists in this module.`
-        }
-      }
+      // An agreement's number is not unique on the API: one agreement of a
+      // number is valid at a time, and the next may follow it (ADR-0005),
+      // which the API refuses in its own sentence when the periods overlap.
+      const errors: Record<string, string> = duplicateFieldErrors(formSchema, values, formTargetRecords, {
+        except: [editingRecord?.id, formSaving ? formWrittenId : null],
+        skip: (fieldId) => agreementsOnApi && fieldId === formSchema.nameField,
+      })
 
       if (formModule?.writes === "scheme") {
         // The same licence rule the select applies, at submit (issue #37):
@@ -2310,7 +2281,7 @@ export function BusinessWorkspace({
 
       return errors
     },
-    [agreementsOnApi, editingRecord?.id, formModule?.writes, formSchema, formTargetRecords, getRecords, projectScope],
+    [agreementsOnApi, editingRecord?.id, formModule?.writes, formSchema, formSaving, formTargetRecords, formWrittenId, getRecords, projectScope],
   )
 
   const getFormReviewSummary = useCallback(
