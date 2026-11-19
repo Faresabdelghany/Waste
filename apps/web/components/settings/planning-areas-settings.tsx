@@ -190,7 +190,8 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
   }
 
   const narrowed = areaRecords.length > 0
-  const emptyMessage = moduleReadSentence(areas, "planning areas") ?? (narrowed ? "No planning areas match this search." : "No planning areas yet.")
+  const unread = moduleReadSentence(areas, "planning areas")
+  const emptyMessage = unread ?? (narrowed ? "No planning areas match this search." : "No planning areas yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = areas.notGranted ? areas.problem?.detail : undefined
 
@@ -218,6 +219,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
       <RecordsSection
         shown={filtered.length}
         total={areaRecords.length}
+        answered={unread === null}
         actions={
           <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!areas.ready || !organisation.ready}>
             <Plus className="h-4 w-4" weight="bold" />
@@ -297,6 +299,7 @@ export function PlanningAreasSettings({ params }: SettingsPaneProps) {
           page={page}
           pageCount={pageCount}
           totalCount={totalCount}
+          answered={unread === null}
           onPageChange={setPage}
         />
       </RecordsSection>

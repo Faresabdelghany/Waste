@@ -28,6 +28,10 @@ export function moduleReadSentence(answer: { pending: boolean; notGranted: boole
   return null
 }
 
+/** Whether a module's records are an answer a pane can count: read, the role's, not refused (#655). */
+export const moduleAnswered = (answer: { pending: boolean; notGranted: boolean; problem: Problem | null }): boolean =>
+  !answer.pending && !answer.notGranted && answer.problem === null
+
 /**
  * A read the surface asks itself (a project's setting, a record's section):
  * not the role's where `viewed` is false, not read with `problem` saying why,

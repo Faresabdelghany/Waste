@@ -85,7 +85,7 @@ import type { SettingsPaneProps } from "@/lib/modules/settings-panes"
 import { type BusinessOrderingOption, type BusinessViewOptions } from "@/components/platform/business-view-options-popover"
 import { emptyBusinessFilters, matchesBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@/lib/prototype/business-filters"
 import { cn } from "@/lib/utils"
-import { countOnceRead, moduleReadSentence } from "@/lib/api/read-state"
+import { countOnceRead, moduleAnswered, moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
 import { densityClass, detailsColumn, listView, RecordToolbar } from "@/components/platform/record-toolbar"
 
@@ -269,6 +269,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
   const setStatus = (team: BusinessRecord, status: "Active" | "Inactive") =>
     write(updateTicketTeamRecord(team, { status }), () => undefined, status === "Active" ? "Team reactivated" : "Team retired")
 
+  const teamsAnswered = accessUnknownSentence(session) === null && moduleAnswered(teams)
   const emptyMessage =
     accessUnknownSentence(session) ??
     moduleReadSentence(teams, "teams", { notShown: "ticket teams" }) ??
@@ -302,6 +303,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
         <RecordsSection
           shown={filtered.length}
           total={rows.length}
+          answered={teamsAnswered}
           actions={
             <Button size="sm" onClick={() => setCreating(true)} disabled={!access.create || !teams.ready || saving}>
               <Plus className="h-4 w-4" weight="bold" /> New team
@@ -344,7 +346,7 @@ function TeamsPanel({ tabs, teams, rows, table }: { tabs: ReactNode; teams: Pane
               )}
             </TableBody>
           </Table>
-          <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
+          <TablePagination page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} answered={teamsAnswered} />
         </RecordsSection>
       </AssetPanelShell>
 
@@ -616,6 +618,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           <RecordsSection
             shown={filteredUsers.length}
             total={userRows.length}
+            answered={pilotReady}
             actions={
               <Button
                 size="sm"
@@ -697,6 +700,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               pageCount={usersPageCount}
               totalCount={usersTotalCount}
               onPageChange={setUsersPage}
+              answered={pilotReady}
             />
           </RecordsSection>
         </AssetPanelShell>
@@ -733,6 +737,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
           <RecordsSection
             shown={filteredRoles.length}
             total={roleRows.length}
+            answered={pilotReady}
             actions={
               <Button
                 size="sm"
@@ -804,6 +809,7 @@ export function OrganizationAccessManagement({ params, onParamsChange }: Setting
               pageCount={rolesPageCount}
               totalCount={rolesTotalCount}
               onPageChange={setRolesPage}
+              answered={pilotReady}
             />
           </RecordsSection>
         </AssetPanelShell>

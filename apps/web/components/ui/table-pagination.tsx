@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { CaretLeft, CaretRight } from "@phosphor-icons/react/dist/ssr"
 
 import { Button } from "@/components/ui/button"
+import { pageRangeLabel } from "@/lib/table-copy"
 import { cn } from "@/lib/utils"
 
 export const TABLE_PAGINATION_PAGE_SIZE = 25
@@ -36,6 +37,8 @@ type TablePaginationProps = {
   onPageChange: (page: number) => void
   pageSize?: number
   emptyLabel?: string
+  /** False while the table's read has not answered: no range and no empty label beneath it (#655). */
+  answered?: boolean
   className?: string
 }
 
@@ -46,6 +49,7 @@ export function TablePagination({
   onPageChange,
   pageSize = TABLE_PAGINATION_PAGE_SIZE,
   emptyLabel = "No matching records",
+  answered = true,
   className,
 }: TablePaginationProps) {
   return (
@@ -56,9 +60,7 @@ export function TablePagination({
       )}
     >
       <p className="text-[10px] text-muted-foreground">
-        {totalCount === 0
-          ? emptyLabel
-          : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalCount)} of ${totalCount}`}
+        {pageRangeLabel({ page, pageSize, totalCount, emptyLabel, answered })}
       </p>
       <div className="flex items-center gap-1">
         <Button

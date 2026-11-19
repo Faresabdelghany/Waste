@@ -58,6 +58,8 @@ export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: Proj
   }
 
   // Until `/me` answers, the grants are unknown: never said to be the role's.
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = accessUnknownSentence(session) === null && access.view && !setting.problem && base !== null
   const emptyMessage = accessUnknownSentence(session) ?? (!access.view
     ? notShownSentence("ticket SLA", { is: true })
     : project === null
@@ -83,6 +85,7 @@ export function TicketSlaSettings({ tabs, pick }: { tabs?: ReactNode; pick: Proj
       <RecordsSection
         shown={rows.length}
         total={rows.length}
+        answered={answered}
         actions={
           <>
             {editing && (

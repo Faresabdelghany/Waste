@@ -32,7 +32,7 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { driverAppReadingOf, publicPagesOf, publicSlugOf, slugRefusalOf, slugSuggestionOf } from "@/lib/data/portals"
 import { addressRefusalOf, brandColorRefusalOf, brandingFormOf, brandingFromForm, brandingOf, contrastLabelOf, type BrandingForm } from "@/lib/data/project-branding"
 import { isSoftDeleted } from "@/lib/prototype/record-visibility"
-import { moduleReadSentence } from "@/lib/api/read-state"
+import { moduleAnswered, moduleReadSentence } from "@/lib/api/read-state"
 import { useGrants } from "@/components/platform/use-grants"
 
 export function PortalsSettingsOnApi() {
@@ -66,7 +66,7 @@ export function PortalsSettingsOnApi() {
 
   return (
     <AssetPanelShell toolbar={null}>
-      <RecordsSection shown={projects.length} total={projects.length}>
+      <RecordsSection shown={projects.length} total={projects.length} answered={moduleAnswered(organisation)}>
         <div className="overflow-x-auto">
           <Table className="min-w-[720px]">
             <TableHeader>

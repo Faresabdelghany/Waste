@@ -55,6 +55,7 @@ export function IntegrationsSettingsOnApi() {
       <RecordsSection
         shown={rows.length}
         total={rows.length}
+        answered={integrations.shown !== null}
         actions={
           granted ? (
             <Button variant="outline" size="sm" onClick={() => {
