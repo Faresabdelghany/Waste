@@ -258,6 +258,7 @@ import { useActorName } from "@/components/platform/shell-identity"
 import { mayOn } from "@/lib/modules/grants"
 import { recurrenceFromValues, serviceDaysFromValues } from "@/lib/prototype/route-schemes/recurrence-values"
 import { RecordToolbar } from "@/components/platform/record-toolbar"
+import { countedOf, pluralOf } from "@/lib/format/counts"
 
 type BusinessWorkspaceProps = {
   workspaceId: WorkspaceId
@@ -1447,7 +1448,7 @@ export function BusinessWorkspace({
       const count = new Set(
         visibleScopedRecords.map(getValue).filter((value) => Boolean(value)),
       ).size
-      return `${count} ${count === 1 ? noun : `${noun}s`}`
+      return countedOf(count, noun)
     }
     return [
       { value: "none", label: "None" },
@@ -3306,7 +3307,7 @@ export function BusinessWorkspace({
           {showFilters && !isMapPlanningView && (
             <RecordToolbar
               className="gap-3"
-              placeholder={`Search ${activeModule.entityLabel.toLowerCase()}s`}
+              placeholder={`Search ${pluralOf(activeModule.entityLabel.toLowerCase())}`}
               query={query}
               onQueryChange={setQuery}
               records={visibleScopedRecords}
@@ -3634,7 +3635,7 @@ export function BusinessWorkspace({
                                       {group.records.length}{" "}
                                       {group.records.length === 1
                                         ? activeModule.entityLabel.toLowerCase()
-                                        : `${activeModule.entityLabel.toLowerCase()}s`}
+                                        : pluralOf(activeModule.entityLabel.toLowerCase())}
                                     </span>
                                   </div>
                                 </TableCell>
