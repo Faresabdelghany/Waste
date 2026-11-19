@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react"
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr"
 
 import { useApiSession } from "@/components/platform/api-session-store"
@@ -154,15 +154,31 @@ export function LoginView() {
   )
 }
 
+const noSubscription = () => () => {}
+
+/** False in the server's HTML and while it hydrates, true once the page's scripts answer it. */
+const useHydrated = () =>
+  useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  )
+
+// The fields are read from the form when it is sent, never from state: what a
+// person or a password manager typed before the page hydrated is in the DOM
+// alone (#659). Until then the button is disabled, so the browser never sends
+// the form itself, which would reload /login empty.
 function PasswordSignIn({ onSignIn, onSignedIn }: { onSignIn: (email: string, password: string) => Promise<unknown>; onSignedIn: () => Promise<void> }) {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const hydrated = useHydrated()
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (busy) return
+    const fields = new FormData(event.currentTarget)
+    const email = String(fields.get("email") ?? "").trim()
+    const password = String(fields.get("password") ?? "")
     setBusy(true)
     setError("")
     try {
@@ -176,15 +192,14 @@ function PasswordSignIn({ onSignIn, onSignedIn }: { onSignIn: (email: string, pa
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
+    <form method="post" onSubmit={submit} className="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
       <div className="space-y-1.5">
         <Label htmlFor="login-email">E-mail</Label>
         <Input
           id="login-email"
+          name="email"
           type="email"
           autoComplete="username"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
           required
         />
       </div>
@@ -192,10 +207,9 @@ function PasswordSignIn({ onSignIn, onSignedIn }: { onSignIn: (email: string, pa
         <Label htmlFor="login-password">Password</Label>
         <Input
           id="login-password"
+          name="password"
           type="password"
           autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
           required
         />
       </div>
@@ -204,7 +218,7 @@ function PasswordSignIn({ onSignIn, onSignedIn }: { onSignIn: (email: string, pa
           {error}
         </p>
       )}
-      <Button type="submit" className="w-full" disabled={busy}>
+      <Button type="submit" className="w-full" disabled={busy || !hydrated}>
         {busy ? "Signing in…" : "Sign in"}
       </Button>
     </form>
