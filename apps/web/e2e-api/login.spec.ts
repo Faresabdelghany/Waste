@@ -33,6 +33,55 @@ test("the right password lands by /me: the administrator on operations", async (
   await expect(sidebar.getByRole("listitem").filter({ has: page.getByRole("link", { name: "Price Engine" }) })).toHaveText("Price Engine")
 })
 
+// #659: text that reached the fields before the page hydrated is in the DOM
+// alone, never in a React event. What the fields hold when Sign in is pressed
+// is what is sent.
+test("fields filled without an input event, as before hydration or by a password manager, are what is sent", async ({ page }) => {
+  await page.goto("/login")
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled()
+  await page.evaluate(
+    ([email, password]) => {
+      ;(document.getElementById("login-email") as HTMLInputElement).value = email
+      ;(document.getElementById("login-password") as HTMLInputElement).value = password
+    },
+    [E2E.loginEmail, E2E.loginPassword],
+  )
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(page).toHaveURL(/\/operate/)
+})
+
+test("before the page's scripts have run, Sign in cannot reload /login empty; once they have, what was typed signs in", async ({ page }) => {
+  let release = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  // The scripts alone: the stylesheets share the folder, and holding one would hold the parser before the form.
+  await page.route("**/_next/static/chunks/*.js", async (route) => {
+    await held
+    await route.continue()
+  })
+  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  const email = page.getByLabel("E-mail")
+  const password = page.getByLabel("Password")
+  const signIn = page.getByRole("button", { name: "Sign in" })
+  await email.fill(E2E.loginEmail)
+  await password.fill(E2E.loginPassword)
+  await expect(signIn).toBeDisabled()
+  await password.press("Enter")
+  await signIn.click({ force: true })
+  // A native submit would navigate; give it the time one takes before reading the page.
+  await page.waitForTimeout(1_000)
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(email).toHaveValue(E2E.loginEmail)
+
+  release()
+  await page.unroute("**/_next/static/chunks/*.js")
+  await expect(signIn).toBeEnabled()
+  await expect(email).toHaveValue(E2E.loginEmail)
+  await signIn.click()
+  await expect(page).toHaveURL(/\/operate/)
+})
+
 test("without a session every page but /login is the gate's: back to /login, carrying the page", async ({ page }) => {
   await page.goto("/customers")
   await expect(page).toHaveURL(/\/login\?next=%2Fcustomers/)
