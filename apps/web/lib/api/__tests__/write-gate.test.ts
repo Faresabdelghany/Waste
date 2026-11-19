@@ -30,7 +30,7 @@ describe("the workspace's write gate", () => {
   test("holds a write to a switched module not read yet, says when it can go, and says what a failed or ungranted read means", () => {
     const held = (target: ModuleState) => writeGate({ ...form, target })
     for (const state of [IDLE, loading(IDLE)]) {
-      assert.deepEqual(held(state), { kind: "held", description: "Service Providers is being read from the API; the form can be saved once it is." }, state.status)
+      assert.deepEqual(held(state), { kind: "held", description: "The Service Providers list is being read from the API; the form can be saved once it is." }, state.status)
     }
     assert.deepEqual(held(loadFailed(IDLE, { type: "about:blank", title: "Unavailable", status: 503 })), { kind: "held", description: "Service Providers could not be read from the API; reload the page to try again." })
     assert.deepEqual(held({ ...IDLE, status: "not-granted" }), { kind: "held", description: "Your role does not view Service Providers." })
@@ -79,14 +79,14 @@ describe("the store's route for a write", () => {
 
   test("refuses a write to a switched module not read yet, its read failed or the role not viewing it, in the gate's sentence", () => {
     for (const state of [undefined, IDLE, loading(IDLE)]) {
-      assert.equal(sentence(route(state)), "Service Providers is being read from the API; it can be saved once it is.", state?.status ?? "never asked for")
+      assert.equal(sentence(route(state)), "The Service Providers list is being read from the API; it can be saved once it is.", state?.status ?? "never asked for")
       assert.ok(said(route(state)))
     }
     assert.equal(sentence(route(loadFailed(IDLE, { type: "about:blank", title: "Unavailable", status: 503 }))), "Service Providers could not be read from the API; reload the page to try again.")
     assert.equal(sentence(route({ ...IDLE, status: "not-granted" })), "Your role does not view Service Providers.")
     assert.equal(said(route({ ...IDLE, status: "not-granted" })), false, "only another write's sync reaches a module no pane of which is shown: refused unsaid")
     const gate = writeGate({ ...form, target: IDLE })
-    assert.equal(gate.kind === "held" ? gate.description : gate.kind, "Service Providers is being read from the API; the form can be saved once it is.", "one rule, the door's own words for when")
+    assert.equal(gate.kind === "held" ? gate.description : gate.kind, "The Service Providers list is being read from the API; the form can be saved once it is.", "one rule, the door's own words for when")
   })
 
   test("refuses a write to a switched module where no API is configured, said in the gate's sentence, never kept in the browser", () => {
