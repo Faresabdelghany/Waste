@@ -25,8 +25,10 @@ import type {
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 
 export function filledRuleBreaks(rule: Extract<BusinessFormValidationRule, { type: "filled" }>, shown: BusinessFormValues): readonly string[] {
-  const condition = shown[rule.when.fieldId]
-  if (typeof condition !== "string" || !rule.when.oneOf.includes(condition)) return []
+  if (rule.when !== undefined) {
+    const condition = shown[rule.when.fieldId]
+    if (typeof condition !== "string" || !rule.when.oneOf.includes(condition)) return []
+  }
   const filled = rule.fields.filter((fieldId) => Boolean(shown[fieldId])).length
   return (rule.exactly ? filled !== 1 : filled === 0) ? rule.at : []
 }
