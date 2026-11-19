@@ -38,6 +38,7 @@ import { settingsHref } from "@/lib/modules/settings-panes"
 import { footerItems, navBadgeOf, navItemActive, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { OPERATOR_PROJECT_NAME } from "@/lib/data/fixture-identity"
 import { projectScopeLabel, selectedProjectIds } from "@/lib/data/project-scope"
+import { officeSearchModules } from "@/lib/data/global-search"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
   operate: Tray,
@@ -55,6 +56,15 @@ const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ classNa
   settings: Gear,
   templates: Layout,
 }
+
+// The office searches every module of its workspaces; the store holds rows only of those its role views.
+const OFFICE_SEARCH_MODULES = officeSearchModules()
+
+/** The pages the office's Search offers: the sidebar's own, Settings among them. */
+const searchPagesOf = (pathname: string) => [
+  ...navItems.map((item) => ({ label: item.label, href: item.href })),
+  ...footerItems.map((item) => ({ label: item.label, href: settingsHref(item.pane, { from: pathname }) })),
+]
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -81,7 +91,7 @@ export function AppSidebar() {
       <SidebarBrand scope={projectLabel} />
 
       <SidebarContent className="px-0 gap-0">
-        <SidebarSearch />
+        <SidebarSearch pages={searchPagesOf(pathname)} modules={OFFICE_SEARCH_MODULES} />
         <SidebarPages
           pages={navItems.map((item) => ({ href: item.href, label: item.label, icon: navItemIcons[item.id], active: navItemActive(item, pathname), badge: badgeOf(item) }))}
         />
