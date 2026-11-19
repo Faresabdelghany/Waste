@@ -28,6 +28,7 @@ import {
   useTablePagination,
 } from "@/components/ui/table-pagination"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { countedOf } from "@/lib/format/counts"
 
 function providerStatusTone(status: string): StatusTone {
   // "Deactive"/"Inactive" contain the "active" substring, so they must be
@@ -167,7 +168,7 @@ function RelatedRecordsTable({
         <div className="overflow-hidden rounded-xl border border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
             <span className="text-xs text-muted-foreground">
-              {records.length} {records.length === 1 ? entityLabel.toLowerCase() : `${entityLabel.toLowerCase()}s`}
+              {countedOf(records.length, entityLabel.toLowerCase())}
             </span>
             <Button size="sm" onClick={onCreate}>
               <Plus className="h-4 w-4" weight="bold" />
