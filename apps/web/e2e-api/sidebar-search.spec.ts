@@ -12,8 +12,10 @@ test("Search: Ctrl+K opens it, a seeded provider is found by part of its name an
   await expect(search).toBeVisible()
   await expect(search.getByRole("option", { name: "Service providers", exact: true })).toBeVisible()
   await search.getByPlaceholder("Search pages and records").fill("nordr")
-  const hit = search.getByRole("option", { name: /NordRen ApS/ })
+  // The provider itself, ranked first; its users, whose details name it, follow.
+  const hit = search.getByRole("option", { name: /^NordRen ApS/ })
   await expect(hit).toBeVisible()
+  await expect(search.getByRole("option").first()).toHaveAccessibleName(/^NordRen ApS/)
   await hit.click()
 
   await expect(search).toBeHidden()
