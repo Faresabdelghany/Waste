@@ -642,6 +642,20 @@ export type ServerStore = {
   set: (update: (state: ServerRecordsState) => ServerRecordsState) => void
 }
 
+/**
+ * The store a read of the session's load is stamped with (#649): each module
+ * as it stood when the read was sent, but one not ready then and ready now as
+ * it is now. Its first read landed while this one waited its turn, which is
+ * the load's order, not a change: read one after the other, it would have
+ * been ready before this read began. A module that moved since then by a
+ * write or a read again keeps its earlier rows, so the watcher still sees it.
+ */
+export function stampedAt(began: ServerRecordsState, now: ServerRecordsState): ServerRecordsState {
+  const stamped = new Map(began)
+  for (const [key, state] of now) if (state.status === "ready" && began.get(key)?.status !== "ready") stamped.set(key, state)
+  return stamped
+}
+
 export type ReadOptions = {
   /** Whether the session the read belongs to is still the store's: false once the person or the API has changed. */
   alive: () => boolean
@@ -649,6 +663,14 @@ export type ReadOptions = {
   now?: () => number
   /** The waits before a failure on the way is asked again (`READ_RETRY_DELAYS_MS`); a test hands its own. */
   retryDelaysMs?: readonly number[]
+  /** Where the lists are asked for: at once, or through the session load's few slots (#649). */
+  fetchSlot?: <T>(fetch: () => Promise<T>) => Promise<T>
+  /**
+   * What the answer waits for before it is mapped: the read of the module
+   * before it in the load, so a module answered first still maps against the
+   * rows of those ahead of it (#649).
+   */
+  turn?: Promise<unknown>
 }
 
 /**
@@ -689,19 +711,24 @@ async function listModuleAgain(client: ApiClient, module: ServerModule, alive: (
  * own refusal is written nowhere either, since it has ended the session and
  * /login says why. The problem comes back for the caller to report.
  */
-export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { alive, now = Date.now, retryDelaysMs = READ_RETRY_DELAYS_MS }: ReadOptions): Promise<Problem | null> {
+export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { alive, now = Date.now, retryDelaysMs = READ_RETRY_DELAYS_MS, fetchSlot = (fetch) => fetch(), turn }: ReadOptions): Promise<Problem | null> {
   if (!alive()) return null
   const key = moduleKeyOf(module.workspaceId, module.moduleId)
   store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
   try {
     const started = store.getSnapshot()
-    const lists = await listModuleAgain(client, module, alive, retryDelaysMs)
+    const lists = await fetchSlot(() => listModuleAgain(client, module, alive, retryDelaysMs))
     if (lists === undefined || !alive()) return null
+    await turn
+    if (!alive()) return null
     // Mapped against the store as the answer lands, so a row made while the
     // read was out keeps the id it was minted under and the rows that name it
     // name that one (#240). Its reads are stamped with the snapshot the read
-    // began with: the server's answer is no newer.
-    const result = mapModule(module, lists, { state: store.getSnapshot(), began: started })
+    // began with: the server's answer is no newer. In the session's load, a
+    // module whose first read landed while this one waited its turn is
+    // stamped as it landed (`stampedAt`, #649).
+    const state = store.getSnapshot()
+    const result = mapModule(module, lists, { state, began: turn === undefined ? started : stampedAt(started, state) })
     store.set((state) => new Map(state).set(key, loaded(result, now())))
     return null
   } catch (error) {
