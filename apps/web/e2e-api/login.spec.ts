@@ -74,8 +74,8 @@ test("before the page's scripts have run, Sign in cannot reload /login empty; on
   await expect(page).toHaveURL(/\/login$/)
   await expect(email).toHaveValue(E2E.loginEmail)
 
+  // Released, the route lets every script through at once; unrouting now would race the held ones.
   release()
-  await page.unroute("**/_next/static/chunks/*.js")
   await expect(signIn).toBeEnabled()
   await expect(email).toHaveValue(E2E.loginEmail)
   await signIn.click()
