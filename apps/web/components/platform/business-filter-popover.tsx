@@ -87,6 +87,7 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   collectionCalendars: CalendarBlank,
   planningAreas: MapTrifold,
   propertyTypes: Buildings,
+  serviceAreas: MapTrifold,
   countries: Globe,
   roles: IdentificationBadge,
   ticketTypes: Tag,

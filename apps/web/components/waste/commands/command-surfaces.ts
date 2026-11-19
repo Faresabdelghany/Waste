@@ -144,7 +144,7 @@ export function initialFiltersOf(surface: CommandSurface | undefined): BusinessF
 
 const TEAM_LIST: ModuleList = {
   shows: isTeamMember,
-  readers: () => ({ statuses: (record) => [record.status], roles: (record) => singleFilterValue(record.facts.Roles) }),
+  readers: (): FilterValueReaders => ({ statuses: (record) => [record.status], roles: (record) => singleFilterValue(record.facts.Roles) }),
   initial: {},
 }
 

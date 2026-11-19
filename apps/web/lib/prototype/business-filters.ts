@@ -27,6 +27,8 @@ export type BusinessFilters = {
   collectionCalendars: string[]
   planningAreas: string[]
   propertyTypes: string[]
+  /** A provider price's or a settlement's award (`provider-money-lists.ts`). */
+  serviceAreas: string[]
   /** A service provider's country, the one fact of the wire's its list can be narrowed by (#654). */
   countries: string[]
   roles: string[]
@@ -88,6 +90,7 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   collectionCalendars: "Holiday list",
   planningAreas: "Planning area",
   propertyTypes: "Property type",
+  serviceAreas: "Service area",
   countries: "Country",
   roles: "Role",
   ticketTypes: "Type",
