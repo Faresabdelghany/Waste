@@ -178,7 +178,8 @@ export function TicketTypesSettings({ tabs, pick, openTypeId, onOpenType }: { ta
     write(made, landOn, "Ticket type added", madeDefault(null, made))
   }
 
-  const emptyMessage = accessUnknownSentence(session) ?? moduleReadSentence(types, "ticket types") ?? "No ticket type yet."
+  const unread = accessUnknownSentence(session) ?? moduleReadSentence(types, "ticket types")
+  const emptyMessage = unread ?? "No ticket type yet."
 
   if (addressed !== undefined) {
     if (opened === undefined) return <TicketTypeMissing message={types.ready ? "No ticket type has this address." : emptyMessage} onBack={() => onOpenType(null)} />
@@ -195,6 +196,7 @@ export function TicketTypesSettings({ tabs, pick, openTypeId, onOpenType }: { ta
       <RecordsSection
         shown={rows.length}
         total={rows.length}
+        answered={unread === null}
         actions={
           <Button size="sm" disabled={!access.create || !types.ready || saving} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" weight="bold" />

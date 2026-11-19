@@ -72,6 +72,8 @@ export function TicketChargesSettings({ tabs, pick: shared }: { tabs?: ReactNode
 
   const pick = (key: string, value: string) => setting.edit({ ...picks, [key]: value })
 
+  // A count only once the setting has answered: a zero before then is no answer (#655).
+  const answered = accessUnknownSentence(session) === null && !setting.problem && base !== null
   const emptyMessage =
     accessUnknownSentence(session) ??
     (project === null
@@ -92,6 +94,7 @@ export function TicketChargesSettings({ tabs, pick: shared }: { tabs?: ReactNode
       <RecordsSection
         shown={rows.length}
         total={rows.length}
+        answered={answered}
         actions={
           <Button size="sm" disabled={!changed || saving} onClick={save}>
             {saving ? "Saving…" : "Save charges"}

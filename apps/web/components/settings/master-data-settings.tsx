@@ -203,7 +203,8 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
   // A frequency names a project, so its create waits for the projects too; the other kinds need only their own module.
   const canCreate = master.ready && !saving && (kind !== "service-frequency" || organisation.ready)
 
-  const emptyMessage = moduleReadSentence(master, "master data", { is: true }) ?? (ofKind.length === 0 ? `No ${details.plural.toLowerCase()} yet.` : `No ${details.plural.toLowerCase()} match this search.`)
+  const unread = moduleReadSentence(master, "master data", { is: true })
+  const emptyMessage = unread ?? (ofKind.length === 0 ? `No ${details.plural.toLowerCase()} yet.` : `No ${details.plural.toLowerCase()} match this search.`)
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = master.notGranted ? master.problem?.detail : undefined
 
@@ -242,6 +243,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
       <RecordsSection
         shown={filtered.length}
         total={ofKind.length}
+        answered={unread === null}
         actions={
           <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!canCreate}>
             <Plus className="h-4 w-4" weight="bold" />
@@ -303,6 +305,7 @@ export function MasterDataSettings({ params }: SettingsPaneProps) {
           page={page}
           pageCount={pageCount}
           totalCount={totalCount}
+          answered={unread === null}
           onPageChange={setPage}
         />
       </RecordsSection>

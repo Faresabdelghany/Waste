@@ -188,7 +188,8 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
   }
 
   const narrowed = calendarRecords.length > 0
-  const emptyMessage = moduleReadSentence(calendars, "collection calendars") ?? (narrowed ? "No collection calendars match this search." : "No collection calendars yet.")
+  const unread = moduleReadSentence(calendars, "collection calendars")
+  const emptyMessage = unread ?? (narrowed ? "No collection calendars match this search." : "No collection calendars yet.")
   // Nothing was read for a role that does not view the module: the store's sentence says why, beneath.
   const emptyHint = calendars.notGranted ? calendars.problem?.detail : undefined
 
@@ -216,6 +217,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
       <RecordsSection
         shown={filtered.length}
         total={calendarRecords.length}
+        answered={unread === null}
         actions={
           <Button size="sm" onClick={() => setIsCreateOpen(true)} disabled={!calendars.ready || !organisation.ready}>
             <Plus className="h-4 w-4" weight="bold" />
@@ -282,6 +284,7 @@ export function CollectionCalendarsSettings({ params }: SettingsPaneProps) {
           page={page}
           pageCount={pageCount}
           totalCount={totalCount}
+          answered={unread === null}
           onPageChange={setPage}
         />
       </RecordsSection>

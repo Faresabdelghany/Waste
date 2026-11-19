@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import type { Problem } from "../problem"
 import { problemSentence } from "../problem"
-import { countOnceRead, moduleReadSentence, notShownSentence, readSentence, waitingSentence } from "../read-state"
+import { countOnceRead, moduleAnswered, moduleReadSentence, notShownSentence, readSentence, waitingSentence } from "../read-state"
 
 const PROBLEMS: Problem[] = [
   { type: "about:blank", title: "Forbidden", status: 403, detail: "The role does not view the module" },
@@ -97,5 +97,15 @@ describe("countOnceRead", () => {
     for (const status of ["idle", "loading", "failed", "not-granted", "kept-on-api"] as const) {
       assert.equal(countOnceRead(0, { status }), null, status)
     }
+  })
+})
+
+describe("moduleAnswered", () => {
+  const problem: Problem = { type: "about:blank", title: "Forbidden", status: 403 }
+  test("only rows read, the role's and not refused are an answer to count (#655)", () => {
+    assert.equal(moduleAnswered({ pending: false, notGranted: false, problem: null }), true)
+    assert.equal(moduleAnswered({ pending: true, notGranted: false, problem: null }), false)
+    assert.equal(moduleAnswered({ pending: false, notGranted: true, problem }), false)
+    assert.equal(moduleAnswered({ pending: false, notGranted: false, problem }), false)
   })
 })
